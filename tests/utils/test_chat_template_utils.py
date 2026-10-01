@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from typing import List, Optional, Tuple, Union
+from typing import Literal
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
@@ -56,8 +56,38 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_bare_container_types(self):
+        def fn(x: list, y: tuple, z: dict):
+            """
+            Test function
+
+            Args:
+                x: The first input
+                y: The second input
+                z: The third input
+            """
+            return x
+
+        # Bare builtin containers have no typing origin, so they must be mapped explicitly;
+        # they should match their `typing.List` / `typing.Tuple` / `typing.Dict` equivalents.
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "description": "The first input"},
+                    "y": {"type": "array", "description": "The second input"},
+                    "z": {"type": "object", "description": "The third input"},
+                },
+                "required": ["x", "y", "z"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_union(self):
-        def fn(x: Union[int, float]):
+        def fn(x: int | float):
             """
             Test function
 
@@ -78,8 +108,35 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_union_with_duplicate_types(self):
+        def fn(x: list | tuple, y: list | tuple | dict | None = None):
+            """
+            Test function
+
+            Args:
+                x: The first input
+                y: The second input
+            """
+            return x
+
+        # `list` and `tuple` both map to "array", which should appear only once in the schema
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "description": "The first input"},
+                    "y": {"type": ["array", "object"], "nullable": True, "description": "The second input"},
+                },
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_optional(self):
-        def fn(x: Optional[int]):
+        def fn(x: int | None):
             """
             Test function
 
@@ -119,7 +176,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_nested_list(self):
-        def fn(x: List[List[Union[str, int]]]):
+        def fn(x: list[list[str | int]]):
             """
             Test function
 
@@ -173,7 +230,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_multiple_complex_arguments(self):
-        def fn(x: List[Union[int, float]], y: Optional[Union[int, str]] = None):
+        def fn(x: list[int | float], y: int | str | None = None):
             """
             Test function
 
@@ -193,6 +250,39 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                     "x": {"type": "array", "items": {"type": ["integer", "number"]}, "description": "The input"},
                     "y": {
                         "type": ["integer", "string"],
+                        "nullable": True,
+                        "description": "Also the input",
+                    },
+                },
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_union_of_complex_types(self):
+        def fn(x: str | list[str], y: Literal["a", "b"] | int | None = None):
+            """
+            Test function
+
+            Args:
+                x: The input
+                y: Also the input
+            """
+            return x
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                        "description": "The input",
+                    },
+                    "y": {
+                        "anyOf": [{"type": "string", "enum": ["a", "b"]}, {"type": "integer"}],
                         "nullable": True,
                         "description": "Also the input",
                     },
@@ -283,7 +373,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_tuple(self):
-        def fn(x: Tuple[int, str]):
+        def fn(x: tuple[int, str]):
             """
             Test function
 
@@ -315,7 +405,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_single_element_tuple_fails(self):
-        def fn(x: Tuple[int]):
+        def fn(x: tuple[int]):
             """
             Test function
 
@@ -333,7 +423,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             get_json_schema(fn)
 
     def test_ellipsis_type_fails(self):
-        def fn(x: Tuple[int, ...]):
+        def fn(x: tuple[int, ...]):
             """
             Test function
 
@@ -377,6 +467,84 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                         "enum": ["celsius", "fahrenheit"],
                         "description": "The temperature format to use",
                     }
+                },
+                "required": ["temperature_format"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_enum_extraction_non_string_choices(self):
+        def fn(rating: int, enabled: bool):
+            """
+            Test function
+
+            Args:
+                rating: The rating to give (choices: [1, 2, 3])
+                enabled: Whether it is enabled (choices: [true, false])
+            """
+            return -40.0
+
+        # Non-string choices (numbers, booleans) must be preserved as-is, not stripped as strings
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rating": {
+                        "type": "integer",
+                        "enum": [1, 2, 3],
+                        "description": "The rating to give",
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "enum": [True, False],
+                        "description": "Whether it is enabled",
+                    },
+                },
+                "required": ["rating", "enabled"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_literal(self):
+        def fn(
+            temperature_format: Literal["celsius", "fahrenheit"],
+            booleanish: Literal[True, False, 0, 1, "y", "n"] = False,
+        ):
+            """
+            Test function
+
+            Args:
+                temperature_format: The temperature format to use
+                booleanish: A value that can be regarded as boolean
+
+
+            Returns:
+                The temperature
+            """
+            return -40.0
+
+        # Let's see if that gets correctly parsed as an enum
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "temperature_format": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The temperature format to use",
+                    },
+                    "booleanish": {
+                        "type": ["boolean", "integer", "string"],
+                        "enum": [True, False, 0, 1, "y", "n"],
+                        "description": "A value that can be regarded as boolean",
+                    },
                 },
                 "required": ["temperature_format"],
             },
@@ -444,10 +612,79 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_instance_method(self):
+        class Tool:
+            def fn(self, x: int):
+                """
+                Test function
+
+                Args:
+                    x: The input
+                """
+                return x
+
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(Tool.fn)["function"], expected_schema)  # unbound case
+        self.assertEqual(get_json_schema(Tool().fn)["function"], expected_schema)  # bound case
+
+    def test_static_method(self):
+        class Tool:
+            @staticmethod
+            def fn(x: int):
+                """
+                Test function
+
+                Args:
+                    x: The input
+                """
+                return x
+
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(Tool.fn)["function"], expected_schema)
+        self.assertEqual(get_json_schema(Tool().fn)["function"], expected_schema)
+
+    def test_class_method(self):
+        class Tool:
+            @classmethod
+            def fn(cls, x: int):
+                """
+                Test function
+
+                Args:
+                    x: The input
+                """
+                return x
+
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(Tool.fn)["function"], expected_schema)
+        self.assertEqual(get_json_schema(Tool().fn)["function"], expected_schema)
+
     def test_everything_all_at_once(self):
-        def fn(
-            x: str, y: Optional[List[Union[str, int]]], z: Tuple[Union[str, int], str] = (42, "hello")
-        ) -> Tuple[int, str]:
+        def fn(x: str, y: list[str | int] | None, z: tuple[str | int, str] = (42, "hello")) -> tuple[int, str]:
             """
             Test function with multiple args, and docstring args that we have to strip out.
 

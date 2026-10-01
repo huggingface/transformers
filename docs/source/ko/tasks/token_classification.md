@@ -155,22 +155,11 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 이제 [`DataCollatorWithPadding`]를 사용하여 예제 배치를 만들어봅시다. 데이터 세트 전체를 최대 길이로 패딩하는 대신, *동적 패딩*을 사용하여 배치에서 가장 긴 길이에 맞게 문장을 패딩하는 것이 효율적입니다.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DataCollatorForTokenClassification
-
->>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## 평가[[evaluation]]
 
@@ -251,8 +240,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ... }
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
@@ -307,101 +294,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-a-tensorflow-model-with-keras)의 기본 튜토리얼을 확인하세요!
-
-</Tip>
-TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수와 학습률 스케쥴, 그리고 일부 훈련 하이퍼파라미터를 설정해야 합니다:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 3
->>> num_train_steps = (len(tokenized_wnut["train"]) // batch_size) * num_train_epochs
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=2e-5,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=0.01,
-...     num_warmup_steps=0,
-... )
-```
-
-그런 다음 [`TFAutoModelForSequenceClassification`]을 사용하여 DistilBERT를 가져오고, 예상되는 레이블 수와 레이블 매핑을 지정합니다:
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained(
-...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
-... )
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터 세트를 `tf.data.Dataset` 형식으로 변환합니다:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_wnut["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_wnut["validation"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method)를 사용하여 훈련할 모델을 구성합니다:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-훈련을 시작하기 전에 설정해야할 마지막 두 가지는 예측에서 seqeval 점수를 계산하고, 모델을 허브에 업로드할 방법을 제공하는 것입니다. 모두 [Keras callbacks](../main_classes/keras_callbacks)를 사용하여 수행됩니다.
-
-[`~transformers.KerasMetricCallback`]에 `compute_metrics` 함수를 전달하세요:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-[`~transformers.PushToHubCallback`]에서 모델과 토크나이저를 업로드할 위치를 지정합니다:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_wnut_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-그런 다음 콜백을 함께 묶습니다:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-드디어, 모델 훈련을 시작할 준비가 되었습니다! [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)에 훈련 데이터 세트, 검증 데이터 세트, 에폭의 수 및 콜백을 전달하여 파인 튜닝합니다:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
-```
-
-훈련이 완료되면, 모델이 자동으로 허브에 업로드되어 누구나 사용할 수 있습니다!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -462,8 +354,6 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 
 원한다면, `pipeline`의 결과를 수동으로 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 PyTorch 텐서를 반환합니다:
 
 ```py
@@ -507,49 +397,3 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
  'O',
  'O']
 ```
-</pt>
-<tf>
-텍스트를 토큰화하고 TensorFlow 텐서를 반환합니다:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_wnut_model")
->>> inputs = tokenizer(text, return_tensors="tf")
-```
-
-입력값을 모델에 전달하고 `logits`을 반환합니다:
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("stevhliu/my_awesome_wnut_model")
->>> logits = model(**inputs).logits
-```
-
-가장 높은 확률을 가진 클래스를 모델의 `id2label` 매핑을 사용하여 텍스트 레이블로 변환합니다:
-
-```py
->>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
->>> predicted_token_class = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
->>> predicted_token_class
-['O',
- 'O',
- 'B-location',
- 'I-location',
- 'B-group',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'B-location',
- 'B-location',
- 'O',
- 'O']
-```
-</tf>
-</frameworkcontent>

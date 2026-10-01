@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,17 @@
 # limitations under the License.
 
 import copy
+import logging
 import os
 import tempfile
 import unittest
 import warnings
 
-from huggingface_hub import HfFolder, create_pull_request
+from huggingface_hub import create_pull_request
 from parameterized import parameterized
 
 from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
+from transformers import logging as transformers_logging
 
 
 if is_torch_available():
@@ -38,7 +39,6 @@ from transformers.generation import (
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
     GenerationMode,
-    HammingDiversityLogitsProcessor,
     MinLengthLogitsProcessor,
     MinNewTokensLengthLogitsProcessor,
     MinPLogitsWarper,
@@ -56,7 +56,14 @@ from transformers.generation import (
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
     WatermarkLogitsProcessor,
 )
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, torch_device
+from transformers.testing_utils import (
+    TOKEN,
+    CaptureLogger,
+    LoggingLevel,
+    TemporaryHubRepo,
+    is_staging_test,
+    torch_device,
+)
 
 
 class GenerationConfigTest(unittest.TestCase):
@@ -79,8 +86,8 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(loaded_config.bad_words_ids, [[1, 2, 3], [4, 5]])
 
         # Checks parameters that were not specified (defaults)
-        self.assertEqual(loaded_config.top_k, 50)
-        self.assertEqual(loaded_config.max_length, 20)
+        self.assertEqual(loaded_config.top_k, None)
+        self.assertEqual(loaded_config.max_length, None)
         self.assertEqual(loaded_config.max_time, None)
 
     def test_from_model_config(self):
@@ -113,30 +120,12 @@ class GenerationConfigTest(unittest.TestCase):
         # `.update()` returns a dictionary of unused kwargs
         self.assertEqual(unused_kwargs, {"foo": "bar"})
 
-    # TODO: @Arthur and/or @Joao
-    # FAILED tests/generation/test_configuration_utils.py::GenerationConfigTest::test_initialize_new_kwargs - AttributeError: 'GenerationConfig' object has no attribute 'get_text_config'
-    # See: https://app.circleci.com/pipelines/github/huggingface/transformers/104831/workflows/e5e61514-51b7-4c8c-bba7-3c4d2986956e/jobs/1394252
-    @unittest.skip("failed with `'GenerationConfig' object has no attribute 'get_text_config'`")
-    def test_initialize_new_kwargs(self):
-        generation_config = GenerationConfig()
-        generation_config.foo = "bar"
-
-        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
-            generation_config.save_pretrained(tmp_dir)
-
-            new_config = GenerationConfig.from_pretrained(tmp_dir)
-        # update_kwargs was used to update the config on valid attributes
-        self.assertEqual(new_config.foo, "bar")
-
-        generation_config = GenerationConfig.from_model_config(new_config)
-        assert not hasattr(generation_config, "foo")  # no new kwargs should be initialized if from config
-
     def test_kwarg_init(self):
         """Tests that we can overwrite attributes at `from_pretrained` time."""
         default_config = GenerationConfig()
-        self.assertEqual(default_config.temperature, 1.0)
-        self.assertEqual(default_config.do_sample, False)
-        self.assertEqual(default_config.num_beams, 1)
+        self.assertEqual(default_config.temperature, None)
+        self.assertEqual(default_config.do_sample, None)
+        self.assertEqual(default_config.num_beams, None)
 
         config = GenerationConfig(
             do_sample=True,
@@ -146,7 +135,7 @@ class GenerationConfigTest(unittest.TestCase):
         )
         self.assertEqual(config.temperature, 0.7)
         self.assertEqual(config.do_sample, True)
-        self.assertEqual(config.num_beams, 1)
+        self.assertEqual(config.num_beams, None)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
@@ -154,62 +143,208 @@ class GenerationConfigTest(unittest.TestCase):
 
         self.assertEqual(loaded_config.temperature, 1.0)
         self.assertEqual(loaded_config.do_sample, True)
-        self.assertEqual(loaded_config.num_beams, 1)  # default value
+        self.assertEqual(loaded_config.num_beams, None)  # default value
 
     def test_validate(self):
         """
         Tests that the `validate` method is working as expected. Note that `validate` is called at initialization time
         """
+        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+
         # A correct configuration will not throw any warning
-        with warnings.catch_warnings(record=True) as captured_warnings:
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
             GenerationConfig()
-        self.assertEqual(len(captured_warnings), 0)
+        self.assertEqual(len(captured_logs.out), 0)
 
-        # Inconsequent but technically wrong configuration will throw a warning (e.g. setting sampling
-        # parameters with `do_sample=False`). May be escalated to an error in the future.
-        with warnings.catch_warnings(record=True) as captured_warnings:
-            GenerationConfig(do_sample=False, temperature=0.5)
-        self.assertEqual(len(captured_warnings), 1)
-
-        with warnings.catch_warnings(record=True) as captured_warnings:
+        # Inconsequent but technically wrong configuration will throw a warning (e.g. requesting an extra output
+        # without `return_dict_in_generate=True`). May be escalated to an error in the future.
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
             GenerationConfig(return_dict_in_generate=False, output_scores=True)
-        self.assertEqual(len(captured_warnings), 1)
+        self.assertNotEqual(len(captured_logs.out), 0)
 
-        # Expanding on the case above, we can update a bad configuration to get rid of the warning. Ideally,
-        # that is done by unsetting the parameter (i.e. setting it to None)
-        generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)
-        with warnings.catch_warnings(record=True) as captured_warnings:
-            # BAD - 0.9 means it is still set, we should warn
+        # Explicitly setting a sampling flag alongside `do_sample=False` still warns: this is a user-level mistake.
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)  # store for later
+        self.assertNotEqual(len(captured_logs.out), 0)
+
+        # But a value inherited from a model's default config (i.e. not in this update's kwargs) does NOT warn: in
+        # the real world, `generate(do_sample=False)` on a model whose `generation_config.json` has `temperature=0.6`
+        # would otherwise log a useless warning.
+        logger.warning_once.cache_clear()
+        base_config = GenerationConfig(do_sample=True, temperature=0.6)  # mimics a model's default config
+        with CaptureLogger(logger) as captured_logs:
+            base_config.update(do_sample=False)
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # Inverse provenance case: `do_sample=False` inherited from a model's config (so not user-set this call), user only
+        # sets a sampling flag. The conflict SHOULD produce noise because the user may think that it's non-greedy by default
+        logger.warning_once.cache_clear()
+        greedy_hub_config = GenerationConfig(do_sample=False)  # mimics a model's default config forcing greedy
+        with CaptureLogger(logger) as captured_logs:
+            greedy_hub_config.update(top_p=0.8)
+        self.assertNotEqual(len(captured_logs.out), 0)
+
+        # Updating only `temperature` (do_sample was pre-existing, i.e. "from the hub") does warn
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
             generation_config_bad_temperature.update(temperature=0.9)
-        self.assertEqual(len(captured_warnings), 1)
-        generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)
-        with warnings.catch_warnings(record=True) as captured_warnings:
-            # CORNER CASE - 1.0 is the default, we can't detect whether it is set by the user or not, we shouldn't warn
-            generation_config_bad_temperature.update(temperature=1.0)
-        self.assertEqual(len(captured_warnings), 0)
-        generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)
-        with warnings.catch_warnings(record=True) as captured_warnings:
+        self.assertNotEqual(len(captured_logs.out), 0)
+
+        # But setting both in the same `update()` call DOES warn.
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            generation_config_bad_temperature.update(do_sample=False, temperature=0.9)
+        self.assertNotEqual(len(captured_logs.out), 0)
+
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
             # OK - None means it is unset, nothing to warn about
             generation_config_bad_temperature.update(temperature=None)
-        self.assertEqual(len(captured_warnings), 0)
+        self.assertEqual(len(captured_logs.out), 0)
 
-        # Impossible sets of contraints/parameters will raise an exception
+        # Impossible sets of parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
-        with self.assertRaises(ValueError):
-            # dummy constraint
-            GenerationConfig(do_sample=True, num_beams=2, constraints=["dummy"])
-        with self.assertRaises(ValueError):
-            GenerationConfig(do_sample=True, num_beams=2, force_words_ids=[[[1, 2, 3]]])
 
         # Passing `generate()`-only flags to `validate` will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(logits_processor="foo")
 
         # Model-specific parameters will NOT raise an exception or a warning
-        with warnings.catch_warnings(record=True) as captured_warnings:
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
             GenerationConfig(foo="bar")
-        self.assertEqual(len(captured_warnings), 0)
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # By default we throw a short warning. However, we log with INFO level the details.
+        # Default: we don't log the incorrect input values, only a short summary. We explain how to get more details.
+        logger.warning_once.cache_clear()
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as captured_logs:
+                GenerationConfig(do_sample=False, temperature=0.5)
+        self.assertNotIn("0.5", captured_logs.out)
+        self.assertTrue(len(captured_logs.out) < 150)  # short log
+        self.assertIn("Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out)
+
+        # INFO level: we share the full deets
+        logger.warning_once.cache_clear()
+        logger.info_once.cache_clear()
+        with LoggingLevel(logging.INFO):
+            with CaptureLogger(logger) as captured_logs:
+                GenerationConfig(do_sample=False, temperature=0.5)
+        self.assertIn("0.5", captured_logs.out)
+        self.assertTrue(len(captured_logs.out) > 400)  # long log
+        self.assertNotIn("Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out)
+
+        # Finally, we can set `strict=True` to raise an exception on what would otherwise be a warning.
+        generation_config = GenerationConfig()
+        generation_config.temperature = 0.5
+        generation_config.do_sample = False
+        with self.assertRaises(ValueError):
+            generation_config.validate(strict=True)
+
+    def test_validate_assistant_ensemble_weight(self):
+        """`assistant_ensemble_weight` must be `None` or strictly inside `(0.0, 1.0)`."""
+        # `None` (default) is valid
+        GenerationConfig().validate()
+        # Strictly inside the open interval is valid
+        GenerationConfig(assistant_ensemble_weight=0.5).validate()
+        GenerationConfig(assistant_ensemble_weight=0.7).validate()
+        # Boundary and out-of-range values must raise
+        for invalid in (0.0, 1.0, 1.5, -0.1):
+            with self.assertRaises(ValueError):
+                GenerationConfig(assistant_ensemble_weight=invalid).validate()
+
+    def test_validate_suppress_forced_token_overlap(self):
+        """
+        A token that is both forced (`forced_bos_token_id`/`forced_eos_token_id`) and suppressed (`suppress_tokens`)
+        makes all logits `-inf` at the forcing step, yielding `nan` probabilities and a generation crash (see #24099).
+        `validate` must reject this combination with a clear error.
+        """
+        # Every forced token is also suppressed -> guaranteed crash -> must raise
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_eos_token_id=2, suppress_tokens=[2])
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_bos_token_id=3, suppress_tokens=[3, 4])
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_eos_token_id=[2, 5], suppress_tokens=[2, 5, 9])
+
+        # Partial overlap: at least one forced token survives, so no crash is possible -> must NOT raise
+        GenerationConfig(forced_eos_token_id=[2, 5], suppress_tokens=[2]).validate()
+        # No overlap, or only one of the two set -> must NOT raise
+        GenerationConfig(forced_eos_token_id=2, suppress_tokens=[5, 6]).validate()
+        GenerationConfig(suppress_tokens=[2]).validate()
+        GenerationConfig(forced_eos_token_id=2).validate()
+
+    def test_assistant_ensemble_weight_default_and_round_trip(self):
+        """Default is `None`; values round-trip through `to_dict`/`from_dict`."""
+        self.assertIsNone(GenerationConfig().assistant_ensemble_weight)
+
+        config = GenerationConfig(assistant_ensemble_weight=0.7)
+        self.assertEqual(config.assistant_ensemble_weight, 0.7)
+        config_dict = config.to_dict()
+        self.assertEqual(config_dict["assistant_ensemble_weight"], 0.7)
+        self.assertEqual(GenerationConfig.from_dict(config_dict).assistant_ensemble_weight, 0.7)
+
+    def test_validate_sampling_flag_provenance(self):
+        """
+        Dedicated coverage for the provenance-aware warning rule on sampling-only flags:
+        we only warn when BOTH `do_sample=False` AND a conflicting sampling flag (e.g. `top_p`, `temperature`)
+        were explicitly provided by the caller in the same context, or none of the 2 were directly provided, or only
+        the sampling flag is provided along do_sample=False already existing.
+        """
+        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+
+        def _warn_count(fn):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as captured:
+                fn()
+            return len(captured.out)
+
+        # 1. Hub config sets `temperature`, user does only `generate(do_sample=False)` -> NO warning.
+        #    (Emulates: model whose `generation_config.json` carries `do_sample=True, temperature=0.6`, user
+        #    explicitly asks for greedy decoding.)
+        def case_hub_temp_user_do_sample_only():
+            cfg = GenerationConfig(do_sample=True, temperature=0.6)  # stands in for the hub default
+            cfg.update(do_sample=False)
+
+        self.assertEqual(_warn_count(case_hub_temp_user_do_sample_only), 0)
+
+        # 2. User explicitly sets BOTH `do_sample=False` and `top_p=0.8` in the same call -> WARN.
+        self.assertNotEqual(_warn_count(lambda: GenerationConfig(do_sample=False, top_p=0.8)), 0)
+
+        # 3. User explicitly sets only `do_sample=False` (no sampling flag) -> NO warning, even though
+        #    attribute defaults (like `top_k=50`) may be present.
+        self.assertEqual(_warn_count(lambda: GenerationConfig(do_sample=False)), 0)
+
+        # 4. Hub config forces greedy (`do_sample=False`), user sets only `top_p=0.8` -> warnings:
+        # do_sample` was inherited, but clashes with user-expressed intent, so flagging their `top_p`
+        def case_hub_greedy_user_top_p():
+            cfg = GenerationConfig(do_sample=False)  # stands in for the hub default
+            cfg.update(top_p=0.8)
+
+        self.assertNotEqual(_warn_count(case_hub_greedy_user_top_p), 0)
+
+        # 5. User sets `do_sample=False` and `temperature=0.5` via a single `update()` call -> WARN.
+        def case_update_both_sides():
+            cfg = GenerationConfig()
+            cfg.update(do_sample=False, temperature=0.5)
+
+        self.assertNotEqual(_warn_count(case_update_both_sides), 0)
+
+        # 6. Same idea for beam flags: user only asks for `num_beams=1`, hub default has `length_penalty=0.8`
+        #    -> NO warning.
+        def case_hub_length_penalty_user_num_beams_only():
+            cfg = GenerationConfig(num_beams=4, length_penalty=0.8)  # stands in for the hub default
+            cfg.update(num_beams=1)
+
+        self.assertEqual(_warn_count(case_hub_length_penalty_user_num_beams_only), 0)
+
+        # 7. User sets BOTH `num_beams=1` and `length_penalty=0.8` explicitly -> WARN.
+        self.assertNotEqual(_warn_count(lambda: GenerationConfig(num_beams=1, length_penalty=0.8)), 0)
 
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
@@ -222,6 +357,7 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError) as exc:
                 config.save_pretrained(tmp_dir)
             self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
+            self.assertTrue("`temperature` is set to `0.5`" in str(exc.exception))
             self.assertTrue(len(os.listdir(tmp_dir)) == 0)
 
         # greedy decoding throws an exception if we try to return multiple sequences -> throws an exception that is
@@ -232,15 +368,25 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError) as exc:
                 config.save_pretrained(tmp_dir)
             self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
+            self.assertTrue(
+                "Greedy methods (do_sample != True) without beam search do not support `num_return_sequences` different than 1"
+                in str(exc.exception)
+            )
             self.assertTrue(len(os.listdir(tmp_dir)) == 0)
 
-        # final check: no warnings/exceptions thrown if it is correct, and file is saved
+        # Final check: no logs at warning level/warnings/exceptions thrown if it is correct, and file is saved.
         config = GenerationConfig()
         with tempfile.TemporaryDirectory() as tmp_dir:
+            # Catch warnings
             with warnings.catch_warnings(record=True) as captured_warnings:
-                config.save_pretrained(tmp_dir)
+                # Catch logs (up to WARNING level, the default level)
+                with LoggingLevel(logging.WARNING):
+                    logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+                    with CaptureLogger(logger) as captured_logs:
+                        config.save_pretrained(tmp_dir)
             self.assertEqual(len(captured_warnings), 0)
-            self.assertTrue(len(os.listdir(tmp_dir)) == 1)
+            self.assertEqual(len(captured_logs.out), 0)
+            self.assertEqual(len(os.listdir(tmp_dir)), 1)
 
     def test_generation_mode(self):
         """Tests that the `get_generation_mode` method is working as expected."""
@@ -253,6 +399,7 @@ class GenerationConfigTest(unittest.TestCase):
         config = GenerationConfig(num_beams=2)
         self.assertEqual(config.get_generation_mode(), GenerationMode.BEAM_SEARCH)
 
+        # TODO joao, manuel: remove this in v4.62.0
         config = GenerationConfig(top_k=10, do_sample=False, penalty_alpha=0.6)
         self.assertEqual(config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
 
@@ -499,31 +646,6 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         )
         self.assertEqual(prefix_constrained_logits_proc._num_beams, num_beams)
 
-    def test_serialize_generation_diversity_penalty_and_num_bean_groups(self):
-        """Tests that GenerationConfig is serialized and HammingDiversityLogitsProcessor is initialized with diversity_penalty_and_num_bean_groups"""
-        num_beams = 2
-        num_beam_groups = 2
-        diversity_penalty = 1.0
-
-        generation_config = GenerationConfig(
-            num_beams=num_beams, diversity_penalty=diversity_penalty, num_beam_groups=num_beam_groups
-        )
-        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
-            generation_config.save_pretrained(tmp_dir)
-            new_config = GenerationConfig.from_pretrained(tmp_dir)
-        self.assertEqual(new_config.num_beams, num_beams)
-        self.assertEqual(new_config.diversity_penalty, diversity_penalty)
-        self.assertEqual(new_config.num_beam_groups, num_beam_groups)
-
-        diversity_logits_processor = HammingDiversityLogitsProcessor(
-            diversity_penalty=new_config.diversity_penalty,
-            num_beams=new_config.num_beams,
-            num_beam_groups=new_config.num_beam_groups,
-        )
-        self.assertEqual(diversity_logits_processor._num_beams, num_beams)
-        self.assertEqual(diversity_logits_processor._diversity_penalty, diversity_penalty)
-        self.assertEqual(diversity_logits_processor._num_sub_beams, num_beams // num_beam_groups)
-
     def test_serialize_generation_bos_token_id(self):
         """Tests that GenerationConfig is serialized and ForcedBOSTokenLogitsProcessor is initialized with bos_token_id"""
         bos_token_id = 0
@@ -682,7 +804,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

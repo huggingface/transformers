@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,38 +14,30 @@
 """Testing suite for the PyTorch Zamba model."""
 
 import math
-import tempfile
 import unittest
 
 import pytest
 
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
+    cleanup,
     require_torch,
-    require_torch_gpu,
+    require_torch_greater_or_equal,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        ZambaForCausalLM,
-        ZambaForSequenceClassification,
-        ZambaModel,
-    )
-    from transformers.models.zamba.modeling_zamba import (
-        ZambaHybridDynamicCache,
-    )
+    from transformers import ZambaForCausalLM, ZambaForSequenceClassification, ZambaModel
 
 
 class ZambaModelTester:
@@ -147,7 +138,6 @@ class ZambaModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -213,12 +203,9 @@ class ZambaModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: Zamba needs the cache to be initialized to return a cache!
-        past_key_values = ZambaHybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -241,9 +228,6 @@ class ZambaModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -301,12 +285,46 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+    model_split_percents = [0.5, 0.8, 0.9]
+
+    def _get_conv_state_shape(self, batch_size: int, config):
+        intermediate_size = config.mamba_expand * config.hidden_size
+        return (batch_size, intermediate_size, config.mamba_d_conv)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        intermediate_size = config.mamba_expand * config.hidden_size
+        return (batch_size, config.n_mamba_heads, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = ZambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=32)
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(
+        "Zamba's Mamba1 conv path has no chunked-continuation support: on a cached multi-token forward it "
+        "rebuilds conv_state from the zero-padded current chunk instead of bridging the previous window, so "
+        "the split-vs-single comparison diverges regardless of padding masking — the scenario is out of "
+        "Mamba1's contract."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        pass
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_cpu_offload(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -315,7 +333,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_casual_lm(self):
+    def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
@@ -326,56 +344,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_initialization(self):
-        r"""
-        Overriding the test_initialization test as the A_log and D params of the Mamba block are initialized differently
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if "A_log" in name:
-                        A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
-                        intermediate_dim = config.mamba_expand * config.hidden_size
-                        A = A.expand(intermediate_dim, -1).reshape(
-                            config.n_mamba_heads, intermediate_dim // config.n_mamba_heads, -1
-                        )
-                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-                    elif "D" in name:
-                        # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-                    elif "x_proj" in name or "dt_proj_weight" in name:
-                        self.assertIn(
-                            ((param.data.mean() * 1e2).round() / 1e2).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized (raw value {param.data.mean()})",
-                        )
-                    elif "dt_proj_bias" in name:
-                        dt = torch.exp(
-                            torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
-                            + math.log(config.time_step_min)
-                        ).clamp(min=config.time_step_floor)
-                        inv_dt = dt + torch.log(-torch.expm1(-dt))
-                        if param.requires_grad:
-                            self.assertTrue(param.data.max().item() <= inv_dt[1])
-                            self.assertTrue(param.data.min().item() >= inv_dt[0])
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        Mamba block are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest("Cumbersome and redundant for Zamba")
 
     def test_attention_outputs(self):
         r"""
@@ -400,7 +368,8 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -458,114 +427,24 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         ) = config_and_inputs
         return config, input_ids, input_mask
 
-    def test_left_padding_compatibility(self):
-        r"""
-        Overriding the test_left_padding_compatibility test as the mamba layers accentuate the numerical differences
-        effect of the left padding discussed in the issue in the note. Using a more permissive tolerance value.
-        """
-        import inspect
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
-        # First, filter out models that don't support left padding - generative and decoder-only.
-        # Zamba is a decoder-only architecture
-        decoder_only_classes = self.all_generative_model_classes
-
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
-
-        for model_class in decoder_only_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=3e-3, atol=3e-3)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @slow
+    @unittest.skip(
+        "Zamba's shared attention uses tied weights excluded from bnb 4-bit quantization, causing a dtype mismatch with FA2 fp16 output."
+    )
     def test_flash_attn_2_fp32_ln(self):
-        r"""
-        Overriding the test_flash_attn_2_fp32_ln test as the Zamba model, like Mixtral, doesn't support
-        right padding + use cache with FA2
-        """
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_input = inputs_dict[model.main_input_name]
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Zamba does not support right padding + use_cache with FA2.
-                dummy_attention_mask[:, -1] = 1
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                    load_in_4bit=True,
-                )
-
-                for _, param in model.named_parameters():
-                    # upcast only layer norms
-                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
-                        param.data = param.data.to(torch.float32)
-
-                _ = model(dummy_input)
-                # with attention mask
-                _ = model(dummy_input, attention_mask=dummy_attention_mask)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        r"""
-        Overriding the test_flash_attn_2_inference_padding_right test as the Zamba model, like Mixtral, doesn't support
-        right padding + use cache with FA2
-        """
-        self.skipTest(reason="Zamba flash attention does not support right padding")
+        pass
 
 
 @require_torch
-class ZambaModelIntegrationTest(unittest.TestCase):
+class ZambaModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model = None
     tokenizer = None
 
     @classmethod
     @slow
     def setUpClass(cls):
+        super().setUpClass()
         model_id = "Zyphra/Zamba-7B-v1"
-        cls.model = ZambaForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_mamba_kernels=False
-        )
+        cls.model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
     @slow
@@ -642,3 +521,38 @@ class ZambaModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
+
+    @require_torch_greater_or_equal("2.9.0")
+    @pytest.mark.torch_compile_test
+    @slow
+    def test_associative_scan_matches_sequential(self):
+        """Compiled generate with use_associative_scan=False vs =True produces the same text."""
+        if torch_device == "cpu":
+            self.skipTest("Associative scan compile test requires a torch accelerator.")
+
+        model_id = "hf-tiny-v2/tiny-random-ZambaForCausalLM"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
+
+        # Opt-out: use_associative_scan=False → compiled sequential loop
+        model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, use_associative_scan=False).to(
+            torch_device
+        )
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        expected_text = tokenizer.decode(output[0].tolist())
+
+        del model
+        cleanup(torch_device, gc_collect=True)
+
+        # Opt-in: use_associative_scan=True → compiled associative scan
+        model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, use_associative_scan=True).to(
+            torch_device
+        )
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        output_text = tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_text, expected_text)

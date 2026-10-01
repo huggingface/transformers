@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,13 +34,13 @@ from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
 from huggingface_hub import HfApi
+from torch import nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
 import transformers
 from transformers import (
-    AdamW,
     DataCollatorWithPadding,
     EvalPrediction,
     SchedulerType,
@@ -51,12 +50,13 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.trainer_pt_utils import get_parameter_names
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.50.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -82,7 +82,7 @@ def save_prefixed_metrics(results, output_dir, file_name: str = "all_results.jso
         if not key.startswith(f"{metric_key_prefix}_"):
             results[f"{metric_key_prefix}_{key}"] = results.pop(key)
 
-    with open(os.path.join(output_dir, file_name), "w") as f:
+    with open(os.path.join(output_dir, file_name), "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4)
 
 
@@ -301,10 +301,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_qa_beam_search_no_trainer", args)
-
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers
     # in the environment
@@ -345,7 +341,7 @@ def main():
             api = HfApi()
             repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+", encoding="utf-8") as gitignore:
                 if "step_*" not in gitignore:
                     gitignore.write("step_*\n")
                 if "epoch_*" not in gitignore:
@@ -756,18 +752,19 @@ def main():
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
-    no_decay = ["bias", "LayerNorm.weight"]
+    forbidden_name_patterns = [r"bias", r"layernorm", r"rmsnorm", r"(?:^|\.)norm(?:$|\.)", r"_norm(?:$|\.)"]
+    decay_parameters = get_parameter_names(model, [nn.LayerNorm], forbidden_layer_names=forbidden_name_patterns)
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if n in decay_parameters and p.requires_grad],
             "weight_decay": args.weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if n not in decay_parameters and p.requires_grad],
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
@@ -939,7 +936,7 @@ def main():
             all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
             all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-    max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+    max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
 
     # concatenate all numpy arrays collected above
     start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, eval_dataset, max_len)
@@ -999,7 +996,7 @@ def main():
                 all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
                 all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-        max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+        max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
 
         # concatenate all numpy arrays collected above
         start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, predict_dataset, max_len)

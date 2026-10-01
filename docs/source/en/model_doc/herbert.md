@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-05-01 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # HerBERT
 
+
 ## Overview
 
-The HerBERT model was proposed in [KLEJ: Comprehensive Benchmark for Polish Language Understanding](https://www.aclweb.org/anthology/2020.acl-main.111.pdf) by Piotr Rybak, Robert Mroczkowski, Janusz Tracz, and
+The HerBERT model was proposed in [KLEJ: Comprehensive Benchmark for Polish Language Understanding](https://huggingface.co/papers/2005.00630) by Piotr Rybak, Robert Mroczkowski, Janusz Tracz, and
 Ireneusz Gawlik. It is a BERT-based Language Model trained on Polish Corpora using only MLM objective with dynamic
 masking of whole words.
 
@@ -40,30 +42,30 @@ models.*
 This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski). The original code can be found
 [here](https://github.com/allegro/HerBERT).
 
-
 ## Usage example
 
 ```python
->>> from transformers import HerbertTokenizer, RobertaModel
+from transformers import HerbertTokenizer, RobertaModel
 
->>> tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
->>> model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1")
 
->>> encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt")
->>> outputs = model(encoded_input)
+tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
+model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1", device_map="auto")
 
->>> # HerBERT can also be loaded using AutoTokenizer and AutoModel:
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
+encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt").to(model.device)
+outputs = model(encoded_input)
 
->>> tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
->>> model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1")
+# HerBERT can also be loaded using AutoTokenizer and AutoModel:
+from transformers import AutoModel, AutoTokenizer
+
+
+tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
+model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1", device_map="auto")
 ```
 
 <Tip>
 
-Herbert implementation is the same as `BERT` except for the tokenization method. Refer to [BERT documentation](bert) 
-for API reference and examples.  
+Herbert implementation is the same as `BERT` except for the tokenization method. Refer to [BERT documentation](bert)
+for API reference and examples.
 
 </Tip>
 
@@ -71,6 +73,3 @@ for API reference and examples.
 
 [[autodoc]] HerbertTokenizer
 
-## HerbertTokenizerFast
-
-[[autodoc]] HerbertTokenizerFast

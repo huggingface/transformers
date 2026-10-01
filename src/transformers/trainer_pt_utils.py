@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,30 +15,32 @@
 Torch utilities for the Trainer class.
 """
 
+import contextlib
 import copy
 import datetime
 import io
 import json
 import math
 import os
+import re
 import sys
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from itertools import chain
 from logging import StreamHandler
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
 import torch.distributed as dist
+from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
-from .tokenization_utils_base import BatchEncoding
 from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -53,7 +54,7 @@ if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_xla_available():
-    import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
 
 if is_torch_available():
     from torch.optim.lr_scheduler import LRScheduler
@@ -69,12 +70,9 @@ def get_dataloader_sampler(dataloader):
         return dataloader.sampler
 
 
-def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
+def atleast_1d(tensor_or_array: torch.Tensor | np.ndarray):
     if isinstance(tensor_or_array, torch.Tensor):
-        if hasattr(torch, "atleast_1d"):
-            tensor_or_array = torch.atleast_1d(tensor_or_array)
-        elif tensor_or_array.ndim < 1:
-            tensor_or_array = tensor_or_array[None]
+        tensor_or_array = torch.atleast_1d(tensor_or_array)
     else:
         tensor_or_array = np.atleast_1d(tensor_or_array)
     return tensor_or_array
@@ -122,9 +120,9 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     nested list/tuples/dict of tensors.
     """
     if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
-        assert (
-            type(tensors) is type(new_tensors)
-        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        assert type(tensors) is type(new_tensors), (
+            f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        )
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -149,13 +147,11 @@ def find_batch_size(tensors):
             if result is not None:
                 return result
     elif isinstance(tensors, Mapping):
-        for key, value in tensors.items():
+        for value in tensors.values():
             result = find_batch_size(value)
             if result is not None:
                 return result
-    elif isinstance(tensors, torch.Tensor):
-        return tensors.shape[0] if len(tensors.shape) >= 1 else None
-    elif isinstance(tensors, np.ndarray):
+    elif isinstance(tensors, (torch.Tensor, np.ndarray)):
         return tensors.shape[0] if len(tensors.shape) >= 1 else None
 
 
@@ -201,7 +197,7 @@ def nested_xla_mesh_reduce(tensors, name):
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
 
 
-def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) -> Any:
+def distributed_concat(tensor: Any, num_total_examples: int | None = None) -> Any:
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
@@ -220,13 +216,77 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
         raise AssertionError("Not currently using distributed training")
 
 
+def nested_gather(tensors, parallel_mode, name=None):
+    """
+    Gather value of `tensors` (tensor or list/tuple of nested tensors) across processes.
+    """
+    from .training_args import ParallelMode
+
+    if tensors is None:
+        return
+    if is_torch_xla_available():
+        if name is None:
+            name = "nested_gather"
+        tensors = nested_xla_mesh_reduce(tensors, name)
+    elif is_sagemaker_mp_enabled():
+        tensors = smp_gather(tensors)
+    elif parallel_mode == ParallelMode.DISTRIBUTED:
+        tensors = distributed_concat(tensors)
+    return tensors
+
+
+def is_attention_mask_causal(attention_mask):
+    """
+    Check if an attention mask is causal (compatible with causal attention).
+
+    Context parallelism only supports causal attention patterns. This function
+    checks if the provided attention mask is compatible.
+
+    Args:
+        attention_mask (`torch.Tensor`): The attention mask to check.
+
+    Returns:
+        `bool`: True if the mask is causal or compatible with causal attention.
+    """
+    if attention_mask is None:
+        return True  # No mask is considered causal (model uses default causal masking)
+
+    # Handle different mask dimensions
+    if attention_mask.dim() == 2:
+        # (batch_size, seq_len) - standard padding mask, compatible with causal attention
+        return True
+    elif attention_mask.dim() in [3, 4]:
+        # (batch_size, seq_len, seq_len) or (batch_size, num_heads, seq_len, seq_len)
+        # Check if it's lower triangular (causal)
+        seq_len = attention_mask.shape[-1]
+        if seq_len <= 1:
+            return True  # Single token or empty is always causal
+
+        # Take first batch and head (if 4D) for checking pattern
+        if attention_mask.dim() == 4:
+            mask = attention_mask[0, 0]  # First batch, first head
+        else:
+            mask = attention_mask[0]  # First batch
+
+        # Check if upper triangular part is masked (should be 0 or very negative for causal)
+        upper_triangular = torch.triu(mask, diagonal=1)
+
+        # For causal masks, upper triangular should be 0 or very negative (like -inf)
+        # Use a reasonable threshold to handle float precision issues
+        is_causal = torch.all(upper_triangular <= 1e-6) or torch.all(upper_triangular < -1e4)
+        return is_causal.item() if isinstance(is_causal, torch.Tensor) else is_causal
+
+    # For unknown dimensions, be conservative and reject
+    return False
+
+
 def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]],
-    num_total_examples: Optional[int] = None,
-    device: Optional[torch.device] = torch.device("cuda"),
+    scalars: list[int | float],
+    num_total_examples: int | None = None,
+    device: torch.device | None = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
-        tensorized_scalar = torch.tensor(scalars).to(device)
+        tensorized_scalar = torch.tensor(scalars, device=device)
         output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
@@ -272,7 +332,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -292,7 +352,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
 
 class EvalLoopContainer:
     """
-    Container to store intermediate results of evaluation loop
+    Container to store intermediate results of evaluation loop.
 
     Args:
         do_nested_concat (`bool`, *optional*, defaults to `True`):
@@ -342,66 +402,10 @@ class EvalLoopContainer:
         return self.arrays
 
 
-class SequentialDistributedSampler(Sampler):
-    """
-    Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
-
-    Even though we only use this sampler for eval and predict (no training), which means that the model params won't
-    have to be synced (i.e. will not hang for synchronization even if varied number of forward passes), we still add
-    extra samples to the sampler to make it evenly divisible (like in `DistributedSampler`) to make it easy to `gather`
-    or `reduce` resulting tensors at the end of the loop.
-    """
-
-    def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
-        warnings.warn(
-            "SequentialDistributedSampler is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        if num_replicas is None:
-            if not dist.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            num_replicas = dist.get_world_size()
-        if rank is None:
-            if not dist.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            rank = dist.get_rank()
-        self.dataset = dataset
-        self.num_replicas = num_replicas
-        self.rank = rank
-        num_samples = len(self.dataset)
-        # Add extra samples to make num_samples a multiple of batch_size if passed
-        if batch_size is not None:
-            self.num_samples = int(math.ceil(num_samples / (batch_size * num_replicas))) * batch_size
-        else:
-            self.num_samples = int(math.ceil(num_samples / num_replicas))
-        self.total_size = self.num_samples * self.num_replicas
-        self.batch_size = batch_size
-
-    def __iter__(self):
-        indices = list(range(len(self.dataset)))
-
-        # add extra samples to make it evenly divisible
-        indices += indices[: (self.total_size - len(indices))]
-        assert (
-            len(indices) == self.total_size
-        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
-
-        # subsample
-        indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert (
-            len(indices) == self.num_samples
-        ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
-
-        return iter(indices)
-
-    def __len__(self):
-        return self.num_samples
-
-
 def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
-    if xm.xrt_world_size() <= 1:
+    if xr.world_size() <= 1:
         return RandomSampler(dataset)
-    return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
+    return DistributedSampler(dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal())
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
@@ -428,114 +432,6 @@ def nested_truncate(tensors, limit):
     return tensors[:limit]
 
 
-class DistributedTensorGatherer:
-    """
-    A class responsible for properly gathering tensors (or nested list/tuple of tensors) on the CPU by chunks.
-
-    If our dataset has 16 samples with a batch size of 2 on 3 processes and we gather then transfer on CPU at every
-    step, our sampler will generate the following indices:
-
-        `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]`
-
-    to get something of size a multiple of 3 (so that each process gets the same dataset length). Then process 0, 1 and
-    2 will be responsible of making predictions for the following samples:
-
-        - P0: `[0, 1, 2, 3, 4, 5]`
-        - P1: `[6, 7, 8, 9, 10, 11]`
-        - P2: `[12, 13, 14, 15, 0, 1]`
-
-    The first batch treated on each process will be
-
-        - P0: `[0, 1]`
-        - P1: `[6, 7]`
-        - P2: `[12, 13]`
-
-    So if we gather at the end of the first batch, we will get a tensor (nested list/tuple of tensor) corresponding to
-    the following indices:
-
-        `[0, 1, 6, 7, 12, 13]`
-
-    If we directly concatenate our results without taking any precautions, the user will then get the predictions for
-    the indices in this order at the end of the prediction loop:
-
-        `[0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 15, 4, 5, 10, 11, 0, 1]`
-
-    For some reason, that's not going to roll their boat. This class is there to solve that problem.
-
-    Args:
-        world_size (`int`):
-            The number of processes used in the distributed training.
-        num_samples (`int`):
-            The number of samples in our dataset.
-        make_multiple_of (`int`, *optional*):
-            If passed, the class assumes the datasets passed to each process are made to be a multiple of this argument
-            (by adding samples).
-        padding_index (`int`, *optional*, defaults to -100):
-            The padding index to use if the arrays don't all have the same sequence length.
-    """
-
-    def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
-        warnings.warn(
-            "DistributedTensorGatherer is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.world_size = world_size
-        self.num_samples = num_samples
-        total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
-        self.total_samples = int(np.ceil(num_samples / total_size)) * total_size
-        self.process_length = self.total_samples // world_size
-        self._storage = None
-        self._offsets = None
-        self.padding_index = padding_index
-
-    def add_arrays(self, arrays):
-        """
-        Add `arrays` to the internal storage, Will initialize the storage to the full size at the first arrays passed
-        so that if we're bound to get an OOM, it happens at the beginning.
-        """
-        if arrays is None:
-            return
-        if self._storage is None:
-            self._storage = nested_new_like(arrays, self.total_samples, padding_index=self.padding_index)
-            self._offsets = list(range(0, self.total_samples, self.process_length))
-
-        slice_len, self._storage = self._nested_set_tensors(self._storage, arrays)
-        for i in range(self.world_size):
-            self._offsets[i] += slice_len
-
-    def _nested_set_tensors(self, storage, arrays):
-        if isinstance(arrays, (list, tuple)):
-            result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
-            return result[0][0], type(arrays)(r[1] for r in result)
-        assert (
-            arrays.shape[0] % self.world_size == 0
-        ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
-
-        slice_len = arrays.shape[0] // self.world_size
-        for i in range(self.world_size):
-            if len(arrays.shape) == 1:
-                storage[self._offsets[i] : self._offsets[i] + slice_len] = arrays[i * slice_len : (i + 1) * slice_len]
-            else:
-                # Expand the array on the fly if needed.
-                if len(storage.shape) > 1 and storage.shape[1] < arrays.shape[1]:
-                    storage = expand_like(storage, arrays.shape[1], padding_index=self.padding_index)
-                storage[self._offsets[i] : self._offsets[i] + slice_len, : arrays.shape[1]] = arrays[
-                    i * slice_len : (i + 1) * slice_len
-                ]
-        return slice_len, storage
-
-    def finalize(self):
-        """
-        Return the properly gathered arrays and truncate to the number of samples (since the sampler added some extras
-        to get each process a dataset of the same length).
-        """
-        if self._storage is None:
-            return
-        if self._offsets[0] != self.process_length:
-            logger.warning("Not all data has been set. Are you sure you passed all values?")
-        return nested_truncate(self._storage, self.num_samples)
-
-
 @dataclass
 class LabelSmoother:
     """
@@ -551,7 +447,7 @@ class LabelSmoother:
     epsilon: float = 0.1
     ignore_index: int = -100
 
-    def __call__(self, model_output, labels, shift_labels=False):
+    def __call__(self, model_output, labels, shift_labels=False, num_items_in_batch=None):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
         if shift_labels:
             logits = logits[..., :-1, :].contiguous()
@@ -572,10 +468,17 @@ class LabelSmoother:
         nll_loss.masked_fill_(padding_mask, 0.0)
         smoothed_loss.masked_fill_(padding_mask, 0.0)
 
-        # Take the mean over the label dimensions, then divide by the number of active elements (i.e. not-padded):
-        num_active_elements = padding_mask.numel() - padding_mask.long().sum()
-        nll_loss = nll_loss.sum() / num_active_elements
-        smoothed_loss = smoothed_loss.sum() / (num_active_elements * log_probs.shape[-1])
+        # The Trainer passes num_items_in_batch when the loss is normalized over the full batch;
+        # otherwise reduce over this micro-batch's active (non-padded) tokens.
+        if num_items_in_batch is None:
+            denominator = padding_mask.numel() - padding_mask.long().sum()
+        elif torch.is_tensor(num_items_in_batch):
+            # The count may be on another device.
+            denominator = num_items_in_batch.to(nll_loss.device)
+        else:
+            denominator = num_items_in_batch
+        nll_loss = nll_loss.sum() / denominator
+        smoothed_loss = smoothed_loss.sum() / (denominator * log_probs.shape[-1])
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
 
@@ -623,9 +526,9 @@ class LengthGroupedSampler(Sampler):
     def __init__(
         self,
         batch_size: int,
-        dataset: Optional[Dataset] = None,
-        lengths: Optional[List[int]] = None,
-        model_input_name: Optional[str] = None,
+        dataset: Dataset | None = None,
+        lengths: list[int] | None = None,
+        model_input_name: str | None = None,
         generator=None,
     ):
         if dataset is None and lengths is None:
@@ -634,10 +537,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if (
-                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or model_input_name not in dataset[0]
-            ):
+            if not isinstance(dataset[0], Mapping) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -645,7 +545,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -670,13 +570,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
     def __init__(
         self,
         batch_size: int,
-        dataset: Optional[Dataset] = None,
-        num_replicas: Optional[int] = None,
-        rank: Optional[int] = None,
+        dataset: Dataset | None = None,
+        num_replicas: int | None = None,
+        rank: int | None = None,
         seed: int = 0,
         drop_last: bool = False,
-        lengths: Optional[List[int]] = None,
-        model_input_name: Optional[str] = None,
+        lengths: list[int] | None = None,
+        model_input_name: str | None = None,
     ):
         if dataset is None and lengths is None:
             raise ValueError("One of dataset and lengths must be provided.")
@@ -697,10 +597,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if (
-                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or model_input_name not in dataset[0]
-            ):
+            if not isinstance(dataset[0], Mapping) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -709,7 +606,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                " List[int]..."
+                " list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -737,7 +634,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             # add extra samples to make it evenly divisible
             indices += indices[: (self.total_size - len(indices))]
         else:
-            # remove tail of data to make it evenly divisible.
+            # remove tail of data to make it evenly divisible
             indices = indices[: self.total_size]
         assert len(indices) == self.total_size
 
@@ -746,6 +643,323 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         assert len(indices) == self.num_samples
 
         return iter(indices)
+
+
+class BatchRebalanceSampler(Sampler):
+    r"""
+    Sampler that balances sequence length cost across DP ranks while minimizing padding waste within each
+    micro-batch. Designed for distributed training with variable-length sequences (e.g., LLM fine-tuning).
+
+    Uses a cost-aware rebalance algorithm ("Poor Man's Batch Rebalance") that:
+    1. For each optimizer step, collects `effective_batch_size` samples (shuffled, same set on all ranks
+       via shared seed — no cross-rank communication needed).
+    2. Sorts samples by length descending.
+    3. Partitions into `dp_size * grad_accum` groups using an iterative cost-balancing algorithm that
+       adjusts group sizes (not sample assignments) until costs converge.
+    4. Sorts groups by cost descending and assigns the top `dp_size` groups to the first micro-batch
+       (slot 0), the next `dp_size` to slot 1, etc. This ensures each micro-batch slot has balanced
+       cost across ranks.
+    5. Each rank yields its `grad_accum` micro-batches (one from each slot).
+
+    Cost model (fixed; captures padding waste plus attention's quadratic cost):
+
+        cost(bs, max_len) = bs * max_len + QUADRATIC_COST_COEF * bs * max_len^2
+
+    where `bs` is the number of samples in the micro-batch and `max_len` is the length of the longest
+    sample (all samples are padded to this length). The linear term captures linear-layer compute and
+    padding waste; the quadratic term captures attention's O(L^2) cost.
+
+    Key properties:
+        - **Variable batch size**: long-sequence groups get fewer samples, short-sequence groups get
+          more, keeping per-group cost balanced.
+        - **Fixed effective batch size**: total samples per optimizer step is always
+          `effective_batch_size`.
+        - **Zero communication**: all ranks run the same deterministic algorithm and yield only their
+          portion — no all-gather or broadcast needed.
+        - **Padding-aware**: the cost model explicitly accounts for padding waste, unlike
+          `LengthGroupedSampler` which only sorts by length.
+
+    Args:
+        lengths (`list[int]`):
+            Token lengths of all samples in the dataset.
+        effective_batch_size (`int`):
+            Total samples per optimizer step (`dp_size * grad_accum * per-group batch size`).
+        dp_size (`int`):
+            Data parallel size (number of ranks).
+        grad_accum (`int`):
+            Gradient accumulation steps.
+        shuffle (`bool`, *optional*, defaults to `True`):
+            Whether to shuffle samples each epoch.
+        seed (`int`, *optional*, defaults to 42):
+            Random seed for shuffling.
+        rank (`int`, *optional*, defaults to 0):
+            Current rank index.
+        drop_last (`bool`, *optional*, defaults to `True`):
+            Drop incomplete last batch.
+
+    Example:
+
+    ```python
+    >>> from transformers.trainer_pt_utils import BatchRebalanceSampler
+    >>> sampler = BatchRebalanceSampler(
+    ...     lengths=[100, 200, 300, ...],
+    ...     effective_batch_size=16,
+    ...     dp_size=4,
+    ...     grad_accum=2,
+    ...     rank=0,
+    ... )
+    >>> for batch_indices in sampler:
+    ...     # batch_indices is a list of sample indices for this rank's micro-batch
+    ...     pass
+    ```
+    """
+
+    # Weight of the attention's O(L^2) term in the cost model.
+    QUADRATIC_COST_COEF = 0.001
+
+    def __init__(
+        self,
+        lengths: list[int],
+        effective_batch_size: int,
+        dp_size: int,
+        grad_accum: int,
+        shuffle: bool = True,
+        seed: int = 42,
+        rank: int = 0,
+        drop_last: bool = True,
+    ):
+        assert dp_size >= 1
+        assert grad_accum >= 1
+        assert effective_batch_size >= dp_size * grad_accum
+
+        self.lengths = list(lengths)
+        self.effective_batch_size = effective_batch_size
+        self.dp_size = dp_size
+        self.grad_accum = grad_accum
+        self.shuffle = shuffle
+        self.seed = seed
+        self.rank = rank
+        self.drop_last = drop_last
+        self.epoch = 0
+
+        self.num_full_batches = len(self.lengths) // effective_batch_size
+        self.remainder = len(self.lengths) % effective_batch_size
+        # When drop_last=False, the trailing partial batch is also yielded (padded up to the
+        # effective batch size when too small to fill every (rank, slot) group), mirroring how
+        # PyTorch's DistributedSampler pads the tail. Otherwise trailing samples are silently
+        # dropped even though the user asked to keep them.
+        self.has_tail = (not drop_last) and self.remainder > 0
+        self.num_global_batches = self.num_full_batches + (1 if self.has_tail else 0)
+
+    def set_epoch(self, epoch: int):
+        self.epoch = epoch
+
+    def __iter__(self):
+        g = torch.Generator()
+        g.manual_seed(self.seed + self.epoch)
+        n = len(self.lengths)
+
+        if self.shuffle:
+            order = torch.randperm(n, generator=g).tolist()
+        else:
+            order = list(range(n))
+
+        for gb in range(self.num_global_batches):
+            batch_indices = order[gb * self.effective_batch_size : (gb + 1) * self.effective_batch_size]
+            # The trailing partial batch (drop_last=False) may be smaller than the number of
+            # (rank, slot) groups (K = dp_size * grad_accum); pad it by repeating samples from
+            # the start of the epoch order (same strategy as torch.utils.data.DistributedSampler)
+            # so every group still has >= 1 sample and the all-reduce stays consistent.
+            if (
+                self.has_tail
+                and gb == self.num_global_batches - 1
+                and len(batch_indices) < self.dp_size * self.grad_accum
+            ):
+                pad = self.dp_size * self.grad_accum - len(batch_indices)
+                # Wrap `order` enough times to fill `pad` indices (handles len(order) < pad).
+                padding = (order * math.ceil(pad / len(order)))[:pad]
+                batch_indices = batch_indices + padding
+            yield from self._yield_global_batch(batch_indices)
+
+    def _yield_global_batch(self, batch_indices):
+        batch_lengths = [self.lengths[i] for i in batch_indices]
+        rank_mbs = self._assign(batch_indices, batch_lengths)
+        for ga in range(self.grad_accum):
+            yield rank_mbs[self.rank][ga]
+
+    def __len__(self):
+        return self.num_global_batches * self.grad_accum
+
+    def _cost(self, bs: int, max_len: int) -> float:
+        return bs * max_len + self.QUADRATIC_COST_COEF * bs * max_len * max_len
+
+    def _assign(self, indices, lengths):
+        # Snake assignment: after balancing, sort the K groups by cost descending and deal them
+        # round-wise — slot k receives groups ranked [k*dp_size, (k+1)*dp_size). The highest-cost
+        # groups land in slot 0, the next-highest in slot 1, etc., so every slot has the same
+        # cost profile across ranks (each rank's slot-k micro-batches cost roughly the same) and
+        # the totals even out across grad-accumulation steps.
+        sorted_pairs = sorted(zip(indices, lengths), key=lambda x: x[1], reverse=True)
+
+        all_groups = self._balance_groups(sorted_pairs)
+
+        group_costs = [(i, self._group_cost(g)) for i, g in enumerate(all_groups)]
+        group_costs.sort(key=lambda x: x[1], reverse=True)
+
+        rank_mbs = [[[] for _ in range(self.grad_accum)] for _ in range(self.dp_size)]
+
+        for slot_idx in range(self.grad_accum):
+            slot_start = slot_idx * self.dp_size
+            for r in range(self.dp_size):
+                g_idx = group_costs[slot_start + r][0]
+                rank_mbs[r][slot_idx] = [idx for idx, _ in all_groups[g_idx]]
+
+        return rank_mbs
+
+    def _balance_groups(self, sorted_pairs):
+        """
+        Split `sorted_pairs` (sorted by length descending) into `K = dp_size * grad_accum`
+        contiguous groups with near-equal cost, by iterative hill climbing: each step moves one
+        sample from the most expensive group to the cheapest one that can receive it.
+
+        The search stops at a local optimum: `seen` detects cycles (no improving move left),
+        and `best_counts` snapshots the lowest-spread state seen along the way so exhausting
+        the iteration budget only degrades the result gracefully (no samples are dropped).
+
+        When the most expensive group is already at `min_per_group` samples it can no longer
+        give samples away, so spread cannot shrink further through it: its whole slot is
+        frozen (see `_relieve_and_freeze`) and the search continues on the remaining groups.
+        """
+        n = len(sorted_pairs)
+        K = self.dp_size * self.grad_accum
+        min_per_group = 1
+
+        base = n // K
+        remainder = n % K
+        if n < K * min_per_group:
+            raise ValueError(
+                f"Not enough samples ({n}) to fill {K} groups with at least {min_per_group} sample(s) each. "
+                f"Reduce effective_batch_size or increase the dataset size."
+            )
+        counts = [base + (1 if i < remainder else 0) for i in range(K)]
+
+        def compute_groups_costs(cts):
+            # Materialize contiguous groups from per-group counts and price each one.
+            groups = []
+            idx = 0
+            for c in cts:
+                groups.append(sorted_pairs[idx : idx + c])
+                idx += c
+            costs = [self._group_cost(g) for g in groups]
+            return groups, costs
+
+        frozen = set()
+        seen = set()
+        best_spread = float("inf")
+        best_counts = list(counts)
+
+        # Each iteration moves one sample between groups, so worst-case convergence is O(n).
+        # `effective_batch_size` (= n) covers the move-dominated regime (large batch, small K) that a
+        # fixed `K * 30` cap could cut off; `K * 30` stays a floor for the detection-dominated regime
+        # (tiny batch, n ~= K), where convergence comes from `spread == 0` / `seen` instead. Hitting
+        # the cap only degrades the result: `best_counts` is tracked below, so nothing is dropped.
+        for _ in range(max(K * 30, self.effective_batch_size)):
+            key = tuple(counts)
+            if key in seen:
+                break
+            seen.add(key)
+
+            groups, costs = compute_groups_costs(counts)
+
+            active = [i for i in range(K) if i not in frozen]
+            if len(active) <= 1:
+                break
+
+            active_costs = [costs[i] for i in active]
+            spread = max(active_costs) - min(active_costs)
+            if spread < best_spread:
+                best_spread = spread
+                best_counts = list(counts)
+
+            hi_idx = max(active, key=lambda i: costs[i])
+
+            if costs[hi_idx] == costs[min(active, key=lambda i: costs[i])]:
+                break
+
+            lo_candidates = sorted(active, key=lambda i: costs[i])
+            transferred = False
+            for lo_idx in lo_candidates:
+                if lo_idx == hi_idx or costs[lo_idx] == costs[hi_idx]:
+                    continue
+                if counts[hi_idx] > min_per_group:
+                    counts[hi_idx] -= 1
+                    counts[lo_idx] += 1
+                    transferred = True
+                    break
+            if not transferred:
+                if counts[hi_idx] <= min_per_group:
+                    cap_cost = costs[hi_idx]
+                    slot_members = self._slot_groups(costs, hi_idx)
+                    self._relieve_and_freeze(counts, slot_members, hi_idx, frozen, sorted_pairs, cap_cost)
+                else:
+                    break
+
+        groups, _ = compute_groups_costs(best_counts)
+        return groups
+
+    def _slot_groups(self, costs, pivot_idx):
+        """Return the groups that share `pivot_idx`'s slot."""
+        K = len(costs)
+        dp_size = self.dp_size
+        cost_ranking = sorted(range(K), key=lambda i: costs[i], reverse=True)
+        pivot_rank = cost_ranking.index(pivot_idx)
+        slot_num = pivot_rank // dp_size
+        slot_start = slot_num * dp_size
+        slot_end = min(slot_start + dp_size, K)
+        return set(cost_ranking[slot_start:slot_end])
+
+    def _relieve_and_freeze(self, counts, slot_members, pivot_idx, frozen, sorted_pairs, cap_cost):
+        """Freeze `slot_members` and exclude them from further balancing.
+
+        Called when the slot's most expensive group (`pivot_idx`) is down to `min_per_group`
+        samples and can no longer give samples away, so its cost cannot shrink anymore.
+        Before freezing, top up the slot's other groups from cheaper outside groups, never
+        letting a receiver's cost exceed `cap_cost` (the slot's peak). This moves samples
+        out of the outside groups, which helps balance the ones still active."""
+        K = len(counts)
+        for gi in slot_members:
+            if gi in frozen or gi == pivot_idx:
+                continue
+            while True:
+                _, costs_now = self._groups_costs_from(counts, sorted_pairs)
+                idx_start = sum(counts[:gi])
+                gi_max_len = sorted_pairs[idx_start][1] if counts[gi] > 0 else 0
+                projected = self._cost(counts[gi] + 1, gi_max_len)
+                if projected > cap_cost:
+                    break
+                donors = [i for i in range(K) if i not in frozen and i not in slot_members and counts[i] > 1]
+                if not donors:
+                    break
+                donor = min(donors, key=lambda i: costs_now[i])
+                counts[gi] += 1
+                counts[donor] -= 1
+        frozen.update(slot_members)
+
+    def _groups_costs_from(self, counts, sorted_pairs):
+        groups = []
+        idx = 0
+        for c in counts:
+            groups.append(sorted_pairs[idx : idx + c])
+            idx += c
+        costs = [self._group_cost(g) for g in groups]
+        return groups, costs
+
+    def _group_cost(self, group):
+        if not group:
+            return 0.0
+        max_len = group[0][1]
+        bs = len(group)
+        return self._cost(bs, max_len)
 
 
 class ShardSampler(Sampler):
@@ -900,85 +1114,59 @@ class IterableDatasetShard(IterableDataset):
             return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
 
-# In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
-# helper methods here
-
-
-def _get_learning_rate(self):
-    if self.is_deepspeed_enabled:
-        # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
-        # not run for the first few dozen steps while loss scale is too large, and thus during
-        # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
-        try:
-            last_lr = self.lr_scheduler.get_last_lr()[0]
-        except AssertionError as e:
-            if "need to call step" in str(e):
-                logger.warning("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
-                last_lr = 0
-            else:
-                raise
-    else:
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            last_lr = self.optimizer.param_groups[0]["lr"]
-        else:
-            last_lr = self.lr_scheduler.get_last_lr()[0]
-        if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
-    return last_lr
-
-
 def _secs2timedelta(secs):
     """
-    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
+    Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal places.
     """
 
     msec = int(abs(secs - int(secs)) * 100)
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
     """
-    Reformat Trainer metrics values to a human-readable format
+    Reformat Trainer metrics values to a human-readable format.
 
     Args:
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (`Dict[str, float]`): The reformatted metrics
+        metrics (`dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
     for k, v in metrics_copy.items():
         if "_mem_" in k:
-            metrics_copy[k] = f"{ v >> 20 }MB"
+            metrics_copy[k] = f"{v >> 20}MB"
         elif "_runtime" in k:
             metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
-            metrics_copy[k] = f"{ int(v) >> 30 }GF"
+            metrics_copy[k] = f"{int(v) >> 30}GF"
         elif isinstance(metrics_copy[k], float):
             metrics_copy[k] = round(v, 4)
 
     return metrics_copy
 
 
+# Trainer helper method: imported into the Trainer class and used as a method (takes `self` as first argument).
 def log_metrics(self, split, metrics):
     """
-    Log metrics in a specially formatted way
+    Log metrics in a specially formatted way.
 
     Under distributed environment this is done only for a process with rank 0.
 
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
 
     In order to get memory usage report you need to install `psutil`. You can do that with `pip install psutil`.
 
-    Now when this method is run, you will see a report that will include: :
+    Now when this method is run, you will see a report that will include:
 
     ```
     init_mem_cpu_alloc_delta   =     1301MB
@@ -1007,7 +1195,7 @@ def log_metrics(self, split, metrics):
     The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
     main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
     use a different amount of gpu memory. This is also not the same under DataParallel where gpu0 may require much more
-    memory than the rest since it stores the gradient and optimizer states for all participating GPUS. Perhaps in the
+    memory than the rest since it stores the gradient and optimizer states for all participating GPUs. Perhaps in the
     future these reports will evolve to measure those too.
 
     The CPU RAM metric measures RSS (Resident Set Size) includes both the memory which is unique to the process and the
@@ -1045,13 +1233,14 @@ def log_metrics(self, split, metrics):
         return
 
     print(f"***** {split} metrics *****")
-    metrics_formatted = self.metrics_format(metrics)
-    k_width = max(len(str(x)) for x in metrics_formatted.keys())
+    metrics_formatted = metrics_format(metrics)
+    k_width = max(len(str(x)) for x in metrics_formatted)
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
         print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
 
 
+# Trainer helper method
 def save_metrics(self, split, metrics, combined=True):
     """
     Save metrics into a json file for that split, e.g. `train_results.json`.
@@ -1061,7 +1250,7 @@ def save_metrics(self, split, metrics, combined=True):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`, `all`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call
@@ -1074,25 +1263,26 @@ def save_metrics(self, split, metrics, combined=True):
         return
 
     path = os.path.join(self.args.output_dir, f"{split}_results.json")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=4, sort_keys=True)
 
     if combined:
         path = os.path.join(self.args.output_dir, "all_results.json")
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path, encoding="utf-8") as f:
                 all_metrics = json.load(f)
         else:
             all_metrics = {}
 
         all_metrics.update(metrics)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(all_metrics, f, indent=4, sort_keys=True)
 
 
+# Trainer helper method
 def save_state(self):
     """
-    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model
+    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model.
 
     Under distributed environment this is done only for a process with rank 0.
     """
@@ -1103,9 +1293,45 @@ def save_state(self):
     self.state.save_to_json(path)
 
 
+# Trainer helper method
+def get_num_trainable_parameters(self) -> int:
+    """
+    Get the number of trainable parameters.
+    """
+    return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+
+# Trainer helper method
+def get_learning_rates(self) -> list[float]:
+    """
+    Returns the learning rate of each parameter from self.optimizer.
+    """
+    if self.optimizer is None:
+        raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+    return [group["lr"] for group in self.optimizer.param_groups]
+
+
+# Trainer helper method
+def get_optimizer_group(self, param: str | torch.nn.parameter.Parameter | None = None):
+    """
+    Returns optimizer group for a parameter if given, else returns all optimizer groups for params.
+
+    Args:
+        param (`str` or `torch.nn.parameter.Parameter`, *optional*):
+            The parameter for which optimizer group needs to be returned.
+    """
+    if self.optimizer is None:
+        raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+    if param is not None:
+        for group in self.optimizer.param_groups:
+            if param in group["params"]:
+                return group
+    return [group["params"] for group in self.optimizer.param_groups]
+
+
 def get_model_param_count(model, trainable_only=False):
     """
-    Calculate model's total param count. If trainable_only is True then count only those requiring grads
+    Calculate model's total param count. If trainable_only is True then count only those requiring grads.
     """
     if is_deepspeed_zero3_enabled():
 
@@ -1124,8 +1350,9 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
-    if forbidden_layer_names is None:
-        forbidden_layer_names = []
+    forbidden_layer_patterns = (
+        [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
+    )
     result = []
     for name, child in model.named_children():
         child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
@@ -1133,12 +1360,13 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
             f"{name}.{n}"
             for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
-            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
+            and not any(pattern.search(f"{name}.{n}".lower()) for pattern in forbidden_layer_patterns)
         ]
     # Add model specific parameters that are not in any child
     result += [
-        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+        k for k in model._parameters if not any(pattern.search(k.lower()) for pattern in forbidden_layer_patterns)
     ]
+
     return result
 
 
@@ -1205,7 +1433,7 @@ if is_sagemaker_mp_enabled():
             return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
-        return tensor.concat().detach().cpu()
+        return tensor.detach().concat().cpu()
 
 
 @dataclass
@@ -1231,16 +1459,14 @@ class AcceleratorConfig:
             all workers.
         use_seedable_sampler (`bool`, *optional*, defaults to `True`):
             Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            training results are fully reproducible using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are negligible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
         gradient_accumulation_kwargs (`dict`, *optional*):
             Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
             Any of the following (optional) keys are acceptable:
               num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if
                 the latter is set to 1, otherwise an exception will be raised.
-              adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`].
-                The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
               sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
         non_blocking (`bool`, *optional*, defaults to `False`):
@@ -1264,7 +1490,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: bool = field(
+    dispatch_batches: bool | None = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
@@ -1284,13 +1510,13 @@ class AcceleratorConfig:
         default=True,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducable using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "Ensures training results are fully reproducible using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are negligible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
 
-    non_blocking: Optional[bool] = field(
+    non_blocking: bool = field(
         default=False,
         metadata={
             "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
@@ -1300,15 +1526,13 @@ class AcceleratorConfig:
         },
     )
 
-    gradient_accumulation_kwargs: Optional[Dict] = field(
+    gradient_accumulation_kwargs: dict | None = field(
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
             "Any of the following (optional) keys are acceptable: "
             "  num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if "
             "    the latter is set to 1, otherwise an exception will be raised. "
-            "  adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`]. "
-            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
             "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
         },
@@ -1328,7 +1552,7 @@ class AcceleratorConfig:
         with open_file(json_file, "r", encoding="utf-8") as f:
             config_dict = json.load(f)
         # Check for keys and load sensible defaults
-        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
+        extra_keys = sorted(key for key in config_dict if key not in cls.__dataclass_fields__)
         if len(extra_keys) > 0:
             raise ValueError(
                 f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
@@ -1354,7 +1578,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
     """
 
-    def __init__(self, optimizer_dict=None, *args, **kwargs):
+    def __init__(self, optimizer_dict=None, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
         super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
@@ -1362,7 +1586,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     def zero_grad(self, set_to_none: bool = True) -> None:
         pass
 
-    def step(self, closure=None) -> Optional[float]:
+    def step(self, closure=None) -> float | None:
         pass
 
 
@@ -1378,8 +1602,7 @@ class LayerWiseDummyScheduler(LRScheduler):
         self.default_lr = kwargs["lr"]
         optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
-        verbose = False
-        super().__init__(optimizer, last_epoch, verbose)
+        super().__init__(optimizer, last_epoch)
 
     def get_lr(self):
         # default value
@@ -1410,3 +1633,27 @@ def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, i
     except Exception as e:
         # Log error if setting RNG state fails
         logger.error(err_template.format(backend=device_name, exception=e))
+
+
+def safe_globals():
+    """
+    Context manager to allowlist numpy objects for torch.load with weights_only=True.
+
+    Starting from version 2.4 PyTorch introduces a check for the objects loaded
+    with torch.load(weights_only=True). Starting from 2.6 weights_only=True becomes
+    a default and requires allowlisting of objects being loaded.
+
+    See: https://github.com/pytorch/pytorch/pull/137602
+    See: https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals
+    See: https://github.com/huggingface/accelerate/pull/3036
+    """
+    if version.parse(torch.__version__).release < version.parse("2.6").release:
+        return contextlib.nullcontext()
+
+    np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
+    allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
+    # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for
+    # all versions of numpy
+    allowlist += [type(np.dtype(np.uint32))]
+
+    return torch.serialization.safe_globals(allowlist)

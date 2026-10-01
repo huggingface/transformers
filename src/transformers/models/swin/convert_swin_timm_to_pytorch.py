@@ -1,10 +1,11 @@
 import argparse
 import json
+from io import BytesIO
 
-import requests
 import timm
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import AutoImageProcessor, SwinConfig, SwinForImageClassification
@@ -41,7 +42,7 @@ def get_swin_config(swin_name):
         num_classes = 1000
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -90,7 +91,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "mask" in key:
@@ -140,8 +141,9 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
-    image = Image.open(requests.get(url, stream=True).raw)
+    image_processor = AutoImageProcessor.from_pretrained(f"microsoft/{swin_name.replace('_', '-')}")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])

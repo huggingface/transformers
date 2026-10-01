@@ -13,21 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2023-04-18 and contributed to Hugging Face Transformers on 2023-07-03.*
 
 # UMT5
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=umt5">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mt5-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/mt5-small-finetuned-arxiv-cs-finetuned-arxiv-cs-full">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
-</div>
 
 ## Overview
 
-The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual Pretraining](https://openreview.net/forum?id=kXwdL1cWOAi) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay, Orhan Firat, Sharan Narang, Noah Constant.
+The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual Pretraining](https://huggingface.co/papers/2304.09151) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay, Orhan Firat, Sharan Narang, Noah Constant.
 
 The abstract from the paper is the following:
 
@@ -43,35 +36,37 @@ Google has released the following variants:
 This model was contributed by [agemagician](https://huggingface.co/agemagician) and [stefan-it](https://huggingface.co/stefan-it). The original code can be
 found [here](https://github.com/google-research/t5x).
 
-## Usage tips 
+## Usage tips
 
-- UMT5 was only pre-trained on [mC4](https://huggingface.co/datasets/mc4) excluding any supervised training.
+- UMT5 was only pre-trained on a refreshed version of the mC4 corpus (107 languages; the original mC4 is the `multilingual` config of [`allenai/c4`](https://huggingface.co/datasets/allenai/c4/viewer/multilingual)), excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
 - Since umT5 was pre-trained in an unsupervised manner, there's no real advantage to using a task prefix during single-task
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 ## Differences with mT5?
+
 `UmT5` is based on mT5, with a non-shared relative positional bias that is computed for each layer. This means that the model set `has_relative_bias` for each layer.
 The conversion script is also different because the model was saved in t5x's latest checkpointing format.
 
 # Sample usage
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/umt5-small")
->>> tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
 
->>> inputs = tokenizer(
-...     "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
-...     return_tensors="pt",
-... )
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs))
+model = AutoModelForSeq2SeqLM.from_pretrained("google/umt5-small", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+
+inputs = tokenizer(
+    "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
+    return_tensors="pt",
+)
+outputs = model.generate(**inputs)
+print(tokenizer.batch_decode(outputs))
 ['<pad><extra_id_0>nyone who<extra_id_1> drink<extra_id_2> a<extra_id_3> alcohol<extra_id_4> A<extra_id_5> A. This<extra_id_6> I<extra_id_7><extra_id_52><extra_id_53></s>']
 ```
 
-<Tip> 
+<Tip>
 
 Refer to [T5's documentation page](t5) for more tips, code examples and notebooks.
 </Tip>
@@ -109,4 +104,3 @@ Refer to [T5's documentation page](t5) for more tips, code examples and notebook
 
 [[autodoc]] UMT5ForQuestionAnswering
     - forward
-

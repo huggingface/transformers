@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import copy
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -217,11 +216,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": SplinterModel} if is_torch_available() else {}
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -275,7 +270,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SplinterModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -283,12 +278,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -337,41 +326,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model_name = "tau/splinter-base"
         model = SplinterModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    # overwrite from common since `SplinterForPreTraining` could contain different number of question tokens in inputs.
-    # When the batch is distributed to multiple devices, each replica could get different values for the maximal number
-    # of question tokens (see `SplinterForPreTraining._prepare_question_positions()`), and the model returns different
-    # shape along dimension 1 (i.e. `num_questions`) that could not be combined into a single tensor as an output.
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        from torch import nn
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
-        # move input tensors to cuda:O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            # Skip this case since it will fail sometimes, as described above.
-            if model_class == SplinterForPreTraining:
-                continue
-
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = nn.DataParallel(model)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 @require_torch

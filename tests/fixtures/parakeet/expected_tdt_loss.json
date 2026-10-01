@@ -1,0 +1,43 @@
+{
+  "seed": 42,
+  "batch_size": 2,
+  "max_t": 8,
+  "max_u": 4,
+  "vocab_size": 5,
+  "durations": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "targets": [
+    [
+      4,
+      2,
+      2,
+      1
+    ],
+    [
+      0,
+      4,
+      2,
+      4
+    ]
+  ],
+  "logit_lengths": [
+    8,
+    7
+  ],
+  "target_lengths": [
+    4,
+    3
+  ],
+  "expected_loss_sum": 21.978166580200195,
+  "expected_loss_mean": 3.124553918838501,
+  "expected_loss_none": [
+    12.923372268676758,
+    9.054794311523438
+  ],
+  "expected_loss_mean_sigma_0p05": 3.1921849250793457
+}

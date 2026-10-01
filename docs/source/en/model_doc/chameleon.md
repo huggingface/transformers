@@ -13,14 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-05-16 and contributed to Hugging Face Transformers on 2024-07-17.*
 
 # Chameleon
 
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models
-](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet.
-
+The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models](https://huggingface.co/papers/2405.09818) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet.
 
 The abstract from the paper is the following:
 
@@ -36,15 +40,13 @@ including Gemini Pro and GPT-4V, according to human judgments on a new long-form
 generation evaluation, where either the prompt or outputs contain mixed sequences of both images and
 text. Chameleon marks a significant step forward in unified modeling of full multimodal documents*
 
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chameleon_arch.png"
 alt="drawing" width="600"/>
 
-<small> Chameleon incorporates a vector quantizer module to transform images into discrete tokens. That also enables image generation using an auto-regressive transformer. Taken from the <a href="https://arxiv.org/abs/2405.09818v1">original paper.</a> </small>
+<small> Chameleon incorporates a vector quantizer module to transform images into discrete tokens. That also enables image generation using an auto-regressive transformer. Taken from the <a href="https://huggingface.co/papers/2405.09818">original paper.</a> </small>
 
 This model was contributed by [joaogante](https://huggingface.co/joaogante) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/facebookresearch/chameleon).
-
 
 ## Usage tips
 
@@ -65,20 +67,21 @@ Chameleon is a gated model so make sure to have access and login to Hugging Face
 Here's how to load the model and perform inference in half-precision (`torch.bfloat16`):
 
 ```python
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
-import torch
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import ChameleonForConditionalGeneration, ChameleonProcessor
+
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", device_map="auto")
 
 # prepare image and text prompt
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "What do you see in this image?<image>"
 
-inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=50)
@@ -90,14 +93,15 @@ print(processor.decode(output[0], skip_special_tokens=True))
 Chameleon can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
 
 ```python
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
-import torch
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import ChameleonForConditionalGeneration, ChameleonProcessor
+
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", device_map="auto")
 
 # Get three different images
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -117,7 +121,7 @@ prompts = [
 
 # We can simply feed images in the order they have to be used in the text prompt
 # Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
-inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(device="cuda", dtype=torch.bfloat16)
+inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(device=model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=50)
@@ -141,7 +145,8 @@ We value your feedback to help identify bugs before the full release! Check out 
 Simply change the snippet above with:
 
 ```python
-from transformers import ChameleonForConditionalGeneration, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig, ChameleonForConditionalGeneration
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -150,7 +155,7 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.bfloat16,
 )
 
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", quantization_config=quantization_config, device_map="cuda")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", quantization_config=quantization_config, device_map="auto")
 ```
 
 ### Use Flash-Attention 2 and SDPA to further speed-up generation
@@ -160,13 +165,12 @@ The models supports both, Flash-Attention 2 and PyTorch's [`torch.nn.functional.
 ```python
 from transformers import ChameleonForConditionalGeneration
 
+
 model_id = "facebook/chameleon-7b"
 model = ChameleonForConditionalGeneration.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16,
-    low_cpu_mem_usage=True,
     attn_implementation="flash_attention_2"
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## ChameleonConfig
@@ -180,10 +184,16 @@ model = ChameleonForConditionalGeneration.from_pretrained(
 ## ChameleonProcessor
 
 [[autodoc]] ChameleonProcessor
+    - __call__
 
 ## ChameleonImageProcessor
 
 [[autodoc]] ChameleonImageProcessor
+    - preprocess
+
+## ChameleonImageProcessorPil
+
+[[autodoc]] ChameleonImageProcessorPil
     - preprocess
 
 ## ChameleonVQVAE
@@ -195,8 +205,10 @@ model = ChameleonForConditionalGeneration.from_pretrained(
 
 [[autodoc]] ChameleonModel
     - forward
+    - get_image_features
 
 ## ChameleonForConditionalGeneration
 
 [[autodoc]] ChameleonForConditionalGeneration
     - forward
+    - get_image_features

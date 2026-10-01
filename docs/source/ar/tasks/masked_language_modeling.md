@@ -176,8 +176,6 @@ pip install transformers datasets evaluate
 
 الآن، قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForLanguageModeling`]. من الأكثر كفاءة أن تقوم بـ *الحشو الديناميكي* ليصل طولها إلى أطول جملة في الدفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الطول الأقصى.
 
-<frameworkcontent>
-<pt>
 
 استخدم رمز نهاية التسلسل كرمز الحشو وحدد `mlm_probability` لحجب الرموز عشوائياً كل مرة تكرر فيها البيانات:
 
@@ -187,23 +185,9 @@ pip install transformers datasets evaluate
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-<tf>
-
-استخدم رمز نهاية التسلسل كرمز الحشو وحدد `mlm_probability` لحجب الرموز عشوائياً كل مرة تكرر فيها البيانات:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -263,75 +247,6 @@ Perplexity: 8.76
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-إذا لم تكن على دراية بتعديل نموذج باستخدام Keras، ألق نظرة على الدليل الأساسي [هنا](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-لتعديل نموذج في TensorFlow، ابدأ بإعداد دالة محسن، وجدول معدل التعلم، وبعض معلمات التدريب:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-ثم يمكنك تحميل DistilRoBERTa باستخدام [`TFAutoModelForMaskedLM`]:
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
-```
-
-قم بتحويل مجموعات بياناتك إلى تنسيق `tf.data.Dataset` باستخدام [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     lm_dataset["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     lm_dataset["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-قم بتهيئة النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن نماذج Transformers لديها جميعها دالة خسارة افتراضية ذات صلة بالمهمة، لذلك لا تحتاج إلى تحديد واحدة ما لم تكن تريد ذلك:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # لا توجد حجة للخسارة!
-```
-
-يمكن القيام بذلك عن طريق تحديد مكان دفع نموذجك ومعالج الرموز في [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_eli5_mlm_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-أخيراً، أنت مستعد لبدء تدريب نموذجك! قم باستدعاء [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق، وعدد العصور، والتعليقات الخاصة بك لتعديل النموذج:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
-```
-
-بمجرد اكتمال التدريب، يتم تحميل نموذجك تلقائياً إلى Hub حتى يتمكن الجميع من استخدامه!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -372,8 +287,6 @@ Perplexity: 8.76
   'sequence': 'The Milky Way is a small galaxy.'}]
 ```
 
-<frameworkcontent>
-<pt>
 قم بتجزئة النص وإرجاع `input_ids` كمتجهات PyTorch. ستحتاج أيضًا إلى تحديد موضع رمز `<mask>`:
 
 ```py
@@ -405,38 +318,3 @@ The Milky Way is a spiral galaxy.
 The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
-</pt>
-<tf>
-قم بتقسيم النص إلى رموز وإرجاع `input_ids` كـ TensorFlow tensors. ستحتاج أيضًا إلى تحديد موضع رمز `<mask>`:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_eli5_mlm_model")
->>> inputs = tokenizer(text, return_tensors="tf")
->>> mask_token_index = tf.where(inputs["input_ids"] == tokenizer.mask_token_id)[0, 1]
-```
-
-قم بتمرير المدخلات إلى النموذج وإرجاع `logits` للرمز المقنع:
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("username/my_awesome_eli5_mlm_model")
->>> logits = model(**inputs).logits
->>> mask_token_logits = logits[0, mask_token_index, :]
-```
-
-ثم قم بإرجاع الرموز الثلاثة المقنعة ذات الاحتمالية الأعلى وطباعتها:
-
-```py
->>> top_3_tokens = tf.math.top_k(mask_token_logits, 3).indices.numpy()
-
->>> for token in top_3_tokens:
-...     print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
-The Milky Way is a spiral galaxy.
-The Milky Way is a massive galaxy.
-The Milky Way is a small galaxy.
-```
-</tf>
-</frameworkcontent>

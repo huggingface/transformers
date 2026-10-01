@@ -9,17 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2022-07-11 and contributed to Hugging Face Transformers on 2023-03-27.*
 
 # NLLB-MOE
 
 
 ## Overview
 
-The NLLB model was presented in [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by Marta R. Costa-jussà, James Cross, Onur Çelebi,
+The NLLB model was presented in [No Language Left Behind: Scaling Human-Centered Machine Translation](https://huggingface.co/papers/2207.04672) by Marta R. Costa-jussà, James Cross, Onur Çelebi,
 Maha Elbayad, Kenneth Heafield, Kevin Heffernan, Elahe Kalbassi, Janice Lam, Daniel Licht, Jean Maillard, Anna Sun, Skyler Wang, Guillaume Wenzek, Al Youngblood, Bapi Akula,
 Loic Barrault, Gabriel Mejia Gonzalez, Prangthip Hansanti, John Hoffman, Semarley Jarrett, Kaushik Ram Sadagopan, Dirk Rowe, Shannon Spruit, Chau Tran, Pierre Andrews,
 Necip Fazil Ayan, Shruti Bhosale, Sergey Edunov, Angela Fan, Cynthia Gao, Vedanuj Goswami, Francisco Guzmán, Philipp Koehn, Alexandre Mourachko, Christophe Ropers,
@@ -48,10 +49,10 @@ The original code can be found [here](https://github.com/facebookresearch/fairse
 
 ## Implementation differences with SwitchTransformers
 
-The biggest difference is the way the tokens are routed. NLLB-MoE uses a `top-2-gate` which means that for each input, only the top two experts are selected based on the 
-highest predicted probabilities from the gating network, and the remaining experts are ignored. In `SwitchTransformers`, only the top-1 probabilities are computed, 
-which means that tokens have less probability of being forwarded. Moreover, if a token is not routed to any expert, `SwitchTransformers` still adds its unmodified hidden 
-states (kind of like a residual connection) while they are masked in `NLLB`'s top-2 routing mechanism. 
+The biggest difference is the way the tokens are routed. NLLB-MoE uses a `top-2-gate` which means that for each input, only the top two experts are selected based on the
+highest predicted probabilities from the gating network, and the remaining experts are ignored. In `SwitchTransformers`, only the top-1 probabilities are computed,
+which means that tokens have less probability of being forwarded. Moreover, if a token is not routed to any expert, `SwitchTransformers` still adds its unmodified hidden
+states (kind of like a residual connection) while they are masked in `NLLB`'s top-2 routing mechanism.
 
 ## Generating with NLLB-MoE
 
@@ -64,18 +65,19 @@ Note that we're using the BCP-47 code for French `fra_Latn`. See [here](https://
 for the list of all BCP-47 in the Flores 200 dataset.
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
->>> article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
->>> inputs = tokenizer(article, return_tensors="pt")
+tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
->>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=50
-... )
->>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
+
+translated_tokens = model.generate(
+    **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=50
+)
+tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 "Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage."
 ```
 
@@ -87,25 +89,25 @@ you should specify the BCP-47 code in the `src_lang` keyword argument of the tok
 See example below for a translation from romanian to german:
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
 
->>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"
->>> inputs = tokenizer(article, return_tensors="pt")
+tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
->>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
-... )
->>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+article = "Şeful ONU spune că nu există o soluţie militară în Siria"
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
+
+translated_tokens = model.generate(
+    **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
+)
+tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 ```
 
 ## Resources
 
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)
-
 
 ## NllbMoeConfig
 
@@ -131,4 +133,3 @@ See example below for a translation from romanian to german:
 
 [[autodoc]] NllbMoeForConditionalGeneration
     - forward
-

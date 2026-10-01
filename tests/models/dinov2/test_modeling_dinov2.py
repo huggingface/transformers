@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,16 +14,18 @@
 """Testing suite for the PyTorch Dinov2 model."""
 
 import unittest
+from functools import cached_property
+
+import pytest
 
 from transformers import Dinov2Config
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -67,6 +68,7 @@ class Dinov2ModelTester:
         scope=None,
         attn_implementation="eager",
         mask_ratio=0.5,
+        use_swiglu_ffn=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -87,6 +89,7 @@ class Dinov2ModelTester:
         self.scope = scope
         self.attn_implementation = attn_implementation
         self.mask_ratio = mask_ratio
+        self.use_swiglu_ffn = use_swiglu_ffn
 
         # in Dinov2, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -120,6 +123,7 @@ class Dinov2ModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             attn_implementation=self.attn_implementation,
+            use_swiglu_ffn=self.use_swiglu_ffn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -212,8 +216,6 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    test_torch_exportable = True
-
     all_model_classes = (
         (
             Dinov2Model,
@@ -228,19 +230,18 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
+
+    def test_reverse_loading_mapping(self):
+        # Force the SwiGLU MLP: weights_in/weights_out -> gate/up/down is the only MLP path with a converter rule.
+        # Plain fc1/fc2 needs no rule and round-trips via test_save_load on the default config.
+        self.model_tester.use_swiglu_ffn = True
+        super().test_reverse_loading_mapping()
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
-
-    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
-    def test_initialization(self):
-        super().test_initialization()
+        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -249,23 +250,17 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -329,7 +324,11 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-2.2005, -0.4495, 1.0964], [-3.3959, -0.8942, -1.0315], [-2.9355, 1.1564, -0.7656]],
+            [
+                [-2.2001, -0.4484, 1.0978],
+                [-3.3830, -0.8899, -1.0198],
+                [-2.9340, 1.1604, -0.7696],
+            ],
             device=torch_device,
         )
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)

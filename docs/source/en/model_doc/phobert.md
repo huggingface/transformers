@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-03-02 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # PhoBERT
 
+
 ## Overview
 
-The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://www.aclweb.org/anthology/2020.findings-emnlp.92.pdf) by Dat Quoc Nguyen, Anh Tuan Nguyen.
+The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://huggingface.co/papers/2003.00744) by Dat Quoc Nguyen, Anh Tuan Nguyen.
 
 The abstract from the paper is the following:
 
@@ -33,29 +35,27 @@ This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The o
 ## Usage example
 
 ```python
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
+import torch
 
->>> phobert = AutoModel.from_pretrained("vinai/phobert-base")
->>> tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
+from transformers import AutoModel, AutoTokenizer
 
->>> # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
->>> line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
 
->>> input_ids = torch.tensor([tokenizer.encode(line)])
+phobert = AutoModel.from_pretrained("vinai/phobert-base", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
 
->>> with torch.no_grad():
-...     features = phobert(input_ids)  # Models outputs are now tuples
+# INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
+line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
 
->>> # With TensorFlow 2.0+:
->>> # from transformers import TFAutoModel
->>> # phobert = TFAutoModel.from_pretrained("vinai/phobert-base")
+input_ids = torch.tensor([tokenizer.encode(line)])
+
+with torch.no_grad():
+    features = phobert(input_ids)  # Models outputs are now tuples
 ```
 
-<Tip> 
+<Tip>
 
-PhoBERT implementation is the same as BERT, except for tokenization. Refer to [BERT documentation](bert) for information on 
-configuration classes and their parameters. PhoBERT-specific tokenizer is documented below.  
+PhoBERT implementation is the same as BERT, except for tokenization. Refer to [BERT documentation](bert) for information on
+configuration classes and their parameters. PhoBERT-specific tokenizer is documented below.
 
 </Tip>
 

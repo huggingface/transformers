@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -9,54 +9,72 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2023-01-19 and contributed to Hugging Face Transformers on 2024-12-05.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # I-JEPA
 
-## Overview
+[I-JEPA](https://huggingface.co/papers/2301.08243) is a self-supervised learning method that learns semantic image representations by predicting parts of an image from other parts of the image. It compares the abstract representations of the image (rather than pixel level comparisons), which avoids the typical pitfalls of data augmentation bias and pixel-level details that don't capture semantic meaning.
 
-The I-JEPA model was proposed in [Image-based Joint-Embedding Predictive Architecture](https://arxiv.org/abs/2301.08243) by Mahmoud Assran, Quentin Duval, Ishan Misra, Piotr Bojanowski, Pascal Vincent, Michael Rabbat, Yann LeCun, Nicolas Ballas.
-I-JEPA is a self-supervised learning method that predicts the representations of one part of an image based on other parts of the same image. This approach focuses on learning semantic features without relying on pre-defined invariances from hand-crafted data transformations, which can bias specific tasks, or on filling in pixel-level details, which often leads to less meaningful representations.
+You can find the original I-JEPA checkpoints under the [AI at Meta](https://huggingface.co/facebook/models?search=ijepa) organization.
+> [!TIP]
+> This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
 
-The abstract from the paper is the following:
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ijepa_architecture.jpg">
 
-This paper demonstrates an approach for learning highly semantic image representations without relying on hand-crafted data-augmentations. We introduce the Image- based Joint-Embedding Predictive Architecture (I-JEPA), a non-generative approach for self-supervised learning from images. The idea behind I-JEPA is simple: from a single context block, predict the representations of various target blocks in the same image. A core design choice to guide I-JEPA towards producing semantic representations is the masking strategy; specifically, it is crucial to (a) sample tar- get blocks with sufficiently large scale (semantic), and to (b) use a sufficiently informative (spatially distributed) context block. Empirically, when combined with Vision Transform- ers, we find I-JEPA to be highly scalable. For instance, we train a ViT-Huge/14 on ImageNet using 16 A100 GPUs in under 72 hours to achieve strong downstream performance across a wide range of tasks, from linear classification to object counting and depth prediction.
+> Click on the I-JEPA models in the right sidebar for more examples of how to apply I-JEPA to different image representation and classification tasks.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ijepa_architecture.jpg"
-alt="drawing" width="600"/>
+The example below demonstrates how to extract image features with [`Pipeline`] or the [`AutoModel`] class.
 
-<small> I-JEPA architecture. Taken from the <a href="https://arxiv.org/abs/2301.08243">original paper.</a> </small>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
-The original code can be found [here](https://github.com/facebookresearch/ijepa).
+```python
+from transformers import pipeline
 
-## How to use
 
-Here is how to use this model for image feature extraction:
+feature_extractor = pipeline(
+    task="image-feature-extraction",
+    model="facebook/ijepa_vith14_1k",
+    device=0,
+)
+features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True).to(model.device)
+
+print(f"Feature shape: {features.shape}")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 import requests
-import torch
 from PIL import Image
 from torch.nn.functional import cosine_similarity
 
 from transformers import AutoModel, AutoProcessor
+
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
 image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
-model_id = "facebook/ijepa_vith14_1k"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")
+model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", attn_implementation="sdpa", device_map="auto")
 
-@torch.no_grad()
+
 def infer(image):
-    inputs = processor(image, return_tensors="pt")
+    inputs = processor(image, return_tensors="pt").to(model.device)
     outputs = model(**inputs)
     return outputs.last_hidden_state.mean(dim=1)
 
@@ -68,14 +86,43 @@ similarity = cosine_similarity(embed_1, embed_2)
 print(similarity)
 ```
 
-## Resources
+</hfoption>
+</hfoptions>
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with I-JEPA.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-<PipelineTag pipeline="image-classification"/>
+```python
+from transformers import AutoModel, AutoProcessor, BitsAndBytesConfig
 
-- [`IJepaForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bit_use_double_quant=True,
+)
+
+url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
+image_1 = Image.open(requests.get(url_1, stream=True).raw)
+image_2 = Image.open(requests.get(url_2, stream=True).raw)
+
+processor = AutoProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
+model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, attn_implementation="sdpa", device_map="auto")
+
+
+def infer(image):
+    inputs = processor(image, return_tensors="pt").to(model.device)
+    outputs = model(**inputs)
+    return outputs.last_hidden_state.mean(dim=1)
+
+
+embed_1 = infer(image_1)
+embed_2 = infer(image_2)
+
+similarity = cosine_similarity(embed_1, embed_2)
+print(similarity)
+```
 
 ## IJepaConfig
 

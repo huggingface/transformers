@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -23,6 +23,7 @@ Image-text-to-text models, also known as vision language models (VLMs), are lang
 In this guide, we provide a brief overview of VLMs and show how to use them with Transformers for inference.
 
 To begin with, there are multiple types of VLMs:
+
 - base models used for fine-tuning
 - chat fine-tuned models for conversation
 - instruction fine-tuned models
@@ -32,26 +33,28 @@ This guide focuses on inference with an instruction-tuned model.
 Let's begin installing the dependencies.
 
 ```bash
-pip install -q transformers accelerate flash_attn
+pip install -q transformers accelerate 
+pip install flash-attn --no-build-isolation
 ```
 
 Let's initialize the model and the processor.
 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
+from accelerate import Accelerator
 import torch
 
-device = torch.device("cuda")
+device = Accelerator().device
 model = AutoModelForImageTextToText.from_pretrained(
-    "HuggingFaceM4/idefics2-8b",
-    torch_dtype=torch.bfloat16,
+    "Qwen/Qwen3-VL-4B-Instruct",
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 ).to(device)
 
-processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct")
 ```
 
-This model has a [chat template](./chat_templating) that helps user parse chat outputs. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs.
+This model has a [chat template](../chat_templating) that helps user parse chat outputs. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs.
 
 The image inputs look like the following.
 
@@ -63,26 +66,28 @@ The image inputs look like the following.
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="A bee on a pink flower"/>
 </div>
 
-
-```python
-from PIL import Image
-import requests
-
-img_urls =["https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png",
-           "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"]
-images = [Image.open(requests.get(img_urls[0], stream=True).raw),
-          Image.open(requests.get(img_urls[1], stream=True).raw)]
-```
-
-Below is an example of the chat template. We can feed conversation turns and the last message as an input by appending it at the end of the template.
-
+Structure your conversation as shown below for a single prompt with image and text inputs.
 
 ```python
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"},
+            {"type": "text", "text": "What do we see in this image?"},
+        ]
+    }
+]
+```
+
+Alternate between the `user` and `assistant` role to ground the model with prior context to generate better responses.
+
+```python
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"},
             {"type": "text", "text": "What do we see in this image?"},
         ]
     },
@@ -95,7 +100,7 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"},
             {"type": "text", "text": "And how about this image?"},
         ]
     },
@@ -105,19 +110,20 @@ messages = [
 We will now call the processors' [`~ProcessorMixin.apply_chat_template`] method to preprocess its output along with the image inputs.
 
 ```python
-prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=prompt, images=[images[0], images[1]], return_tensors="pt").to(device)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(device)
 ```
 
 We can now pass the preprocessed inputs to the model.
 
 ```python
+input_len = len(inputs.input_ids[0])
+
 with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=500)
-generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    generated_ids = model.generate(**inputs, max_new_tokens=200)
+generated_texts = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)
 
 print(generated_texts)
-## ['User: What do we see in this image? \nAssistant: In this image we can see two cats on the nets. \nUser: And how about this image? \nAssistant: In this image we can see flowers, plants and insect.']
+## ['In this image we can see flowers, plants and insect.']
 ```
 
 ## Pipeline
@@ -160,12 +166,58 @@ outputs[0]["generated_text"]
 #  with a yellow center in the foreground. The flower is surrounded by red and white flowers with green stems
 ```
 
+If you prefer, you can also load the images separately and pass them to the pipeline like so:
+
+```python
+import requests
+from PIL import Image
+from transformers import pipeline
+
+pipe = pipeline("image-text-to-text", model="HuggingFaceTB/SmolVLM-256M-Instruct")
+
+img_urls = [
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png",
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+]
+images = [
+    Image.open(requests.get(img_urls[0], stream=True).raw),
+    Image.open(requests.get(img_urls[1], stream=True).raw),
+]
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "text", "text": "What do you see in these images?"},
+        ],
+    }
+]
+outputs = pipe(text=messages, images=images, max_new_tokens=50, return_full_text=False)
+outputs[0]["generated_text"]
+" In the first image, there are two cats sitting on a plant. In the second image, there are flowers with a pinkish hue."
+```
+
+The images will still be included in the `"input_text"` field of the output:
+
+```python
+outputs[0]['input_text']
+"""
+[{'role': 'user',
+  'content': [{'type': 'image',
+    'image': <PIL.PngImagePlugin.PngImageFile image mode=RGBA size=622x412>},
+   {'type': 'image',
+    'image': <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=5184x3456>},
+   {'type': 'text', 'text': 'What do you see in these images?'}]}]
+"""
+```
+
 ## Streaming
 
-We can use [text streaming](./generation_strategies#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
+We can use [text streaming](../generation_features#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
 
 Assume we have an application that keeps chat history and takes in the new user input. We will preprocess the inputs as usual and initialize [`TextIteratorStreamer`] to handle the generation in a separate thread. This allows you to stream the generated text tokens in real-time. Any generation arguments can be passed to [`TextIteratorStreamer`].
-
 
 ```python
 import time
@@ -244,12 +296,12 @@ for value in generator:
 
 ## Fit models in smaller hardware
 
-VLMs are often large and need to be optimized to fit on smaller hardware. Transformers supports many model quantization libraries, and here we will only show int8 quantization with [Quanto](./quantization/quanto#quanto). int8 quantization offers memory improvements up to 75 percent (if all weights are quantized). However it is no free lunch, since 8-bit is not a CUDA-native precision, the weights are quantized back and forth on the fly, which adds up to latency.
+VLMs are often large and need to be optimized to fit on smaller hardware. Transformers supports many model quantization libraries, and here we will only show int8 quantization with [Quanto](../quantization/quanto). int8 quantization offers memory improvements up to 75 percent (if all weights are quantized). However it is no free lunch, since 8-bit is not a CUDA-native precision, the weights are quantized back and forth on the fly, which adds up to latency.
 
 First, install dependencies.
 
 ```bash
-pip install -U quanto bitsandbytes
+pip install -U optimum-quanto bitsandbytes
 ```
 
 To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization.
@@ -257,14 +309,105 @@ To quantize a model during loading, we need to first create [`QuantoConfig`]. Th
 ```python
 from transformers import AutoModelForImageTextToText, QuantoConfig
 
-model_id = "HuggingFaceM4/idefics2-8b"
+model_id = "Qwen/Qwen3-VL-4B-Instruct"
 quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="cuda", quantization_config=quantization_config
+    model_id, device_map="auto", quantization_config=quantization_config
 )
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"},
+            {"type": "text", "text": "What do we see in this image?"},
+        ]
+    },
+]
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(quantized_model.device)
+input_len = len(inputs.input_ids[0])
+
+with torch.no_grad():
+    generated_ids = quantized_model.generate(**inputs, cache_implementation="static", max_new_tokens=100)
+generated_texts = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)
+
+print(generated_texts[0])
+## ['In this image, we see two tabby cats resting on a large, tangled pile of fishing nets. The nets are a mix of brown, orange, and red colors, with some blue and green ropes visible in the background. The cats appear relaxed and comfortable, nestled into the fibers of the nets. One cat is in the foreground, looking slightly to the side, while the other is positioned further back, looking directly at the camera. The scene suggests a coastal or fishing-related setting, possibly near']
 ```
 
 And that's it, we can use the model the same way with no changes.
+
+
+## Iterative chatting with cache
+
+If you're building multimodal chat agents, you’re likely passing the same images or audio across turns. Caching lets you reuse their encoded representations instead of reprocessing them each time, cutting redundant computation.
+
+Like text-only models, multimodal models track dialogue history with a [chat template](../chat_templating). The key difference is that it applies the chat template in `"text"` format only and processes new multimodal content separately. If you apply the template with processing, the entire conversation gets reprocessed every turn because Jinja can't distinguish previously encoded inputs from new ones.
+
+The example below demonstrates this pattern. For text-only models, see the [iterative generation](../kv_cache#iterative-generation) guide.
+
+Here’s a simple Python example demonstrating this pattern. For an example with text-only models, refer to [this guide](../kv_cache.md#iterative-generation).
+
+```python
+import torch
+from transformers import AutoProcessor, Gemma4ForConditionalGeneration, TextStreamer
+from transformers.cache_utils import DynamicCache
+from transformers.image_utils import load_image
+from transformers.audio_utils import load_audio
+
+model_id = 'google/gemma-4-E2B-it'
+processor = AutoProcessor.from_pretrained(model_id)
+model = Gemma4ForConditionalGeneration.from_pretrained(model_id, dtype=torch.float32, device_map='cpu')
+
+past_key_values = DynamicCache()
+streamer = TextStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+## Turn 1: multimodal input (text + image + audio)
+audio = load_audio("https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav")
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "In detail, describe the following audio and image."},
+            {"type": "audio"},
+            {"type": "image"},
+        ],
+    },
+]
+input_string = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=input_string, images=[image], audio=[audio], return_tensors='pt')
+output = model.generate(**inputs, past_key_values=past_key_values, max_new_tokens=1024, do_sample=False, streamer=streamer)
+first_response = processor.decode(output[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+
+## Turn 2: text-only follow-up (reuses KV cache, no new media)
+messages.append({"role": "assistant", "content": [{"type": "text", "text": first_response}]})
+cached_string = processor.apply_chat_template(messages, tokenize=False)
+messages.append({"role": "user", "content": [{"type": "text", "text": "Summarize the previous descriptions in one sentence."}]})
+full_string = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+new_string = full_string[len(cached_string):]
+
+new_input_ids = processor.tokenizer(new_string, add_special_tokens=False, return_tensors='pt')['input_ids']
+# Build and pass an attention mask only if batched input or there is padding
+# attention_mask = torch.ones(1, past_key_values.get_seq_length() + new_input_ids.shape[1], dtype=torch.long)
+
+output2 = model.generate(input_ids=new_input_ids, past_key_values=past_key_values, max_new_tokens=1024, do_sample=False, streamer=streamer)
+second_response = processor.decode(output2[0][new_input_ids.shape[1]:], skip_special_tokens=True)
+
+## Turn 3: new image (must go through processor for image token expansion + encoding)
+image2 = load_image("https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/artemis.jpeg")
+messages.append({"role": "assistant", "content": [{"type": "text", "text": second_response}]})
+cached_string2 = processor.apply_chat_template(messages, tokenize=False)
+messages.append({"role": "user", "content": [{"type": "text", "text": "Describe this image."}, {"type": "image"}]})
+full_string2 = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+new_string2 = full_string2[len(cached_string2):]
+
+new_inputs2 = processor(text=new_string2, images=[image2], add_special_tokens=False, return_tensors='pt')
+# new_inputs2['attention_mask'] = torch.ones(1, past_key_values.get_seq_length() + new_inputs2['input_ids'].shape[1], dtype=torch.long)
+new_inputs2['past_key_values'] = past_key_values
+
+output3 = model.generate(**new_inputs2, max_new_tokens=1024, do_sample=False, streamer=streamer)
+```
 
 ## Further Reading
 
@@ -272,3 +415,4 @@ Here are some more resources for the image-text-to-text task.
 
 - [Image-text-to-text task page](https://huggingface.co/tasks/image-text-to-text) covers model types, use cases, datasets, and more.
 - [Vision Language Models Explained](https://huggingface.co/blog/vlms) is a blog post that covers everything about vision language models and supervised fine-tuning using [TRL](https://huggingface.co/docs/trl/en/index).
+- [Learn how to fine-tune vision language models using TRL](https://huggingface.co/blog/trl-vlm-alignment)

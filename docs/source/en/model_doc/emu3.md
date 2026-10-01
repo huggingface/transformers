@@ -9,19 +9,24 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-09-27 and contributed to Hugging Face Transformers on 2025-01-10.*
 
 # Emu3
 
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Emu3 model was proposed in [Emu3: Next-Token Prediction is All You Need](https://arxiv.org/abs/2409.18869) by Xinlong Wang, Xiaosong Zhang, Zhengxiong Luo, Quan Sun, Yufeng Cui, Jinsheng Wang, Fan Zhang, Yueze Wang, Zhen Li, Qiying Yu, Yingli Zhao, Yulong Ao, Xuebin Min, Tao Li, Boya Wu, Bo Zhao, Bowen Zhang, Liangdong Wang, Guang Liu, Zheqi He, Xi Yang, Jingjing Liu, Yonghua Lin, Tiejun Huang, Zhongyuan Wang.
+The Emu3 model was proposed in [Emu3: Next-Token Prediction is All You Need](https://huggingface.co/papers/2409.18869) by Xinlong Wang, Xiaosong Zhang, Zhengxiong Luo, Quan Sun, Yufeng Cui, Jinsheng Wang, Fan Zhang, Yueze Wang, Zhen Li, Qiying Yu, Yingli Zhao, Yulong Ao, Xuebin Min, Tao Li, Boya Wu, Bo Zhao, Bowen Zhang, Liangdong Wang, Guang Liu, Zheqi He, Xi Yang, Jingjing Liu, Yonghua Lin, Tiejun Huang, Zhongyuan Wang.
 
-Emu3 is a multimodal LLM that uses vector quantization to tokenize images into discrete tokens. Discretized image tokens are later fused with text token ids for image and text generation. The model can additionally generate images by predicting image token ids. 
-
+Emu3 is a multimodal LLM that uses vector quantization to tokenize images into discrete tokens. Discretized image tokens are later fused with text token ids for image and text generation. The model can additionally generate images by predicting image token ids.
 
 The abstract from the paper is the following:
 
@@ -38,10 +43,8 @@ Tips:
 > [!TIP]
 > Emu3 implementation in Transformers uses a special image token to indicate where to merge image embeddings. The special image token isn't new and uses one of the reserved tokens: `<|extra_0|>`. You have to add `<image>` to your prompt in the place where the image should be embedded for correct generation.
 
-
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/baaivision/Emu3).
-
 
 ## Usage example
 
@@ -50,20 +53,21 @@ The original code can be found [here](https://github.com/baaivision/Emu3).
 Here's how to load the model and perform inference in half-precision (`torch.bfloat16`) to generate textual output from text or text and image inputs:
 
 ```python
-from transformers import Emu3Processor, Emu3ForConditionalGeneration
-import torch
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import Emu3ForConditionalGeneration, Emu3Processor
+
 
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", torch_dtype=torch.bfloat16, device_map="cuda")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", device_map="auto")
 
 # prepare image and text prompt
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "What do you see in this image?<image>"
 
-inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=50)
@@ -76,7 +80,7 @@ Emu3 can also generate images from textual input. Here is how you can do it:
 
 ```python
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", torch_dtype="bfloat16", device_map="auto", attn_implementation="flash_attention_2")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", device_map="auto", attn_implementation="flash_attention_2")
 
 
 inputs = processor(
@@ -85,10 +89,10 @@ inputs = processor(
     return_tensors="pt",
     return_for_image_generation=True,
 )
-inputs = inputs.to(device="cuda:0", dtype=torch.bfloat16)
+inputs = inputs.to(device=model.device)
 
 neg_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
-neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device="cuda:0")
+neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device=model.device)
 
 image_sizes = inputs.pop("image_sizes")
 HEIGHT, WIDTH = image_sizes[0]
@@ -102,7 +106,7 @@ def prefix_allowed_tokens_fn(batch_id, input_ids):
     eos_token_id = torch.tensor([processor.tokenizer.eos_token_id], device=model.device)
     pad_token_id = torch.tensor([processor.tokenizer.pad_token_id], device=model.device)
     eof_token_id = torch.tensor([processor.tokenizer.eof_token_id], device=model.device)
-    eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
+    eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt").to(model.device)[0]
 
     position = torch.nonzero(input_ids == image_wrapper_token_id, as_tuple=True)[0][0]
     offset = input_ids.shape[0] - position
@@ -130,12 +134,11 @@ out = model.generate(
 )
 
 image = model.decode_image_tokens(out.sequences[:, inputs.input_ids.shape[1]: ], height=HEIGHT, width=WIDTH)
-images = processor.postprocess(list(image.float()), return_tensors="PIL.Image.Image") # internally we convert to np but it's not supported in bf16 precision
+images = processor.postprocess(list(image.float()), return_tensors="PIL.Image.Image").to(model.device) # internally we convert to np but it's not supported in bf16 precision
 for i, image in enumerate(images['pixel_values']):
     image.save(f"result{i}.png")
 
 ```
-
 
 ## Emu3Config
 
@@ -152,6 +155,7 @@ for i, image in enumerate(images['pixel_values']):
 ## Emu3Processor
 
 [[autodoc]] Emu3Processor
+    - __call__
 
 ## Emu3ImageProcessor
 
@@ -167,6 +171,10 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] Emu3TextModel
     - forward
+
+## Emu3Model
+
+[[autodoc]] Emu3Model
 
 ## Emu3ForCausalLM
 

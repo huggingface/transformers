@@ -9,16 +9,21 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2022-04-14 and contributed to Hugging Face Transformers on 2022-05-24.*
 
 # GPT-NeoX
 
+<div class="flex flex-wrap space-x-1">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-We introduce GPT-NeoX-20B, a 20 billion parameter autoregressive language model trained on the Pile, whose weights will
+We introduce [GPT-NeoX-20B](https://huggingface.co/papers/2204.06745), a 20 billion parameter autoregressive language model trained on the Pile, whose weights will
 be made freely and openly available to the public through a permissive license. It is, to the best of our knowledge,
 the largest dense autoregressive model that has publicly available weights at the time of submission. In this work,
 we describe GPT-NeoX-20B's architecture and training and evaluate its performance on a range of language-understanding,
@@ -32,7 +37,7 @@ generous the support of [CoreWeave](https://www.coreweave.com/).
 GPT-NeoX-20B was trained with fp16, thus it is recommended to initialize the model as follows:
 
 ```python
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b").half().cuda()
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", device_map="auto")
 ```
 
 GPT-NeoX-20B also has a different tokenizer from the one used in GPT-J-6B and GPT-Neo. The new tokenizer allocates
@@ -43,31 +48,32 @@ additional tokens to whitespace characters, making the model more suitable for c
 The `generate()` method can be used to generate text using GPT Neo model.
 
 ```python
->>> from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
+from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
 
->>> model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b")
->>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
 
->>> prompt = "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", device_map="auto")
+tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
 
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+prompt = "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
 
->>> gen_tokens = model.generate(
-...     input_ids,
-...     do_sample=True,
-...     temperature=0.9,
-...     max_length=100,
-... )
->>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
+input_ids = tokenizer(prompt, return_tensors="pt").to(model.device).input_ids
+
+gen_tokens = model.generate(
+    input_ids,
+    do_sample=True,
+    temperature=0.9,
+    max_length=100,
+)
+gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ```
 
 ## Using Flash Attention 2
 
-Flash Attention 2 is an faster, optimized version of the model.
+Flash Attention 2 is a faster, optimized version of the model.
 
-### Installation 
+### Installation
 
-First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
+First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features).
 
 Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2:
 
@@ -77,15 +83,15 @@ pip install -U flash-attn --no-build-isolation
 
 ### Usage
 
-To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
+To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`~PreTrainedModel.from_pretrained`]. We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
->>> from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
+from transformers import GPTNeoXForCausalLM
 
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", attn_implementation="flash_attention_2", device_map="auto")
 ...
 ```
-
 
 ### Expected speedups
 
@@ -95,8 +101,8 @@ Below is an expected speedup diagram that compares pure inference time between t
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/gpt-neox-1.8b-speedup.jpg">
 </div>
 
-
 ## Using Scaled Dot Product Attention (SDPA)
+
 PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
 encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
 [official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
@@ -108,7 +114,9 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```python
 from transformers import GPTNeoXForCausalLM
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", torch_dtype=torch.float16, attn_implementation="sdpa")
+
+
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 
@@ -119,6 +127,7 @@ On a local benchmark (rtx3080ti-16GB, PyTorch 2.2.1, OS Ubuntu 22.04) using `flo
 following speedups during training and inference.
 
 ### Training
+
 | Batch size |    Seq len | Time per batch (Eager - s) |    Time per batch (SDPA - s) | Speedup (%) | Eager peak mem (MB) | SDPA peak mem (MB) |    Mem saving (%) |
 |-----------:|-----------:|---------------------------:|-----------------------------:|------------:|--------------------:|-------------------:|------------------:|
 |          1 |        128 |                      0.024 |                        0.019 |      28.945 |             1789.95 |            1789.95 |                 0 |
@@ -138,6 +147,7 @@ following speedups during training and inference.
 |          4 |       2048 |                        OOM |                        0.731 |           / |                 OOM |            12705.1 | SDPA does not OOM |
 
 ### Inference
+
 |    Batch size |      Seq len |    Per token latency Eager (ms) |    Per token latency SDPA (ms) |    Speedup (%) |    Mem Eager (MB) |   Mem SDPA (MB) |    Mem saved (%) |
 |--------------:|-------------:|--------------------------------:|-------------------------------:|---------------:|------------------:|----------------:|-----------------:|
 |             1 |          128 |                           6.569 |                          5.858 |          12.14 |           974.831 |         974.826 |                0 |
@@ -156,7 +166,6 @@ following speedups during training and inference.
 |             4 |         1024 |                          11.765 |                         11.303 |           4.09 |           2558.96 |         2546.04 |            0.508 |
 |             4 |         2048 |                          19.568 |                         17.735 |          10.33 |            4175.5 |         4165.26 |            0.246 |
 
-
 ## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
@@ -165,9 +174,9 @@ following speedups during training and inference.
 
 [[autodoc]] GPTNeoXConfig
 
-## GPTNeoXTokenizerFast
+## GPTNeoXTokenizer
 
-[[autodoc]] GPTNeoXTokenizerFast
+[[autodoc]] GPTNeoXTokenizer
 
 ## GPTNeoXModel
 

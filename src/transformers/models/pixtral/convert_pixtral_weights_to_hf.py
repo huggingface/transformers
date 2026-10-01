@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -145,7 +144,7 @@ MISTRAL_CONFIG_MAPPING = {
 def convert_mistral_model(input_dir, output_dir):
     vision_config = {}
     if os.path.isfile(f"{input_dir}/params.json"):
-        with open(f"{input_dir}/params.json") as f:
+        with open(f"{input_dir}/params.json", encoding="utf-8") as f:
             param_json = json.load(f)
         vision_config = param_json.pop("vision_encoder")
         for k, v in MISTRAL_CONFIG_MAPPING.items():
@@ -158,7 +157,6 @@ def convert_mistral_model(input_dir, output_dir):
             hidden_act="silu",
             sliding_window=None,
             tie_word_embeddings=False,
-            is_composition=True,
             rms_norm_eps=1e-5,
         )
     else:
@@ -188,7 +186,7 @@ def convert_mistral_model(input_dir, output_dir):
         vision_config,
         text_config,
         vision_feature_layer=-1,
-        image_token_index=10,
+        image_token_id=10,
         vision_feature_select_strategy="full",
         image_seq_length=1,
         multimodal_projector_bias=adapter_bias,
@@ -238,7 +236,7 @@ def main():
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
     if args.chat_template_file:
-        processor.chat_template = open(args.chat_template_file).read()
+        processor.chat_template = open(args.chat_template_file, encoding="utf-8").read()
     processor.save_pretrained(args.output_dir)
 
 

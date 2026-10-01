@@ -9,56 +9,81 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-03-29 and contributed to Hugging Face Transformers on 2022-05-18.*
+
 
 # Convolutional Vision Transformer (CvT)
 
-## Overview
+[Convolutional Vision Transformer (CvT)](https://huggingface.co/papers/2103.15808) is a model that combines the strengths of convolutional neural networks (CNNs) and Vision transformers for the computer vision tasks. It introduces convolutional layers into the vision transformer architecture, allowing it to capture local patterns in images while maintaining the global context provided by self-attention mechanisms.
 
-The CvT model was proposed in [CvT: Introducing Convolutions to Vision Transformers](https://arxiv.org/abs/2103.15808) by Haiping Wu, Bin Xiao, Noel Codella, Mengchen Liu, Xiyang Dai, Lu Yuan and Lei Zhang. The Convolutional vision Transformer (CvT) improves the [Vision Transformer (ViT)](vit) in performance and efficiency by introducing convolutions into ViT to yield the best of both designs.
+You can find all the CvT checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=cvt) organization.
 
-The abstract from the paper is the following:
+> [!TIP]
+> This model was contributed by [anujunj](https://huggingface.co/anugunj).
+>
+> Click on the CvT models in the right sidebar for more examples of how to apply CvT to different computer vision tasks.
 
-*We present in this paper a new architecture, named Convolutional vision Transformer (CvT), that improves Vision Transformer (ViT) 
-in performance and efficiency by introducing convolutions into ViT to yield the best of both designs. This is accomplished through 
-two primary modifications: a hierarchy of Transformers containing a new convolutional token embedding, and a convolutional Transformer 
-block leveraging a convolutional projection. These changes introduce desirable properties of convolutional neural networks (CNNs) 
-to the ViT architecture (\ie shift, scale, and distortion invariance) while maintaining the merits of Transformers (\ie dynamic attention, 
-global context, and better generalization). We validate CvT by conducting extensive experiments, showing that this approach achieves 
-state-of-the-art performance over other Vision Transformers and ResNets on ImageNet-1k, with fewer parameters and lower FLOPs. In addition, 
-performance gains are maintained when pretrained on larger datasets (\eg ImageNet-22k) and fine-tuned to downstream tasks. Pre-trained on 
-ImageNet-22k, our CvT-W24 obtains a top-1 accuracy of 87.7\% on the ImageNet-1k val set. Finally, our results show that the positional encoding, 
-a crucial component in existing Vision Transformers, can be safely removed in our model, simplifying the design for higher resolution vision tasks.*
+The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/microsoft/CvT).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Usage tips
+```python
+from transformers import pipeline
 
-- CvT models are regular Vision Transformers, but trained with convolutions. They outperform the [original model (ViT)](vit) when fine-tuned on ImageNet-1K and CIFAR-100.
-- You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) (you can just replace [`ViTFeatureExtractor`] by [`AutoImageProcessor`] and [`ViTForImageClassification`] by [`CvtForImageClassification`]).
-- The available checkpoints are either (1) pre-trained on [ImageNet-22k](http://www.image-net.org/) (a collection of 14 million images and 22k classes) only, (2) also fine-tuned on ImageNet-22k or (3) also fine-tuned on [ImageNet-1k](http://www.image-net.org/challenges/LSVRC/2012/) (also referred to as ILSVRC 2012, a collection of 1.3 million
-  images and 1,000 classes).
+
+pipeline = pipeline(
+    task="image-classification",
+    model="microsoft/cvt-13",
+    device=0
+)
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import requests
+import torch
+from PIL import Image
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+
+image_processor = AutoImageProcessor.from_pretrained("microsoft/cvt-13")
+model = AutoModelForImageClassification.from_pretrained(
+    "microsoft/cvt-13",
+    device_map="auto"
+)
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(image, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+  logits = model(**inputs).logits
+predicted_class_id = logits.argmax(dim=-1).item()
+
+class_labels = model.config.id2label
+predicted_class_label = class_labels[predicted_class_id]
+print(f"The predicted class label is: {predicted_class_label}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CvT.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [`CvtForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+Refer to this set of ViT [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) for examples of inference and fine-tuning on custom datasets. Replace [`ViTFeatureExtractor`] and [`ViTForImageClassification`] in these notebooks with [`AutoImageProcessor`] and [`CvtForImageClassification`].
 
 ## CvtConfig
 
 [[autodoc]] CvtConfig
-
-<frameworkcontent>
-<pt>
 
 ## CvtModel
 
@@ -69,19 +94,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] CvtForImageClassification
     - forward
-
-</pt>
-<tf>
-
-## TFCvtModel
-
-[[autodoc]] TFCvtModel
-    - call
-
-## TFCvtForImageClassification
-
-[[autodoc]] TFCvtForImageClassification
-    - call
-
-</tf>
-</frameworkcontent>

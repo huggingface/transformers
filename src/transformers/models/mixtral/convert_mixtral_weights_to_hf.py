@@ -49,16 +49,16 @@ def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, safe_serialization=True):
+def write_model(model_path, input_base_path, model_size):
     os.makedirs(model_path, exist_ok=True)
 
     params = read_json(os.path.join(input_base_path, "params.json"))
@@ -94,7 +94,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     loaded = [
-        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu") for i in range(8)
+        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu", weights_only=True)
+        for i in range(8)
     ]
 
     merged_state_dict = {}
@@ -105,7 +106,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
 
     for layer_i in range(n_layers):
         # Sharded
-        # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
+        # Note that attention.w{q,k,v,o}, feed_forward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
 
@@ -148,7 +149,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         w3 = merged_state_dict[f"layers.{layer_i}.block_sparse_moe.w3"]
 
         experts_w1 = [
-            w1[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            w1[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].clone(memory_format=torch.contiguous_format)
             for expert_idx in range(num_local_experts)
         ]
 
@@ -157,16 +158,16 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
             state_dict[expert_key + ".weight"] = expert_block.clone()
 
         experts_w2 = [
-            w2[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            w2[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].clone(memory_format=torch.contiguous_format)
             for expert_idx in range(num_local_experts)
         ]
 
         for idx, expert_block in enumerate(experts_w2):
             expert_key = f"model.layers.{layer_i}.block_sparse_moe.experts.{idx}.w2"
-            state_dict[expert_key + ".weight"] = expert_block.T.clone().contiguous()
+            state_dict[expert_key + ".weight"] = expert_block.T.clone(memory_format=torch.contiguous_format)
 
         experts_w3 = [
-            w3[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            w3[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].clone(memory_format=torch.contiguous_format)
             for expert_idx in range(num_local_experts)
         ]
 
@@ -205,7 +206,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         model = MixtralForCausalLM(config)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
-    model.config.torch_dtype = torch.float16
+    model.config.dtype = torch.float16
     print("Saving in the Transformers format.")
 
     model.load_state_dict(state_dict, strict=True, assign=True)
@@ -213,7 +214,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     for n, p in model.named_parameters():
         assert p.device.type != "meta", f"{n} has not been loaded!"
 
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
 
 
 def main():
@@ -226,17 +227,15 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, checkout the original repo: https://huggingface.co/mistral-ai",
+        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, check out the original repo: https://huggingface.co/mistral-ai",
         default="7B",
     )
     parser.add_argument("--output_dir", help="Location to write HF model", required=True)
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         model_size=args.model_size,
-        safe_serialization=args.safe_serialization,
     )
 
 

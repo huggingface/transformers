@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2019-08-20 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # LXMERT
 
+
 ## Overview
 
-The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from Transformers](https://arxiv.org/abs/1908.07490) by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders
+The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from Transformers](https://huggingface.co/papers/1908.07490) by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders
 (one for the vision modality, one for the language modality, and then one to fuse both modalities) pretrained using a
 combination of masked language modeling, visual-language text alignment, ROI-feature regression, masked
 visual-attribute modeling, masked visual-object modeling, and visual-question answering objectives. The pretraining
@@ -67,10 +69,6 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] LxmertTokenizer
 
-## LxmertTokenizerFast
-
-[[autodoc]] LxmertTokenizerFast
-
 ## Lxmert specific outputs
 
 [[autodoc]] models.lxmert.modeling_lxmert.LxmertModelOutput
@@ -78,13 +76,6 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 [[autodoc]] models.lxmert.modeling_lxmert.LxmertForPreTrainingOutput
 
 [[autodoc]] models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
-
-[[autodoc]] models.lxmert.modeling_tf_lxmert.TFLxmertModelOutput
-
-[[autodoc]] models.lxmert.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## LxmertModel
 
@@ -100,19 +91,3 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] LxmertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLxmertModel
-
-[[autodoc]] TFLxmertModel
-    - call
-
-## TFLxmertForPreTraining
-
-[[autodoc]] TFLxmertForPreTraining
-    - call
-
-</tf>
-</frameworkcontent>

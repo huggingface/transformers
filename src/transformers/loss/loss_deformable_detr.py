@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from ..image_transforms import center_to_corners_format
-from ..utils import is_scipy_available
+from ..utils import is_scipy_available, logging
 from .loss_for_object_detection import (
     HungarianMatcher,
     ImageLoss,
@@ -14,6 +14,9 @@ from .loss_for_object_detection import (
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
 
 
 class DeformableDetrHungarianMatcher(HungarianMatcher):
@@ -49,6 +52,10 @@ class DeformableDetrHungarianMatcher(HungarianMatcher):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+        # these predictions only if there are no other valid predictions.
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
@@ -63,6 +70,22 @@ class DeformableDetrImageLoss(ImageLoss):
         self.num_classes = num_classes
         self.focal_alpha = focal_alpha
         self.losses = losses
+
+    @torch.no_grad()
+    def loss_cardinality(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
+
+        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
+        """
+        logits = outputs["logits"]
+        device = logits.device
+        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
+        # Count the number of predictions that are NOT "no-object" (sigmoid > 0.5 threshold)
+        card_pred = (logits.sigmoid().max(-1).values > 0.5).sum(1)
+        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
+        losses = {"cardinality_error": card_err}
+        return losses
 
     # removed logging parameter, which was part of the original implementation
     def loss_labels(self, outputs, targets, indices, num_boxes):
@@ -136,7 +159,7 @@ def DeformableDetrForSegmentationLoss(
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
 
-    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs
 
 
@@ -174,5 +197,5 @@ def DeformableDetrForObjectDetectionLoss(
         for i in range(config.decoder_layers - 1):
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
-    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs

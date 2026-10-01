@@ -4,13 +4,17 @@ LABEL maintainer="Hugging Face"
 RUN apt update
 RUN git clone https://github.com/huggingface/transformers
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder ./transformers[dev]
+RUN python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip install --no-cache-dir ./transformers[dev]
+
+# We want to use the latest doc-builder when building docs
+RUN python3 -m pip install -U git+https://github.com/huggingface/doc-builder.git@main
+
 RUN apt-get -y update && apt-get install -y libsndfile1-dev && apt install -y tesseract-ocr
 
 # Torch needs to be installed before deepspeed
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed]
 
-RUN python3 -m pip install --no-cache-dir torchvision git+https://github.com/facebookresearch/detectron2.git pytesseract
+RUN python3 -m pip install --no-cache-dir --no-build-isolation torchvision git+https://github.com/facebookresearch/detectron2.git pytesseract
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 # Test if the image could successfully build the doc. before publishing the image

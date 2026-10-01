@@ -9,25 +9,25 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2019-09-11 and contributed to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
+</div>
 
 # CTRL
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=ctrl">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-ctrl-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/tiny-ctrl">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
-</div>
 
 ## Overview
 
-CTRL model was proposed in [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and
+CTRL model was proposed in [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://huggingface.co/papers/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and
 Richard Socher. It's a causal (unidirectional) transformer pre-trained using language modeling on a very large corpus
 of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
 
@@ -55,10 +55,9 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
   token in a sequence. Leveraging this feature allows CTRL to generate syntactically coherent text as it can be
   observed in the *run_generation.py* example script.
 - The PyTorch models can take the `past_key_values` as input, which is the previously computed key/value attention pairs.
-  TensorFlow models accepts `past` as input. Using the `past_key_values` value prevents the model from re-computing
-  pre-computed values in the context of text generation. See the [`forward`](model_doc/ctrl#transformers.CTRLModel.forward)
+  Using the `past_key_values` value prevents the model from re-computing
+  pre-computed values in the context of text generation. See the [`~CTRLModel#forward`]
   method for more information on the usage of this argument.
-
 
 ## Resources
 
@@ -74,9 +73,6 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
 [[autodoc]] CTRLTokenizer
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
-
 ## CTRLModel
 
 [[autodoc]] CTRLModel
@@ -91,24 +87,3 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
 
 [[autodoc]] CTRLForSequenceClassification
     - forward
-
-</pt>
-<tf>
-
-## TFCTRLModel
-
-[[autodoc]] TFCTRLModel
-    - call
-
-## TFCTRLLMHeadModel
-
-[[autodoc]] TFCTRLLMHeadModel
-    - call
-
-## TFCTRLForSequenceClassification
-
-[[autodoc]] TFCTRLForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>

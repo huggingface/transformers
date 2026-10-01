@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2023-06-16 and contributed to Hugging Face Transformers on 2023-10-13.*
 
 # OWLv2
 
+
 ## Overview
 
-OWLv2 was proposed in [Scaling Open-Vocabulary Object Detection](https://arxiv.org/abs/2306.09683) by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2 scales up [OWL-ViT](owlvit) using self-training, which uses an existing detector to generate pseudo-box annotations on image-text pairs. This results in large gains over the previous state-of-the-art for zero-shot object detection.
+OWLv2 was proposed in [Scaling Open-Vocabulary Object Detection](https://huggingface.co/papers/2306.09683) by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2 scales up [OWL-ViT](owlvit) using self-training, which uses an existing detector to generate pseudo-box annotations on image-text pairs. This results in large gains over the previous state-of-the-art for zero-shot object detection.
 
 The abstract from the paper is the following:
 
@@ -27,7 +29,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/owlv2_overview.png"
 alt="drawing" width="600"/>
 
-<small> OWLv2 high-level overview. Taken from the <a href="https://arxiv.org/abs/2306.09683">original paper</a>. </small>
+<small> OWLv2 high-level overview. Taken from the <a href="https://huggingface.co/papers/2306.09683">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit).
@@ -39,33 +41,33 @@ OWLv2 is, just like its predecessor [OWL-ViT](owlvit), a zero-shot text-conditio
 [`Owlv2ImageProcessor`] can be used to resize (or rescale) and normalize images for the model and [`CLIPTokenizer`] is used to encode the text. [`Owlv2Processor`] wraps [`Owlv2ImageProcessor`] and [`CLIPTokenizer`] into a single instance to both encode the text and prepare the images. The following example shows how to perform object detection using [`Owlv2Processor`] and [`Owlv2ForObjectDetection`].
 
 ```python
->>> import requests
->>> from PIL import Image
->>> import torch
+import requests
+from PIL import Image
+import torch
 
->>> from transformers import Owlv2Processor, Owlv2ForObjectDetection
+from transformers import Owlv2Processor, Owlv2ForObjectDetection
 
->>> processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16-ensemble")
->>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
+processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16-ensemble")
+model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble", device_map="auto")
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> text_labels = [["a photo of a cat", "a photo of a dog"]]
->>> inputs = processor(text=text_labels, images=image, return_tensors="pt")
->>> outputs = model(**inputs)
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+text_labels = [["a photo of a cat", "a photo of a dog"]]
+inputs = processor(text=text_labels, images=image, return_tensors="pt").to(model.device)
+outputs = model(**inputs)
 
->>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
->>> target_sizes = torch.tensor([(image.height, image.width)])
->>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
->>> results = processor.post_process_grounded_object_detection(
-...     outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
-... )
->>> # Retrieve predictions for the first image for the corresponding text queries
->>> result = results[0]
->>> boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
->>> for box, score, text_label in zip(boxes, scores, text_labels):
-...     box = [round(i, 2) for i in box.tolist()]
-...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
+# Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+target_sizes = torch.tensor([(image.height, image.width)])
+# Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+results = processor.post_process_grounded_object_detection(
+    outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
+)
+# Retrieve predictions for the first image for the corresponding text queries
+result = results[0]
+boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
+for box, score, text_label in zip(boxes, scores, text_labels):
+    box = [round(i, 2) for i in box.tolist()]
+    print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
 Detected a photo of a cat with confidence 0.614 at location [341.67, 23.39, 642.32, 371.35]
 Detected a photo of a cat with confidence 0.665 at location [6.75, 51.96, 326.62, 473.13]
 ```
@@ -85,7 +87,6 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 ## Owlv2Config
 
 [[autodoc]] Owlv2Config
-    - from_text_vision_configs
 
 ## Owlv2TextConfig
 
@@ -98,6 +99,13 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 ## Owlv2ImageProcessor
 
 [[autodoc]] Owlv2ImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_image_guided_detection
+
+## Owlv2ImageProcessorPil
+
+[[autodoc]] Owlv2ImageProcessorPil
     - preprocess
     - post_process_object_detection
     - post_process_image_guided_detection

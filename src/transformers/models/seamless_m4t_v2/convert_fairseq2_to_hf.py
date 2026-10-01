@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -207,7 +206,7 @@ def _convert_model(
     hf_model.load_state_dict(state_dict, strict=False)
     n_params = param_count(hf_model)
 
-    logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
+    logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
 
     hf_model.eval()
     hf_model.to(device)

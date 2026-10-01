@@ -18,7 +18,6 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Tuple
 
 import yaml
 from tqdm import tqdm
@@ -57,9 +56,9 @@ class TatoebaConverter:
     def __init__(self, save_dir="marian_converted"):
         assert Path(DEFAULT_REPO).exists(), "need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git"
         self.download_lang_info()
-        self.model_results = json.load(open("Tatoeba-Challenge/models/released-model-results.json"))
+        self.model_results = json.load(open("Tatoeba-Challenge/models/released-model-results.json", encoding="utf-8"))
         self.alpha3_to_alpha2 = {}
-        for line in open(ISO_PATH):
+        for line in open(ISO_PATH, encoding="utf-8"):
             parts = line.split("\t")
             if len(parts[0]) == 3 and len(parts[3]) == 2:
                 self.alpha3_to_alpha2[parts[0]] = parts[3]
@@ -107,7 +106,7 @@ class TatoebaConverter:
             print(f"Three letter monolingual code: {code}")
             return [code]
 
-    def resolve_lang_code(self, src, tgt) -> Tuple[str, str]:
+    def resolve_lang_code(self, src, tgt) -> tuple[str, str]:
         src_tags = self.get_tags(src, self.tag2name[src])
         tgt_tags = self.get_tags(tgt, self.tag2name[tgt])
         return src_tags, tgt_tags
@@ -228,7 +227,7 @@ class TatoebaConverter:
         # combine with Tatoeba markdown
         readme_url = f"{TATOEBA_MODELS_URL}/{model_dict['_name']}/README.md"
         extra_markdown = f"""
-### {model_dict['_name']}
+### {model_dict["_name"]}
 
 * source language name: {self.tag2name[a3_src]}
 * target language name: {self.tag2name[a3_tgt]}
@@ -237,12 +236,12 @@ class TatoebaConverter:
 
         content = (
             f"""
-* model: {model_dict['modeltype']}
-* source language code{src_multilingual*'s'}: {', '.join(a2_src_tags)}
-* target language code{tgt_multilingual*'s'}: {', '.join(a2_tgt_tags)}
+* model: {model_dict["modeltype"]}
+* source language code{src_multilingual * "s"}: {", ".join(a2_src_tags)}
+* target language code{tgt_multilingual * "s"}: {", ".join(a2_tgt_tags)}
 * dataset: opus {backtranslated_data}
-* release date: {model_dict['release-date']}
-* pre-processing: {model_dict['pre-processing']}
+* release date: {model_dict["release-date"]}
+* pre-processing: {model_dict["pre-processing"]}
 """
             + multilingual_data
             + tuned
@@ -303,7 +302,7 @@ class TatoebaConverter:
             results = [url_to_name(model["download"]) for model in self.model_results[model_name]]
             ymls = [f for f in os.listdir(p) if f.endswith(".yml") and f[:-4] in results]
             ymls.sort(key=lambda x: results.index(x[:-4]))
-            metadata = yaml.safe_load(open(p / ymls[0]))
+            metadata = yaml.safe_load(open(p / ymls[0], encoding="utf-8"))
             metadata.update(self.model_type_info_from_model_name(ymls[0][:-4]))
         elif method == "newest":
             ymls = [f for f in os.listdir(p) if f.endswith(".yml")]
@@ -311,7 +310,7 @@ class TatoebaConverter:
             ymls.sort(
                 key=lambda x: datetime.datetime.strptime(re.search(r"\d\d\d\d-\d\d?-\d\d?", x).group(), "%Y-%m-%d")
             )
-            metadata = yaml.safe_load(open(p / ymls[-1]))
+            metadata = yaml.safe_load(open(p / ymls[-1], encoding="utf-8"))
             metadata.update(self.model_type_info_from_model_name(ymls[-1][:-4]))
         else:
             raise NotImplementedError(f"Don't know argument method='{method}' to parse_metadata()")

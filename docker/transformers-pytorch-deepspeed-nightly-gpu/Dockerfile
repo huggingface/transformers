@@ -1,11 +1,11 @@
 # https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-23-11.html#rel-23-11
-FROM nvcr.io/nvidia/pytorch:23.11-py3
+FROM nvcr.io/nvidia/pytorch:24.08-py3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu121'
+ARG CUDA='cu126'
 
 RUN apt -y update
 RUN apt install -y libaio-dev
@@ -19,9 +19,10 @@ RUN python3 -m pip uninstall -y torch torchvision torchaudio
 # Install **nightly** release PyTorch (flag `--pre`)
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
-RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
+RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+# `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
+RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'pandas<2' 'numpy<2'
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
@@ -30,6 +31,11 @@ RUN python3 -m pip uninstall -y transformer-engine
 
 # Uninstall `torch-tensorrt` and `apex` shipped with the base image
 RUN python3 -m pip uninstall -y torch-tensorrt apex
+
+# Uninstall outdated `nvtx` (0.2.5 from /rapids/) shipped with the base image:
+# DeepSpeed calls `nvtx.get_domain` (added in 0.2.12) and will crash otherwise.
+# DeepSpeed falls back to `torch.cuda.nvtx` when the standalone package is absent.
+RUN python3 -m pip uninstall -y nvtx
 
 # Pre-build **nightly** release of DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
@@ -55,6 +61,9 @@ RUN python3 -m pip uninstall -y deepspeed
 ## install torch_tensorrt (fx path)
 #RUN git clone https://github.com/pytorch/TensorRT.git
 #RUN cd TensorRT/py && python3 setup.py install --fx-only
+
+# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
+RUN python3 -m pip uninstall -y kernels
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

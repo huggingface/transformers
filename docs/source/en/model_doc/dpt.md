@@ -9,16 +9,22 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-03-24 and contributed to Hugging Face Transformers on 2022-03-28.*
 
 # DPT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The DPT model was proposed in [Vision Transformers for Dense Prediction](https://arxiv.org/abs/2103.13413) by René Ranftl, Alexey Bochkovskiy, Vladlen Koltun.
+The DPT model was proposed in [Vision Transformers for Dense Prediction](https://huggingface.co/papers/2103.13413) by René Ranftl, Alexey Bochkovskiy, Vladlen Koltun.
 DPT is a model that leverages the [Vision Transformer (ViT)](vit) as backbone for dense prediction tasks like semantic segmentation and depth estimation.
 
 The abstract from the paper is the following:
@@ -28,7 +34,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dpt_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> DPT architecture. Taken from the <a href="https://arxiv.org/abs/2103.13413" target="_blank">original paper</a>. </small>
+<small> DPT architecture. Taken from the <a href="https://huggingface.co/papers/2103.13413" target="_blank">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/isl-org/DPT).
 
@@ -38,6 +44,7 @@ DPT is compatible with the [`AutoBackbone`] class. This allows to use the DPT fr
 
 ```python
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
+
 
 # initialize with a Transformer-based backbone such as DINOv2
 # in that case, we also specify `reshape_hidden_states=False` to get feature maps of shape (batch_size, num_channels, height, width)
@@ -62,17 +69,17 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DPTConfig
 
-## DPTFeatureExtractor
-
-[[autodoc]] DPTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## DPTImageProcessor
 
 [[autodoc]] DPTImageProcessor
     - preprocess
+
+## DPTImageProcessorPil
+
+[[autodoc]] DPTImageProcessorPil
+    - preprocess
     - post_process_semantic_segmentation
+    - post_process_depth_estimation
 
 ## DPTModel
 

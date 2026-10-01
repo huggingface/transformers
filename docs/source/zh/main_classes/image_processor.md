@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Image Processor
 
-Image processor负责为视觉模型准备输入特征并后期处理处理它们的输出。这包括诸如调整大小、归一化和转换为PyTorch、TensorFlow、Flax和NumPy张量等转换。它还可能包括特定于模型的后期处理，例如将logits转换为分割掩码。
+Image processor负责为视觉模型准备输入特征并后期处理处理它们的输出。这包括诸如调整大小、归一化和转换为PyTorch和NumPy张量等转换。它还可能包括特定于模型的后期处理，例如将logits转换为分割掩码。
 
 
 ## ImageProcessingMixin

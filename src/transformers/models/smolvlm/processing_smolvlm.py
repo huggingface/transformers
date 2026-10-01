@@ -1,0 +1,275 @@
+# Copyright 2025 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Processor class for SmolVLM.
+"""
+
+from datetime import timedelta
+
+from ...image_utils import make_nested_list_of_images
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring, is_num2words_available, logging
+
+
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_VIDEO_INTRO
+DEFAULT_VIDEO_INTRO = (
+    "You are provided the following series of {frame_count} frames from a {video_duration} [H:MM:SS] video.\n"
+)
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_MEDIA_OUTTRO
+DEFAULT_MEDIA_OUTTRO = "\n\n"
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.FRAME_TIMESTAMP_MESSAGE
+FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
+
+logger = logging.get_logger(__name__)
+
+
+if is_num2words_available():
+    from num2words import num2words
+else:
+    num2words = None
+
+
+# The correct chat template to be used for videos after #38105
+DEFAULT_CHAT_TEMPLATE = "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% elif line['type'] == 'video' %}{{ '<video>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
+
+
+def _prompt_split_image(
+    image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_image_token
+):
+    """Prompt with expanded image tokens for when the image is split into patches."""
+    text_split_images = ""
+    for n_h in range(image_rows):
+        for n_w in range(image_cols):
+            text_split_images += (
+                f"{fake_token_around_image}" + f"<row_{n_h + 1}_col_{n_w + 1}>" + f"{image_token}" * image_seq_len
+            )
+        text_split_images += "\n"
+
+    text_split_images += (
+        f"\n{fake_token_around_image}"
+        + f"{global_image_token}"
+        + f"{image_token}" * image_seq_len
+        + f"{fake_token_around_image}"
+    )
+    return text_split_images
+
+
+def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, global_image_token):
+    """Prompt with expanded image tokens for a single image."""
+    return (
+        f"{fake_token_around_image}"
+        + f"{global_image_token}"
+        + f"{image_token}" * image_seq_len
+        + f"{fake_token_around_image}"
+    )
+
+
+def get_image_prompt_string(
+    image_rows, image_cols, image_seq_len, fake_token_around_image, image_token, global_image_token
+):
+    if image_rows == 0 and image_cols == 0:
+        return _prompt_single_image(
+            image_seq_len,
+            fake_token_around_image=fake_token_around_image,
+            image_token=image_token,
+            global_image_token=global_image_token,
+        )
+    return _prompt_split_image(
+        image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_image_token
+    )
+
+
+class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "is_split_into_words": False,
+        },
+        "images_kwargs": {
+            "return_row_col_info": True,
+        },
+        "videos_kwargs": {
+            "return_metadata": True,
+        },
+    }
+
+
+@auto_docstring
+class SmolVLMProcessor(ProcessorMixin):
+    valid_processor_kwargs = SmolVLMProcessorKwargs
+
+    def __init__(
+        self,
+        image_processor,
+        tokenizer,
+        video_processor,
+        image_seq_len: int = 169,
+        chat_template: str | None = None,
+        **kwargs,
+    ):
+        r"""
+        image_seq_len (`int`, *optional*, defaults to 169):
+            The length of the image sequence i.e. the number of <image> tokens per image in the input.
+            This parameter is used to build the string from the input prompt and image tokens and should match the
+            value the model used. It is computed as: image_seq_len = int(((image_size // patch_size) ** 2) / (scale_factor**2))
+        """
+        self.fake_image_token = getattr(tokenizer, "fake_image_token", "<fake_token_around_image>")
+        self.image_token = getattr(tokenizer, "image_token", "<image>")
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.end_of_utterance_token = getattr(tokenizer, "end_of_utterance_token", "<end_of_utterance>")
+        self.global_image_token = getattr(tokenizer, "global_image_token", "<global-img>")
+        self.image_seq_len = image_seq_len
+        self.video_token = getattr(tokenizer, "video_token", "<video>")
+
+        if not num2words:
+            raise ImportError(
+                "Package `num2words` is required to run SmolVLM processor. Install it with `pip install num2words`."
+            )
+
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
+
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, **kwargs):
+        if images is not None:
+            images = self.image_processor.fetch_images(images)
+            images = make_nested_list_of_images(images)
+        return super().prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
+
+    def validate_inputs(self, images=None, text=None, videos=None, **kwargs):
+        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
+        if text is None and images is None and videos is None:
+            raise ValueError("You must provide one of `text`, `images` or `videos`.")
+        if text is None and ((images is None) ^ (videos is not None)):
+            raise ValueError("You must specify exactly one of `images` or `videos`")
+        if text is not None:
+            n_images_in_text = sum(sample.count(self.image_token) for sample in text)
+            if n_images_in_text > 0 and images is None and videos is None:
+                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
+            if images is not None:
+                n_images_per_sample = [sample.count(self.image_token) for sample in text]
+                n_images_in_images = [len(sublist) for sublist in images]
+                if n_images_in_images != n_images_per_sample:
+                    raise ValueError(
+                        f"The number of images in the text {n_images_per_sample} and images {n_images_in_images} should be the same."
+                    )
+            if videos is not None:
+                n_videos_per_sample = [sample.count(self.video_token) for sample in text]
+                n_videos_in_videos = [len(sublist) for sublist in videos]
+                if n_videos_in_videos != n_videos_per_sample:
+                    raise ValueError(
+                        f"The number of videos in the text {n_videos_per_sample} and videos {n_videos_in_videos} should be the same."
+                    )
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        rows = [row for row_list in image_inputs["rows"] for row in row_list]
+        cols = [col for col_list in image_inputs["cols"] for col in col_list]
+        return get_image_prompt_string(
+            rows[image_idx],
+            cols[image_idx],
+            self.image_seq_len,
+            fake_token_around_image=self.fake_image_token,
+            image_token=self.image_token,
+            global_image_token=self.global_image_token,
+        )
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
+        num_frames = video_inputs["pixel_values"].shape[1]
+        metadata = video_inputs["video_metadata"][video_idx]
+        if metadata.fps is None:
+            logger.warning_once(
+                "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+            metadata.fps = 24
+        timestamps = [(int(second // 60), int(second % 60)) for second in metadata.timestamps]
+        duration = int(metadata.duration) if metadata.duration is not None else int(metadata.timestamps[-1])
+        duration_td = timedelta(seconds=int(duration))
+        prompt = DEFAULT_VIDEO_INTRO.format(frame_count=num2words(num_frames), video_duration=str(duration_td))
+        for timestamp in timestamps:
+            image_prompt_string = _prompt_single_image(
+                self.image_seq_len,
+                image_token=self.image_token,
+                fake_token_around_image=self.fake_image_token,
+                global_image_token=self.global_image_token,
+            )
+            timestamp_str = f"{timestamp[0]:02d}:{timestamp[1]:02d}"
+            prompt += FRAME_TIMESTAMP_MESSAGE.format(timestamp=timestamp_str) + image_prompt_string
+        return prompt + DEFAULT_MEDIA_OUTTRO
+
+    def apply_chat_template(
+        self,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
+        processor_kwargs: dict | None = None,
+        **kwargs,
+    ) -> str:
+        """
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
+
+        The input is expected to be in the following format, where each message content is a list consisting of text and
+        optionally image or video inputs. One can also provide an image, video, URL or local path which will be used to form
+        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Please describe this image in detail."},
+                ],
+            },
+        ]
+
+        Args:
+            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
+        """
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        ):
+            conversations = conversation
+        else:
+            conversations = [conversation]
+
+        has_video = any(
+            (isinstance(content, dict) and content["type"] == "video")
+            for conversation in conversations
+            for message in conversation
+            for content in (message.get("content") or [])
+        )
+        if chat_template is None and has_video:
+            # re-assign to the correct default template for BC, if user is not requesting their own template
+            chat_template = DEFAULT_CHAT_TEMPLATE
+
+        # Users might be passing processor kwargs simply as `**kwargs`
+        if processor_kwargs:
+            processor_kwargs.setdefault("num_frames", self.video_processor.num_frames)
+            processor_kwargs.setdefault("fps", self.video_processor.fps)
+        else:
+            kwargs.setdefault("num_frames", self.video_processor.num_frames)
+            kwargs.setdefault("fps", self.video_processor.fps)
+
+        return super().apply_chat_template(conversation, chat_template, processor_kwargs=processor_kwargs, **kwargs)
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["rows", "cols", "video_metadata"]
+
+
+__all__ = ["SmolVLMProcessor"]

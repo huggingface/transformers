@@ -9,17 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2023-04-17 and contributed to Hugging Face Transformers on 2024-06-22.*
 
 # RT-DETR
 
+
 ## Overview
 
-
-The RT-DETR model was proposed in [DETRs Beat YOLOs on Real-time Object Detection](https://arxiv.org/abs/2304.08069) by Wenyu Lv, Yian Zhao, Shangliang Xu, Jinman Wei, Guanzhong Wang, Cheng Cui, Yuning Du, Qingqing Dang, Yi Liu.
+The RT-DETR model was proposed in [DETRs Beat YOLOs on Real-time Object Detection](https://huggingface.co/papers/2304.08069) by Wenyu Lv, Yian Zhao, Shangliang Xu, Jinman Wei, Guanzhong Wang, Cheng Cui, Yuning Du, Qingqing Dang, Yi Liu.
 
 RT-DETR is an object detection model that stands for "Real-Time DEtection Transformer." This model is designed to perform object detection tasks with a focus on achieving real-time performance while maintaining high accuracy. Leveraging the transformer architecture, which has gained significant popularity in various fields of deep learning, RT-DETR processes images to identify and locate multiple objects within them.
 
@@ -30,40 +31,40 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/rt_detr_overview.png"
 alt="drawing" width="600"/>
 
-<small> RT-DETR performance relative to YOLO models. Taken from the <a href="https://arxiv.org/abs/2304.08069">original paper.</a> </small>
+<small> RT-DETR performance relative to YOLO models. Taken from the <a href="https://huggingface.co/papers/2304.08069">original paper.</a> </small>
 
 The model version was contributed by [rafaelpadilla](https://huggingface.co/rafaelpadilla) and [sangbumchoi](https://github.com/SangbumChoi). The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
 
-
 ## Usage tips
 
-Initially, an image is processed using a pre-trained convolutional neural network, specifically a Resnet-D variant as referenced in the original code. This network extracts features from the final three layers of the architecture. Following this, a hybrid encoder is employed to convert the multi-scale features into a sequential array of image features. Then, a decoder, equipped with auxiliary prediction heads is used to refine the object queries. This process facilitates the direct generation of bounding boxes, eliminating the need for any additional post-processing to acquire the logits and coordinates for the bounding boxes.
+Initially, an image is processed using a pre-trained convolutional neural network, specifically a Resnet-D variant as referenced in the original code. This network extracts features from the final three layers of the architecture. Following this, a hybrid encoder is employed to convert the multi-scale features into a sequential array of image features. Then, a decoder, equipped with auxiliary prediction heads is used to refine the object queries. This process facilitates the direct generation of bounding boxes, eliminating the need for any additional post-processing to acquire the logits and coordinates for the bounding boxes. The model is meant to be used on images resized to a size 640x640 with the corresponding ImageProcessor. Reshaping to other sizes will generally degrade performance.
 
-```py
->>> import torch
->>> import requests
+```python
+import requests
+import torch
+from PIL import Image
 
->>> from PIL import Image
->>> from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
+from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
->>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
 
->>> inputs = image_processor(images=image, return_tensors="pt")
+image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
+model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd", device_map="auto")
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.3)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> for result in results:
-...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-...         score, label = score.item(), label_id.item()
-...         box = [round(i, 2) for i in box.tolist()]
-...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.3)
+
+for result in results:
+    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+        score, label = score.item(), label_id.item()
+        box = [round(i, 2) for i in box.tolist()]
+        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
 sofa: 0.97 [0.14, 0.38, 640.13, 476.21]
 cat: 0.96 [343.38, 24.28, 640.14, 371.5]
 cat: 0.96 [13.23, 54.18, 318.98, 472.22]
@@ -95,9 +96,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - preprocess
     - post_process_object_detection
 
-## RTDetrImageProcessorFast
+## RTDetrImageProcessorPil
 
-[[autodoc]] RTDetrImageProcessorFast
+[[autodoc]] RTDetrImageProcessorPil
     - preprocess
     - post_process_object_detection
 

@@ -9,12 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
-# Image Feature Extraction
+# Image feature extraction
 
 [[open-in-colab]]
 
@@ -27,7 +27,7 @@ In this guide, you will:
 
 ## Image Similarity using `image-feature-extraction` Pipeline
 
-We have two images of cats sitting on top of fish nets, one of them is generated. 
+We have two images of cats sitting on top of fish nets, one of them is generated.
 
 ```python
 from PIL import Image
@@ -38,15 +38,15 @@ image_real = Image.open(requests.get(img_urls[0], stream=True).raw).convert("RGB
 image_gen = Image.open(requests.get(img_urls[1], stream=True).raw).convert("RGB")
 ```
 
-Let's see the pipeline in action. First, initialize the pipeline. If you don't pass any model to it, the pipeline will be automatically initialized with [google/vit-base-patch16-224](google/vit-base-patch16-224). If you'd like to calculate similarity, set `pool` to True.
+Let's see the pipeline in action. First, initialize the pipeline. If you don't pass any model to it, the pipeline will be automatically initialized with [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224). If you'd like to calculate similarity, set `pool` to True.
 
 ```python
 import torch
 from transformers import pipeline
-from accelerate.test_utils.testing import get_backend
+from accelerate import Accelerator
 # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
-DEVICE, _, _ = get_backend()
-pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
+device = Accelerator().device
+pipe = pipeline(task="image-feature-extraction", model="google/vit-base-patch16-384", device=device, pool=True)
 ```
 
 To infer with `pipe` pass both images to it.
@@ -67,7 +67,7 @@ print(outputs)
 # [[[-0.03909236937761307, 0.43381670117378235, -0.06913255900144577,
 ```
 
-To get the similarity score, we need to pass them to a similarity function. 
+To get the similarity score, we need to pass them to a similarity function.
 
 ```python
 from torch.nn.functional import cosine_similarity
@@ -83,7 +83,7 @@ print(similarity_score)
 If you want to get the last hidden states before pooling, avoid passing any value for the `pool` parameter, as it is set to `False` by default. These hidden states are useful for training new classifiers or models based on the features from the model.
 
 ```python
-pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-224", device=DEVICE)
+pipe = pipeline(task="image-feature-extraction", model="google/vit-base-patch16-224", device=device)
 outputs = pipe(image_real)
 ```
 
@@ -103,14 +103,14 @@ We can also use `AutoModel` class of transformers to get the features. `AutoMod
 from transformers import AutoImageProcessor, AutoModel
 
 processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
-model = AutoModel.from_pretrained("google/vit-base-patch16-224").to(DEVICE)
+model = AutoModel.from_pretrained("google/vit-base-patch16-224").to(device)
 ```
 
 Let's write a simple function for inference. We will pass the inputs to the `processor` first and pass its outputs to the `model`.
 
 ```python
 def infer(image):
-  inputs = processor(image, return_tensors="pt").to(DEVICE)
+  inputs = processor(image, return_tensors="pt").to(device)
   outputs = model(**inputs)
   return outputs.pooler_output
 ```
@@ -132,4 +132,3 @@ print(similarity_score)
 
 # tensor([0.6061], device='cuda:0', grad_fn=<SumBackward1>)
 ```
-

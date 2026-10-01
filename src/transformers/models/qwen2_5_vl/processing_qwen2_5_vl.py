@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen2_5_vl.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -23,176 +22,91 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Union
-
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-
-
-class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[List[float], float]
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
+from ...video_utils import VideoInput
 
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": True,
         },
-        "videos_kwargs": {"fps": 2.0},
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
+@auto_docstring
 class Qwen2_5_VLProcessor(ProcessorMixin):
-    r"""
-    Constructs a Qwen2.5-VL processor which wraps a Qwen2.5-VL image processor and a Qwen2 tokenizer into a single processor.
-    [`Qwen2_5_VLProcessor`] offers all the functionalities of [`Qwen2VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
-    [`~Qwen2_5_VLProcessor.__call__`] and [`~Qwen2_5_VLProcessor.decode`] for more information.
-    Args:
-        image_processor ([`Qwen2VLImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
+    valid_processor_kwargs = Qwen2_5_VLProcessorKwargs
 
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
-
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
-        **kwargs: Unpack[Qwen2_5_VLProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
-        Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-            - **second_per_grid_ts** -- List of video seconds per time grid. Returned when `videos` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            Qwen2_5_VLProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
         )
-        if images is not None:
-            image_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-        if videos is not None:
-            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
-            video_grid_thw = videos_inputs["video_grid_thw"]
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
 
-            fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-            if isinstance(fps, (int, float)):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
-            elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
-            else:
-                raise ValueError(
-                    f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
-                )
-            videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
+        merge_length = self.video_processor.merge_size**2
+        num_video_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
+        return self.video_token * num_video_tokens
 
-        else:
-            videos_inputs = {}
-            video_grid_thw = None
-
-        if not isinstance(text, list):
-            text = [text]
-
-        if image_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.image_token,
-                        "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length),
-                        1,
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        if video_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.video_token,
-                        "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length),
-                        1,
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
-
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
-
-    def batch_decode(self, *args, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        return self.tokenizer.batch_decode(*args, **kwargs)
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
-    def post_process_image_text_to_text(self, generated_outputs):
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            num_video_patches = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
+
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
         """
         Post-process the output of the model to decode the text.
 
@@ -200,20 +114,44 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             generated_outputs (`torch.Tensor` or `np.ndarray`):
                 The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(
-            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
         )
 
     @property
     def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-        return names_from_processor + ["second_per_grid_ts"]
+        return super().model_input_names + ["second_per_grid_ts", "mm_token_type_ids"]
+
+    def _process_videos(self, videos: VideoInput, **kwargs):
+        processed_data, video_replacements = super()._process_videos(videos, **kwargs)
+        video_grid_thw = processed_data["video_grid_thw"]
+
+        video_metadata = processed_data["video_metadata"]
+        fps = [metadata.sampled_fps for metadata in video_metadata]
+
+        if isinstance(fps, (int, float)):
+            second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
+        elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
+            second_per_grid_ts = [self.video_processor.temporal_patch_size / tmp for tmp in fps]
+        else:
+            raise ValueError(
+                f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
+            )
+        processed_data["second_per_grid_ts"] = second_per_grid_ts
+        return processed_data, video_replacements
 
 
 __all__ = ["Qwen2_5_VLProcessor"]

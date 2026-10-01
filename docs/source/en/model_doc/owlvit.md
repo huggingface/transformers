@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2022-05-12 and contributed to Hugging Face Transformers on 2022-07-22.*
 
 # OWL-ViT
 
+
 ## Overview
 
-The OWL-ViT (short for Vision Transformer for Open-World Localization) was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/abs/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. OWL-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.
+The OWL-ViT (short for Vision Transformer for Open-World Localization) was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://huggingface.co/papers/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. OWL-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.
 
 The abstract from the paper is the following:
 
@@ -27,7 +29,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/owlvit_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> OWL-ViT architecture. Taken from the <a href="https://arxiv.org/abs/2205.06230">original paper</a>. </small>
+<small> OWL-ViT architecture. Taken from the <a href="https://huggingface.co/papers/2205.06230">original paper</a>. </small>
 
 This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit).
 
@@ -38,33 +40,33 @@ OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses [CL
 [`OwlViTImageProcessor`] can be used to resize (or rescale) and normalize images for the model and [`CLIPTokenizer`] is used to encode the text. [`OwlViTProcessor`] wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`] into a single instance to both encode the text and prepare the images. The following example shows how to perform object detection using [`OwlViTProcessor`] and [`OwlViTForObjectDetection`].
 
 ```python
->>> import requests
->>> from PIL import Image
->>> import torch
+import requests
+from PIL import Image
+import torch
 
->>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
->>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
->>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32", device_map="auto")
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> text_labels = [["a photo of a cat", "a photo of a dog"]]
->>> inputs = processor(text=text_labels, images=image, return_tensors="pt")
->>> outputs = model(**inputs)
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+text_labels = [["a photo of a cat", "a photo of a dog"]]
+inputs = processor(text=text_labels, images=image, return_tensors="pt").to(model.device)
+outputs = model(**inputs)
 
->>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
->>> target_sizes = torch.tensor([(image.height, image.width)])
->>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
->>> results = processor.post_process_grounded_object_detection(
-...     outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
-... )
->>> # Retrieve predictions for the first image for the corresponding text queries
->>> result = results[0]
->>> boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
->>> for box, score, text_label in zip(boxes, scores, text_labels):
-...     box = [round(i, 2) for i in box.tolist()]
-...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
+# Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+target_sizes = torch.tensor([(image.height, image.width)])
+# Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+results = processor.post_process_grounded_object_detection(
+    outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
+)
+# Retrieve predictions for the first image for the corresponding text queries
+result = results[0]
+boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
+for box, score, text_label in zip(boxes, scores, text_labels):
+    box = [round(i, 2) for i in box.tolist()]
+    print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
 Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
 Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
 ```
@@ -76,7 +78,6 @@ A demo notebook on using OWL-ViT for zero- and one-shot (image-guided) object de
 ## OwlViTConfig
 
 [[autodoc]] OwlViTConfig
-    - from_text_vision_configs
 
 ## OwlViTTextConfig
 
@@ -89,6 +90,11 @@ A demo notebook on using OWL-ViT for zero- and one-shot (image-guided) object de
 ## OwlViTImageProcessor
 
 [[autodoc]] OwlViTImageProcessor
+    - preprocess
+
+## OwlViTImageProcessorPil
+
+[[autodoc]] OwlViTImageProcessorPil
     - preprocess
     - post_process_object_detection
     - post_process_image_guided_detection

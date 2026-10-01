@@ -101,19 +101,15 @@ class UnivNetModelTester:
 class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UnivNetModel,) if is_torch_available() else ()
     # UnivNetModel currently cannot be traced with torch.jit.trace.
-    test_torchscript = False
     # The UnivNetModel is not a transformer and does not use any attention mechanisms, so skip transformer/attention
     # related tests.
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_position_embeddings = False
-    test_head_masking = False
     # UnivNetModel is not a sequence classification model.
     test_mismatched_shapes = False
     # UnivNetModel does not have a base_model_prefix attribute.
     test_missing_keys = False
-    # UnivNetModel does not implement a parallelize method.
-    test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
 
@@ -122,10 +118,6 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(
             self, config_class=UnivNetConfig, has_text_modality=False, common_properties=["num_mel_bins"]
         )
-
-    @unittest.skip(reason="fix this once it gets more usage")
-    def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -216,7 +208,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=sampling_rate))
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 
@@ -227,7 +219,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
             noise_sequence_shape = (64, noise_length)
         else:
             noise_sequence_shape = (num_samples, 64, noise_length)
-        # Explicity generate noise_sequence on CPU for consistency.
+        # Explicitly generate noise_sequence on CPU for consistency.
         noise_sequence = torch.randn(noise_sequence_shape, generator=generator, dtype=torch.float32, device="cpu")
         # Put noise_sequence on the desired device.
         noise_sequence = noise_sequence.to(device)

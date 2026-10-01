@@ -9,12 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2023-09-12.*
 
 # Persimmon
+
 
 ## Overview
 
@@ -33,15 +35,14 @@ The original code can be found [here](https://github.com/persimmon-ai-labs/adept
 
 <Tip warning={true}>
 
-The `Persimmon` models were trained using `bfloat16`, but the original inference uses `float16` The checkpoints uploaded on the hub use `torch_dtype = 'float16'` which will be
-used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
+The `Persimmon` models were trained using `bfloat16`, but the original inference uses `float16` The checkpoints uploaded on the hub use `dtype = 'float16'` which will be
+used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`.
 
-The `dtype` of the online weights is mostly irrelevant, unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be cast to the default `dtype` of `torch` (becomes `torch.float32`). Users should specify the `torch_dtype` they want, and if they don't it will be `torch.float32`.
+The `dtype` of the online weights is mostly irrelevant, unless you are using `dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be cast to the default `dtype` of `torch` (becomes `torch.float32`, device_map="auto"). Users should specify the `dtype` they want, and if they don't it will be `torch.float32`.
 
 Finetuning the model in `float16` is not recommended and known to produce `nan`, as such the model should be fine-tuned in `bfloat16`.
 
 </Tip>
-
 
 Tips:
 
@@ -57,6 +58,7 @@ python src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py  --i
 ```
 
 For the chat model:
+
 ```bash
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
 tar -xvf 8b_base_model_release.tar
@@ -64,19 +66,18 @@ tar -xvf 8b_base_model_release.tar
 
 Thereafter, models can be loaded via:
 
-```py
+```python
 from transformers import PersimmonForCausalLM, PersimmonTokenizer
 
-model = PersimmonForCausalLM.from_pretrained("/output/path")
+
+model = PersimmonForCausalLM.from_pretrained("/output/path", device_map="auto")
 tokenizer = PersimmonTokenizer.from_pretrained("/output/path")
 ```
-
 
 - Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
 The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!
 
 - The authors suggest to use the following prompt format for the chat mode: `f"human: {prompt}\n\nadept:"`
-
 
 ## PersimmonConfig
 

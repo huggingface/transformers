@@ -165,27 +165,14 @@ pip install transformers datasets evaluate
 
 이제 [`DefaultDataCollator`]를 이용해 예시 배치를 생성합니다. 🤗 Transformers의 다른 데이터 콜레이터(data collator)와 달리, [`DefaultDataCollator`]는 패딩과 같은 추가 전처리를 적용하지 않습니다:
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 이용해 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기초 튜토리얼을 살펴보세요!
@@ -235,81 +222,6 @@ pip install transformers datasets evaluate
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras로 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#train-a-tensorflow-model-with-keras)에서 기초 튜토리얼을 살펴보세요!
-
-</Tip>
-TensorFlow를 이용한 모델을 미세 조정하려면 옵티마이저 함수, 학습률 스케쥴 및 몇 가지 훈련 하이퍼파라미터를 설정하는 것부터 시작해야합니다:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_epochs = 2
->>> total_train_steps = (len(tokenized_squad["train"]) // batch_size) * num_epochs
->>> optimizer, schedule = create_optimizer(
-...     init_lr=2e-5,
-...     num_warmup_steps=0,
-...     num_train_steps=total_train_steps,
-... )
-```
-
-그 다음 [`TFAutoModelForQuestionAnswering`]으로 DistilBERT를 가져옵니다:
-
-```py
->>> from transformers import TFAutoModelForQuestionAnswering
-
->>> model = TFAutoModelForQuestionAnswering("distilbert/distilbert-base-uncased")
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용해서 데이터 세트를 `tf.data.Dataset` 형식으로 변환합니다:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_squad["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_squad["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method)로 훈련할 모델을 설정합니다:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-마지막으로 모델을 Hub로 푸시할 방법을 설정합니다. [`~transformers.PushToHubCallback`]에서 모델과 토크나이저를 푸시할 경로를 설정합니다:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_qa_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-드디어 모델 훈련을 시작할 준비가 되었습니다! 훈련 데이터 세트와 평가 데이터 세트, 에폭 수, 콜백을 설정한 후 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 이용해 모델을 미세 조정합니다:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=[callback])
-```
-훈련이 완료되면 모델이 자동으로 Hub에 업로드되어 누구나 사용할 수 있습니다!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -334,24 +246,7 @@ TensorFlow를 이용한 모델을 미세 조정하려면 옵티마이저 함수,
 >>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
 ```
 
-추론을 위해 미세 조정한 모델을 테스트하는 가장 쉬운 방법은 [`pipeline`]을 사용하는 것 입니다. 모델을 사용해 질의 응답을 하기 위해서 `pipeline`을 인스턴스화하고 텍스트를 입력합니다:
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline("question-answering", model="my_awesome_qa_model")
->>> question_answerer(question=question, context=context)
-{'score': 0.2058267742395401,
- 'start': 10,
- 'end': 95,
- 'answer': '176 billion parameters and can generate text in 46 languages natural languages and 13'}
-```
-
-원한다면 `pipeline`의 결과를 직접 복제할 수도 있습니다:
-
-<frameworkcontent>
-<pt>
-텍스트를 토큰화해서 PyTorch 텐서를 반환합니다:
+추론을 위해 미세 조정된 모델을 테스트하는 가장 쉬운 방법은 tokenizer와 model을 직접 사용하는 것 입니다. 텍스트를 토큰화해서 PyTorch 텐서를 반환합니다:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -384,39 +279,3 @@ TensorFlow를 이용한 모델을 미세 조정하려면 옵티마이저 함수,
 >>> tokenizer.decode(predict_answer_tokens)
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
-</pt>
-<tf>
-텍스트를 토큰화해서 TensorFlow 텐서를 반환합니다:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_qa_model")
->>> inputs = tokenizer(question, text, return_tensors="tf")
-```
-
-모델에 입력을 전달하고 `logits`을 반환합니다:
-
-```py
->>> from transformers import TFAutoModelForQuestionAnswering
-
->>> model = TFAutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
->>> outputs = model(**inputs)
-```
-
-모델의 출력에서 시작 및 종료 위치가 어딘지 가장 높은 확률을 얻습니다:
-
-```py
->>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
->>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
-```
-
-예측된 토큰을 해독해서 답을 얻습니다:
-
-```py
->>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
->>> tokenizer.decode(predict_answer_tokens)
-'176 billion parameters and can generate text in 46 languages natural languages and 13'
-```
-</tf>
-</frameworkcontent>

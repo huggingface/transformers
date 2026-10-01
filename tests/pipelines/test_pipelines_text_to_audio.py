@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import torch
 
 from transformers import (
     MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
@@ -26,7 +27,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     require_torch,
     require_torch_accelerator,
-    require_torch_or_tf,
     slow,
     torch_device,
 )
@@ -36,30 +36,62 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
     # for now only test text_to_waveform and not text_to_spectrogram
 
-    @slow
     @require_torch
-    def test_small_musicgen_pt(self):
-        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
-
+    def test_small_speecht5_pt(self):
+        audio_generator = pipeline(task="text-to-audio", model="microsoft/speecht5_tts")
+        num_channels = 1  # model generates mono audio
         forward_params = {
-            "do_sample": False,
-            "max_new_tokens": 250,
+            "do_sample": True,
+            "semantic_max_new_tokens": 5,
+            "speaker_embeddings": torch.rand(1, 512) * 0.2 - 0.1,
         }
 
-        outputs = music_generator("This is a test", forward_params=forward_params)
-        self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 32000}, outputs)
+        outputs = audio_generator("This is a test", forward_params=forward_params)
+        self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 16000}, outputs)
+        self.assertEqual(len(outputs["audio"].shape), num_channels)
 
         # test two examples side-by-side
-        outputs = music_generator(["This is a test", "This is a second test"], forward_params=forward_params)
+        outputs = audio_generator(["This is a test", "This is a second test"], forward_params=forward_params)
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
-        # test batching
+        # test batching, this time with parameterization in the forward pass
+        audio_generator = pipeline(task="text-to-audio", model="microsoft/speecht5_tts")
+        forward_params = {
+            "do_sample": False,
+            "max_new_tokens": 5,
+            "speaker_embeddings": torch.rand(1, 512) * 0.2 - 0.1,
+        }
+        outputs = audio_generator(
+            ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
+        )
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+    @require_torch
+    def test_small_musicgen_pt(self):
+        music_generator = pipeline(
+            task="text-to-audio", model="facebook/musicgen-small", do_sample=False, max_new_tokens=5
+        )
+        num_channels = 1  # model generates mono audio
+
+        outputs = music_generator("This is a test")
+        self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 32000}, outputs)
+        self.assertEqual(len(outputs["audio"].shape), num_channels)
+
+        # test two examples side-by-side
+        outputs = music_generator(["This is a test", "This is a second test"])
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+        # test batching, this time with parameterization in the forward pass
+        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
+        forward_params = {"do_sample": False, "max_new_tokens": 5}
         outputs = music_generator(
             ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
         )
@@ -69,7 +101,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_medium_seamless_m4t_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="facebook/hf-seamless-m4t-medium", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="facebook/hf-seamless-m4t-medium", max_new_tokens=5)
 
         for forward_params in [{"tgt_lang": "eng"}, {"return_intermediate_token_ids": True, "tgt_lang": "eng"}]:
             outputs = speech_generator("This is a test", forward_params=forward_params)
@@ -90,12 +122,13 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_small_bark_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small")
+        num_channels = 1  # model generates mono audio
 
         forward_params = {
             # Using `do_sample=False` to force deterministic output
             "do_sample": False,
-            "semantic_max_new_tokens": 100,
+            "semantic_max_new_tokens": 5,
         }
 
         outputs = speech_generator("This is a test", forward_params=forward_params)
@@ -103,6 +136,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             {"audio": ANY(np.ndarray), "sampling_rate": 24000},
             outputs,
         )
+        self.assertEqual(len(outputs["audio"].shape), num_channels)
 
         # test two examples side-by-side
         outputs = speech_generator(
@@ -115,7 +149,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         # test other generation strategy
         forward_params = {
             "do_sample": True,
-            "semantic_max_new_tokens": 100,
+            "semantic_max_new_tokens": 5,
             "semantic_num_return_sequences": 2,
         }
 
@@ -140,12 +174,12 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_conversion_additional_tensor(self):
-        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt", device=torch_device)
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", device=torch_device)
         processor = AutoProcessor.from_pretrained("suno/bark-small")
 
         forward_params = {
             "do_sample": True,
-            "semantic_max_new_tokens": 100,
+            "semantic_max_new_tokens": 5,
         }
 
         # atm, must do to stay coherent with BarkProcessor
@@ -154,7 +188,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "add_special_tokens": False,
             "return_attention_mask": True,
             "return_token_type_ids": False,
-            "padding": "max_length",
         }
         outputs = speech_generator(
             "This is a test",
@@ -176,10 +209,9 @@ class TextToAudioPipelineTests(unittest.TestCase):
             outputs,
         )
 
-    @slow
     @require_torch
     def test_vits_model_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="facebook/mms-tts-eng", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="facebook/mms-tts-eng")
 
         outputs = speech_generator("This is a test")
         self.assertEqual(outputs["sampling_rate"], 16000)
@@ -196,11 +228,10 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = speech_generator(["This is a test", "This is a second test"], batch_size=2)
         self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
 
-    @slow
     @require_torch
     def test_forward_model_kwargs(self):
         # use vits - a forward model
-        speech_generator = pipeline(task="text-to-audio", model="kakao-enterprise/vits-vctk", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="kakao-enterprise/vits-vctk")
 
         # for reproducibility
         set_seed(555)
@@ -221,15 +252,14 @@ class TextToAudioPipelineTests(unittest.TestCase):
             )
         self.assertTrue(np.abs(outputs["audio"] - audio).max() < 1e-5)
 
-    @slow
     @require_torch
     def test_generative_model_kwargs(self):
         # use musicgen - a generative model
-        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
 
         forward_params = {
             "do_sample": True,
-            "max_new_tokens": 250,
+            "max_new_tokens": 20,
         }
 
         # for reproducibility
@@ -241,14 +271,79 @@ class TextToAudioPipelineTests(unittest.TestCase):
         # make sure generate kwargs get priority over forward params
         forward_params = {
             "do_sample": False,
-            "max_new_tokens": 250,
+            "max_new_tokens": 20,
         }
         generate_kwargs = {"do_sample": True}
 
         # for reproducibility
         set_seed(555)
         outputs = music_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
-        self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
+        self.assertTrue(np.abs(outputs["audio"] - audio).max() < 1e-5)
+
+    @slow
+    @require_torch
+    def test_csm_model_pt(self):
+        speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b", device=torch_device)
+        generate_kwargs = {"max_new_tokens": 10}
+        num_channels = 1  # model generates mono audio
+
+        outputs = speech_generator("This is a test", generate_kwargs=generate_kwargs)
+        self.assertEqual(outputs["sampling_rate"], 24000)
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
+        # ensure audio and not discrete codes
+        self.assertEqual(len(audio.shape), num_channels)
+
+        # test two examples side-by-side
+        outputs = speech_generator(["This is a test", "This is a second test"], generate_kwargs=generate_kwargs)
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(audio[0].shape), num_channels)
+
+        # test batching
+        batch_size = 2
+        outputs = speech_generator(
+            ["This is a test", "This is a second test"], generate_kwargs=generate_kwargs, batch_size=batch_size
+        )
+        self.assertEqual(len(outputs), batch_size)
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(outputs[0]["audio"].shape), num_channels)
+
+    @slow
+    @require_torch
+    def test_dia_model(self):
+        speech_generator = pipeline(task="text-to-audio", model="nari-labs/Dia-1.6B-0626", device=torch_device)
+        generate_kwargs = {"max_new_tokens": 20}
+        num_channels = 1  # model generates mono audio
+
+        outputs = speech_generator("Dia is an open weights text to dialogue model.", generate_kwargs=generate_kwargs)
+        self.assertEqual(outputs["sampling_rate"], 44100)
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
+        # ensure audio (with one channel) and not discrete codes
+        self.assertEqual(len(audio.shape), num_channels)
+
+        # test two examples side-by-side
+        outputs = speech_generator(
+            ["Dia is an open weights text to dialogue model.", "This is a second example."],
+            generate_kwargs=generate_kwargs,
+        )
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(audio[0].shape), num_channels)
+
+        # test batching
+        batch_size = 2
+        outputs = speech_generator(
+            ["Dia is an open weights text to dialogue model.", "This is a second example."],
+            generate_kwargs=generate_kwargs,
+            batch_size=2,
+        )
+        self.assertEqual(len(outputs), batch_size)
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(outputs[0]["audio"].shape), num_channels)
 
     def get_test_pipeline(
         self,
@@ -257,16 +352,22 @@ class TextToAudioPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
+        model_test_kwargs = {}
+        if model.can_generate():  # not all models in this pipeline can generate and, therefore, take `generate` kwargs
+            model_test_kwargs["max_new_tokens"] = 5
+        model.config._attn_implementation = "eager"
         speech_generator = TextToAudioPipeline(
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
+            **model_test_kwargs,
         )
+
         return speech_generator, ["This is a test", "Another test"]
 
     def run_pipeline_test(self, speech_generator, _):

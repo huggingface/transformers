@@ -1,0 +1,26 @@
+name: Assign PR Reviewers
+
+# Caller workflow — delegates to the reusable reviewer-assignment workflow in transformers-ci,
+# which requests up to two reviewers ranked by how many lines this PR changes in the files they
+# own. The resolution logic lives there; what stays here is the data it reads:
+# `.github/scripts/codeowners_for_review_action`, because who owns what is this repo's decision.
+# `utils/check_reviewers.py` checks that file against this tree on every PR.
+#
+# `pull_request_target` so the job gets a token that can request reviews on a PR from a fork. The
+# reusable workflow checks out the BASE, never the head, and executes nothing from the PR.
+on:
+  pull_request_target:
+    branches:
+      - main
+    types: [ready_for_review]
+
+permissions:
+  contents: read
+
+# we will pin once the feature is stable.
+jobs:
+  assign_reviewers:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: huggingface/transformers-ci/.github/workflows/assign-reviewers.yml@main # main

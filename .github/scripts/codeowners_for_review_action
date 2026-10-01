@@ -1,0 +1,96 @@
+# Who reviews what. Read by the `Assign PR Reviewers` workflow, and checked against this tree by
+# `utils/check_reviewers.py`. See the "Reviewer assignment" section of docs/source/en/pr_checks.md.
+#
+# Keep this file outside src/, tests/, docs/ and utils/. The PR CI security gate only lets a PR
+# from a non-collaborator touch those four directories, and that is the whole reason a fork cannot
+# rewrite reviewer routing. Moving this file into one of them — say next to check_reviewers.py in
+# utils/ — would silently hand that away, unless it is also named in the gate's `protected_paths`.
+
+# Top-level rules are matched only if nothing else matches
+* @Rocketknight1 @ArthurZucker # if no one is pinged based on the other rules, he will do the dispatch
+*.md @stevhliu
+*tokenization* @ArthurZucker
+docs/ @stevhliu
+/benchmark/ @McPatate
+/docker/ @ydshieh @ArthurZucker
+
+# More high-level globs catch cases when specific rules later don't apply
+/src/transformers/models/*/processing* @molbap
+/src/transformers/models/*/image_processing* @molbap @guarin
+/src/transformers/models/*/video_processing_* @zucchini-nlp
+
+# Fallback by modality for any model file with no rule of its own, so a new model reaches someone
+# without anybody adding a line here. The modality is the model's section in
+# docs/source/en/_toctree.yml, which every model must appear in (utils/check_doc_toc.py).
+#
+# `@@modality/<section>` is not a path pattern: the `@@` marks a rule that matches a model by its
+# doc section rather than by where its files live, so it cannot be confused with a glob. See the
+# "Reviewer assignment" section of docs/source/en/pr_checks.md.
+#
+# A model that needs a specific reviewer says so in its own file:
+#   # Reviewers: @someone
+# in the leading comment block of modular_<model>.py / modeling_<model>.py, which wins over both.
+@@modality/text @ArthurZucker
+@@modality/vision @molbap @guarin
+@@modality/audio @eustlb
+@@modality/video @zucchini-nlp
+@@modality/multimodal @zucchini-nlp
+@@modality/time-series @Rocketknight1
+@@modality/reinforcement-learning @Rocketknight1
+
+# Owners of subsections of the library
+/src/transformers/generation/ @Cyrilvallez
+/src/transformers/pipelines/ @Rocketknight1
+/src/transformers/integrations/ @SunMarc
+/src/transformers/quantizers/ @SunMarc
+tests/ @ydshieh
+tests/generation/ @Cyrilvallez
+
+/src/transformers/models/auto/ @ArthurZucker
+/src/transformers/utils/ @ArthurZucker @Rocketknight1
+/src/transformers/loss/ @ArthurZucker
+
+# Specific files come after the sections/globs, so they take priority
+/.circleci/config.yml @ArthurZucker @ydshieh
+/utils/tests_fetcher.py @ydshieh
+trainer.py @SunMarc
+trainer_utils.py @SunMarc
+/utils/modular_model_converter.py @Cyrilvallez @ArthurZucker
+/src/transformers/generation/continuous_batching/ @remi-or
+tests/generation/test_continuous_batching.py @remi-or
+
+# Owners of individual models are specific / high priority, and so they come last
+# mod* captures modeling and modular files
+
+# Text models
+/src/transformers/models/fastspeech2_conformer/mod*_fastspeech2_conformer* @ArthurZucker
+/src/transformers/models/llama/mod*_llama* @ArthurZucker @Cyrilvallez
+
+# Video models
+/src/transformers/models/timesformer/mod*_timesformer* @Rocketknight1
+/src/transformers/models/videomae/mod*_videomae* @Rocketknight1
+/src/transformers/models/vivit/mod*_vivit* @Rocketknight1
+
+# Multimodal models
+/src/transformers/models/layoutlm/mod*_layoutlm* @NielsRogge
+/src/transformers/models/layoutlmv2/mod*_layoutlmv2* @NielsRogge
+/src/transformers/models/layoutlmv3/mod*_layoutlmv3* @NielsRogge
+/src/transformers/models/layoutxlm/mod*_layoutxlm* @NielsRogge
+/src/transformers/models/llava/mod*_llava* @zucchini-nlp @ArthurZucker
+/src/transformers/models/paligemma/mod*_paligemma* @zucchini-nlp @molbap
+/src/transformers/models/pixtral/mod*_pixtral* @zucchini-nlp @ArthurZucker
+/src/transformers/models/qwen2_audio/mod*_qwen2_audio* @zucchini-nlp @ArthurZucker
+/src/transformers/models/qwen2_vl/mod*_qwen2_vl* @zucchini-nlp @ArthurZucker
+/src/transformers/models/sam/mod*_sam* @zucchini-nlp @ArthurZucker
+/src/transformers/models/tapas/mod*_tapas* @NielsRogge
+/src/transformers/models/vision_encoder_decoder/mod*_vision_encoder_decoder* @Rocketknight1
+/src/transformers/models/vision_text_dual_encoder/mod*_vision_text_dual_encoder* @Rocketknight1
+
+# Directories the modality fallback cannot place: their doc page is named differently, they have no
+# doc page yet, or they are not a model. Everything else under models/ is routed by @@modality.
+/src/transformers/models/openai/ @ArthurZucker
+/src/transformers/models/timm_backbone/ @molbap @guarin
+/src/transformers/models/deprecated/
+
+# Finally, files with no owners that shouldn't generate pings, usually automatically generated and checked in the CI
+utils/dummy*

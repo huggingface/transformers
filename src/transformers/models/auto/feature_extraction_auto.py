@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,18 +14,24 @@
 """AutoFeatureExtractor class."""
 
 import importlib
-import json
 import os
-import warnings
 from collections import OrderedDict
-from typing import Dict, Optional, Union
 
 # Build the list of all feature extractors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
+from ...utils import (
+    CONFIG_NAME,
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    cached_file,
+    logging,
+    resolve_revision,
+    safe_load_json_file,
+)
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -37,83 +42,52 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
+MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
-        ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
-        ("beit", "BeitFeatureExtractor"),
-        ("chinese_clip", "ChineseCLIPFeatureExtractor"),
-        ("clap", "ClapFeatureExtractor"),
-        ("clip", "CLIPFeatureExtractor"),
-        ("clipseg", "ViTFeatureExtractor"),
-        ("clvp", "ClvpFeatureExtractor"),
-        ("conditional_detr", "ConditionalDetrFeatureExtractor"),
-        ("convnext", "ConvNextFeatureExtractor"),
-        ("cvt", "ConvNextFeatureExtractor"),
-        ("dac", "DacFeatureExtractor"),
+        ("audioflamingo3", "WhisperFeatureExtractor"),
+        ("canary", "ParakeetFeatureExtractor"),
+        ("csm", "EncodecFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
-        ("data2vec-vision", "BeitFeatureExtractor"),
-        ("deformable_detr", "DeformableDetrFeatureExtractor"),
-        ("deit", "DeiTFeatureExtractor"),
-        ("detr", "DetrFeatureExtractor"),
-        ("dinat", "ViTFeatureExtractor"),
-        ("donut-swin", "DonutFeatureExtractor"),
-        ("dpt", "DPTFeatureExtractor"),
-        ("encodec", "EncodecFeatureExtractor"),
-        ("flava", "FlavaFeatureExtractor"),
-        ("glpn", "GLPNFeatureExtractor"),
-        ("groupvit", "CLIPFeatureExtractor"),
+        ("glmasr", "WhisperFeatureExtractor"),
+        ("granite_speech5_ctc", "GraniteSpeech5FeatureExtractor"),
+        ("granite_speech5_encoder", "GraniteSpeech5FeatureExtractor"),
+        ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),
+        ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("imagegpt", "ImageGPTFeatureExtractor"),
-        ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
-        ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
-        ("levit", "LevitFeatureExtractor"),
-        ("maskformer", "MaskFormerFeatureExtractor"),
-        ("mctct", "MCTCTFeatureExtractor"),
+        ("inkling_mm_model", "InklingFeatureExtractor"),
+        ("lasr_ctc", "LasrFeatureExtractor"),
+        ("lasr_encoder", "LasrFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
-        ("mobilenet_v1", "MobileNetV1FeatureExtractor"),
-        ("mobilenet_v2", "MobileNetV2FeatureExtractor"),
-        ("mobilevit", "MobileViTFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
-        ("nat", "ViTFeatureExtractor"),
-        ("owlvit", "OwlViTFeatureExtractor"),
-        ("perceiver", "PerceiverFeatureExtractor"),
-        ("poolformer", "PoolFormerFeatureExtractor"),
-        ("pop2piano", "Pop2PianoFeatureExtractor"),
-        ("regnet", "ConvNextFeatureExtractor"),
-        ("resnet", "ConvNextFeatureExtractor"),
-        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
+        ("musicgen", "EncodecFeatureExtractor"),
+        ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
+        ("nemotron3_diarization", "NemotronAsrStreamingFeatureExtractor"),
+        ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingFeatureExtractor"),
+        ("parakeet_ctc", "ParakeetFeatureExtractor"),
+        ("parakeet_encoder", "ParakeetFeatureExtractor"),
+        ("parakeet_rnnt", "ParakeetFeatureExtractor"),
+        ("parakeet_tdt", "ParakeetFeatureExtractor"),
+        ("pe_audio_video", "PeAudioFeatureExtractor"),
+        ("qwen2_5_omni", "WhisperFeatureExtractor"),
+        ("qwen2_audio", "WhisperFeatureExtractor"),
+        ("qwen3_omni_moe", "WhisperFeatureExtractor"),
         ("seamless_m4t_v2", "SeamlessM4TFeatureExtractor"),
-        ("segformer", "SegformerFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
-        ("speech_to_text", "Speech2TextFeatureExtractor"),
-        ("speecht5", "SpeechT5FeatureExtractor"),
-        ("swiftformer", "ViTFeatureExtractor"),
-        ("swin", "ViTFeatureExtractor"),
-        ("swinv2", "ViTFeatureExtractor"),
-        ("table-transformer", "DetrFeatureExtractor"),
-        ("timesformer", "VideoMAEFeatureExtractor"),
-        ("tvlt", "TvltFeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
-        ("univnet", "UnivNetFeatureExtractor"),
-        ("van", "ConvNextFeatureExtractor"),
-        ("videomae", "VideoMAEFeatureExtractor"),
-        ("vilt", "ViltFeatureExtractor"),
-        ("vit", "ViTFeatureExtractor"),
-        ("vit_mae", "ViTFeatureExtractor"),
-        ("vit_msn", "ViTFeatureExtractor"),
-        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("vibevoice", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+        ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+        ("voxtral", "WhisperFeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
         ("wavlm", "Wav2Vec2FeatureExtractor"),
-        ("whisper", "WhisperFeatureExtractor"),
-        ("xclip", "CLIPFeatureExtractor"),
-        ("yolos", "YolosFeatureExtractor"),
+        ("xcodec", "DacFeatureExtractor"),
     ]
 )
 
+FEATURE_EXTRACTOR_MAPPING_NAMES.update(MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES)
 FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
 
 
@@ -128,11 +102,11 @@ def feature_extractor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
+    for extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
@@ -142,18 +116,17 @@ def feature_extractor_class_from_name(class_name: str):
 
 
 def get_feature_extractor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):
     """
-    Loads the tokenizer configuration from a pretrained model tokenizer configuration.
+    Loads the feature extractor configuration from a pretrained model feature extractor configuration.
 
     Args:
         pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -162,7 +135,7 @@ def get_feature_extractor_config(
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
-              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+              [`~FeatureExtractionMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
 
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -170,21 +143,18 @@ def get_feature_extractor_config(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
-            If `True`, will only try to load the tokenizer configuration from local files.
+            If `True`, will only try to load the feature extractor configuration from local files.
 
     <Tip>
 
@@ -193,52 +163,66 @@ def get_feature_extractor_config(
     </Tip>
 
     Returns:
-        `Dict`: The configuration of the tokenizer.
+        `Dict`: The configuration of the feature extractor.
 
     Examples:
 
     ```python
     # Download configuration from huggingface.co and cache.
-    tokenizer_config = get_tokenizer_config("google-bert/bert-base-uncased")
-    # This model does not have a tokenizer config so the result will be an empty dict.
-    tokenizer_config = get_tokenizer_config("FacebookAI/xlm-roberta-base")
+    feature_extractor_config = get_feature_extractor_config("facebook/wav2vec2-base-960h")
+    # This model does not have a feature extractor config so the result will be an empty dict.
+    feature_extractor_config = get_feature_extractor_config("FacebookAI/xlm-roberta-base")
 
-    # Save a pretrained tokenizer locally and you can reload its config
-    from transformers import AutoTokenizer
+    # Save a pretrained feature extractor locally and you can reload its config
+    from transformers import AutoFeatureExtractor
 
-    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-    tokenizer.save_pretrained("tokenizer-test")
-    tokenizer_config = get_tokenizer_config("tokenizer-test")
+    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+    feature_extractor.save_pretrained("feature-extractor-test")
+    feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
-    resolved_config_file = get_file_from_repo(
+    # Load with a priority given to the nested processor config, if available in repo
+    resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
-        FEATURE_EXTRACTOR_NAME,
+        filename=PROCESSOR_NAME,
         cache_dir=cache_dir,
         force_download=force_download,
-        resume_download=resume_download,
         proxies=proxies,
         token=token,
         revision=revision,
         local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
     )
-    if resolved_config_file is None:
-        logger.info(
-            "Could not locate the feature extractor configuration file, will try to use the model config instead."
-        )
+    resolved_feature_extractor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=FEATURE_EXTRACTOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+
+    # An empty list if none of the possible files is found in the repo
+    if not resolved_feature_extractor_file and not resolved_processor_file:
+        logger.info("Could not locate the feature extractor configuration file.")
         return {}
 
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+    # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
+    feature_extractor_dict = None
+    if resolved_processor_file is not None:
+        processor_dict = safe_load_json_file(resolved_processor_file)
+        if "feature_extractor" in processor_dict:
+            feature_extractor_dict = processor_dict["feature_extractor"]
+
+    if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
+        feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
+    return feature_extractor_dict or {}
 
 
 class AutoFeatureExtractor:
@@ -250,7 +234,7 @@ class AutoFeatureExtractor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoFeatureExtractor is designed to be instantiated "
             "using the `AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -276,7 +260,7 @@ class AutoFeatureExtractor:
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
+                - a path to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
@@ -284,15 +268,12 @@ class AutoFeatureExtractor:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -306,7 +287,7 @@ class AutoFeatureExtractor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
@@ -328,21 +309,18 @@ class AutoFeatureExtractor:
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token", None) is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
@@ -352,7 +330,7 @@ class AutoFeatureExtractor:
 
         # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
         if feature_extractor_class is None and feature_extractor_auto_map is None:
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
@@ -366,29 +344,36 @@ class AutoFeatureExtractor:
 
         has_remote_code = feature_extractor_auto_map is not None
         has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        explicit_local_code = has_local_code and not (
+            feature_extractor_class or FEATURE_EXTRACTOR_MAPPING[type(config)]
+        ).__module__.startswith("transformers.")
+        if has_remote_code:
+            if "--" in feature_extractor_auto_map:
+                upstream_repo = feature_extractor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             feature_extractor_class = get_class_from_dynamic_module(
                 feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                feature_extractor_class.register_for_auto_class()
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            feature_extractor_class.register_for_auto_class()
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif feature_extractor_class is not None:
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
         elif type(config) in FEATURE_EXTRACTOR_MAPPING:
             feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
             f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
-            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
+            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES)}"
         )
 
     @staticmethod
@@ -397,8 +382,11 @@ class AutoFeatureExtractor:
         Register a new feature extractor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
+
+
+__all__ = ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"]

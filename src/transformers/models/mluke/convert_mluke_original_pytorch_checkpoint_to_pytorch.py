@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,12 +27,12 @@ from transformers.tokenization_utils_base import AddedToken
 @torch.no_grad()
 def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, pytorch_dump_folder_path, model_size):
     # Load configuration defined in the metadata file
-    with open(metadata_path) as metadata_file:
+    with open(metadata_path, encoding="utf-8") as metadata_file:
         metadata = json.load(metadata_file)
     config = LukeConfig(use_entity_aware_attention=True, **metadata["model_config"])
 
     # Load in the weights from the checkpoint_path
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["module"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["module"]
 
     # Load the entity vocab file
     entity_vocab = load_original_entity_vocab(entity_vocab_path)
@@ -51,13 +50,17 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
-    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "r") as f:
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "r", encoding="utf-8") as f:
         tokenizer_config = json.load(f)
     tokenizer_config["tokenizer_class"] = "MLukeTokenizer"
-    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w") as f:
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f)
 
-    with open(os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:
+    with open(
+        os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]),
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(entity_vocab, f)
 
     tokenizer = MLukeTokenizer.from_pretrained(pytorch_dump_folder_path)
@@ -100,7 +103,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     state_dict.pop("lm_head.decoder.weight")
     state_dict.pop("lm_head.decoder.bias")
     state_dict_for_hugging_face = OrderedDict()
-    for key, value in state_dict.items():
+    for key in state_dict:
         if not (key.startswith("lm_head") or key.startswith("entity_predictions")):
             state_dict_for_hugging_face[f"luke.{key}"] = state_dict[key]
         else:
@@ -170,7 +173,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     input_ids = encoding["input_ids"][0].tolist()
     mask_position_id = input_ids.index(tokenizer.convert_tokens_to_ids("<mask>"))
     predicted_id = outputs.logits[0][mask_position_id].argmax(dim=-1)
-    assert "Japan" == tokenizer.decode(predicted_id)
+    assert tokenizer.decode(predicted_id) == "Japan"
 
     predicted_entity_id = outputs.entity_logits[0][0].argmax().item()
     multilingual_predicted_entities = [
@@ -179,14 +182,14 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     assert [e for e in multilingual_predicted_entities if e.startswith("en:")][0] == "en:Japan"
 
     # Finally, save our PyTorch model and tokenizer
-    print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))
+    print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
 
 def load_original_entity_vocab(entity_vocab_path):
     SPECIAL_TOKENS = ["[MASK]", "[PAD]", "[UNK]"]
 
-    data = [json.loads(line) for line in open(entity_vocab_path)]
+    data = [json.loads(line) for line in open(entity_vocab_path, encoding="utf-8")]
 
     new_mapping = {}
     for entry in data:

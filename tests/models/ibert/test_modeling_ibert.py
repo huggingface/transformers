@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -225,11 +224,7 @@ class IBertModelTester:
 
 @require_torch
 class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
     test_resize_embeddings = False
-
     all_model_classes = (
         (
             IBertForMaskedLM,
@@ -246,7 +241,6 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": IBertModel,
             "fill-mask": IBertForMaskedLM,
-            "question-answering": IBertForQuestionAnswering,
             "text-classification": IBertForSequenceClassification,
             "token-classification": IBertForTokenClassification,
             "zero-shot": IBertForSequenceClassification,
@@ -255,9 +249,11 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    test_torch_exportable = False  # quantization uses `np.frexp` + Python `decimal.Decimal` per element, not traceable
+
     def setUp(self):
         self.model_tester = IBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -265,13 +261,6 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # I-BERT only supports absolute embedding
-        for type in ["absolute"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

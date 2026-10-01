@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +15,16 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
-import requests
+import pytest
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -34,8 +35,10 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
+
+if is_torchvision_available():
     from transformers import VitPoseImageProcessor
 
 
@@ -49,8 +52,9 @@ class VitPoseModelTester:
         num_channels=3,
         is_training=True,
         use_labels=True,
+        use_flip_pairs=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -70,6 +74,7 @@ class VitPoseModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
+        self.use_flip_pairs = use_flip_pairs
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -95,9 +100,13 @@ class VitPoseModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
+        flip_pairs = None
+        if self.use_flip_pairs:
+            flip_pairs = torch.arange(self.num_labels).view(-1, 2)
+
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, labels, flip_pairs
 
     def get_config(self):
         return VitPoseConfig(
@@ -117,7 +126,7 @@ class VitPoseModelTester:
             out_indices=self.out_indices,
         )
 
-    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
+    def create_and_check_for_pose_estimation(self, config, pixel_values, labels, flip_pairs):
         model = VitPoseForPoseEstimation(config)
         model.to(torch_device)
         model.eval()
@@ -130,12 +139,27 @@ class VitPoseModelTester:
             result.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
         )
 
+        result_flipped = model(pixel_values, flip_pairs=flip_pairs)
+        self.parent.assertEqual(
+            result_flipped.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
+        )
+
+    def create_and_check_for_pose_estimation_without_graph_break(self, config, pixel_values, labels, flip_pairs):
+        model = VitPoseForPoseEstimation(config)
+        model.to(torch_device)
+        model.eval()
+
+        torch.compiler.reset()
+        model = torch.compile(model, fullgraph=True)
+        model(pixel_values, flip_pairs=flip_pairs)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             pixel_values,
             labels,
+            flip_pairs,
         ) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
@@ -149,16 +173,12 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (VitPoseForPoseEstimation,) if is_torch_available() else ()
-    fx_compatible = False
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VitPoseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -167,6 +187,9 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="VitPose does not support input and output embeddings")
     def test_model_common_attributes(self):
@@ -180,20 +203,20 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="VitPose does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="VitPose does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="VitPose does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="VitPose does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     def test_forward_signature(self):
@@ -213,6 +236,12 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
 
     @slow
+    @pytest.mark.torch_compile_test
+    def test_for_post_estimation_without_graph_break(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pose_estimation_without_graph_break(*config_and_inputs)
+
+    @slow
     def test_model_from_pretrained(self):
         model_name = "usyd-community/vitpose-base-simple"
         model = VitPoseForPoseEstimation.from_pretrained(model_name)
@@ -221,8 +250,8 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of people in house
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
+    image = load_test_image(url)
     return image
 
 
@@ -310,7 +339,6 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
 
         pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
-        print(pose_results)
 
         expected_bbox = torch.tensor([391.9900, 190.0800, 391.1575, 189.3034])
         expected_keypoints = torch.tensor(

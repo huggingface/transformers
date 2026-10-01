@@ -9,16 +9,22 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-08-23 and contributed to Hugging Face Transformers on 2024-09-20.*
 
 # GraniteMoe
 
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The GraniteMoe model was proposed in [Power Scheduler: A Batch Size and Token Number Agnostic Learning Rate Scheduler](https://arxiv.org/abs/2408.13359) by Yikang Shen, Matthew Stallone, Mayank Mishra, Gaoyuan Zhang, Shawn Tan, Aditya Prasad, Adriana Meza Soria, David D. Cox and Rameswar Panda.
+The GraniteMoe model was proposed in [Power Scheduler: A Batch Size and Token Number Agnostic Learning Rate Scheduler](https://huggingface.co/papers/2408.13359) by Yikang Shen, Matthew Stallone, Mayank Mishra, Gaoyuan Zhang, Shawn Tan, Aditya Prasad, Adriana Meza Soria, David D. Cox and Rameswar Panda.
 
 PowerMoE-3B is a 3B sparse Mixture-of-Experts (sMoE) language model trained with the Power learning rate scheduler. It sparsely activates 800M parameters for each token. It is trained on a mix of open-source and proprietary datasets. PowerMoE-3B has shown promising results compared to other dense models with 2x activate parameters across various benchmarks, including natural language multi-choices, code generation, and math reasoning.
 
@@ -32,8 +38,8 @@ We [open source](https://huggingface.co/collections/ibm/power-lm-66be64ae647ddf1
 Tips:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_path = "ibm/PowerMoE-3b"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
@@ -46,7 +52,7 @@ model.eval()
 prompt = "Write a code to find the maximum value in a list of numbers."
 
 # tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
+input_tokens = tokenizer(prompt, return_tensors="pt").to(model.device)
 # generate output tokens
 output = model.generate(**input_tokens, max_new_tokens=100)
 # decode output tokens into text
@@ -57,7 +63,6 @@ for i in output:
 ```
 
 This model was contributed by [mayank-mishra](https://huggingface.co/mayank-mishra).
-
 
 ## GraniteMoeConfig
 

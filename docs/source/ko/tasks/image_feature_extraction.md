@@ -45,9 +45,9 @@ image_gen = Image.open(requests.get(img_urls[1], stream=True).raw).convert("RGB"
 
 ```python
 import torch
-from transformers import pipeline
+from transformers import pipeline, infer_device
 
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+DEVICE = infer_device()
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 

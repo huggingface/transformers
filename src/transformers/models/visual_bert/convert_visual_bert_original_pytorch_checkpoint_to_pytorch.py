@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,7 +55,7 @@ ACCEPTABLE_CHECKPOINTS = [
 
 
 def load_state_dict(checkpoint_path):
-    sd = torch.load(checkpoint_path, map_location="cpu")
+    sd = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     return sd
 
 
@@ -84,9 +83,9 @@ def convert_visual_bert_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     Copy/paste/tweak model's weights to our VisualBERT structure.
     """
 
-    assert (
-        checkpoint_path.split("/")[-1] in ACCEPTABLE_CHECKPOINTS
-    ), f"The checkpoint provided must be in {ACCEPTABLE_CHECKPOINTS}."
+    assert checkpoint_path.split("/")[-1] in ACCEPTABLE_CHECKPOINTS, (
+        f"The checkpoint provided must be in {ACCEPTABLE_CHECKPOINTS}."
+    )
 
     # Get Config
     if "pre" in checkpoint_path:

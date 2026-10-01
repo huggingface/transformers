@@ -9,16 +9,17 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-10-24 and contributed to Hugging Face Transformers on 2021-07-24.*
 
 # RemBERT
 
 ## Overview
 
-The RemBERT model was proposed in [Rethinking Embedding Coupling in Pre-trained Language Models](https://arxiv.org/abs/2010.12821) by Hyung Won Chung, Thibault Févry, Henry Tsai, Melvin Johnson, Sebastian Ruder.
+The RemBERT model was proposed in [Rethinking Embedding Coupling in Pre-trained Language Models](https://huggingface.co/papers/2010.12821) by Hyung Won Chung, Thibault Févry, Henry Tsai, Melvin Johnson, Sebastian Ruder.
 
 The abstract from the paper is the following:
 
@@ -57,21 +58,9 @@ also similar to the Albert one rather than the BERT one.
 ## RemBertTokenizer
 
 [[autodoc]] RemBertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## RemBertTokenizerFast
-
-[[autodoc]] RemBertTokenizerFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-<frameworkcontent>
-<pt>
 
 ## RemBertModel
 
@@ -107,44 +96,3 @@ also similar to the Albert one rather than the BERT one.
 
 [[autodoc]] RemBertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFRemBertModel
-
-[[autodoc]] TFRemBertModel
-    - call
-
-## TFRemBertForMaskedLM
-
-[[autodoc]] TFRemBertForMaskedLM
-    - call
-
-## TFRemBertForCausalLM
-
-[[autodoc]] TFRemBertForCausalLM
-    - call
-
-## TFRemBertForSequenceClassification
-
-[[autodoc]] TFRemBertForSequenceClassification
-    - call
-
-## TFRemBertForMultipleChoice
-
-[[autodoc]] TFRemBertForMultipleChoice
-    - call
-
-## TFRemBertForTokenClassification
-
-[[autodoc]] TFRemBertForTokenClassification
-    - call
-
-## TFRemBertForQuestionAnswering
-
-[[autodoc]] TFRemBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

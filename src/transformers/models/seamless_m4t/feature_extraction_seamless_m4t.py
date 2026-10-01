@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for SeamlessM4T
 """
-
-from typing import List, Optional, Union
 
 import numpy as np
 
@@ -74,7 +71,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.stride = stride
 
         mel_filters = mel_filter_bank(
-            num_frequency_bins=256,
+            num_frequency_bins=257,
             num_mel_filters=self.num_mel_bins,
             min_frequency=20,
             max_frequency=sampling_rate // 2,
@@ -84,7 +81,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             triangularize_in_mel_space=True,
         )
 
-        self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
+        self.mel_filters = mel_filters
         self.window = window_function(400, "povey", periodic=False)
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -92,8 +89,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+        input_values: list[np.ndarray], attention_mask: list[np.ndarray], padding_value: float = 0.0
+    ) -> list[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
@@ -117,8 +114,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         waveform: np.ndarray,
     ) -> np.ndarray:
         """
-        Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
-        and hence the waveform should not be normalized before feature extraction.
+        Get mel-filter bank features using Numpy method to mimic Kaldi.
         """
         # by default, it extracts the left channel if stereo
         if len(waveform.shape) == 2:
@@ -143,29 +139,29 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        pad_to_multiple_of: Optional[int] = 2,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = True,
+        pad_to_multiple_of: int | None = 2,
+        max_length: int | None = None,
         truncation: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        do_normalize_per_mel_bins: Optional[bool] = True,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
+        return_attention_mask: bool | None = None,
+        do_normalize_per_mel_bins: bool | None = True,
         **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `torch.Tensor`, `List[float]`, `List[np.ndarray]`, `List[torch.Tensor]`,
-            `List[List[float]]`, `List[List[List[float]]]`):
+            raw_speech (`np.ndarray`, `torch.Tensor`, `list[float]`, `list[np.ndarray]`, `list[torch.Tensor]`,
+            `list[list[float]]`, `list[list[list[float]]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array,
                 a torch tensor, a list of float values, a list of numpy arrays, a list of torch tensors,
                 a list of list of float values or a list of a list of list of float values.
-                If `raw_speech` is a one-dimensional `np.ndarray`, `torch.Tensor` or a `List[float]`, `raw_speech` is
+                If `raw_speech` is a one-dimensional `np.ndarray`, `torch.Tensor` or a `list[float]`, `raw_speech` is
                 considered a single-channel, single-sample sound. In all other cases, the first dimension of
-                `raw_speech`, whether from an `np.ndarray`, a `torch.Tensor` or a `List[...]`,
+                `raw_speech`, whether from an `np.ndarray`, a `torch.Tensor` or a `list[...]`,
                 corresponds to the number of samples in the batch, and the number of channels
                 (i.e. mono or stereo character) is derived from the other dimensions
                 (1D -> single-channel waveform batches; 2D-> stereo-channel waveform batches).
@@ -204,7 +200,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -225,7 +220,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 

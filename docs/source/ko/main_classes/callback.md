@@ -36,7 +36,6 @@ rendered properly in your Markdown viewer.
  사용됩니다.
 - [`~integrations.CometCallback`]는 [comet_ml](https://www.comet.com/site/)이 설치되어 있으면 사용됩니다.
 - [`~integrations.MLflowCallback`]는 [mlflow](https://www.mlflow.org/)가 설치되어 있으면 사용됩니다.
-- [`~integrations.NeptuneCallback`]는 [neptune](https://neptune.ai/)이 설치되어 있으면 사용됩니다.
 - [`~integrations.AzureMLCallback`]는 [azureml-sdk](https://pypi.org/project/azureml-sdk/)가 설치되어
  있으면 사용됩니다.
 - [`~integrations.CodeCarbonCallback`]는 [codecarbon](https://pypi.org/project/codecarbon/)이 설치되어
@@ -45,6 +44,7 @@ rendered properly in your Markdown viewer.
 - [`~integrations.DagsHubCallback`]는 [dagshub](https://dagshub.com/)이 설치되어 있으면 사용됩니다.
 - [`~integrations.FlyteCallback`]는 [flyte](https://flyte.org/)가 설치되어 있으면 사용됩니다.
 - [`~integrations.DVCLiveCallback`]는 [dvclive](https://dvc.org/doc/dvclive)가 설치되어 있으면 사용됩니다.
+- [`~integrations.SwanLabCallback`]는 [swanlab](https://swanlab.cn)가 설치되어 있으면 사용됩니다.
 
 패키지가 설치되어 있지만 해당 통합 기능을 사용하고 싶지 않다면, `TrainingArguments.report_to`를 사용하고자 하는 통합 기능 목록으로 변경할 수 있습니다 (예: `["azure_ml", "wandb"]`).
 
@@ -81,8 +81,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] integrations.CodeCarbonCallback
 
-[[autodoc]] integrations.NeptuneCallback
-
 [[autodoc]] integrations.ClearMLCallback
 
 [[autodoc]] integrations.DagsHubCallback
@@ -90,6 +88,9 @@ rendered properly in your Markdown viewer.
 [[autodoc]] integrations.FlyteCallback
 
 [[autodoc]] integrations.DVCLiveCallback
+    - setup
+
+[[autodoc]] integrations.SwanLabCallback
     - setup
 
 ## TrainerCallback [[trainercallback]]

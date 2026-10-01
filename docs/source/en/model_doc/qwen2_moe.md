@@ -9,52 +9,127 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-07-15 and contributed to Hugging Face Transformers on 2024-03-27.*
+
+<div style="float: right;">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+</div>
 
 # Qwen2MoE
 
-## Overview
+[Qwen2MoE](https://huggingface.co/papers/2407.10671) is a Mixture-of-Experts (MoE) variant of [Qwen2](./qwen2), available as a base model and an aligned chat model. It uses SwiGLU activation, group query attention and a mixture of sliding window attention and full attention. The tokenizer can also be adapted to multiple languages and codes.
 
-Qwen2MoE is the new model series of large language models from the Qwen team. Previously, we released the Qwen series, including Qwen-72B, Qwen-1.8B, Qwen-VL, Qwen-Audio, etc.
+The MoE architecture uses upcycled models from the dense language models. For example, Qwen1.5-MoE-A2.7B is upcycled from Qwen-1.8B. It has 14.3B parameters but only 2.7B parameters are activated during runtime.
 
-### Model Details
+You can find all the original checkpoints in the [Qwen1.5](https://huggingface.co/collections/Qwen/qwen15-65c0a2f577b1ecb76d786524) collection.
 
-Qwen2MoE is a language model series including decoder language models of different model sizes. For each size, we release the base language model and the aligned chat model. Qwen2MoE has the following architectural choices:
+> [!TIP]
+> Click on the Qwen2MoE models in the right sidebar for more examples of how to apply Qwen2MoE to different language tasks.
 
-- Qwen2MoE is based on the Transformer architecture with SwiGLU activation, attention QKV bias, group query attention, mixture of sliding window attention and full attention, etc. Additionally, we have an improved tokenizer adaptive to multiple natural languages and codes.
-- Qwen2MoE employs Mixture of Experts (MoE) architecture, where the models are upcycled from dense language models. For instance, `Qwen1.5-MoE-A2.7B` is upcycled from `Qwen-1.8B`. It has 14.3B parameters in total and 2.7B activated parameters during runtime, while it achieves comparable performance with `Qwen1.5-7B`, with only 25% of the training resources.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-For more details refer to the [release blog post](https://qwenlm.github.io/blog/qwen-moe/).
-
-## Usage tips
-
-`Qwen1.5-MoE-A2.7B` and `Qwen1.5-MoE-A2.7B-Chat` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
-
-In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
+from transformers import pipeline
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat")
 
->>> prompt = "Give me a short introduction to large language model."
+pipe = pipeline(
+    task="text-generation",
+    model="Qwen/Qwen1.5-MoE-A2.7B",
+    device_map=0
+)
 
->>> messages = [{"role": "user", "content": prompt}]
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Tell me about the Qwen2 model family."},
+]
+outputs = pipe(messages, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
+print(outputs[0]["generated_text"][-1]['content'])
+```
 
->>> text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+</hfoption>
+<hfoption id="AutoModel">
 
->>> model_inputs = tokenizer([text], return_tensors="pt").to(device)
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 
->>> generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen1.5-MoE-A2.7B-Chat",
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat")
 
->>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+prompt = "Give me a short introduction to large language models."
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": prompt}
+]
+text = tokenizer.apply_chat_template(
+    messages,
+    tokenize=False,
+    add_generation_prompt=True
+)
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(
+    model_inputs.input_ids,
+    cache_implementation="static",
+    max_new_tokens=512,
+    do_sample=True,
+    temperature=0.7,
+    top_k=50,
+    top_p=0.95
+)
+generated_ids = [
+    output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+]
+
+response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(response)
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+```bash
+transformers chat Qwen/Qwen1.5-MoE-A2.7B-Chat --dtype auto --attn_implementation flash_attention_2
+```
+</hfoption>
+ </hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 8-bits.
+
+```python
+# pip install -U flash-attn --no-build-isolation
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+
+quantization_config = BitsAndBytesConfig(
+    load_in_8bit=True
+)
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat")
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen1.5-MoE-A2.7B-Chat",
+    device_map="auto",
+    quantization_config=quantization_config,
+    attn_implementation="flash_attention_2"
+)
+
+inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 ## Qwen2MoeConfig

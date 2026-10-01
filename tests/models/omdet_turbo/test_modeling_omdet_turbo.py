@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +15,13 @@
 
 import copy
 import unittest
+from functools import cached_property
 from io import BytesIO
 
 import requests
 
 from transformers import OmDetTurboConfig, is_torch_available, is_vision_available
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
@@ -33,7 +32,8 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_image_processing_common import load_test_image
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -196,11 +196,12 @@ class OmDetTurboModelTester:
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_head_masking = False
+
     pipeline_model_mapping = (
         {"zero-shot-object-detection": OmDetTurboForObjectDetection} if is_torch_available() else {}
     )
+
+    test_torch_exportable = False  # detection head uses data-dependent filtering
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -224,30 +225,8 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_object_detection_head_model(config, inputs_dict)
 
-    @unittest.skip(
-        reason="Unsupported as classes_input_ids are classes input are flattened by the processor: https://github.com/huggingface/transformers/issues/33669"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="OmDet-Turbo does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_hidden_states(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_simple(self):
-        pass
-
-    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
-    def test_torchscript_output_hidden_state(self):
         pass
 
     def test_resize_tokens_embeddings(self):
@@ -392,7 +371,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 # init
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
@@ -463,7 +442,8 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -615,33 +595,11 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.assertIsNotNone(encoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "embeddings" in name
-                        or ".fc" in name
-                        or "decoder.channel_projection_layers" in name
-                        or "query_position_head" in name
-                        or "decoder.encoder_vision_features" in name
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} seems not properly initialized",
-                    )
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    image = load_test_image(url).convert("RGB")
     return image
 
 
@@ -652,9 +610,9 @@ def prepare_text():
 
 
 def prepare_img_batched():
-    url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
-    url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+    url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/train2017/000000257813.jpg"
+    url3 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
 
     return [Image.open(BytesIO(requests.get(url).content)).convert("RGB") for url in [url1, url2, url3]]
 
@@ -824,11 +782,11 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.decoder_class_logits.shape, expected_shape_class_logits)
 
         expected_class_logits = torch.tensor(
-            [[[0.9427, -2.5958, -7.7601]], [[-2.3408, -9.3516, -9.3516]], [[1.0740, -2.3315, -1.1885]]]
+            [[[0.9427, -2.5958, -7.7601]], [[-2.3408, -9.3516, -9.3516]], [[1.292, -2.2389, -1.371]]]
         ).to(torch_device)
 
         expected_coord_logits = torch.tensor(
-            [[[0.2550, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.3742, 0.3337, 0.0666]]]
+            [[[0.255, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.4041, 0.2596, 0.1161]]]
         ).to(torch_device)
 
         torch.testing.assert_close(
@@ -843,18 +801,18 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             outputs,
             text_labels=text_labels_batched,
             target_sizes=[image.size[::-1] for image in images_batched],
-            score_threshold=0.2,
+            threshold=0.2,
         )
-        expected_scores = torch.tensor([0.7675, 0.3016, 0.7454]).to(torch_device)
+        expected_scores = torch.tensor([0.7675, 0.3016, 0.7845]).to(torch_device)
         expected_slice_boxes = torch.tensor(
             [
                 [39.8870, 70.3522, 176.7424, 118.0354],
                 [146.5446, 219.7132, 209.6983, 251.0456],
-                [545.3470, 209.9055, 651.9860, 502.1882],
+                [531.5081, 27.5789, 709.8206, 504.0435],
             ]
         ).to(torch_device)
 
-        self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 6])
+        self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 7])
         torch.testing.assert_close(
             torch.stack([result["scores"][0] for result in results]), expected_scores, rtol=1e-2, atol=1e-2
         )
@@ -865,12 +823,12 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         expected_text_labels = [
             ["remote", "cat", "remote", "cat"],
             ["boat", "boat", "boat", "boat"],
-            ["statue", "trees", "trees", "torch", "statue", "statue"],
+            ["statue", "trees", "statue", "statue", "trees", "trees", "torch"],
         ]
         self.assertListEqual([result["text_labels"] for result in results], expected_text_labels)
 
     @require_torch_accelerator
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+    def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         processor = self.default_processor
         image = prepare_img()
         text_labels, task = prepare_text()
@@ -881,7 +839,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             cpu_outputs = model(**encoding)
 
-        # 2. run model on GPU
+        # 2. run model on accelerator
         model.to(torch_device)
         encoding = encoding.to(torch_device)
         with torch.no_grad():

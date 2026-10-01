@@ -235,14 +235,14 @@ Utiliser un [`pipeline`] pour les tâches de NLP est pratiquement identique.
 
 Le [`pipeline`] prend en charge plus d'une modalité. Par exemple, une tâche de réponse à des questions visuelles (VQA) combine texte et image. N'hésitez pas à utiliser n'importe quel lien d'image que vous aimez et une question que vous souhaitez poser à propos de l'image. L'image peut être une URL ou un chemin local vers l'image.
 
-Par exemple, si vous utilisez cette [image de facture](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png) :
+Par exemple, si vous utilisez cette [image de facture](https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png) :
 
 ```py
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
 >>> output = vqa(
-...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
 ...     question="What is the invoice number?",
 ... )
 >>> output[0]["score"] = round(output[0]["score"], 3)
@@ -272,18 +272,18 @@ Chargez d'abord votre modèle en utilisant `device_map="auto"` ! Nous utiliseron
 import torch
 from transformers import pipeline
 
-pipe = pipeline(model="facebook/opt-1.3b", torch_dtype=torch.bfloat16, device_map="auto")
+pipe = pipeline(model="facebook/opt-1.3b", dtype=torch.bfloat16, device_map="auto")
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
-Vous pouvez également passer des modèles chargés en 8 bits si vous installez `bitsandbytes` et ajoutez l'argument `load_in_8bit=True`
+Vous pouvez également passer des modèles chargés en 8 bits si vous installez `bitsandbytes` et ajoutez l'argument `quantization_config` 
 Notez que vous pouvez remplacer le point de contrôle par n'importe quel modèle.
 
 ```py
 # pip install accelerate bitsandbytes
 import torch
-from transformers import pipeline
+from transformers import pipeline, BitsAndBytesConfig
 
-pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"load_in_8bit": True})
+pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"quantization_config": BitsAndBytesConfig(load_in_8bit=True)})
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 

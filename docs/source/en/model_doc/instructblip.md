@@ -9,13 +9,22 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was published in HF papers on 2023-05-11 and contributed to Hugging Face Transformers on 2023-06-26.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # InstructBLIP
 
+
 ## Overview
 
-The InstructBLIP model was proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://arxiv.org/abs/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
-InstructBLIP leverages the [BLIP-2](blip2) architecture for visual instruction tuning.
+The InstructBLIP model was proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://huggingface.co/papers/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
+InstructBLIP leverages the [BLIP-2](blip-2) architecture for visual instruction tuning.
 
 The abstract from the paper is the following:
 
@@ -24,23 +33,22 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/instructblip_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> InstructBLIP architecture. Taken from the <a href="https://arxiv.org/abs/2305.06500">original paper.</a> </small>
+<small> InstructBLIP architecture. Taken from the <a href="https://huggingface.co/papers/2305.06500">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/salesforce/LAVIS/tree/main/projects/instructblip).
 
 ## Usage tips
 
-InstructBLIP uses the same architecture as [BLIP-2](blip2) with a tiny but important difference: it also feeds the text prompt (instruction) to the Q-Former.
+InstructBLIP uses the same architecture as [BLIP-2](blip-2) with a tiny but important difference: it also feeds the text prompt (instruction) to the Q-Former.
 
 > [!NOTE]
-> BLIP models after release v4.46 will raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expand model embeddings layer to add special `<image>` token. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you. Adding these attributes means that BLIP will add the number of query tokens required per image and expand the text with as many `<image>` placeholders as there will be query tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there wil be failure when merging the embeddings.
+> BLIP models after release v4.46 will raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expand model embeddings layer to add special `<image>` token. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you. Adding these attributes means that BLIP will add the number of query tokens required per image and expand the text with as many `<image>` placeholders as there will be query tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
 The attributes can be obtained from model config, as `model.config.num_query_tokens` and model embeddings expansion can be done by following [this link](https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042).
 
 ## InstructBlipConfig
 
 [[autodoc]] InstructBlipConfig
-    - from_vision_qformer_text_configs
 
 ## InstructBlipVisionConfig
 
@@ -53,7 +61,7 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 ## InstructBlipProcessor
 
 [[autodoc]] InstructBlipProcessor
-
+    - __call__
 
 ## InstructBlipVisionModel
 
@@ -65,8 +73,13 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 [[autodoc]] InstructBlipQFormerModel
     - forward
 
+## InstructBlipModel
+
+[[autodoc]] InstructBlipModel
+
 ## InstructBlipForConditionalGeneration
 
 [[autodoc]] InstructBlipForConditionalGeneration
     - forward
     - generate
+    - get_image_features

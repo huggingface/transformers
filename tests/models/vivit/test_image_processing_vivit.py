@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_video_inputs
 
 
 if is_torch_available():
@@ -33,49 +32,18 @@ if is_vision_available():
     from transformers import VivitImageProcessor
 
 
-class VivitImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_frames=10,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        crop_size=None,
-    ):
-        size = size if size is not None else {"shortest_edge": 18}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+class VivitImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_frames", 10)
 
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.num_frames = num_frames
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.crop_size = crop_size
+        # Image processor init kwargs
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 18})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "crop_size": self.crop_size,
-        }
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
@@ -98,31 +66,7 @@ class VivitImageProcessingTester:
 class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VivitImageProcessor if is_vision_available() else None
 
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = VivitImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "size"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 18})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
-
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+    image_processor_tester_class = VivitImageProcessingTester
 
     def test_rescale(self):
         # ViVit optionally rescales between -1 and 1 instead of the usual 0 and 1
@@ -192,14 +136,22 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Test not batched input
         encoded_videos = image_processing(
-            video_inputs[0], return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs[0],
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
         encoded_videos = image_processing(
-            video_inputs, return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs,
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(
@@ -227,3 +179,11 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
         )
+
+    @unittest.skip("VivitImageProcessor has not been refactored to use the new image processing backend architecture")
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        pass
+
+    @unittest.skip("Vivit has an old API that inherits from `BaseImageProcessor`")
+    def test_pil_can_load_without_torchvision(self):
+        pass

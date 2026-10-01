@@ -13,77 +13,86 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-10-22 and contributed to Hugging Face Transformers on 2020-11-17.*
+
 
 # mT5
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=mt5">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mt5-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/mt5-small-finetuned-arxiv-cs-finetuned-arxiv-cs-full">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
-</div>
+[mT5](https://huggingface.co/papers/2010.11934) is a multilingual variant of [T5](./t5), trained on 101 languages. It also incorporates a new "accidental translation" technique to prevent the model from incorrectly translating predictions into the wrong language.
 
-## Overview
+You can find all the original [mT5] checkpoints under the [mT5](https://huggingface.co/collections/google/mt5-release-65005f1a520f8d7b4d039509) collection.
 
-The mT5 model was presented in [mT5: A massively multilingual pre-trained text-to-text transformer](https://arxiv.org/abs/2010.11934) by Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya
-Siddhant, Aditya Barua, Colin Raffel.
+> [!TIP]
+> This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+>
+> Click on the mT5 models in the right sidebar for more examples of how to apply mT5 to different language tasks.
 
-The abstract from the paper is the following:
+The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-*The recent "Text-to-Text Transfer Transformer" (T5) leveraged a unified text-to-text format and scale to attain
-state-of-the-art results on a wide variety of English-language NLP tasks. In this paper, we introduce mT5, a
-multilingual variant of T5 that was pre-trained on a new Common Crawl-based dataset covering 101 languages. We detail
-the design and modified training of mT5 and demonstrate its state-of-the-art performance on many multilingual
-benchmarks. We also describe a simple technique to prevent "accidental translation" in the zero-shot setting, where a
-generative model chooses to (partially) translate its prediction into the wrong language. All of the code and model
-checkpoints used in this work are publicly available.*
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-Note: mT5 was only pre-trained on [mC4](https://huggingface.co/datasets/mc4) excluding any supervised training.
-Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
-Since mT5 was pre-trained unsupervisedly, there's no real advantage to using a task prefix during single-task
-fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
+```python
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-Google has released the following variants:
 
-- [google/mt5-small](https://huggingface.co/google/mt5-small)
+tokenizer = AutoTokenizer.from_pretrained(
+    "csebuetnlp/mT5_multilingual_XLSum"
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    "csebuetnlp/mT5_multilingual_XLSum",
+    device_map="auto",
+)
 
-- [google/mt5-base](https://huggingface.co/google/mt5-base)
+input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
-- [google/mt5-large](https://huggingface.co/google/mt5-large)
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
 
-- [google/mt5-xl](https://huggingface.co/google/mt5-xl)
+</hfoption>
+</hfoptions>
 
-- [google/mt5-xxl](https://huggingface.co/google/mt5-xxl).
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The original code can be
-found [here](https://github.com/google-research/multilingual-t5).
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-## Resources
+```python
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4"
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    "csebuetnlp/mT5_multilingual_XLSum",
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "csebuetnlp/mT5_multilingual_XLSum"
+)
+input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- mT5 must be fine-tuned for downstream tasks because it was only pretrained on the [mC4](https://huggingface.co/datasets/allenai/c4/viewer/multilingual) dataset (the `multilingual` config of `allenai/c4`).
 
 ## MT5Config
 
 [[autodoc]] MT5Config
-
-## MT5Tokenizer
-
-[[autodoc]] MT5Tokenizer
-
-See [`T5Tokenizer`] for all details.
-
-
-## MT5TokenizerFast
-
-[[autodoc]] MT5TokenizerFast
-
-See [`T5TokenizerFast`] for all details.
-
-<frameworkcontent>
-<pt>
 
 ## MT5Model
 
@@ -108,36 +117,3 @@ See [`T5TokenizerFast`] for all details.
 ## MT5ForQuestionAnswering
 
 [[autodoc]] MT5ForQuestionAnswering
-
-</pt>
-<tf>
-
-## TFMT5Model
-
-[[autodoc]] TFMT5Model
-
-## TFMT5ForConditionalGeneration
-
-[[autodoc]] TFMT5ForConditionalGeneration
-
-## TFMT5EncoderModel
-
-[[autodoc]] TFMT5EncoderModel
-
-</tf>
-<jax>
-
-## FlaxMT5Model
-
-[[autodoc]] FlaxMT5Model
-
-## FlaxMT5ForConditionalGeneration
-
-[[autodoc]] FlaxMT5ForConditionalGeneration
-
-## FlaxMT5EncoderModel
-
-[[autodoc]] FlaxMT5EncoderModel
-
-</jax>
-</frameworkcontent>

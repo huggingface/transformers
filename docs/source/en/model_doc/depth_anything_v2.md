@@ -9,16 +9,17 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-06-13 and contributed to Hugging Face Transformers on 2024-07-05.*
 
 # Depth Anything V2
 
 ## Overview
 
-Depth Anything V2 was introduced in [the paper of the same name](https://arxiv.org/abs/2406.09414) by Lihe Yang et al. It uses the same architecture as the original [Depth Anything model](depth_anything), but uses synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
+Depth Anything V2 was introduced in [the paper of the same name](https://huggingface.co/papers/2406.09414) by Lihe Yang et al. It uses the same architecture as the original [Depth Anything model](depth_anything), but uses synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
 
 The abstract from the paper is the following:
 
@@ -27,7 +28,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/depth_anything_overview.jpg"
 alt="drawing" width="600"/>
 
-<small> Depth Anything overview. Taken from the <a href="https://arxiv.org/abs/2401.10891">original paper</a>.</small>
+<small> Depth Anything overview. Taken from the <a href="https://huggingface.co/papers/2401.10891">original paper</a>.</small>
 
 The Depth Anything models were contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/DepthAnything/Depth-Anything-V2).
@@ -41,19 +42,21 @@ There are 2 main ways to use Depth Anything V2: either using the pipeline API, w
 The pipeline allows to use the model in a few lines of code:
 
 ```python
->>> from transformers import pipeline
->>> from PIL import Image
->>> import requests
+import requests
+from PIL import Image
 
->>> # load pipe
->>> pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
+from transformers import pipeline
 
->>> # load image
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> # inference
->>> depth = pipe(image)["depth"]
+# load pipe
+pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
+
+# load image
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
+
+# inference
+depth = pipe(image)["depth"]
 ```
 
 ### Using the model yourself
@@ -61,34 +64,35 @@ The pipeline allows to use the model in a few lines of code:
 If you want to do the pre- and post-processing yourself, here's how to do that:
 
 ```python
->>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
->>> import torch
->>> import numpy as np
->>> from PIL import Image
->>> import requests
+import requests
+import torch
+from PIL import Image
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
->>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
->>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
 
->>> # prepare image for the model
->>> inputs = image_processor(images=image, return_tensors="pt")
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+image_processor = AutoImageProcessor.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
+model = AutoModelForDepthEstimation.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf", device_map="auto")
 
->>> # interpolate to original size and visualize the prediction
->>> post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs,
-...     target_sizes=[(image.height, image.width)],
-... )
+# prepare image for the model
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
->>> predicted_depth = post_processed_output[0]["predicted_depth"]
->>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
->>> depth = depth.detach().cpu().numpy() * 255
->>> depth = Image.fromarray(depth.astype("uint8"))
+with torch.no_grad():
+    outputs = model(**inputs)
+
+# interpolate to original size and visualize the prediction
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs,
+    target_sizes=[(image.height, image.width)],
+)
+
+predicted_depth = post_processed_output[0]["predicted_depth"]
+depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+depth = depth.detach().cpu().numpy() * 255
+depth = Image.fromarray(depth.astype("uint8"))
 ```
 
 ## Resources

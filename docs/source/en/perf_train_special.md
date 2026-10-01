@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -8,56 +8,63 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
-# PyTorch training on Apple silicon
+# Apple Silicon
 
-Previously, training models on a Mac was limited to the CPU only. With the release of PyTorch v1.12, you can take advantage of training models with Apple's silicon GPUs for significantly faster performance and training. This is powered in PyTorch by integrating Apple's Metal Performance Shaders (MPS) as a backend. The [MPS backend](https://pytorch.org/docs/stable/notes/mps.html) implements PyTorch operations as custom Metal shaders and places these modules on a `mps` device.
+Apple Silicon (M-series) chips have a unified memory architecture where the CPU and GPU share the same memory pool. Shared memory eliminates the data transfer overhead of GPUs, making it practical to train large models locally. Transformers uses the [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html) backend to accelerate training on this hardware.
 
-<Tip warning={true}>
+This requires macOS 12.3 or later and PyTorch built with MPS support.
 
-Some PyTorch operations are not implemented in MPS yet and will throw an error. To avoid this, you should set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1` to use the CPU kernels instead (you'll still see a `UserWarning`).
+> [!WARNING]
+> MPS doesn't support all PyTorch operations yet (see this [GitHub issue](https://github.com/pytorch/pytorch/issues/77764) for more details about missing ops). Set `PYTORCH_ENABLE_MPS_FALLBACK=1` to fall back to CPU kernels for unsupported operations. Open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository for any other unexpected behavior.
 
-<br>
 
-If you run into any other errors, please open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository because the [`Trainer`] only integrates the MPS backend.
 
-</Tip>
+## Model loading and device selection
 
-With the `mps` device set, you can:
+MPS requires the entire model to fit in unified memory, so `device_map="auto"` can't offload layers to the CPU like CUDA. In this case, try using a smaller model.
 
-* train larger networks or batch sizes locally
-* reduce data retrieval latency because the GPU's unified memory architecture allows direct access to the full memory store
-* reduce costs because you don't need to train on cloud-based GPUs or add additional local GPUs
+Loading weights to MPS is faster and uses less memory with safetensors `0.8.0` and PyTorch 2.9 or later. When `device_map="mps"` or `"auto"`, weights are mapped into Metal buffers without an intermediate copy, which roughly halves the memory footprint during loading and makes it about 5-6x faster. On older PyTorch versions, loading will fall back to the standard load path.
 
-Get started by making sure you have PyTorch installed. MPS acceleration is supported on macOS 12.3+.
+[`Trainer`] detects MPS automatically with `torch.backends.mps.is_available` and sets the device to `mps` without any configuration changes.
 
-```bash
-pip install torch torchvision torchaudio
+## Mixed precision
+
+MPS supports both bf16 and fp16 mixed precision (bf16 requires macOS 14.0 or later).
+
+```python
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="./outputs",
+    bf16=True,  # requires macOS 14.0+
+)
 ```
 
-[`TrainingArguments`] uses the `mps` device by default if it's available which means you don't need to explicitly set the device. For example, you can run the [run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py) script with the MPS backend automatically enabled without making any changes.
 
-```diff
-export TASK_NAME=mrpc
 
-python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path google-bert/bert-base-cased \
-  --task_name $TASK_NAME \
-- --use_mps_device \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
+## Graph cache
+
+MPS compiles a separate Metal kernel for each unique tensor shape and stores them in a graph cache with no eviction policy. Training with variable-length inputs (padded sequences, dynamic batches) grows the cache on every new shape and can eventually exhaust unified memory.
+
+Set `torch_empty_cache_steps` in [`TrainingArguments`] to bound this growth. On MPS, [`Trainer`] clears the graph cache alongside the device cache every `torch_empty_cache_steps` steps, at a throughput cost. You need to opt-in to clear both caches. When `torch_empty_cache_steps` is unset (the default), neither cache is cleared and behavior is unchanged.
+
+```python
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="./outputs",
+    torch_empty_cache_steps=1,  # clear caches every step
+)
 ```
 
-Backends for [distributed setups](https://pytorch.org/docs/stable/distributed.html#backends) like `gloo` and `nccl` are not supported by the `mps` device which means you can only train on a single GPU with the MPS backend.
+Graph cache clearing requires PyTorch 2.13 or later. On older versions, [`Trainer`] skips the graph cache call and only clears the device cache.
 
-You can learn more about the MPS backend in the [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) blog post.
+## Next steps
+
+- Read the [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) blog post for background on the MPS backend.
+

@@ -41,7 +41,7 @@ rendered properly in your Markdown viewer.
     이는 `src`, `tests`, `.github` 폴더 중 하나에 코드가 업데이트된 경우에만 실행됩니다.
     (model card, notebook, 기타 등등을 추가한 경우 실행되지 않도록 하기 위해서입니다)
 
-   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): `tests` 및 `examples`에서
+   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled-caller.yml): `tests` 및 `examples`에서
    GPU를 이용한 일반 테스트, 느린 테스트를 실행합니다.
 
 
@@ -473,13 +473,6 @@ GPU 요구 사항을 표로 정리하면 아래와 같습니디ㅏ:
 def test_example_with_multi_gpu():
 ```
 
-`tensorflow`가 필요한 경우 `require_tf` 데코레이터를 사용합니다. 예를 들어 다음과 같습니다:
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
-```
-
 이러한 데코레이터는 중첩될 수 있습니다.
 예를 들어, 느린 테스트로 진행되고 pytorch에서 적어도 하나의 GPU가 필요한 경우 다음과 같이 설정할 수 있습니다:
 
@@ -519,7 +512,7 @@ n_gpu = get_gpu_count()  #torch와 tf와 함께 작동
 
 다음은 사용 가능한 테스트입니다:
 
-- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
+- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
 실행 지점으로 바로 이동하려면, 해당 테스트에서 `execute_subprocess_async` 호출을 검색하세요.

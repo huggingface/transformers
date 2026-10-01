@@ -13,12 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-06-24 and contributed to Hugging Face Transformers on 2023-06-20.*
 
 # XLSR-Wav2Vec2
 
+
 ## Overview
 
-The XLSR-Wav2Vec2 model was proposed in [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://arxiv.org/abs/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael
+The XLSR-Wav2Vec2 model was proposed in [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://huggingface.co/papers/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael
 Auli.
 
 The abstract from the paper is the following:
@@ -36,7 +38,7 @@ XLSR-53, a large model pretrained in 53 languages.*
 
 The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
 
-Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingface.co/docs/transformers/en/model_doc/wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
+Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](./wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
 
 ## Usage tips
 
@@ -46,6 +48,6 @@ Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingf
 
 <Tip>
 
-XLSR-Wav2Vec2's architecture is based on the Wav2Vec2 model, so one can refer to [Wav2Vec2's documentation page](wav2vec2).
+XLSR-Wav2Vec2's architecture is based on the Wav2Vec2 model, so one can refer to [Wav2Vec2's documentation page](./wav2vec2).
 
 </Tip>

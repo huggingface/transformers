@@ -9,16 +9,22 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-05-03 and contributed to Hugging Face Transformers on 2024-04-15.*
 
 # Idefics2
 
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Idefics2 model was proposed in [What matters when building vision-language models?](https://arxiv.org/abs/2405.02246) by Léo Tronchon, Hugo Laurencon, Victor Sanh. The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
+The Idefics2 model was proposed in [What matters when building vision-language models?](https://huggingface.co/papers/2405.02246) by Léo Tronchon, Hugo Laurencon, Victor Sanh. The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
 
 Idefics2 is an open multimodal model that accepts arbitrary sequences of image and text inputs and produces text
 outputs. The model can answer questions about images, describe visual content, create stories grounded on multiple
@@ -33,7 +39,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/idefics2_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Idefics2 architecture. Taken from the <a href="https://arxiv.org/abs/2405.02246">original paper.</a> </small>
+<small> Idefics2 architecture. Taken from the <a href="https://huggingface.co/papers/2405.02246">original paper.</a> </small>
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2).
@@ -50,10 +56,9 @@ Example of how to use the processor on chat messages:
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
-import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
+
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
@@ -72,15 +77,14 @@ messages = [{
 }]
 
 processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
-model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b")
-model.to(device)
+model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b", device_map="auto")
 
 # at inference time, one needs to pass `add_generation_prompt=True` in order to make sure the model completes the prompt
 text = processor.apply_chat_template(messages, add_generation_prompt=True)
 print(text)
 # 'User: What’s the difference between these two images?<image><image><end_of_utterance>\nAssistant:'
 
-inputs = processor(images=images, text=text, return_tensors="pt").to(device)
+inputs = processor(images=images, text=text, return_tensors="pt").to(model.device)
 
 generated_text = model.generate(**inputs, max_new_tokens=500)
 generated_text = processor.batch_decode(generated_text, skip_special_tokens=True)[0]
@@ -92,8 +96,9 @@ print("Generated text:", generated_text)
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
-import torch
+
+from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
+
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
@@ -117,14 +122,12 @@ messages = [{
     ],
 }]
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
-model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b")
-model.to(device)
+model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b", device_map="auto")
 
 text = processor.apply_chat_template(messages, add_generation_prompt=False)
-inputs = processor(images=images, text=text, return_tensors="pt").to(device)
+inputs = processor(images=images, text=text, return_tensors="pt").to(model.device)
 
 labels = inputs.input_ids.clone()
 labels[labels == processor.tokenizer.pad_token_id] = -100
@@ -141,7 +144,7 @@ Do note that when training Idefics2 on multi-turn conversations between a user a
 
 ## Model optimizations: Flash Attention
 
-The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
+The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../kernel_doc/loading_kernels#attention-kernels), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 
@@ -156,16 +159,17 @@ To load and run a model using Flash Attention-2, simply change the code snippet 
 ```diff
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-+    torch_dtype=torch.float16,    
++    dtype=torch.float16,
 +    attn_implementation="flash_attention_2",
-).to(device)
+    device_map="auto",
+)
 ```
 
 ## Shrinking down Idefics2 using quantization
 
-As the Idefics2 model has 8 billion parameters, that would require about 16GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter), that requires only about 3.5GB of RAM.
+As the Idefics2 model has 8 billion parameters, that would require about 16GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization/overview). If the model is quantized to 4 bits (or half a byte per parameter), that requires only about 3.5GB of RAM.
 
-Quantizing a model is as simple as passing a `quantization_config` to the model. One can change the code snippet above with the changes below. We'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization.md) for other quantization methods):
+Quantizing a model is as simple as passing a `quantization_config` to the model. One can change the code snippet above with the changes below. We'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization/overview) for other quantization methods):
 
 ```diff
 + from transformers import BitsAndBytesConfig
@@ -178,16 +182,17 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 + )
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-+    torch_dtype=torch.float16,    
++    dtype=torch.float16,
 +    quantization_config=quantization_config,
-).to(device)
+    device_map="auto",
+)
 ```
 
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Idefics2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-- A notebook on how to fine-tune Idefics2 on a custom dataset using the [Trainer](../main_classes/trainer.md) can be found [here](https://colab.research.google.com/drive/1NtcTgRbSBKN7pYD3Vdx1j9m8pt3fhFDB?usp=sharing). It supports both full fine-tuning as well as (quantized) LoRa.
+- A notebook on how to fine-tune Idefics2 on a custom dataset using the [Trainer](../main_classes/trainer) can be found [here](https://colab.research.google.com/drive/1NtcTgRbSBKN7pYD3Vdx1j9m8pt3fhFDB?usp=sharing). It supports both full fine-tuning as well as (quantized) LoRa.
 - A script regarding how to fine-tune Idefics2 using the TRL library can be found [here](https://gist.github.com/edbeeching/228652fc6c2b29a1641be5a5778223cb).
 - Demo notebook regarding fine-tuning Idefics2 for JSON extraction use cases can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Idefics2). 🌎
 
@@ -195,24 +200,37 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Idefics2Config
 
+## Idefics2VisionConfig
+
+[[autodoc]] Idefics2VisionConfig
+
+## Idefics2PerceiverConfig
+
+[[autodoc]] Idefics2PerceiverConfig
 
 ## Idefics2Model
 
 [[autodoc]] Idefics2Model
     - forward
-
+    - get_image_features
 
 ## Idefics2ForConditionalGeneration
 
 [[autodoc]] Idefics2ForConditionalGeneration
     - forward
-
+    - get_image_features
 
 ## Idefics2ImageProcessor
+
 [[autodoc]] Idefics2ImageProcessor
     - preprocess
 
+## Idefics2ImageProcessorPil
+
+[[autodoc]] Idefics2ImageProcessorPil
+    - preprocess
 
 ## Idefics2Processor
+
 [[autodoc]] Idefics2Processor
     - __call__

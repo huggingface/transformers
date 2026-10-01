@@ -24,8 +24,6 @@ objectives in our [model summary](https://huggingface.co/transformers/model_summ
 
 There are two sets of scripts provided. The first set leverages the Trainer API. The second set with `no_trainer` in the suffix uses a custom training loop and leverages the 🤗 Accelerate library . Both sets use the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-**Note:** The old script `run_language_modeling.py` is still available [here](https://github.com/huggingface/transformers/blob/main/examples/legacy/run_language_modeling.py).
-
 The following examples, will run on datasets hosted on our [hub](https://huggingface.co/datasets) or with your own
 text files for training and validation. We give examples of both below.
 
@@ -37,7 +35,7 @@ the tokenization). The loss here is that of causal language modeling.
 ```bash
 python run_clm.py \
     --model_name_or_path openai-community/gpt2 \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
@@ -67,7 +65,7 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 
 ```bash
 python run_clm_no_trainer.py \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --model_name_or_path openai-community/gpt2 \
     --output_dir /tmp/test-clm
@@ -75,14 +73,14 @@ python run_clm_no_trainer.py \
 
 ### GPT-2/GPT and causal language modeling with fill-in-the middle objective
 
-The following example fine-tunes GPT-2 on WikiText-2 but using the Fill-in-middle training objective. FIM objective was proposed in [Efficient Training of Language Models to Fill in the Middle](https://arxiv.org/abs/2207.14255). They showed that autoregressive language models can learn to infill text after applying a straightforward transformation to the dataset, which simply moves a span of text from the middle of a document to its end.
+The following example fine-tunes GPT-2 on WikiText-2 but using the Fill-in-middle training objective. FIM objective was proposed in [Efficient Training of Language Models to Fill in the Middle](https://huggingface.co/papers/2207.14255). They showed that autoregressive language models can learn to infill text after applying a straightforward transformation to the dataset, which simply moves a span of text from the middle of a document to its end.
 
 We're using the raw WikiText-2 (no tokens were replaced before the tokenization). The loss here is that of causal language modeling.
 
 ```bash
 python run_fim.py \
     --model_name_or_path gpt2 \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
@@ -114,7 +112,7 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 ```bash
 python run_fim_no_trainer.py \
     --model_name_or_path gpt2 \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --model_name_or_path gpt2 \
     --fim_rate 0.5 \
@@ -136,7 +134,7 @@ converge slightly slower (over-fitting takes more epochs).
 ```bash
 python run_mlm.py \
     --model_name_or_path FacebookAI/roberta-base \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
@@ -166,7 +164,7 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 
 ```bash
 python run_mlm_no_trainer.py \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --model_name_or_path FacebookAI/roberta-base \
     --output_dir /tmp/test-mlm
@@ -177,7 +175,7 @@ sure all your batches have the same length.
 
 ### Whole word masking
 
-This part was moved to `examples/research_projects/mlm_wwm`.
+This part was moved to https://github.com/huggingface/transformers-research-projects/tree/main/mlm_wwm.
 
 ### XLNet and permutation language modeling
 
@@ -196,7 +194,7 @@ Here is how to fine-tune XLNet on wikitext-2:
 ```bash
 python run_plm.py \
     --model_name_or_path=xlnet/xlnet-base-cased \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
@@ -228,10 +226,6 @@ sure all your batches have the same length.
 ## Streaming
 
 To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is supported by `run_mlm.py`, `run_clm.py` and `run_fim.py`. Make sure to adapt the other scripts to your use case by taking inspiration from them.
-
-## Low Cpu Memory Usage
-
-To use low cpu memory mode which can be very useful for LLM, add `--low_cpu_mem_usage` to the command line. This is currently supported by `run_clm.py`,`run_mlm.py`, `run_plm.py`, `run_fim.py`, `run_mlm_no_trainer.py`, `run_clm_no_trainer.py` and `run_fim_no_trainer.py`.
 
 ## Creating a model on the fly
 

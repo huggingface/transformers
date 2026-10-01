@@ -157,15 +157,6 @@ class MegatronBertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_for_causal_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = MegatronBertForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_megatron_bert_for_next_sequence_prediction(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -282,11 +273,12 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MegatronBertModel,
             "fill-mask": MegatronBertForMaskedLM,
-            "question-answering": MegatronBertForQuestionAnswering,
             "text-classification": MegatronBertForSequenceClassification,
             "text-generation": MegatronBertForCausalLM,
             "token-classification": MegatronBertForTokenClassification,
@@ -295,9 +287,7 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     # test_resize_embeddings = False
-    test_head_masking = False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -315,7 +305,7 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = MegatronBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MegatronBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MegatronBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -351,6 +341,21 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_megatron_bert_for_token_classification(*config_and_inputs)
+
+    def test_decoder_causal_mask(self):
+        # Regression test for #48745
+        config, input_ids = self.model_tester.prepare_config_and_inputs()[:2]
+        config.is_decoder = True
+        model = MegatronBertModel(config).to(torch_device).eval()
+
+        input_ids_modified = input_ids.clone()
+        input_ids_modified[:, -1] = (input_ids_modified[:, -1] + 1) % config.vocab_size
+        res_orig = model(input_ids).last_hidden_state
+        res_mod = model(input_ids_modified).last_hidden_state
+        self.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
+        )
 
 
 def _long_tensor(tok_lst):
@@ -388,5 +393,5 @@ class MegatronBertModelIntegrationTests(unittest.TestCase):
             for jj in range(3):
                 a = output[0, ii, jj]
                 b = expected[3 * ii + jj]
-                msg = "ii={} jj={} a={} b={}".format(ii, jj, a, b)
+                msg = f"ii={ii} jj={jj} a={a} b={b}"
                 self.assertTrue(math.isclose(a, b, rel_tol=TOLERANCE, abs_tol=TOLERANCE), msg=msg)

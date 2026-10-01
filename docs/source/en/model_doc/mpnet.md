@@ -13,12 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-04-20 and contributed to Hugging Face Transformers on 2020-12-09.*
 
 # MPNet
 
+
 ## Overview
 
-The MPNet model was proposed in [MPNet: Masked and Permuted Pre-training for Language Understanding](https://arxiv.org/abs/2004.09297) by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.
+The MPNet model was proposed in [MPNet: Masked and Permuted Pre-training for Language Understanding](https://huggingface.co/papers/2004.09297) by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.
 
 MPNet adopts a novel pre-training method, named masked and permuted language modeling, to inherit the advantages of
 masked language modeling and permuted language modeling for natural language understanding.
@@ -41,7 +43,7 @@ The original code can be found [here](https://github.com/microsoft/MPNet).
 
 ## Usage tips
 
-MPNet doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just 
+MPNet doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just
 separate your segments with the separation token `tokenizer.sep_token` (or `[sep]`).
 
 ## Resources
@@ -59,17 +61,8 @@ separate your segments with the separation token `tokenizer.sep_token` (or `[sep
 ## MPNetTokenizer
 
 [[autodoc]] MPNetTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## MPNetTokenizerFast
-
-[[autodoc]] MPNetTokenizerFast
-
-<frameworkcontent>
-<pt>
 
 ## MPNetModel
 
@@ -100,39 +93,3 @@ separate your segments with the separation token `tokenizer.sep_token` (or `[sep
 
 [[autodoc]] MPNetForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFMPNetModel
-
-[[autodoc]] TFMPNetModel
-    - call
-
-## TFMPNetForMaskedLM
-
-[[autodoc]] TFMPNetForMaskedLM
-    - call
-
-## TFMPNetForSequenceClassification
-
-[[autodoc]] TFMPNetForSequenceClassification
-    - call
-
-## TFMPNetForMultipleChoice
-
-[[autodoc]] TFMPNetForMultipleChoice
-    - call
-
-## TFMPNetForTokenClassification
-
-[[autodoc]] TFMPNetForTokenClassification
-    - call
-
-## TFMPNetForQuestionAnswering
-
-[[autodoc]] TFMPNetForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

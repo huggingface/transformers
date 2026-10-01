@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,26 +14,16 @@
 
 """Processor class for Mllama."""
 
-from typing import List, Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
-
-
-class MllamaImagesKwargs(ImagesKwargs, total=False):
-    max_image_tiles: Optional[int]
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MllamaImagesKwargs
-
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,
@@ -42,7 +31,7 @@ class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) -> List[List[int]]:
+def get_cross_attention_token_mask(input_ids: list[int], image_token_id: int) -> list[list[int]]:
     """
     Generate a cross-attention token mask for image tokens in the input sequence.
 
@@ -50,11 +39,11 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
     a mask that defines which subsequent tokens each image token should attend to.
 
     Args:
-        input_ids (List[int]): A list of token ids representing the input sequence.
+        input_ids (list[int]): A list of token ids representing the input sequence.
         image_token_id (int): The id of the token used to represent images in the sequence.
 
     Returns:
-        List[List[int]]: A list of [start, end] pairs, where each pair represents the range
+        list[list[int]]: A list of [start, end] pairs, where each pair represents the range
         of tokens an image token should attend to.
 
     Notes:
@@ -91,8 +80,8 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
 
 
 def convert_sparse_cross_attention_mask_to_dense(
-    cross_attention_token_mask: List[List[List[int]]],
-    num_tiles: List[List[int]],
+    cross_attention_token_mask: list[list[list[int]]],
+    num_tiles: list[list[int]],
     max_num_tiles: int,
     length: int,
 ) -> np.ndarray:
@@ -103,11 +92,11 @@ def convert_sparse_cross_attention_mask_to_dense(
     The sparse representation is a nested list structure that defines attention ranges for each image in each batch item.
 
     Args:
-        cross_attention_token_mask (List[List[List[int]]]): A nested list structure where:
+        cross_attention_token_mask (list[list[list[int]]]): A nested list structure where:
             - The outer list represents the batch dimension.
             - The middle list represents different images within each batch item.
             - The inner list contains pairs of integers [start, end] representing token ranges for each image.
-        num_tiles (List[List[int]]): A nested list structure specifying the number of tiles for each image in each batch item.
+        num_tiles (list[list[int]]): A nested list structure specifying the number of tiles for each image in each batch item.
         max_num_tiles (int): The maximum possible number of tiles.
         length (int): The total sequence length of the input.
 
@@ -120,7 +109,7 @@ def convert_sparse_cross_attention_mask_to_dense(
     """
 
     batch_size = len(cross_attention_token_mask)
-    max_num_images = max([len(masks) for masks in cross_attention_token_mask])
+    max_num_images = max(len(masks) for masks in cross_attention_token_mask)
 
     cross_attention_mask = np.zeros(
         shape=(batch_size, length, max_num_images, max_num_tiles),
@@ -175,42 +164,9 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
     return f"{image_token * num_image_tokens_on_start}{bos_token}{prompt}"
 
 
+@auto_docstring
 class MllamaProcessor(ProcessorMixin):
-    r"""
-    Constructs a Mllama processor which wraps [`MllamaImageProcessor`] and
-    [`PretrainedTokenizerFast`] into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~MllamaProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
-    information.
-    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
-        ```python
-        from transformers import MllamaProcessor
-        from PIL import Image
-
-        processor = MllamaProcessor.from_pretrained("meta-llama/Llama-3.2-11B-Vision")
-
-        processor(
-            images=your_pil_image,
-            text=["<|image|>If I had to write a haiku for this one"],
-            images_kwargs = {"size": {"height": 448, "width": 448}},
-            text_kwargs = {"padding": "right"},
-            common_kwargs = {"return_tensors": "pt"},
-        )
-        ```
-
-    Args:
-        image_processor ([`MllamaImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
-    image_processor_class = "MllamaImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
+    valid_processor_kwargs = MllamaProcessorKwargs
 
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
@@ -225,35 +181,14 @@ class MllamaProcessor(ProcessorMixin):
         self.bos_token = tokenizer.bos_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[MllamaProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
-        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` arguments to
-        MllamaImageProcessor's [`~MllamaImageProcessor.__call__`] if `images` is not `None`. Please refer
-        to the docstring of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -264,89 +199,101 @@ class MllamaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             TODO: add aspect_ratio_ids and aspect_ratio_mask and cross_attention_mask
         """
-        if text is None and images is None:
-            raise ValueError("You must specify either text or images.")
+        images, text = self.prepare_inputs_layout(images=images, text=text)
+        self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
             MllamaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
-        text_kwargs = output_kwargs["text_kwargs"]
-        images_kwargs = output_kwargs["images_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
-
-        data = {}
+        text_inputs = {}
         if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-            n_images_in_text = [t.count(self.image_token) for t in text]
-            text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
-            _ = text_kwargs.pop("padding_side", None)  # hack until padding-side is an accepted kwarg by tokenizers
-            encoding = self.tokenizer(text, **text_kwargs)
-            data.update(encoding)
+            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        n_images_in_images = [0]
+        image_inputs = {}
         if images is not None:
-            images = make_nested_list_of_images(images)
-            n_images_in_images = [len(sample) for sample in images]
-
-        if text is not None:
-            if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
-                batch_img == 0 for batch_img in n_images_in_text
-            ):
-                raise ValueError(
-                    "If a batch of text is provided, there should be either no images or at least one image per sample"
-                )
-            if sum(n_images_in_images) != sum(n_images_in_text):
-                if images is None:
-                    raise ValueError("No image were provided, but there are image tokens in the prompt")
-                else:
-                    raise ValueError(
-                        f"The number of image token ({sum(n_images_in_text)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
-                    )
-
-        if images is not None:
-            image_features = self.image_processor(images, **images_kwargs)
-            num_tiles = image_features.pop("num_tiles")
-            data.update(image_features)
+            image_inputs, _ = self._process_images(images, **output_kwargs["images_kwargs"])
+            num_tiles = image_inputs.pop("num_tiles")
 
         # Create cross attention mask
         if images is not None and text is not None:
             cross_attention_token_mask = [
-                get_cross_attention_token_mask(token_ids, self.image_token_id) for token_ids in encoding["input_ids"]
+                get_cross_attention_token_mask(token_ids, self.image_token_id)
+                for token_ids in text_inputs["input_ids"]
             ]
             cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
                 cross_attention_token_mask,
                 num_tiles=num_tiles,
                 max_num_tiles=self.image_processor.max_image_tiles,
-                length=max(len(input_ids) for input_ids in encoding["input_ids"]),
+                length=max(len(input_ids) for input_ids in text_inputs["input_ids"]),
             )
-            data["cross_attention_mask"] = cross_attention_mask
+            text_inputs["cross_attention_mask"] = cross_attention_mask
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
-        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
-        return batch_feature
+    def prepare_inputs_layout(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs,
+    ):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        # Model requires nested struct
+        if images is not None:
+            images = make_nested_list_of_images(images)
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+        if text is not None:
+            text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
 
-    def post_process_image_text_to_text(self, generated_outputs):
+        return images, text
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images, text, **kwargs)
+
+        if text is not None:
+            n_images_in_text = [t.count(self.image_token) for t in text]
+
+            if sum(n_images_in_text) > 0 and images is None:
+                raise ValueError("No image were provided, but there are image tokens in the prompt")
+            elif images is not None:
+                images = make_nested_list_of_images(images)
+                n_images_in_images = [len(sample) for sample in images]
+
+                if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
+                    batch_img == 0 for batch_img in n_images_in_text
+                ):
+                    raise ValueError(
+                        "If a batch of text is provided, there should be either no images or at least one image per sample"
+                    )
+
+                if n_images_in_images != n_images_in_text:
+                    add_message = ""
+                    if sum(n_images_in_images) == sum(n_images_in_text) and n_images_in_images != n_images_in_text:
+                        add_message = "Make sure to pass your images as a nested list, where each sub-list holds images per batch"
+
+                    raise ValueError(
+                        f"The number of image tokens in each text ({n_images_in_text}) should be the same as the "
+                        f"number of provided images per batch ({n_images_in_images}). {add_message}"
+                    )
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        # Mllama has an `image_token` but doesn't need to add placeholders because
+        # it uses cross-attention. Return the token itself an empty replacement
+        return self.image_token
+
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
         """
         Post-process the output of the model to decode the text.
 
@@ -354,12 +301,21 @@ class MllamaProcessor(ProcessorMixin):
             generated_outputs (`torch.Tensor` or `np.ndarray`):
                 The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(
-            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
         )
 
     @property
@@ -367,7 +323,7 @@ class MllamaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
 
-        # Remove `num_tiles`, it is popped and used only when processing. Make a copy of list when remocing
+        # Remove `num_tiles`, it is popped and used only when processing. Make a copy of list when removing
         # otherwise `self.image_processor.model_input_names` is also modified
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_tiles"]
         return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])

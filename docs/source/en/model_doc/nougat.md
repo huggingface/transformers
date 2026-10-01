@@ -8,16 +8,18 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
 "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was published in HF papers on 2023-08-25 and contributed to Hugging Face Transformers on 2023-09-26.*
 
 # Nougat
 
+
 ## Overview
 
-The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://arxiv.org/abs/2308.13418) by
+The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://huggingface.co/papers/2308.13418) by
 Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic. Nougat uses the same architecture as [Donut](donut), meaning an image Transformer
 encoder and an autoregressive text Transformer decoder to translate scientific PDFs to markdown, enabling easier access to them.
 
@@ -28,7 +30,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/nougat_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> Nougat high-level overview. Taken from the <a href="https://arxiv.org/abs/2308.13418">original paper</a>. </small>
+<small> Nougat high-level overview. Taken from the <a href="https://huggingface.co/papers/2308.13418">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/facebookresearch/nougat).
@@ -52,38 +54,36 @@ into a single instance to both extract the input features and decode the predict
 
 - Step-by-step PDF transcription
 
-```py
->>> from huggingface_hub import hf_hub_download
->>> import re
->>> from PIL import Image
+```python
 
->>> from transformers import NougatProcessor, VisionEncoderDecoderModel
->>> from datasets import load_dataset
->>> import torch
+from huggingface_hub import hf_hub_download
+from PIL import Image
 
->>> processor = NougatProcessor.from_pretrained("facebook/nougat-base")
->>> model = VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base")
+from transformers import AutoModelForImageTextToText, NougatProcessor
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
->>> model.to(device)  # doctest: +IGNORE_RESULT
 
->>> # prepare PDF image for the model
->>> filepath = hf_hub_download(repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_paper.png", repo_type="dataset")
->>> image = Image.open(filepath)
->>> pixel_values = processor(image, return_tensors="pt").pixel_values
+processor = NougatProcessor.from_pretrained("facebook/nougat-base")
+model = AutoModelForImageTextToText.from_pretrained("facebook/nougat-base", device_map="auto")
 
->>> # generate transcription (here we only generate 30 tokens)
->>> outputs = model.generate(
-...     pixel_values.to(device),
-...     min_length=1,
-...     max_new_tokens=30,
-...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
-... )
+model.to(model.device)  # doctest: +IGNORE_RESULT
 
->>> sequence = processor.batch_decode(outputs, skip_special_tokens=True)[0]
->>> sequence = processor.post_process_generation(sequence, fix_markdown=False)
->>> # note: we're using repr here such for the sake of printing the \n characters, feel free to just print the sequence
->>> print(repr(sequence))
+# prepare PDF image for the model
+filepath = hf_hub_download(repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_paper.png", repo_type="dataset")
+image = Image.open(filepath)
+pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
+
+# generate transcription (here we only generate 30 tokens)
+outputs = model.generate(
+    pixel_values.to(model.device),
+    min_length=1,
+    max_new_tokens=30,
+    bad_words_ids=[[processor.tokenizer.unk_token_id]],
+)
+
+sequence = processor.batch_decode(outputs, skip_special_tokens=True)[0]
+sequence = processor.post_process_generation(sequence, fix_markdown=False)
+# note: we're using repr here such for the sake of printing the \n characters, feel free to just print the sequence
+print(repr(sequence))
 '\n\n# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@'
 ```
 
@@ -95,14 +95,23 @@ The model is identical to [Donut](donut) in terms of architecture.
 
 </Tip>
 
+## NougatConfig
+
+[[autodoc]] NougatConfig
+
 ## NougatImageProcessor
 
 [[autodoc]] NougatImageProcessor
     - preprocess
 
-## NougatTokenizerFast
+## NougatImageProcessorPil
 
-[[autodoc]] NougatTokenizerFast
+[[autodoc]] NougatImageProcessorPil
+    - preprocess
+
+## NougatTokenizer
+
+[[autodoc]] NougatTokenizer
 
 ## NougatProcessor
 

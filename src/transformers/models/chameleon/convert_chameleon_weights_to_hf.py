@@ -15,11 +15,11 @@ import argparse
 import gc
 import json
 import os
+from io import BytesIO
 
-import requests
 import torch
 import yaml
-from accelerate import init_empty_weights
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -72,12 +72,12 @@ def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
@@ -130,13 +130,15 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         for possible_name in ["consolidated.pth", "consolidated.00.pth"]:
             possible_path = os.path.join(input_model_path, possible_name)
             if os.path.exists(possible_path):
-                loaded = torch.load(possible_path, map_location="cpu")
+                loaded = torch.load(possible_path, map_location="cpu", weights_only=True)
                 break
         assert loaded is not None
     else:
         # Sharded
         loaded = [
-            torch.load(os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
+            torch.load(
+                os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu", weights_only=True
+            )
             for i in range(num_shards)
         ]
 
@@ -314,17 +316,17 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Load VQGAN weights
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
-    vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
+    vqgan_state_dict = torch.load(vqgan_path, map_location="cpu", weights_only=True)["state_dict"]
     for k, v in vqgan_state_dict.items():
         if "decoder" in k:
             continue  # we dont do image generation yet
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
-    ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-    multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+    ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
+    multiple_of = params.get("multiple_of", 256)
 
-    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json"), encoding="utf-8") as tokenizer_file:
         tokenizer_config = json.load(tokenizer_file)
         vocabulary_map = tokenizer_config["model"]["vocab"]
         vocabulary_map["<image>"] = vocabulary_map[
@@ -336,7 +338,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
             if token["content"] == "<reserved08707>":
                 token["content"] = "<image>"
 
-    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f)  # save the new file to init tokenizer later
 
     vq_keys_to_replace = [
@@ -347,7 +349,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         ("double_z", "double_latent"),
         ("z_channels", "latent_channels"),
     ]
-    with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
+    with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml"), encoding="utf-8") as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
         vq_config.update(**vq_config["ddconfig"])
         for old, new in vq_keys_to_replace:
@@ -371,18 +373,18 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,
     )
-    with init_empty_weights():
+    with torch.device("meta"):
         model = ChameleonForConditionalGeneration(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)
-    model.save_pretrained(model_path, safe_serialization=True)
+    model.save_pretrained(model_path)
 
     # Load and save the processor
     tokenizer = LlamaTokenizerFast(
         tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
     )
     tokenizer.sep_token_id = 8710  # assign <reserved08706> to sep so that we can append it after input text
-    tokenizer.pad_token_id = 1  # assing <pad> to special pad_token
+    tokenizer.pad_token_id = 1  # assign <pad> to special pad_token
     image_processor = ChameleonImageProcessor()
     processor = ChameleonProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(model_path)
@@ -398,16 +400,14 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     print("Loading the checkpoint in a Chameleon model...")
     print("*" * 100)
     model = ChameleonForConditionalGeneration.from_pretrained(
-        model_path, attn_implementation="eager", torch_dtype=torch.bfloat16, device_map="auto"
+        model_path, attn_implementation="eager", dtype=torch.bfloat16, device_map="auto"
     )
     processor = ChameleonProcessor.from_pretrained(model_path)
 
     prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
-    image = Image.open(
-        requests.get(
-            "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
-        ).raw
-    )
+    url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
     length = inputs.input_ids.shape[1]
 
@@ -419,14 +419,14 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Multi-image example
     prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-    image = Image.open(
-        requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-    )
-    image_2 = Image.open(
-        requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-    )
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg"
+    with httpx.stream("GET", url) as response:
+        image_1 = Image.open(BytesIO(response.read()))
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg"
+    with httpx.stream("GET", url) as response:
+        image_2 = Image.open(BytesIO(response.read()))
 
-    inputs = processor(prompt, images=[image, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+    inputs = processor(prompt, images=[image_1, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
     length = inputs.input_ids.shape[1]
     out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
     generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
@@ -444,7 +444,7 @@ def main():
         "--model_size",
         choices=["7B", "30B"],
         help=""
-        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, checkout the original repo: https://github.com/facebookresearch/chameleon",
+        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, check out the original repo: https://github.com/facebookresearch/chameleon",
     )
     parser.add_argument(
         "--output_dir",

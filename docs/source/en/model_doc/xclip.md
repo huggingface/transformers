@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2022-08-04 and contributed to Hugging Face Transformers on 2023-06-20.*
 
 # X-CLIP
 
+
 ## Overview
 
-The X-CLIP model was proposed in [Expanding Language-Image Pretrained Models for General Video Recognition](https://arxiv.org/abs/2208.02816) by Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling.
+The X-CLIP model was proposed in [Expanding Language-Image Pretrained Models for General Video Recognition](https://huggingface.co/papers/2208.02816) by Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling.
 X-CLIP is a minimal extension of [CLIP](clip) for video. The model consists of a text encoder, a cross-frame vision encoder, a multi-frame integration Transformer, and a video-specific prompt generator.
 
 The abstract from the paper is the following:
@@ -32,7 +34,7 @@ Tips:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/xclip_architecture.png"
 alt="drawing" width="600"/>
 
-<small> X-CLIP architecture. Taken from the <a href="https://arxiv.org/abs/2208.02816">original paper.</a> </small>
+<small> X-CLIP architecture. Taken from the <a href="https://huggingface.co/papers/2208.02816">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/microsoft/VideoX/tree/master/X-CLIP).
@@ -48,11 +50,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## XCLIPProcessor
 
 [[autodoc]] XCLIPProcessor
+    - __call__
 
 ## XCLIPConfig
 
 [[autodoc]] XCLIPConfig
-    - from_text_vision_configs
 
 ## XCLIPTextConfig
 

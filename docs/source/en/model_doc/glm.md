@@ -9,17 +9,24 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-06-18 and contributed to Hugging Face Transformers on 2024-10-18.*
 
-# GLM
+# GLM-4
+
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+</div>
 
 ## Overview
 
 The GLM Model was proposed
-in [ChatGLM: A Family of Large Language Models from GLM-130B to GLM-4 All Tools](https://arxiv.org/html/2406.12793v1)
+in [ChatGLM: A Family of Large Language Models from GLM-130B to GLM-4 All Tools](https://huggingface.co/papers/2406.12793)
 by GLM Team, THUDM & ZhipuAI.
 
 The abstract from the paper is the following:
@@ -45,7 +52,6 @@ Tips:
 - This model was contributed by [THUDM](https://huggingface.co/THUDM). The most recent code can be
   found [here](https://github.com/thudm/GLM-4).
 
-  
 ## Usage tips
 
 `GLM-4` can be found on the [Huggingface Hub](https://huggingface.co/collections/THUDM/glm-4-665fcf188c414b03c2f7e3b7)
@@ -53,25 +59,25 @@ Tips:
 In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
->>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
 
->>> prompt = "Give me a short introduction to large language model."
+model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
 
->>> messages = [{"role": "user", "content": prompt}]
+prompt = "Give me a short introduction to large language model."
 
->>> text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+messages = [{"role": "user", "content": prompt}]
 
->>> model_inputs = tokenizer([text], return_tensors="pt").to(device)
+text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
->>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
->>> generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 
->>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+
+response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
 
 ## GlmConfig

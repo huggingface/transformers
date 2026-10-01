@@ -63,7 +63,7 @@ Wenn Sie sich vergewissert haben, dass der Fehler noch nicht gemeldet wurde, geb
 Um das Betriebssystem und die Softwareversionen automatisch auszugeben, führen Sie den folgenden Befehl aus:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 Sie können denselben Befehl auch im Hauptverzeichnis des Repositorys ausführen:
@@ -161,7 +161,7 @@ Sie benötigen **[Python 3.9](https://github.com/huggingface/transformers/blob/m
    🤗 Transformers stützt sich auf `black` und `ruff`, um seinen Quellcode konsistent zu formatieren. Nachdem Sie Änderungen vorgenommen haben, wenden Sie automatische Stilkorrekturen und Codeprüfungen, die nicht automatisiert werden können, in einem Schritt an:
 
    ```bash
-   make fixup
+   make style
    ```
 
    Dieser Task ist optimiert, nur mit Dateien zu arbeiten, die von Ihrer PR modifiziert wurden.
@@ -175,13 +175,7 @@ Sie benötigen **[Python 3.9](https://github.com/huggingface/transformers/blob/m
    🤗 Transformers verwendet auch `ruff` und einige benutzerdefinierte Skripte, um auf Programmierfehler zu prüfen. Qualitätskontrollen werden von der CI durchgeführt, aber Sie können die gleichen Überprüfungen auch selbst ausführen:
 
    ```bash
-   make quality
-   ```
-
-   Abschließend haben wir viele Skripte, die sicherstellen, dass wir alle betroffenen Dateien aktualisieren, wenn wir ein neues Modell hinzufügen. Sie können diese wie folgt ausführen:
-
-   ```bash
-   make repo-consistency
+   make check-repo
    ```
 
    Um mehr über diese Prüfungen zu erfahren und wie man mit ihnen Probleme behebt, lesen Sie den Leitfaden zu [Überprüfungen bei einer Pull-Anfrage](https://huggingface.co/docs/transformers/pr_checks).
@@ -283,8 +277,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 Wie bei den langsamen Tests gibt es auch andere Umgebungsvariablen, die standardmäßig beim Testen nicht gesetzt sind:
 
 * `RUN_CUSTOM_TOKENIZERS`: Aktiviert Tests für benutzerdefinierte Tokenizer.
-* `RUN_PT_FLAX_CROSS_TESTS`: Aktiviert Tests für die Integration von PyTorch + Flax.
-* `RUN_PT_TF_CROSS_TESTS`: Aktiviert Tests für die Integration von TensorFlow + PyTorch.
 
 Weitere Umgebungsvariablen und zusätzliche Informationen finden Sie in der [testing_utils.py](src/transformers/testing_utils.py).
 

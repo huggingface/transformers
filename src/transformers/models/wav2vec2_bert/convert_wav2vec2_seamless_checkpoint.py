@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,7 +103,7 @@ def _convert_model(
             state_dict[new_key] = state_dict.pop(k)
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unecessary param
+    extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unnecessary param
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
     if len(extra_keys) != 0:
         raise ValueError(f"extra keys found: {extra_keys}")
@@ -113,7 +112,7 @@ def _convert_model(
     hf_model.load_state_dict(state_dict, strict=True)
     n_params = param_count(hf_model)
 
-    logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
+    logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
 
     hf_model.eval()
     del state_dict
@@ -150,7 +149,6 @@ def convert_wav2vec2_bert_checkpoint(
 
     # save feature extractor
     fe = SeamlessM4TFeatureExtractor(padding_value=1)
-    fe._set_processor_class("Wav2Vec2BertProcessor")
     fe.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:

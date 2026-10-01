@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import itertools
 import os
-import random
 import tempfile
 import unittest
 
@@ -24,30 +22,19 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import WhisperFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torch_gpu
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torch_accelerator,
+)
 from transformers.utils.import_utils import is_torch_available
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
     import torch
-
-global_rng = random.Random()
-
-
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 class WhisperFeatureExtractionTester:
@@ -200,6 +187,73 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_dither(self):
+        np.random.seed(42)  # seed the dithering randn()
+
+        # Tests that features with and without little dithering are similar, but not the same
+        dict_no_dither = self.feat_extract_tester.prepare_feat_extract_dict()
+        dict_no_dither["dither"] = 0.0
+
+        dict_dither = self.feat_extract_tester.prepare_feat_extract_dict()
+        dict_dither["dither"] = 0.00003  # approx. 1/32k
+
+        feature_extractor_no_dither = self.feature_extraction_class(**dict_no_dither)
+        feature_extractor_dither = self.feature_extraction_class(**dict_dither)
+
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # compute features
+        input_features_no_dither = feature_extractor_no_dither(
+            np_speech_inputs, padding=True, return_tensors="np", sampling_rate=dict_no_dither["sampling_rate"]
+        ).input_features
+        input_features_dither = feature_extractor_dither(
+            np_speech_inputs, padding=True, return_tensors="np", sampling_rate=dict_dither["sampling_rate"]
+        ).input_features
+
+        # test there is a difference between features (there's added noise to input signal)
+        diff = input_features_dither - input_features_no_dither
+
+        # features are not identical
+        self.assertTrue(np.abs(diff).mean() > 1e-6)
+        # features are not too different
+        self.assertTrue(np.abs(diff).mean() <= 1e-4)
+        self.assertTrue(np.abs(diff).max() <= 5e-3)
+
+    def test_feature_shape(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        hop_length = feature_extractor.hop_length
+        test_inputs = np.random.randn(16000)
+
+        self.assertTrue(
+            feature_extractor(
+                [test_inputs[: hop_length * 5 + 1]],
+                return_attention_mask=True,
+                padding=False,
+                return_tensors="np",
+            ).attention_mask.shape[-1]
+            == 5
+        )
+        self.assertTrue(
+            feature_extractor(
+                [test_inputs[: hop_length * 5]],
+                return_attention_mask=True,
+                padding=False,
+                return_tensors="np",
+            ).attention_mask.shape[-1]
+            == 5
+        )
+        self.assertTrue(
+            feature_extractor(
+                [test_inputs[: hop_length * 5 - 1]],
+                return_attention_mask=True,
+                padding=False,
+                return_tensors="np",
+            ).attention_mask.shape[-1]
+            == 4
+        )
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
@@ -214,14 +268,53 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
+    @require_torch
+    def test_torch_extract_fbank_features_contiguous_magnitudes(self):
+        """Guards the mel-magnitude contiguity fix.
+
+        `stft[..., :-1]` is a non-contiguous view, and squaring it keeps that
+        layout. On some CPU backends the downstream `mel_filters.T @ magnitudes`
+        matmul then falls onto a slow strided-GEMM path (observed ~8x slower on
+        a ROCm PyTorch build, ~43 ms vs ~3 ms for a 30 s window). Forcing
+        `magnitudes` contiguous restores the fast path with no change in output.
+
+        Correctness (and the non-contiguity of the raw view) is asserted so this
+        stays stable in CI. See https://github.com/huggingface/transformers/pull/47351
+        for the benchmark script and the measured (backend-dependent) speedups.
+        """
+        torch.manual_seed(0)
+        feature_extractor = WhisperFeatureExtractor()
+        n_fft = feature_extractor.n_fft
+        hop_length = feature_extractor.hop_length
+        # Mirror `_torch_extract_fbank_features`: the window is built from n_fft.
+        window = torch.hann_window(n_fft)
+        # One full Whisper window of audio (chunk_length * sampling_rate samples).
+        waveform = torch.randn(feature_extractor.n_samples, dtype=torch.float32)
+
+        stft = torch.stft(waveform, n_fft, hop_length, window=window, return_complex=True)
+        magnitudes_non_contiguous = stft[..., :-1].abs() ** 2
+        magnitudes_contiguous = magnitudes_non_contiguous.contiguous()
+
+        # Root cause of the slow path: the sliced view is non-contiguous.
+        self.assertFalse(magnitudes_non_contiguous.is_contiguous())
+        self.assertTrue(magnitudes_contiguous.is_contiguous())
+
+        mel_filters = torch.from_numpy(feature_extractor.mel_filters).to(torch.float32)
+
+        # The fix must not change the result, only the memory layout.
+        torch.testing.assert_close(
+            mel_filters.T @ magnitudes_non_contiguous,
+            mel_filters.T @ magnitudes_contiguous,
+        )
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch
     def test_torch_integration(self):
         # fmt: off
@@ -270,7 +363,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(np.all(np.mean(audio) < 1e-3))
         self.assertTrue(np.all(np.abs(np.var(audio) - 1) < 1e-3))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch
     def test_torch_integration_batch(self):
         # fmt: off

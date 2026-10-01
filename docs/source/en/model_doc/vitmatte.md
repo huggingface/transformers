@@ -9,12 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was published in HF papers on 2023-05-24 and contributed to Hugging Face Transformers on 2023-09-19.*
 
 # ViTMatte
 
+
 ## Overview
 
-The ViTMatte model was proposed in [Boosting Image Matting with Pretrained Plain Vision Transformers](https://arxiv.org/abs/2305.15272) by Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang.
+The ViTMatte model was proposed in [Boosting Image Matting with Pretrained Plain Vision Transformers](https://huggingface.co/papers/2305.15272) by Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang.
 ViTMatte leverages plain [Vision Transformers](vit) for the task of image matting, which is the process of accurately estimating the foreground object in images and videos.
 
 The abstract from the paper is the following:
@@ -27,7 +29,7 @@ The original code can be found [here](https://github.com/hustvl/ViTMatte).
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitmatte_architecture.png"
 alt="drawing" width="600"/>
 
-<small> ViTMatte high-level overview. Taken from the <a href="https://arxiv.org/abs/2305.15272">original paper.</a> </small>
+<small> ViTMatte high-level overview. Taken from the <a href="https://huggingface.co/papers/2305.15272">original paper.</a> </small>
 
 ## Resources
 
@@ -47,6 +49,11 @@ The model expects both the image and trimap (concatenated) as input. Use [`ViTMa
 ## VitMatteImageProcessor
 
 [[autodoc]] VitMatteImageProcessor
+    - preprocess
+
+## VitMatteImageProcessorPil
+
+[[autodoc]] VitMatteImageProcessorPil
     - preprocess
 
 ## VitMatteForImageMatting

@@ -208,7 +208,7 @@ DETR モデルをトレーニングできる「ラベル」。画像プロセッ
 ... )
 ```
 
-`image_processor` は、注釈が次の形式であることを期待します: `{'image_id': int, 'annotations': List[Dict]}`,
+`image_processor` は、注釈が次の形式であることを期待します: `{'image_id': int, 'annotations': list[Dict]}`,
  ここで、各辞書は COCO オブジェクトの注釈です。 1 つの例として、注釈を再フォーマットする関数を追加してみましょう。
 
  ```py

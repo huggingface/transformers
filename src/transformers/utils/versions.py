@@ -19,7 +19,6 @@ import importlib.metadata
 import operator
 import re
 import sys
-from typing import Optional
 
 from packaging import version
 
@@ -46,14 +45,14 @@ def _compare_versions(op, got_ver, want_ver, requirement, pkg, hint):
         )
 
 
-def require_version(requirement: str, hint: Optional[str] = None) -> None:
+def require_version(requirement: str, hint: str | None = None) -> None:
     """
     Perform a runtime check of the dependency versions, using the exact same syntax used by pip.
 
     The installed module version comes from the *site-packages* dir via *importlib.metadata*.
 
     Args:
-        requirement (`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
+        requirement (`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.60", "numpy"
         hint (`str`, *optional*): what suggestion to print in case of requirements not being met
 
     Example:

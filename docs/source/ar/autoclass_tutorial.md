@@ -52,7 +52,7 @@
     <figcaption class="mt-2 text-center text-sm text-gray-500">الصورة توضح مخطط مراحل نموذج Swin.</figcaption>
 </div>
 
-يسمح لك [`AutoBackbone`] باستخدام النماذج المُدربة مسبقًا كعمود فقري للحصول على خرائط ميزات من مراحل مختلفة من العمود الفقري. يجب عليك تحديد أحد المعلمات التالية في [`~PretrainedConfig.from_pretrained`]:
+يسمح لك [`AutoBackbone`] باستخدام النماذج المُدربة مسبقًا كعمود فقري للحصول على خرائط ميزات من مراحل مختلفة من العمود الفقري. يجب عليك تحديد أحد المعلمات التالية في [`~PreTrainedConfig.from_pretrained`]:
 
 * `out_indices` هو فهرس الطبقة التي تريد الحصول على خريطة الميزات منها
 * `out_features` هو اسم الطبقة التي تريد الحصول على خريطة الميزات منها
@@ -115,8 +115,6 @@
 
 ## النموذج التلقائي (AutoModel)
 
-<frameworkcontent>
-<pt>
 تسمح لك فئات `AutoModelFor` بتحميل نموذج مُدرب مسبقًا لمهمة معينة (راجع [هنا](model_doc/auto) للحصول على قائمة كاملة بالمهام المتاحة). على سبيل المثال، قم بتحميل نموذج لتصنيف التسلسل باستخدام [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
@@ -143,25 +141,4 @@
 
 
 بشكل عام، نوصي باستخدام فئة `AutoTokenizer` وفئة `AutoModelFor` لتحميل مثيلات مُدربة مسبقًا من النماذج. سيساعدك هذا في تحميل البنية الصحيحة في كل مرة. في البرنامج التعليمي التالي، تعرف على كيفية استخدام المحلل اللغوي ومعالج الصور ومستخرج الميزات والمعالج الذي تم تحميله حديثًا لمعالجة مجموعة بيانات للضبط الدقيق.
-</pt>
 
-<tf>
-أخيرًا، تسمح لك فئات `TFAutoModelFor` بتحميل نموذج مُدرب مسبقًا لمهمة معينة (راجع [هنا](model_doc/auto) للحصول على قائمة كاملة بالمهام المتاحة). على سبيل المثال، قم بتحميل نموذج لتصنيف التسلسل باستخدام [`TFAutoModelForSequenceClassification.from_pretrained`]:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-أعد استخدام نفس نقطة التفتيش لتحميل بنية لمهمة مختلفة:
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-بشكل عام، نوصي باستخدام فئة `AutoTokenizer` وفئة `TFAutoModelFor` لتحميل نسخ لنماذج مُدربة مسبقًا. سيساعدك هذا في تحميل البنية الصحيحة في كل مرة. في البرنامج التعليمي التالي، ستتعرف على كيفية استخدام المُجزّئ اللغوي ومعالج الصور ومستخرج الميزات والمعالج الذي تم تحميله حديثًا لمعالجة مجموعة بيانات للضبط الدقيق.
-</tf>
-</frameworkcontent>

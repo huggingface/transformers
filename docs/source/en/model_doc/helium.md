@@ -9,18 +9,22 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2025-01-13.*
 
 # Helium
 
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
 Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/2025/01/13/helium.html) by the Kyutai Team.
-
 
 Helium-1 preview is a lightweight language model with 2B parameters, targeting edge and mobile devices.
 It supports the following languages: English, French, German, Italian, Portuguese, Spanish.
@@ -30,21 +34,18 @@ It supports the following languages: English, French, German, Italian, Portugues
 - **Language(s) (NLP):** English, French, German, Italian, Portuguese, Spanish
 - **License:** CC-BY 4.0
 
-
-
-
 ## Evaluation
 
 <!-- This section describes the evaluation protocols and provides the results. -->
 
-#### Testing Data
+### Testing Data
 
 <!-- This should link to a Dataset Card if possible. -->
 
-The model was evaluated on MMLU, TriviaQA, NaturalQuestions, ARC Easy & Challenge, Open Book QA, Common Sense QA, 
+The model was evaluated on MMLU, TriviaQA, NaturalQuestions, ARC Easy & Challenge, Open Book QA, Common Sense QA,
 Physical Interaction QA, Social Interaction QA, HellaSwag, WinoGrande, Multilingual Knowledge QA, FLORES 200.
 
-#### Metrics
+### Metrics
 
 <!-- These are the evaluation metrics being used, ideally with a description of why. -->
 
@@ -86,7 +87,6 @@ We report BLEU on FLORES.
 || HS | 58.6 | 40.8 | 60.5 | 61.1 | 51.4 |
 || MKQA | 16.0 | 7.9 | 18.5 | 20.6 | 10.6 |
 
-
 ## Technical Specifications
 
 ### Model Architecture and Objective
@@ -104,29 +104,28 @@ Tips:
 
 - This model was contributed by [Laurent Mazare](https://huggingface.co/lmz)
 
-  
 ## Usage tips
 
 `Helium` can be found on the [Huggingface Hub](https://huggingface.co/models?other=helium)
 
-In the following, we demonstrate how to use `helium-1-preview` for the inference. 
+In the following, we demonstrate how to use `helium-1-preview` for the inference.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("kyutai/helium-1-preview-2b", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("kyutai/helium-1-preview-2b")
 
->>> prompt = "Give me a short introduction to large language model."
+model = AutoModelForCausalLM.from_pretrained("kyutai/helium-1-preview-2b", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("kyutai/helium-1-preview-2b")
 
->>> model_inputs = tokenizer(prompt, return_tensors="pt").to(device)
+prompt = "Give me a short introduction to large language model."
 
->>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
+model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
->>> generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 
->>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+
+response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
 
 ## HeliumConfig

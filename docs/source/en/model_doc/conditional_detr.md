@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-08-13 and contributed to Hugging Face Transformers on 2022-09-22.*
 
 # Conditional DETR
 
+
 ## Overview
 
-The Conditional DETR model was proposed in [Conditional DETR for Fast Training Convergence](https://arxiv.org/abs/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang. Conditional DETR presents a conditional cross-attention mechanism for fast DETR training. Conditional DETR converges 6.7× to 10× faster than DETR.
+The Conditional DETR model was proposed in [Conditional DETR for Fast Training Convergence](https://huggingface.co/papers/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang. Conditional DETR presents a conditional cross-attention mechanism for fast DETR training. Conditional DETR converges 6.7× to 10× faster than DETR.
 
 The abstract from the paper is the following:
 
@@ -27,7 +29,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/conditional_detr_curve.jpg"
 alt="drawing" width="600"/>
 
-<small> Conditional DETR shows much faster convergence compared to the original DETR. Taken from the <a href="https://arxiv.org/abs/2108.06152">original paper</a>.</small>
+<small> Conditional DETR shows much faster convergence compared to the original DETR. Taken from the <a href="https://huggingface.co/papers/2108.06152">original paper</a>.</small>
 
 This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The original code can be found [here](https://github.com/Atten4Vis/ConditionalDETR).
 
@@ -44,15 +46,11 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 [[autodoc]] ConditionalDetrImageProcessor
     - preprocess
-    - post_process_object_detection
-    - post_process_instance_segmentation
-    - post_process_semantic_segmentation
-    - post_process_panoptic_segmentation
 
-## ConditionalDetrFeatureExtractor
+## ConditionalDetrImageProcessorPil
 
-[[autodoc]] ConditionalDetrFeatureExtractor
-    - __call__
+[[autodoc]] ConditionalDetrImageProcessorPil
+    - preprocess
     - post_process_object_detection
     - post_process_instance_segmentation
     - post_process_semantic_segmentation

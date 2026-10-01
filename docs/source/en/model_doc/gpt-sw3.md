@@ -9,12 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2022-12-12.*
 
 # GPT-Sw3
+
 
 ## Overview
 
@@ -35,16 +37,16 @@ This model was contributed by [AI Sweden Models](https://huggingface.co/AI-Swede
 ## Usage example
 
 ```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> tokenizer = AutoTokenizer.from_pretrained("AI-Sweden-Models/gpt-sw3-356m")
->>> model = AutoModelForCausalLM.from_pretrained("AI-Sweden-Models/gpt-sw3-356m")
+tokenizer = AutoTokenizer.from_pretrained("AI-Sweden-Models/gpt-sw3-356m")
+model = AutoModelForCausalLM.from_pretrained("AI-Sweden-Models/gpt-sw3-356m", device_map="auto")
 
->>> input_ids = tokenizer("Träd är fina för att", return_tensors="pt")["input_ids"]
+input_ids = tokenizer("Träd är fina för att", return_tensors="pt").to(model.device)["input_ids"]
 
->>> generated_token_ids = model.generate(inputs=input_ids, max_new_tokens=10, do_sample=True)[0]
+generated_token_ids = model.generate(inputs=input_ids, max_new_tokens=10, do_sample=True)[0]
 
->>> print(tokenizer.decode(generated_token_ids))
+print(tokenizer.decode(generated_token_ids))
 Träd är fina för att de är färgstarka. Men ibland är det fint
 ```
 
@@ -56,8 +58,8 @@ Träd är fina för att de är färgstarka. Men ibland är det fint
 
 <Tip>
 
-The implementation uses the `GPT2Model` coupled with our `GPTSw3Tokenizer`. Refer to [GPT2Model documentation](gpt2) 
-for API reference and examples.  
+The implementation uses the `GPT2Model` coupled with our `GPTSw3Tokenizer`. Refer to [GPT2Model documentation](gpt2)
+for API reference and examples.
 
 Note that sentencepiece is required to use our tokenizer and can be installed with `pip install transformers[sentencepiece]` or `pip install sentencepiece`
 

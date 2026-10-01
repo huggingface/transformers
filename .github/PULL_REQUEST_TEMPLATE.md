@@ -14,17 +14,30 @@ Once you're done, someone will review your PR shortly (see the section "Who can 
 
 Fixes # (issue)
 
+## Code Agent Policy
+
+The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
+code agents. These often are low-quality, or fix extremely minor issues that occur rarely or never in practice.
+As a result, we're instituting a rule that **first-time contributors should not use code agents to submit PRs or issues**.
+We'd also ask autonomous "OpenClaw"-like agents not to open any PRs or issues.
+
+Issues/PRs from first-time contributors that violate this rule will probably just be closed without review, and we
+might block you, especially if you open more than one or appear to be deliberately ignoring this. We especially do not
+want new contributors to jump in on random issues to contribute an agent-written fix. This creates lots of noise
+for reviewers and other users and will almost certainly get you blocked.
+
+For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
+
+- [ ] (First-time contributors only): I confirm that this PR description and code is not written by an LLM or code agent
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request),
-      Pull Request section?
+- [ ] Did you read the [contributor guideline](https://huggingface.co/docs/transformers/contributing) and the
+      [Pull Request](https://huggingface.co/docs/transformers/pr_checks) checks?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
       to it if that's the case.
-- [ ] Did you make sure to update the documentation with your changes? Here are the
-      [documentation guidelines](https://github.com/huggingface/transformers/tree/main/docs), and
-      [here are tips on formatting docstrings](https://github.com/huggingface/transformers/tree/main/docs#writing-source-documentation).
-- [ ] Did you write any new necessary tests?
+- [ ] Did you make sure to update the documentation with your changes according to the [guidelines](https://github.com/huggingface/transformers/tree/main/docs)?
+- [ ] Did you write any new necessary [tests](https://huggingface.co/docs/transformers/testing)?
 
 
 ## Who can review?
@@ -39,41 +52,41 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- text models: @ArthurZucker
-- vision models: @amyeroberts, @qubvel
-- speech models: @ylacombe, @eustlb
+- text models: @ArthurZucker @Cyrilvallez @vasqu
+- vision models: @molbap @guarin
+- audio models: @eustlb @ebezzam @vasqu
+- multimodal models: @zucchini-nlp
 - graph models: @clefourrier
 
 Library:
 
-- flax: @sanchit-gandhi
-- generate: @zucchini-nlp (visual-language models) or @gante (all others)
+- generate: @zucchini-nlp (visual-language models) or @Cyrilvallez (all others)
+- continuous batching: @remi-or @ArthurZucker @McPatate
 - pipelines: @Rocketknight1
-- tensorflow: @gante and @Rocketknight1
-- tokenizers: @ArthurZucker
-- trainer: @muellerzr and @SunMarc
-- chat templates: @Rocketknight1
+- tokenizers: @ArthurZucker and @itazap
+- trainer: @SunMarc
+- attention: @vasqu @ArthurZucker @CyrilVallez
+- model loading (from pretrained, etc): @CyrilVallez
+- distributed: @3outeille @ArthurZucker
+- CIs: @ydshieh
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @muellerzr
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
+- quantization: @SunMarc
+- kernels: @vasqu @drbh
+- peft: @BenjaminBossan @githubnemo
+
+Devices/Backends:
+
+- AMD ROCm: @Abdennacer-Badaoui
+- MPS: @isalia20
+- Intel XPU: @IlyasMoutawwakil
+- Ascend NPU: @IlyasMoutawwakil 
 
 Documentation: @stevhliu
 
-HF projects:
-
-- accelerate: [different repo](https://github.com/huggingface/accelerate)
-- datasets: [different repo](https://github.com/huggingface/datasets)
-- diffusers: [different repo](https://github.com/huggingface/diffusers)
-- rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
-
-Maintained examples (not research project or legacy):
-
-- Flax: @sanchit-gandhi
-- PyTorch: See Models above and tag the person corresponding to the modality of the example.
-- TensorFlow: @Rocketknight1
+Research projects are not maintained and should be taken as is.
 
  -->

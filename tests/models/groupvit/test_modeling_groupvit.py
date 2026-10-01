@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,22 +14,20 @@
 """Testing suite for the PyTorch GroupViT model."""
 
 import inspect
-import os
 import random
 import tempfile
 import unittest
 
 import numpy as np
-import requests
 
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
-from transformers.testing_utils import is_flaky, is_pt_tf_cross_test, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -46,8 +43,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import CLIPProcessor
 
 
@@ -144,15 +139,12 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GroupViTVisionModel,) if is_torch_available() else ()
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = GroupViTVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -165,18 +157,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @is_flaky(description="The `index` computed with `max()` in `hard_softmax` is not stable.")
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        import tensorflow as tf
-
-        seed = 338
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        tf.random.set_seed(seed)
-        return super().test_pt_tf_model_equivalence()
 
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -215,7 +195,8 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -259,39 +240,27 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
                     continue
 
                 self.assertListEqual(
-                    list(self_attentions[i].shape[-2:]),
+                    list(self_attn.shape[-2:]),
                     [
                         self.model_tester.num_output_groups[i],
                         self.model_tester.num_output_groups[i - 1] if i > 0 else seq_len,
                     ],
                 )
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="GroupViTVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="GroupViTVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     # override since the attention mask from GroupViT is not used to compute loss, thus no grad
@@ -450,12 +419,10 @@ class GroupViTTextModelTester:
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -464,36 +431,24 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="GroupViTTextModel does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="GroupViTTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="GroupViTTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -525,8 +480,10 @@ class GroupViTModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return GroupViTConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return GroupViTConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -556,8 +513,7 @@ class GroupViTModelTester:
 class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 
@@ -583,7 +539,7 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="input_embeds are tested in individual model tests")
+    @unittest.skip(reason="inputs_embeds are tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
@@ -594,117 +550,6 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(reason="GroupViTModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # overwritten from parent as this equivalent test needs a specific `seed` and hard to get a good one!
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-5, name="outputs", attributes=None):
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol=tol, name=name, attributes=attributes)
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        import tensorflow as tf
-
-        seed = 163
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        tf.random.set_seed(seed)
-        return super().test_pt_tf_model_equivalence()
-
-    # override as the `logit_scale` parameter initilization is different for GROUPVIT
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # GROUPVIT needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
 
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -727,11 +572,22 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model = GroupViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester.vision_model_tester
+        # GroupViT returns attention grouping of each stage
+        return sum(g > 0 for g in self.model_tester.vision_model_tester.num_group_tokens)
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester.vision_model_tester
+        return model_tester.expected_num_hidden_layers
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 

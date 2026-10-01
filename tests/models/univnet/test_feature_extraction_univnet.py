@@ -14,7 +14,6 @@
 
 import itertools
 import os
-import random
 import tempfile
 import unittest
 
@@ -25,29 +24,12 @@ from transformers import UnivNetFeatureExtractor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, slow
 from transformers.utils.import_utils import is_torch_available
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
     import torch
-
-
-global_rng = random.Random()
-
-
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 class UnivNetFeatureExtractionTester:
@@ -248,7 +230,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-        # Test np.ndarray vs List[np.ndarray]
+        # Test np.ndarray vs list[np.ndarray]
         encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor([np_speech_inputs], return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
@@ -330,7 +312,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=self.feat_extract_tester.sampling_rate))
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 

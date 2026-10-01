@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -100,7 +99,7 @@ def rename_key(name):
 
 # Copied from transformers.models.donut.convert_donut_to_pytorch.convert_state_dict
 def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -275,7 +274,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the converted model and processor to the 🤗 hub.",
+        help="Whether or not to push the converted model and processor to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

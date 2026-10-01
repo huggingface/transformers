@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,27 +17,28 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
-from transformers import Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available, set_seed
+from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_bitsandbytes,
     require_torch,
-    require_torch_large_gpu,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 if is_torch_available():
     import torch
@@ -46,8 +46,8 @@ if is_torch_available():
     from transformers import (
         Emu3ForCausalLM,
         Emu3ForConditionalGeneration,
+        Emu3Model,
         Emu3Processor,
-        Emu3TextModel,
     )
 
 
@@ -88,7 +88,7 @@ class Emu3Text2TextModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         config = self.get_config()
 
@@ -131,47 +131,13 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = Emu3Text2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Emu3TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Emu3TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = Emu3TextModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = Emu3TextModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @unittest.skip("Doesn't work, tensors are not almost same")  # TODO raushan fixme
     def test_custom_4d_attention_mask(self):
@@ -197,12 +163,13 @@ class Emu3Vision2TextModelTester:
         bos_token_id=1,
         eos_token_id=2,
         image_token_id=3,
-        image_size=30,
+        image_size=15,
         codebook_size=20,
         temporal_downsample_factor=1,
         base_channels=32,
-        vq_channel_multiplier=[1, 1],
-        image_seq_length=100,
+        vq_channel_multiplier=[1, 2, 1],
+        vq_num_res_blocks=2,
+        image_seq_length=12,
         vq_img_token_start_id=3,
     ):
         self.parent = parent
@@ -224,6 +191,7 @@ class Emu3Vision2TextModelTester:
         self.codebook_size = codebook_size
         self.temporal_downsample_factor = temporal_downsample_factor
         self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_num_res_blocks = vq_num_res_blocks
         self.vq_img_token_start_id = vq_img_token_start_id
         self.base_channels = base_channels
         self.seq_length = seq_length + image_seq_length
@@ -233,9 +201,9 @@ class Emu3Vision2TextModelTester:
         config = self.get_config()
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
-        attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         pixel_values = floats_tensor(
             [
@@ -287,6 +255,7 @@ class Emu3Vision2TextModelTester:
             "base_channels": self.base_channels,
             "channel_multiplier": self.vq_channel_multiplier,
             "hidden_size": self.base_channels,
+            "attn_resolutions": [],
         }
         return Emu3Config(text_config=text_config, vq_config=vq_config, vocabulary_map=vocab_map)
 
@@ -310,63 +279,27 @@ class Emu3Vision2TextModelTester:
 
 @require_torch
 class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {}
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
+    all_model_classes = (
+        (
+            Emu3Model,
+            Emu3ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {"any-to-any": Emu3ForConditionalGeneration, "image-text-to-text": Emu3ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
+    skip_test_image_features_output_shape = True  # Emu3 uses index -3 for hidden_size instead of -1
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Emu3Config, has_text_modality=False, common_properties=["vocabulary_map"]
-        )
+        self.config_tester = ConfigTester(self, config_class=Emu3Config, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     @unittest.skip(
         "Emu3 has a VQ module that uses `weight.data` directly in forward which prevent offloding on that module"
@@ -386,45 +319,72 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip("VQ-VAE module doesn't initialize weights properly")
-    def test_initialization(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip("Emu3 has dynamic control flow in vision backbone")
     def test_generate_with_static_cache(self):
         pass
 
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of Emu3VQVAEAttentionBlock instances in the encoder, assumes that attn_resolutions is empty (default)
+        # 0 via down due to attn_resolutions being empty, 1 via middle block, 0 via up due to attn_resolutions being empty
+        return 1
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of Emu3VQVAEResnetBlock and Emu3VQVAETemporalResnetBlock instances in the encoder, plus 1 for before the block
+        # up_down_blocks for down, 2 for middle, vq_num_res_blocks for Emu3VQVAETemporalResnetBlock
+        up_down_blocks = len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks
+        return up_down_blocks + 2 + model_tester.vq_num_res_blocks + 1
+
 
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     @require_bitsandbytes
     def test_model_generation(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x200.jpg"
+        )
         prompt = "USER: <image>Describe what do you see here and tell me about the history behind it? ASSISTANT:"
 
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['USER: 64*64Describe what do you see here and tell me about the history behind it? ASSISTANT: The image captures a moment of tranquility with a black Labrador Retriever resting on a wooden floor. The dog, with its glossy black coat, is lying down with its front legs stretched out in']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['USER: 64*64Describe what do you see here and tell me about the history behind it? ASSISTANT: The image captures a moment of tranquility with a black Labrador Retriever resting on a wooden floor. The dog, with its glossy black coat, is lying down with its front legs extended forward and']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     def test_model_generation_batched(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/50/50", stream=True).raw)
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x200.jpg"
+        )
+        image_2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_247_200x200.jpg"
+        )
         prompts = [
             "USER: <image>Describe what do you see here? ASSISTANT:",
             "USER: <image>What can you say about the image? ASSISTANT:",
@@ -435,38 +395,72 @@ class Emu3IntegrationTest(unittest.TestCase):
         )
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = [
-            "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and curved, with its head lowered and ears pointed forward, suggesting alertness or focus.",
-            'USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a steep, reddish-brown cliff, which could be a'
-        ]  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): [
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and its head is lowered, suggesting a state of alertness or readiness. The animal's",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a gently sloping hill with a reddish-brown hue,",
+                ],
+                (None, None): [
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and curved, with its head lowered and ears pointed forward, suggesting alertness or focus.",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a steep, reddish-brown cliff, which could be a",
+                ],
+                ("cuda", 8): [
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image features a close-up view of a black dog with a shiny black coat, lying on a wooden surface. The dog's eyes are open and it is looking directly at the camera, giving an",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image shows a desert landscape with a large sand dune and some desert vegetation. The sand dune is prominent in the background, while the desert vegetation is more prominent in the foreground.",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     def test_model_generation_multi_image(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True), attn_implementation="eager"
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
+        # Force 32x32 tokens per image (256x256 pixels / spatial_factor 8) to avoid OOM on A10G
+        processor.image_processor.min_pixels = 256 * 256
+        processor.image_processor.max_pixels = 256 * 256
+        processor.image_processor.size = {"min_pixels": 256 * 256, "max_pixels": 256 * 256}
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/50/50", stream=True).raw)
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x200.jpg"
+        )
+        image_2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_247_200x200.jpg"
+        )
         prompt = "USER: <image><image>What do these two images have in common? ASSISTANT:"
 
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"]  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+                {
+                    ("xpu", 3): ['USER: 64*6464*64What do these two images have in common? ASSISTANT: The two images both depict a rhinoceros, yet they are significantly different in terms of focus and clarity. The rhinoceros in the upper image is in sharp focus, showing detailed textures'],
+                    ("xpu", 5): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black dog. The top image focuses on the dog's face, while the bottom image shows the dog's body. Both images display the dog's presence"],
+                    (None, None): ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"],
+                    ("cuda", 8): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black cow. One image captures a close-up of the cow's face, while the other image shows the cow in its natural environment, standing on a"],
+                }
+            )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     def test_model_generate_images(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Gen-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
 
         inputs = processor(
@@ -515,7 +509,7 @@ class Emu3IntegrationTest(unittest.TestCase):
         )
         self.assertTrue(out.shape[1] == 54)
 
-        image = model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
+        image = model.decode_image_tokens(image_tokens=out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
         images = processor.postprocess(list(image.float()), return_tensors="np")
         self.assertTrue(images["pixel_values"].shape == (3, 40, 40))
         self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
@@ -526,4 +520,4 @@ class Emu3IntegrationTest(unittest.TestCase):
             repo_type="dataset",
         )
         original_pixels = np.load(filepath)
-        self.assertTrue(np.allclose(original_pixels, images["pixel_values"]))
+        self.assertTrue(np.allclose(original_pixels, images["pixel_values"], atol=1))

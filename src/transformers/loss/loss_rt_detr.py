@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..utils import is_scipy_available, is_vision_available, requires_backends
+from ..utils import is_scipy_available, is_vision_available, logging, requires_backends
 from .loss_for_object_detection import (
     box_iou,
     dice_loss,
@@ -34,12 +34,11 @@ if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
 
+logger = logging.get_logger(__name__)
+
+
 # different for RT-DETR: not slicing the last element like in DETR one
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
@@ -73,6 +72,11 @@ class RTDetrHungarianMatcher(nn.Module):
     def forward(self, outputs, targets):
         """Performs the matching
 
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             outputs: This is a dict that contains at least these entries:
                  "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
@@ -99,7 +103,7 @@ class RTDetrHungarianMatcher(nn.Module):
         target_bbox = torch.cat([v["boxes"] for v in targets])
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        # The 1 is a constant that doesn't change the matching, it can be omitted.
         if self.use_focal_loss:
             out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
             out_prob = out_prob[:, target_ids]
@@ -112,10 +116,14 @@ class RTDetrHungarianMatcher(nn.Module):
 
         # Compute the L1 cost between boxes
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
-        # Compute the giou cost betwen boxes
+        # Compute the giou cost between boxes
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
         # Compute the final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+        # these predictions only if there are no other valid predictions.
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
@@ -131,21 +139,8 @@ class RTDetrLoss(nn.Module):
     prediction (supervise class and box).
 
     Args:
-        matcher (`DetrHungarianMatcher`):
-            Module able to compute a matching between targets and proposals.
-        weight_dict (`Dict`):
-            Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
-            `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
-        losses (`List[str]`):
-            List of all the losses to be applied. See `get_loss` for a list of all available losses.
-        alpha (`float`):
-            Parameter alpha used to compute the focal loss.
-        gamma (`float`):
-            Parameter gamma used to compute the focal loss.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
+        config (`RTDetrConfig`):
+            Configuration object holding the matcher settings, loss weights and class counts.
     """
 
     def __init__(self, config):
@@ -162,7 +157,7 @@ class RTDetrLoss(nn.Module):
         self.eos_coef = config.eos_coefficient
         empty_weight = torch.ones(config.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
         self.alpha = config.focal_loss_alpha
         self.gamma = config.focal_loss_gamma
 
@@ -175,10 +170,11 @@ class RTDetrLoss(nn.Module):
 
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([_target["boxes"][i] for _target, (_, i) in zip(targets, indices)], dim=0)
-        ious, _ = box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
-        ious = torch.diag(ious).detach()
+        ious, _ = box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))
+        ious = torch.diag(ious)
 
         src_logits = outputs["logits"]
+        dtype = src_logits.dtype
         target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
@@ -186,12 +182,13 @@ class RTDetrLoss(nn.Module):
         target_classes[idx] = target_classes_original
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
 
-        target_score_original = torch.zeros_like(target_classes, dtype=src_logits.dtype)
-        target_score_original[idx] = ious.to(target_score_original.dtype)
+        target_score_original = torch.zeros_like(target_classes, dtype=dtype)
+        target_score_original[idx] = ious.to(dtype)
         target_score = target_score_original.unsqueeze(-1) * target
 
-        pred_score = F.sigmoid(src_logits).detach()
-        weight = self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score
+        pred_score = F.sigmoid(src_logits.detach())
+        # pow promotes to float32 under float16 CUDA autocast; cast back to preserve original dtype
+        weight = (self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score).to(dtype)
 
         loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
@@ -226,8 +223,8 @@ class RTDetrLoss(nn.Module):
         logits = outputs["logits"]
         device = logits.device
         target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
+        # Count the number of predictions that are NOT "no-object" (sigmoid > 0.5 threshold)
+        card_pred = (logits.sigmoid().max(-1).values > 0.5).sum(1)
         card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
@@ -374,7 +371,7 @@ class RTDetrLoss(nn.Module):
         Args:
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
+             targets (`list[dict]`, *optional*):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
@@ -447,10 +444,16 @@ def RTDetrForObjectDetectionLoss(
 ):
     criterion = RTDetrLoss(config)
     criterion.to(device)
+    if denoising_meta_values is not None:
+        # Drop denoising queries and calculate loss only over normal queries.
+        # See https://github.com/huggingface/transformers/pull/48528
+        _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
+        _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
     # Second: compute the losses, based on outputs and labels
     outputs_loss = {}
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
+    auxiliary_outputs = None
     if config.auxiliary_loss:
         if denoising_meta_values is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)

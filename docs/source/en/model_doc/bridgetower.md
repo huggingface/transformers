@@ -13,15 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2022-06-17 and contributed to Hugging Face Transformers on 2023-01-25.*
 
 # BridgeTower
 
+
 ## Overview
 
-The BridgeTower model was proposed in [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://arxiv.org/abs/2206.08657) by Xiao Xu, Chenfei Wu, Shachar Rosenman, Vasudev Lal, Wanxiang Che, Nan Duan. The goal of this model is to build a
+The BridgeTower model was proposed in [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://huggingface.co/papers/2206.08657) by Xiao Xu, Chenfei Wu, Shachar Rosenman, Vasudev Lal, Wanxiang Che, Nan Duan. The goal of this model is to build a
 bridge between each uni-modal encoder and the cross-modal encoder to enable comprehensive and detailed interaction at each layer of the cross-modal encoder thus achieving remarkable performance on various downstream tasks with almost negligible additional performance and computational costs.
 
-This paper has been accepted to the [AAAI'23](https://aaai.org/Conferences/AAAI-23/) conference. 
+This paper has been accepted to the [AAAI'23](https://aaai.org/Conferences/AAAI-23/) conference.
 
 The abstract from the paper is the following:
 
@@ -35,7 +37,7 @@ Notably, when further scaling the model, BRIDGETOWER achieves an accuracy of 81.
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/bridgetower_architecture%20.jpg"
 alt="drawing" width="600"/>
 
-<small> BridgeTower architecture. Taken from the <a href="https://arxiv.org/abs/2206.08657">original paper.</a> </small>
+<small> BridgeTower architecture. Taken from the <a href="https://huggingface.co/papers/2206.08657">original paper.</a> </small>
 
 This model was contributed by [Anahita Bhiwandiwalla](https://huggingface.co/anahita-b), [Tiep Le](https://huggingface.co/Tile) and [Shaoyen Tseng](https://huggingface.co/shaoyent). The original code can be found [here](https://github.com/microsoft/BridgeTower).
 
@@ -49,72 +51,78 @@ The [`BridgeTowerProcessor`] wraps [`RobertaTokenizer`] and [`BridgeTowerImagePr
 encode the text and prepare the images respectively.
 
 The following example shows how to run contrastive learning using [`BridgeTowerProcessor`] and [`BridgeTowerForContrastiveLearning`].
+
 ```python
->>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
->>> import requests
->>> from PIL import Image
+import requests
+from PIL import Image
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+from transformers import BridgeTowerForContrastiveLearning, BridgeTowerProcessor
 
->>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
->>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
->>> # forward pass
->>> scores = dict()
->>> for text in texts:
-...     # prepare inputs
-...     encoding = processor(image, text, return_tensors="pt")
-...     outputs = model(**encoding)
-...     scores[text] = outputs
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+
+processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
+model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc", device_map="auto")
+
+# forward pass
+scores = dict()
+for text in texts:
+    # prepare inputs
+    encoding = processor(image, text, return_tensors="pt").to(model.device)
+    outputs = model(**encoding)
+    scores[text] = outputs
 ```
 
 The following example shows how to run image-text retrieval using [`BridgeTowerProcessor`] and [`BridgeTowerForImageAndTextRetrieval`].
+
 ```python
->>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
->>> import requests
->>> from PIL import Image
+import requests
+from PIL import Image
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+from transformers import BridgeTowerForImageAndTextRetrieval, BridgeTowerProcessor
 
->>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
->>> model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
 
->>> # forward pass
->>> scores = dict()
->>> for text in texts:
-...     # prepare inputs
-...     encoding = processor(image, text, return_tensors="pt")
-...     outputs = model(**encoding)
-...     scores[text] = outputs.logits[0, 1].item()
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+
+processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridgetower-base-itm-mlm", device_map="auto")
+
+# forward pass
+scores = dict()
+for text in texts:
+    # prepare inputs
+    encoding = processor(image, text, return_tensors="pt").to(model.device)
+    outputs = model(**encoding)
+    scores[text] = outputs.logits[0, 1].item()
 ```
 
 The following example shows how to run masked language modeling using [`BridgeTowerProcessor`] and [`BridgeTowerForMaskedLM`].
 
 ```python
->>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
->>> from PIL import Image
->>> import requests
+from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
+from PIL import Image
+import requests
 
->>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
->>> text = "a <mask> looking out of the window"
+url = "http://images.cocodataset.org/val2017/000000360943.jpg"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+text = "a <mask> looking out of the window"
 
->>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
->>> model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm", device_map="auto")
 
->>> # prepare inputs
->>> encoding = processor(image, text, return_tensors="pt")
+# prepare inputs
+encoding = processor(image, text, return_tensors="pt").to(model.device)
 
->>> # forward pass
->>> outputs = model(**encoding)
+# forward pass
+outputs = model(**encoding)
 
->>> results = processor.decode(outputs.logits.argmax(dim=-1).squeeze(0).tolist())
+results = processor.decode(outputs.logits.argmax(dim=-1).squeeze(0).tolist())
 
->>> print(results)
+print(results)
 .a cat looking out of the window.
 ```
 
@@ -122,9 +130,7 @@ Tips:
 
 - This implementation of BridgeTower uses [`RobertaTokenizer`] to generate text embeddings and OpenAI's CLIP/ViT model to compute visual embeddings.
 - Checkpoints for pre-trained [bridgeTower-base](https://huggingface.co/BridgeTower/bridgetower-base) and [bridgetower masked language modeling and image text matching](https://huggingface.co/BridgeTower/bridgetower-base-itm-mlm) are released.
-- Please refer to [Table 5](https://arxiv.org/pdf/2206.08657.pdf) for BridgeTower's performance on Image Retrieval and other down stream tasks.
-- The PyTorch version of this model is only available in torch 1.10 and higher.
-
+- Please refer to [Table 5](https://huggingface.co/papers/2206.08657) for BridgeTower's performance on Image Retrieval and other down stream tasks.
 
 ## BridgeTowerConfig
 
@@ -141,6 +147,11 @@ Tips:
 ## BridgeTowerImageProcessor
 
 [[autodoc]] BridgeTowerImageProcessor
+    - preprocess
+
+## BridgeTowerImageProcessorPil
+
+[[autodoc]] BridgeTowerImageProcessorPil
     - preprocess
 
 ## BridgeTowerProcessor
@@ -167,4 +178,3 @@ Tips:
 
 [[autodoc]] BridgeTowerForImageAndTextRetrieval
     - forward
-

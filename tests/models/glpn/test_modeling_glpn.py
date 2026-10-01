@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +33,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GLPNImageProcessor
+    from transformers import GLPNImageProcessorPil
 
 
 class GLPNConfigTester(ConfigTester):
@@ -149,10 +148,7 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_head_masking = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = GLPNModelTester(self)
@@ -164,6 +160,9 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -185,7 +184,8 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -325,7 +325,7 @@ def prepare_img():
 class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
-        image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+        image_processor = GLPNImageProcessorPil.from_pretrained("vinvino02/glpn-kitti")
         model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(torch_device)
 
         image = prepare_img()

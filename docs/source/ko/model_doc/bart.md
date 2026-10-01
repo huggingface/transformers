@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요 [[overview]]
 
-Bart 모델은 2019년 10월 29일 Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer가 발표한 [BART: 자연어 생성, 번역, 이해를 위한 잡음 제거 seq2seq 사전 훈련](https://arxiv.org/abs/1910.13461)이라는 논문에서 소개되었습니다.
+Bart 모델은 2019년 10월 29일 Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer가 발표한 [BART: 자연어 생성, 번역, 이해를 위한 잡음 제거 seq2seq 사전 훈련](https://huggingface.co/papers/1910.13461)이라는 논문에서 소개되었습니다.
 
 논문의 초록에 따르면,
 
@@ -111,7 +111,7 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 - [텍스트 분류 작업 가이드](../tasks/sequence_classification)
 - [질문 답변 작업 가이드](../tasks/question_answering)
 - [인과적 언어 모델링 작업 가이드](../tasks/language_modeling)
-- 이 [논문](https://arxiv.org/abs/2010.13002)은 [증류된 체크포인트](https://huggingface.co/models?search=distilbart)에 대해 설명합니다.
+- 이 [논문](https://huggingface.co/papers/2010.13002)은 [증류된 체크포인트](https://huggingface.co/models?search=distilbart)에 대해 설명합니다.
 
 ## BartConfig[[transformers.BartConfig]]
 
@@ -129,8 +129,6 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
     - all
 
 
-<frameworkcontent>
-<pt>
 
 ## BartModel[[transformers.BartModel]]
 
@@ -157,61 +155,6 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] BartForCausalLM
     - forward
 
-</pt>
-<tf>
-
-## TFBartModel[[transformers.TFBartModel]]
-
-[[autodoc]] TFBartModel
-    - call
-
-## TFBartForConditionalGeneration[[transformers.TFBartForConditionalGeneration]]
-
-[[autodoc]] TFBartForConditionalGeneration
-    - call
-
-## TFBartForSequenceClassification[[transformers.TFBartForSequenceClassification]]
-
-[[autodoc]] TFBartForSequenceClassification
-    - call
-
-</tf>
-<jax>
-
-## FlaxBartModel[[transformers.FlaxBartModel]]
-
-[[autodoc]] FlaxBartModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForConditionalGeneration[[transformers.FlaxBartForConditionalGeneration]]
-
-[[autodoc]] FlaxBartForConditionalGeneration
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForSequenceClassification[[transformers.FlaxBartForSequenceClassification]]
-
-[[autodoc]] FlaxBartForSequenceClassification
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForQuestionAnswering[[transformers.FlaxBartForQuestionAnswering]]
-
-[[autodoc]] FlaxBartForQuestionAnswering
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForCausalLM[[transformers.FlaxBartForCausalLM]]
-
-[[autodoc]] FlaxBartForCausalLM
-    - __call__
-</jax>
-</frameworkcontent>
 
 
 

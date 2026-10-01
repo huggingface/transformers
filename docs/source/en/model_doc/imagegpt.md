@@ -8,12 +8,14 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
 "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was contributed to Hugging Face Transformers on 2021-11-18.*
 
 # ImageGPT
+
 
 ## Overview
 
@@ -21,7 +23,7 @@ The ImageGPT model was proposed in [Generative Pretraining from Pixels](https://
 Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo Jun, David Luan, Ilya Sutskever. ImageGPT (iGPT) is a GPT-2-like
 model trained to predict the next pixel value, allowing for both unconditional and conditional image generation.
 
-The abstract from the paper is the following:
+The abstract from the [paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V1_ICML.pdf) is the following:
 
 *Inspired by progress in unsupervised representation learning for natural language, we examine whether similar models
 can learn useful representations for images. We train a sequence Transformer to auto-regressively predict pixels,
@@ -89,14 +91,14 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ImageGPTConfig
 
-## ImageGPTFeatureExtractor
-
-[[autodoc]] ImageGPTFeatureExtractor
-    - __call__
-
 ## ImageGPTImageProcessor
 
 [[autodoc]] ImageGPTImageProcessor
+    - preprocess
+
+## ImageGPTImageProcessorPil
+
+[[autodoc]] ImageGPTImageProcessorPil
     - preprocess
 
 ## ImageGPTModel

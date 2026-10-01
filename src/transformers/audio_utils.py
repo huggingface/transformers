@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team and the librosa & torchaudio authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,13 +16,534 @@ Audio processing functions to extract features from audio waveforms. This code i
 and remove unnecessary dependencies.
 """
 
+import base64
+import importlib
+import io
+import os
 import warnings
-from typing import List, Optional, Tuple, Union
+from collections.abc import Sequence
+from io import BytesIO
+from typing import TYPE_CHECKING, Any, Union
+from urllib.parse import urlparse
 
 import numpy as np
+from huggingface_hub.utils import httpx
+from packaging import version
+
+from .utils import (
+    is_librosa_available,
+    is_numpy_array,
+    is_soundfile_available,
+    is_torch_tensor,
+    is_torchaudio_available,
+    is_torchcodec_available,
+    requires_backends,
+)
+from .utils.generic import retry
 
 
-def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+if TYPE_CHECKING:
+    import torch
+
+if is_soundfile_available():
+    import soundfile as sf
+
+if is_librosa_available():
+    import librosa
+
+    # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
+    import soxr
+
+if is_torchaudio_available():
+    import torchaudio
+
+if is_torchcodec_available():
+    TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
+
+AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
+
+
+@retry(exceptions=(httpx.HTTPError,))
+def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
+    """Fetch audio bytes from a URL with automatic retry and exponential backoff."""
+    response = httpx.get(url, follow_redirects=True, timeout=timeout)
+    response.raise_for_status()
+    return response.content
+
+
+_NEEDS_TORCHCODEC = "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from this source."
+
+
+TORCHCODEC_ONLY_FILETYPES = frozenset(
+    {
+        "3gp",
+        "aac",
+        "ac3",
+        "amr",
+        "avi",
+        "flv",
+        "m4a",
+        "m4v",
+        "mkv",
+        "mov",
+        "mp4",
+        "mpg",
+        "ogv",
+        "sox",
+        "ts",
+        "webm",
+        "wma",
+        "wmv",
+        "wv",
+    }
+)
+
+
+def _format_from_source(audio: str) -> "str | None":
+    """Best-effort format token from the source *string* — the file extension (paths and URLs) or
+    the media subtype (`data:` URIs) — without resolving or decoding it. Returns None when the
+    string carries no hint, e.g. a raw base64 payload."""
+    if audio.startswith("data:"):
+        media_type = audio[len("data:") :].split(",", 1)[0].split(";", 1)[0]
+        return media_type.rpartition("/")[2].removeprefix("x-") or None
+    path = urlparse(audio).path if audio.startswith(("http://", "https://")) else audio
+    return os.path.splitext(path)[1].lstrip(".").lower() or None
+
+
+def get_audio_filetype(data: bytes) -> str:
+    """Identify a file's container/codec from its magic bytes.
+
+    A few extensions are byte-identical in their headers and collapse to a canonical type:
+    ``wavex`` -> ``wav`` and ``m4v``/``hevc.mp4`` -> ``mp4`` (all carry the ``isom`` ftyp brand).
+
+    Raises ValueError if the bytes match no supported filetype.
+    """
+    head = data[:64]
+
+    # Containers that host several filetypes -> sniff a bit deeper.
+    if head[4:8] == b"ftyp":  # ISO-BMFF: m4v & hevc share the 'isom' brand -> mp4
+        brand = head[8:12]
+        return (
+            "3gp" if brand[:3] == b"3gp" else "m4a" if brand[:3] == b"M4A" else "mov" if brand[:2] == b"qt" else "mp4"
+        )
+    if head[:4] == b"RIFF" and head[8:12] in (b"WAVE", b"AVI "):
+        return "wav" if head[8:12] == b"WAVE" else "avi"
+    if head[:4] == b"riff" and head[4:8] == bytes.fromhex("2e91cf11"):  # Wave64
+        return "w64"
+    if head[:4] == bytes.fromhex("1a45dfa3"):  # EBML: Matroska vs WebM
+        return "webm" if b"webm" in head else "mkv"
+    if head[:4] == b"OggS":  # OGG: Opus / Theora (ogv) / Vorbis (ogg)
+        page = data[:128]
+        return "opus" if b"OpusHead" in page else "ogv" if b"theora" in page else "ogg"
+    if head[:16] == bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c"):  # ASF
+        return "wmv" if bytes.fromhex("c0ef19bc4d5bcf11a8fd00805f5c442b") in data else "wma"
+    if head[:1] == b"\xff" and len(head) > 1 and head[1] & 0xE0 == 0xE0:  # MPEG/AAC sync
+        if head[1] & 0xF6 == 0xF0:  # ADTS layer bits 00 -> AAC
+            return "aac"
+        layer = head[1] >> 1 & 0x3  # MPEG audio layer field (II -> mp2, III -> mp3)
+        if layer in (0b10, 0b01):
+            return "mp2" if layer == 0b10 else "mp3"
+    if head[:1] == b"\x47" and len(data) > 188 and data[188] == 0x47:
+        return "ts"
+    if head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
+        return "aiff"
+
+    # Single fixed-signature formats, keyed by their leading bytes.
+    signatures = {
+        b"fLaC": "flac",
+        b"RF64": "rf64",
+        b"caff": "caf",
+        b".snd": "au",
+        b"#!AMR": "amr",
+        b"wvpk": "wv",
+        b".SoX": "sox",
+        b"XoS.": "sox",
+        b"Creative Voice File": "voc",
+        b"\x64\xa3\x01\x00": "sf",
+        b"\x00\x01\xa3\x64": "sf",
+        b"\x0b\x77": "ac3",
+        b"\x00\x00\x01\xba": "mpg",
+        b"FLV": "flv",
+        b"ID3": "mp3",
+    }
+    for sig, filetype in signatures.items():
+        if head.startswith(sig):
+            return filetype
+
+    raise ValueError("not supported filetype")
+
+
+def _resolve_audio_source(audio: str, timeout: float | None = None) -> "str | bytes":
+    """Resolve an audio source string to a local file path or raw bytes for a decoder.
+
+    Accepts `http(s)://` URLs (fetched with retry), local file paths (returned unchanged),
+    and base64 strings (optionally wrapped as a `data:...` URI).
+    """
+    if audio.startswith(("http://", "https://")):
+        return _fetch_audio_bytes(audio, timeout=timeout)
+    if os.path.isfile(audio):
+        return audio
+    # Not a URL or a local path — assume base64, optionally wrapped as a `data:<media-type>;base64,` URI
+    if audio.startswith("data:"):
+        audio = audio.split(",", 1)[1]
+    try:
+        return base64.b64decode(audio)
+    except Exception as e:
+        raise ValueError(
+            "Incorrect audio source. Must be a valid URL starting with `http://` or `https://`, "
+            f"a valid path to an audio file, or a base64 encoded string. Got {audio}. Failed with {e}"
+        )
+
+
+def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backend: str = "auto") -> np.ndarray:
+    """
+    Loads `audio` to an np.ndarray object.
+
+    Args:
+        audio (`str` or `np.ndarray`):
+            The audio to be loaded to the numpy array format. If a `str`, it can be an `http(s)://`
+            URL, a local file path, or a base64-encoded string (optionally wrapped as a
+            `data:<media-type>;base64,` URI).
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate to be used when loading the audio. It should be same as the
+            sampling rate the model you will be using further was trained with.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
+        backend (`str`, *optional*, defaults to `"auto"`):
+            Decoding backend: `"auto"` uses torchcodec when available (>=0.3.0) and falls back to
+            librosa; `"torchcodec"`, `"librosa"` or `"torchaudio"` force that backend (and error if it
+            is missing). `"torchaudio"` decodes with `torchaudio.load` and resamples with
+            `torchaudio.functional.resample` (matches serving stacks such as sglang bit-for-bit).
+
+    Returns:
+        `np.ndarray`: A numpy array representing the audio.
+    """
+    if isinstance(audio, np.ndarray):
+        return audio
+    if not isinstance(audio, str):
+        raise TypeError(
+            "Incorrect format used for `audio`. Should be a numpy array or a `str`: an `http(s)://` URL, "
+            "a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI)."
+        )
+
+    # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
+    if backend == "auto":
+        resolved_backend = (
+            "torchcodec" if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION else "librosa"
+        )
+    elif backend in ("torchcodec", "librosa", "torchaudio"):
+        resolved_backend = backend
+    else:
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'librosa', or 'torchaudio'.")
+    # soundfile-based backends (librosa / torchaudio) cannot decode the video-ish formats below.
+    use_torchcodec = resolved_backend == "torchcodec"
+
+    # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
+    filetype = _format_from_source(audio)
+    # 2. With librosa as the only backend, fail fast and clearly on a format it cannot decode.
+    if not use_torchcodec and filetype in TORCHCODEC_ONLY_FILETYPES:
+        raise RuntimeError(
+            f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+        )
+
+    # 3. Resolve to local path or bytes; sniff format for raw base64 payloads before passing to librosa.
+    source = _resolve_audio_source(audio, timeout=timeout)
+    if not use_torchcodec and filetype is None and isinstance(source, bytes):
+        try:
+            filetype = get_audio_filetype(source)
+        except ValueError:
+            filetype = None
+        if filetype in TORCHCODEC_ONLY_FILETYPES:
+            raise RuntimeError(
+                f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+            )
+
+    # 4. Decode with the selected backend (`requires_backends` raises a clear error if it is missing).
+    if use_torchcodec:
+        requires_backends(load_audio, ["torchcodec"])
+        from torchcodec.decoders import AudioDecoder
+
+        # `num_channels=1` matches what most models expect and librosa's default.
+        return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
+
+    if resolved_backend == "torchaudio":
+        requires_backends(load_audio, ["torchaudio"])
+        waveform, src_sampling_rate = torchaudio.load(BytesIO(source) if isinstance(source, bytes) else source)
+        waveform = waveform.mean(dim=0)  # to mono
+
+        if src_sampling_rate != sampling_rate:
+            waveform = torchaudio.functional.resample(waveform, orig_freq=src_sampling_rate, new_freq=sampling_rate)
+        return waveform.numpy().astype(np.float32)
+
+    requires_backends(load_audio, ["librosa"])
+    return librosa.load(BytesIO(source) if isinstance(source, bytes) else source, sr=sampling_rate)[0]
+
+
+def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
+    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="torchcodec"`)."""
+    warnings.warn(
+        "`load_audio_torchcodec` is deprecated and will be removed in a future version. "
+        'Use `load_audio(..., backend="torchcodec")` instead.',
+        FutureWarning,
+    )
+    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="torchcodec")
+
+
+def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
+    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="librosa"`)."""
+    warnings.warn(
+        "`load_audio_librosa` is deprecated and will be removed in a future version. "
+        'Use `load_audio(..., backend="librosa")` instead.',
+        FutureWarning,
+    )
+    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="librosa")
+
+
+def load_audio_as(
+    audio: str,
+    return_format: str,
+    timeout: int | None = None,
+    force_mono: bool = False,
+    sampling_rate: int | None = None,
+) -> str | dict[str, Any] | io.BytesIO | None:
+    """
+    Load audio from either a local file path or URL and return in specified format.
+
+    Args:
+        audio (`str`): Either a local file path or a URL to an audio file
+        return_format (`str`): Format to return the audio in:
+            - "base64": Base64 encoded string
+            - "dict": Dictionary with data and format
+            - "buffer": BytesIO object
+        timeout (`int`, *optional*): Timeout for URL requests in seconds
+        force_mono (`bool`): Whether to convert stereo audio to mono
+        sampling_rate (`int`, *optional*): If provided, the audio will be resampled to the specified sampling rate.
+
+    Returns:
+        `Union[str, Dict[str, Any], io.BytesIO, None]`:
+            - `str`: Base64 encoded audio data (if return_format="base64")
+            - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
+            - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
+    """
+    requires_backends(load_audio_as, ["librosa"])
+
+    if return_format not in ["base64", "dict", "buffer"]:
+        raise ValueError(f"Invalid return_format: {return_format}. Must be 'base64', 'dict', or 'buffer'")
+
+    try:
+        # Load audio bytes from URL or file
+        audio_bytes = None
+        if audio.startswith(("http://", "https://")):
+            audio_bytes = _fetch_audio_bytes(audio, timeout=timeout)
+        elif os.path.isfile(audio):
+            with open(audio, "rb") as audio_file:
+                audio_bytes = audio_file.read()
+        else:
+            raise ValueError(f"File not found: {audio}")
+
+        # Process audio data
+        with io.BytesIO(audio_bytes) as audio_file:
+            with sf.SoundFile(audio_file) as f:
+                audio_array = f.read(dtype="float32")
+                original_sr = f.samplerate
+                audio_format = f.format
+                if sampling_rate is not None and sampling_rate != original_sr:
+                    # Resample audio to target sampling rate
+                    audio_array = soxr.resample(audio_array, original_sr, sampling_rate, quality="HQ")
+                else:
+                    sampling_rate = original_sr
+
+        # Convert to mono if needed
+        if force_mono and audio_array.ndim != 1:
+            audio_array = audio_array.mean(axis=1)
+
+        buffer = io.BytesIO()
+        sf.write(buffer, audio_array, sampling_rate, format=audio_format.upper())
+        buffer.seek(0)
+
+        if return_format == "buffer":
+            return buffer
+        elif return_format == "base64":
+            return base64.b64encode(buffer.read()).decode("utf-8")
+        elif return_format == "dict":
+            return {
+                "data": base64.b64encode(buffer.read()).decode("utf-8"),
+                "format": audio_format.lower(),
+            }
+
+    except Exception as e:
+        raise ValueError(f"Error loading audio: {e}")
+
+
+def conv1d_output_length(module: "torch.nn.Conv1d", input_length: int) -> int:
+    """
+    Computes the output length of a 1D convolution layer according to torch's documentation:
+    https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+    """
+    return int(
+        (input_length + 2 * module.padding[0] - module.dilation[0] * (module.kernel_size[0] - 1) - 1)
+        / module.stride[0]
+        + 1
+    )
+
+
+def is_valid_audio(audio):
+    return (
+        is_numpy_array(audio)
+        or is_torch_tensor(audio)
+        or (isinstance(audio, (list, tuple)) and isinstance(audio[0], float))
+    )
+
+
+def is_valid_list_of_audio(audio):
+    return audio and all(is_valid_audio(audio_i) for audio_i in audio)
+
+
+def make_list_of_audio(
+    audio: list[AudioInput] | AudioInput,
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio.
+    Args:
+        audio (`Union[list[AudioInput], AudioInput]`):
+            The input audio.
+    Returns:
+        list: A list of audio.
+    """
+    # If it's a list of audios, it's already in the right format
+    if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
+        return audio
+
+    # If it's a single audio, convert it to a list of
+    if is_valid_audio(audio):
+        return [audio]
+
+    raise ValueError("Invalid input type. Must be a single audio or a list of audio")
+
+
+def make_list_of_audio_chat_template(
+    audio: list[AudioInput] | AudioInput | str | list[str],
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio. Unlike `make_list_of_audio`, this function also accepts a URL string or
+    local path, as accepted by chat templates.
+
+    Args:
+        audio (`Union[list[AudioInput], AudioInput]`):
+            The input audio. Can be a URL string, local path, numpy/torch array,  or a list of these.
+    Returns:
+        list: A list of audio.
+    """
+
+    # Handle string inputs
+    if isinstance(audio, str):
+        return [audio]
+    if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+        return list(audio)
+
+    # Handle numpy/torch array inputs
+    return make_list_of_audio(audio)
+
+
+def make_audio_chat_template_content(audio_item) -> dict:
+    """
+    Build a chat-template content dict for a single audio item.
+
+    Args:
+        audio_item (`str` or array-like):
+            A single audio item. Strings are treated as local paths or URLs; other values (numpy/torch arrays) are
+            forwarded directly.
+
+    Returns:
+        `dict`: A chat-template content dict, e.g. `{"type": "audio", "path": ...}` for strings or
+        `{"type": "audio", "audio": ...}` otherwise.
+    """
+    if isinstance(audio_item, str):
+        return {"type": "audio", "path": audio_item}
+    return {"type": "audio", "audio": audio_item}
+
+
+def resolve_language(language: str | None, code_to_name: dict[str, str], return_code: bool = True) -> str | None:
+    """
+    Map a language code or name to its canonical form, with validation.
+
+    Accepts either a language code (e.g. ``"zh"``, ``"en"``) or a full name (e.g. ``"Chinese"``, ``"English"``) and
+    returns the canonical code or name depending on ``return_code``. ``None`` passes through unchanged (auto-detect).
+
+    Args:
+        language (`str` or `None`):
+            The language code or full name to resolve. ``None`` is returned unchanged.
+        code_to_name (`dict[str, str]`):
+            Mapping from language code to full language name for the model's supported languages.
+        return_code (`bool`, *optional*, defaults to `True`):
+            Whether to return the canonical language ``code``. If ``False``, returns the full language ``name``.
+
+    Returns:
+        `str` or `None`: The canonical language code or name, or ``None`` if ``language`` is ``None``.
+
+    Raises:
+        `ValueError`: If the language is not recognized.
+    """
+    if language is None:
+        return None
+
+    language_lower = language.lower()
+    # Try code lookup first, then full-name lookup (both case-insensitive)
+    for code, name in code_to_name.items():
+        if language_lower == code.lower() or language_lower == name.lower():
+            return code if return_code else name
+
+    raise ValueError(
+        f"Unsupported language: {language!r}. Use a language code "
+        f"(e.g. 'en', 'zh') or full name (e.g. 'English', 'Chinese'). "
+        f"Supported codes: {sorted(code_to_name.keys())}. "
+        f"Supported names: {sorted(set(code_to_name.values()))}."
+    )
+
+
+def prepare_language_inputs(
+    language: str | list[str] | None,
+    batch_size: int,
+    code_to_name: dict[str, str],
+    allow_broadcast: bool = False,
+    return_code: bool = True,
+) -> list[str | None]:
+    """
+    Broadcast and validate a language argument to match ``batch_size``.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names (e.g. ``"Chinese"``, ``"English"``). Each value is
+    resolved to its canonical form via [`resolve_language`].
+
+    Args:
+        language (`str`, `list[str]`, or `None`):
+            The language hint(s). A single value is broadcast to the whole batch; a list must match ``batch_size``
+            (unless ``allow_broadcast`` is set). ``None`` disables language hints for the whole batch.
+        batch_size (`int`):
+            The number of samples in the batch.
+        code_to_name (`dict[str, str]`):
+            Mapping from language code to full language name for the model's supported languages.
+        allow_broadcast (`bool`, *optional*, defaults to `False`):
+            Whether a single-element list may be broadcast to the whole batch.
+        return_code (`bool`, *optional*, defaults to `True`):
+            Whether to return canonical language ``code``s. If ``False``, returns full language ``name``s.
+
+    Returns:
+        `list[str | None]`: The resolved language for each sample.
+    """
+    if language is None:
+        return [None] * batch_size
+    if isinstance(language, str):
+        return [resolve_language(language, code_to_name, return_code)] * batch_size
+    if isinstance(language, (list, tuple)):
+        if allow_broadcast and len(language) == 1 and batch_size > 1:
+            return [resolve_language(language[0], code_to_name, return_code)] * batch_size
+        if len(language) != batch_size:
+            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+        return [resolve_language(lang, code_to_name, return_code) for lang in language]
+    raise TypeError("`language` must be a string, a list of strings, or `None`.")
+
+
+def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.
 
@@ -59,7 +579,7 @@ def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return mels
 
 
-def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from mels to hertz.
 
@@ -95,9 +615,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return freq
 
 
-def hertz_to_octave(
-    freq: Union[float, np.ndarray], tuning: Optional[float] = 0.0, bins_per_octave: Optional[int] = 12
-):
+def hertz_to_octave(freq: float | np.ndarray, tuning: float = 0.0, bins_per_octave: int = 12):
     """
     Convert frequency from hertz to fractional octave numbers.
     Adapted from *librosa*.
@@ -145,9 +663,9 @@ def chroma_filter_bank(
     num_chroma: int,
     sampling_rate: int,
     tuning: float = 0.0,
-    power: Optional[float] = 2.0,
-    weighting_parameters: Optional[Tuple[float, float]] = (5.0, 2.0),
-    start_at_c_chroma: Optional[bool] = True,
+    power: float | None = 2.0,
+    weighting_parameters: tuple[float, float] | None = (5.0, 2.0),
+    start_at_c_chroma: bool = True,
 ):
     """
     Creates a chroma filter bank, i.e a linear transformation to project spectrogram bins onto chroma bins.
@@ -165,10 +683,10 @@ def chroma_filter_bank(
             Tuning deviation from A440 in fractions of a chroma bin.
         power (`float`, *optional*, defaults to 2.0):
             If 12.0, normalizes each column with their L2 norm. If 1.0, normalizes each column with their L1 norm.
-        weighting_parameters (`Tuple[float, float]`, *optional*, defaults to `(5., 2.)`):
+        weighting_parameters (`tuple[float, float]`, *optional*, defaults to `(5., 2.)`):
             If specified, apply a Gaussian weighting parameterized by the first element of the tuple being the center and
             the second element being the Gaussian half-width.
-        start_at_c_chroma (`float`, *optional*, defaults to `True`):
+        start_at_c_chroma (`bool`, *optional*, defaults to `True`):
             If True, the filter bank will start at the 'C' pitch class. Otherwise, it will start at 'A'.
     Returns:
         `np.ndarray` of shape `(num_frequency_bins, num_chroma)`
@@ -221,7 +739,7 @@ def mel_filter_bank(
     min_frequency: float,
     max_frequency: float,
     sampling_rate: int,
-    norm: Optional[str] = None,
+    norm: str | None = None,
     mel_scale: str = "htk",
     triangularize_in_mel_space: bool = False,
 ) -> np.ndarray:
@@ -247,7 +765,7 @@ def mel_filter_bank(
 
     Args:
         num_frequency_bins (`int`):
-            Number of frequencies used to compute the spectrogram (should be the same as in `stft`).
+            Number of frequency bins (should be the same as `n_fft // 2 + 1` where `n_fft` is the size of the Fourier Transform used to compute the spectrogram).
         num_mel_filters (`int`):
             Number of mel filters to generate.
         min_frequency (`float`):
@@ -271,6 +789,12 @@ def mel_filter_bank(
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
 
+    if num_frequency_bins < 2:
+        raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
+
+    if min_frequency > max_frequency:
+        raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
+
     # center points of the triangular mel filters
     mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
     mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
@@ -279,7 +803,7 @@ def mel_filter_bank(
 
     if triangularize_in_mel_space:
         # frequencies of FFT bins in Hz, but filters triangularized in mel space
-        fft_bin_width = sampling_rate / (num_frequency_bins * 2)
+        fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
         fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
         filter_freqs = mel_freqs
     else:
@@ -320,7 +844,7 @@ def window_function(
     window_length: int,
     name: str = "hann",
     periodic: bool = True,
-    frame_length: Optional[int] = None,
+    frame_length: int | None = None,
     center: bool = True,
 ) -> np.ndarray:
     """
@@ -357,7 +881,7 @@ def window_function(
         window = np.hamming(length)
     elif name in ["hann", "hann_window"]:
         window = np.hanning(length)
-    elif name in ["povey"]:
+    elif name == "povey":
         window = np.power(np.hanning(length), 0.85)
     else:
         raise ValueError(f"Unknown window function '{name}'")
@@ -379,25 +903,26 @@ def window_function(
     return padded_window
 
 
-# TODO This method does not support batching yet as we are mainly focused on inference.
+# Note: This method processes a single waveform. For batch processing, use spectrogram_batch().
 def spectrogram(
     waveform: np.ndarray,
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: Optional[int] = None,
-    power: Optional[float] = 1.0,
+    fft_length: int | None = None,
+    power: float | None = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
-    preemphasis: Optional[float] = None,
-    mel_filters: Optional[np.ndarray] = None,
+    dither: float = 0.0,
+    preemphasis: float | None = None,
+    mel_filters: np.ndarray | None = None,
     mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
+    log_mel: str | None = None,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
-    remove_dc_offset: Optional[bool] = None,
+    db_range: float | None = None,
+    remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
 ) -> np.ndarray:
     """
@@ -460,6 +985,12 @@ def spectrogram(
         onesided (`bool`, *optional*, defaults to `True`):
             If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
             frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
+        dither (`float`, *optional*, defaults to 0.0):
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
+            E.g. use 4.0 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
+            Dithering has similar effect as `mel_floor`. It reduces the high log_mel_fbank
+            values for signals with hard-zero sections, when VAD cutoff is present in the signal.
         preemphasis (`float`, *optional*)
             Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
         mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`, *optional*):
@@ -540,6 +1071,9 @@ def spectrogram(
     for frame_idx in range(num_frames):
         buffer[:frame_length] = waveform[timestep : timestep + frame_length]
 
+        if dither != 0.0:
+            buffer[:frame_length] += dither * np.random.randn(frame_length)
+
         if remove_dc_offset:
             buffer[:frame_length] = buffer[:frame_length] - buffer[:frame_length].mean()
 
@@ -582,25 +1116,26 @@ def spectrogram(
 
 
 def spectrogram_batch(
-    waveform_list: List[np.ndarray],
+    waveform_list: list[np.ndarray],
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: Optional[int] = None,
-    power: Optional[float] = 1.0,
+    fft_length: int | None = None,
+    power: float | None = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
-    preemphasis: Optional[float] = None,
-    mel_filters: Optional[np.ndarray] = None,
+    dither: float = 0.0,
+    preemphasis: float | None = None,
+    mel_filters: np.ndarray | None = None,
     mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
+    log_mel: str | None = None,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
-    remove_dc_offset: Optional[bool] = None,
+    db_range: float | None = None,
+    remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.
     This function extends the capabilities of the `spectrogram` function to handle multiple waveforms efficiently by leveraging broadcasting.
@@ -635,7 +1170,7 @@ def spectrogram_batch(
     Note: This function is designed for efficient batch processing of multiple waveforms but retains compatibility with individual waveform processing methods like `librosa.stft`.
 
     Args:
-        waveform_list (`List[np.ndarray]` with arrays of shape `(length,)`):
+        waveform_list (`list[np.ndarray]` with arrays of shape `(length,)`):
             The list of input waveforms, each a single-channel (mono) signal.
         window (`np.ndarray` of shape `(frame_length,)`):
             The windowing function to apply, including zero-padding if necessary.
@@ -653,6 +1188,10 @@ def spectrogram_batch(
             The padding strategy when `center` is `True`.
         onesided (`bool`, *optional*, defaults to `True`):
             If True, returns a one-sided spectrogram for real input signals.
+        dither (`float`, *optional*, defaults to 0.0):
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
+            E.g. use 4.0 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
         preemphasis (`float`, *optional*):
             Applies a pre-emphasis filter to each frame.
         mel_filters (`np.ndarray`, *optional*):
@@ -673,7 +1212,7 @@ def spectrogram_batch(
             Data type of the output spectrogram.
 
     Returns:
-        List[`np.ndarray`]: A list of spectrogram arrays, one for each input waveform.
+        list[`np.ndarray`]: A list of spectrogram arrays, one for each input waveform.
     """
     window_length = len(window)
 
@@ -741,6 +1280,9 @@ def spectrogram_batch(
         timestep = frame_idx * hop_length
         buffer[:, :frame_length] = padded_waveform_batch[:, timestep : timestep + frame_length]
 
+        if dither != 0.0:
+            buffer[:, :frame_length] += dither * np.random.randn(*buffer[:, :frame_length].shape)
+
         if remove_dc_offset:
             buffer[:, :frame_length] -= buffer[:, :frame_length].mean(axis=1, keepdims=True)
 
@@ -788,7 +1330,7 @@ def power_to_db(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts a power spectrogram to the decibel scale. This computes `10 * log10(spectrogram / reference)`, using basic
@@ -839,7 +1381,7 @@ def power_to_db_batch(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts a batch of power spectrograms to the decibel scale. This computes `10 * log10(spectrogram / reference)`,
@@ -888,7 +1430,7 @@ def amplitude_to_db(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-5,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts an amplitude spectrogram to the decibel scale. This computes `20 * log10(spectrogram / reference)`, using
@@ -934,7 +1476,7 @@ def amplitude_to_db(
 
 
 def amplitude_to_db_batch(
-    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: Optional[float] = None
+    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: float | None = None
 ) -> np.ndarray:
     """
     Converts a batch of amplitude spectrograms to the decibel scale. This computes `20 * log10(spectrogram / reference)`,
@@ -976,148 +1518,3 @@ def amplitude_to_db_batch(
         spectrogram = np.clip(spectrogram, a_min=max_values - db_range, a_max=None)
 
     return spectrogram
-
-
-### deprecated functions below this line ###
-
-
-def get_mel_filter_banks(
-    nb_frequency_bins: int,
-    nb_mel_filters: int,
-    frequency_min: float,
-    frequency_max: float,
-    sample_rate: int,
-    norm: Optional[str] = None,
-    mel_scale: str = "htk",
-) -> np.array:
-    warnings.warn(
-        "The function `get_mel_filter_banks` is deprecated and will be removed in version 4.31.0 of Transformers",
-        FutureWarning,
-    )
-    return mel_filter_bank(
-        num_frequency_bins=nb_frequency_bins,
-        num_mel_filters=nb_mel_filters,
-        min_frequency=frequency_min,
-        max_frequency=frequency_max,
-        sampling_rate=sample_rate,
-        norm=norm,
-        mel_scale=mel_scale,
-    )
-
-
-def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 400, center: bool = True):
-    """
-    In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
-    segments called `frames`.
-
-    The window length (window_length) defines how much of the signal is contained in each frame, while the hop length
-    defines the step between the beginning of each new frame.
-
-
-    Args:
-        waveform (`np.array` of shape `(sample_length,)`):
-            The raw waveform which will be split into smaller chunks.
-        hop_length (`int`, *optional*, defaults to 160):
-            Step between each window of the waveform.
-        fft_window_size (`int`, *optional*, defaults to 400):
-            Defines the size of the window.
-        center (`bool`, defaults to `True`):
-            Whether or not to center each frame around the middle of the frame. Centering is done by reflecting the
-            waveform on the left and on the right.
-
-    Return:
-        framed_waveform (`np.array` of shape `(waveform.shape // hop_length , fft_window_size)`):
-            The framed waveforms that can be fed to `np.fft`.
-    """
-    warnings.warn(
-        "The function `fram_wave` is deprecated and will be removed in version 4.31.0 of Transformers",
-        FutureWarning,
-    )
-    frames = []
-    for i in range(0, waveform.shape[0] + 1, hop_length):
-        if center:
-            half_window = (fft_window_size - 1) // 2 + 1
-            start = i - half_window if i > half_window else 0
-            end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
-            frame = waveform[start:end]
-            if start == 0:
-                padd_width = (-i + half_window, 0)
-                frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-            elif end == waveform.shape[0]:
-                padd_width = (0, (i - waveform.shape[0] + half_window))
-                frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-        else:
-            frame = waveform[i : i + fft_window_size]
-            frame_width = frame.shape[0]
-            if frame_width < waveform.shape[0]:
-                frame = np.lib.pad(
-                    frame, pad_width=(0, fft_window_size - frame_width), mode="constant", constant_values=0
-                )
-        frames.append(frame)
-
-    frames = np.stack(frames, 0)
-    return frames
-
-
-def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
-    """
-    Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
-    as `torch.stft`.
-
-    Args:
-        frames (`np.array` of dimension `(num_frames, fft_window_size)`):
-            A framed audio signal obtained using `audio_utils.fram_wav`.
-        windowing_function (`np.array` of dimension `(nb_frequency_bins, nb_mel_filters)`:
-            A array representing the function that will be used to reduces the amplitude of the discontinuities at the
-            boundaries of each frame when computing the STFT. Each frame will be multiplied by the windowing_function.
-            For more information on the discontinuities, called *Spectral leakage*, refer to [this
-            tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
-        fft_window_size (`int`, *optional*):
-            Size of the window om which the Fourier transform is applied. This controls the frequency resolution of the
-            spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples. The number of
-            frequency bins (`nb_frequency_bins`) used to divide the window into equal strips is equal to
-            `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionnally.
-
-    Example:
-
-    ```python
-    >>> from transformers.audio_utils import stft, fram_wave
-    >>> import numpy as np
-
-    >>> audio = np.random.rand(50)
-    >>> fft_window_size = 10
-    >>> hop_length = 2
-    >>> framed_audio = fram_wave(audio, hop_length, fft_window_size)
-    >>> spectrogram = stft(framed_audio, np.hanning(fft_window_size + 1))
-    ```
-
-    Returns:
-        spectrogram (`np.ndarray`):
-            A spectrogram of shape `(num_frames, nb_frequency_bins)` obtained using the STFT algorithm
-    """
-    warnings.warn(
-        "The function `stft` is deprecated and will be removed in version 4.31.0 of Transformers",
-        FutureWarning,
-    )
-    frame_size = frames.shape[1]
-
-    if fft_window_size is None:
-        fft_window_size = frame_size
-
-    if fft_window_size < frame_size:
-        raise ValueError("FFT size must greater or equal the frame size")
-    # number of FFT bins to store
-    nb_frequency_bins = (fft_window_size >> 1) + 1
-
-    spectrogram = np.empty((len(frames), nb_frequency_bins), dtype=np.complex64)
-    fft_signal = np.zeros(fft_window_size)
-
-    for f, frame in enumerate(frames):
-        if windowing_function is not None:
-            np.multiply(frame, windowing_function, out=fft_signal[:frame_size])
-        else:
-            fft_signal[:frame_size] = frame
-        spectrogram[f] = np.fft.fft(fft_signal, axis=0)[:nb_frequency_bins]
-    return spectrogram.T

@@ -8,129 +8,121 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
-# Hyperparameter Search using Trainer API
+# Hyperparameter search
 
-🤗 Transformers provides a [`Trainer`] class optimized for training 🤗 Transformers models, making it easier to start training without manually writing your own training loop. The [`Trainer`] provides API for hyperparameter search. This doc shows how to enable it in example.
+Hyperparameters like learning rate, batch size, and number of epochs significantly affect training results. [`Trainer.hyperparameter_search`] finds the best combination by running multiple trials, each with a different set of values, and returning the best one.
 
-## Hyperparameter Search backend
+Each trial initializes a fresh model with `model_init`, samples new hyperparameters, runs a full training loop, and reports an objective to the search backend. The backend uses each objective to inform the next trial. After all trials complete, the best hyperparameters are returned in a [`~trainer.utils.BestRun`].
 
-[`Trainer`] supports four hyperparameter search backends currently:
-[optuna](https://optuna.org/), [sigopt](https://sigopt.com/), [raytune](https://docs.ray.io/en/latest/tune/index.html) and [wandb](https://wandb.ai/site/sweeps).
+## Initializing a model
 
-you should install them before using them as the hyperparameter search backend
+Start each trial with a fresh model to avoid the previous runs' state. `model_init` is called at the start of each trial and returns a new model instance, so every trial begins from the same initial weights.
+
+```py
+from transformers import AutoModelForCausalLM
+
+def model_init(trial):
+    return AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+
+trainer = Trainer(
+    model_init=model_init,
+    args=args,
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+)
+```
+
+Don't pass `model=` and `model_init=` together or [`Trainer`] raises an error.
+
+## Define the search space
+
+Create a function that defines the search space. The format depends on the backend. If you don't define a `hp_space` function, the default 
+search covers `learning_rate`, `num_train_epochs`, and `per_device_train_batch_size`.
+
 ```bash
-pip install optuna/sigopt/wandb/ray[tune]
+# install one of these hyperparam search backends
+pip install optuna
+pip install wandb
+pip install ray[tune]
 ```
 
-## How to enable Hyperparameter search in example
+<hfoptions id="backends">
+<hfoption id="Optuna">
 
-Define the hyperparameter search space, different backends need different format.
-
-For sigopt, see sigopt [object_parameter](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter), it's like following:
-```py
->>> def sigopt_hp_space(trial):
-...     return [
-...         {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double"},
-...         {
-...             "categorical_values": ["16", "32", "64", "128"],
-...             "name": "per_device_train_batch_size",
-...             "type": "categorical",
-...         },
-...     ]
-```
-
-For optuna, see optuna [object_parameter](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py), it's like following:
+[Optuna](https://optuna.readthedocs.io/en/stable/index.html) is a lightweight framework for hyperparameter optimization.
 
 ```py
->>> def optuna_hp_space(trial):
-...     return {
-...         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
-...         "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [16, 32, 64, 128]),
-...     }
+def hp_space(trial):
+    return {
+        "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
+        "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [16, 32, 64, 128]),
+    }
 ```
 
-Optuna provides multi-objective HPO. You can pass `direction` in `hyperparameter_search` and define your own compute_objective to return multiple objective values. The Pareto Front (`List[BestRun]`) will be returned in hyperparameter_search, you should refer to the test case `TrainerHyperParameterMultiObjectOptunaIntegrationTest` in [test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py). It's like following
+</hfoption>
+<hfoption id="Ray Tune">
+
+[Ray Tune](https://docs.ray.io/en/latest/tune/index.html) is a scalable hyperparameter tuning library that can also distribute trials across multiple machines.
 
 ```py
->>> best_trials = trainer.hyperparameter_search(
-...     direction=["minimize", "maximize"],
-...     backend="optuna",
-...     hp_space=optuna_hp_space,
-...     n_trials=20,
-...     compute_objective=compute_objective,
-... )
+from ray import tune
+
+def hp_space(trial):
+    return {
+        "learning_rate": tune.loguniform(1e-6, 1e-4),
+        "per_device_train_batch_size": tune.choice([16, 32, 64, 128]),
+    }
 ```
 
-For raytune, see raytune [object_parameter](https://docs.ray.io/en/latest/tune/api/search_space.html), it's like following:
+</hfoption>
+<hfoption id="Weights & Biases">
+
+[Weights & Biases](https://docs.wandb.ai/) is an experiment tracking platform with built-in hyperparameter search. It supports Bayesian, random, and grid search strategies.
 
 ```py
->>> def ray_hp_space(trial):
-...     return {
-...         "learning_rate": tune.loguniform(1e-6, 1e-4),
-...         "per_device_train_batch_size": tune.choice([16, 32, 64, 128]),
-...     }
+def hp_space(trial):
+    return {
+        "method": "random",
+        "metric": {"name": "objective", "goal": "minimize"},
+        "parameters": {
+            "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+            "per_device_train_batch_size": {"values": [16, 32, 64, 128]},
+        },
+    }
 ```
 
-For wandb, see wandb [object_parameter](https://docs.wandb.ai/guides/sweeps/configuration), it's like following:
+</hfoption>
+</hfoptions>
+
+## Run the search
+
+Provide an optional `compute_objective` function to define the optimization target. It defaults to `eval_loss` if present, or the sum of all metric values otherwise. Pass an explicit function to avoid relying on this fallback. The search `backend` optimizes the objective over `n_trials` runs in a given `direction`.
 
 ```py
->>> def wandb_hp_space(trial):
-...     return {
-...         "method": "random",
-...         "metric": {"name": "objective", "goal": "minimize"},
-...         "parameters": {
-...             "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
-...             "per_device_train_batch_size": {"values": [16, 32, 64, 128]},
-...         },
-...     }
+def compute_objective(metrics):
+    return metrics["eval_loss"]
+
+best_run = trainer.hyperparameter_search(
+    hp_space=hp_space,
+    compute_objective=compute_objective,
+    n_trials=30,               # how many trials to run
+    direction="minimize",      # or "maximize" for metrics like accuracy/F1
+    backend="optuna",          # "optuna", "ray", or "wandb"
+)
 ```
 
-Define a `model_init` function and pass it to the [`Trainer`], as an example:
-```py
->>> def model_init(trial):
-...     return AutoModelForSequenceClassification.from_pretrained(
-...         model_args.model_name_or_path,
-...         from_tf=bool(".ckpt" in model_args.model_name_or_path),
-...         config=config,
-...         cache_dir=model_args.cache_dir,
-...         revision=model_args.model_revision,
-...         token=True if model_args.use_auth_token else None,
-...     )
-```
-
-Create a [`Trainer`] with your `model_init` function, training arguments, training and test datasets, and evaluation function:
+[`~Trainer.hyperparameter_search`] returns a [`~trainer.utils.BestRun`] containing the objective value and best hyperparameter combination.
 
 ```py
->>> trainer = Trainer(
-...     model=None,
-...     args=training_args,
-...     train_dataset=small_train_dataset,
-...     eval_dataset=small_eval_dataset,
-...     compute_metrics=compute_metrics,
-...     processing_class=tokenizer,
-...     model_init=model_init,
-...     data_collator=data_collator,
-... )
+best_run = trainer.hyperparameter_search(...)
+
+best_run.objective        # 0.38  (best eval loss)
+best_run.hyperparameters  # {"learning_rate": 5e-5, "num_train_epochs": 4, ...}
 ```
 
-Call hyperparameter search, get the best trial parameters, backend could be `"optuna"`/`"sigopt"`/`"wandb"`/`"ray"`. direction can be`"minimize"` or `"maximize"`, which indicates whether to optimize greater or lower objective.
-
-You could define your own compute_objective function, if not defined, the default compute_objective will be called, and the sum of eval metric like f1 is returned as objective value.
-
-```py
->>> best_trial = trainer.hyperparameter_search(
-...     direction="maximize",
-...     backend="optuna",
-...     hp_space=optuna_hp_space,
-...     n_trials=20,
-...     compute_objective=compute_objective,
-... )
-```
-
-## Hyperparameter search For DDP finetune
-Currently, Hyperparameter search for DDP is enabled for optuna and sigopt. Only the rank-zero process will generate the search trial and pass the argument to other ranks.
+Apply the best hyperparameters to [`TrainingArguments`] and retrain on the full dataset.

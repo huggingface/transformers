@@ -9,16 +9,17 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-03-15 and contributed to Hugging Face Transformers on 2024-10-06.*
 
 # myt5
 
 ## Overview
 
-The myt5 model was proposed in [MYTE: Morphology-Driven Byte Encoding for Better and Fairer Multilingual Language Modeling](https://arxiv.org/pdf/2403.10691.pdf) by Tomasz Limisiewicz, Terra Blevins, Hila Gonen, Orevaoghene Ahia, and Luke Zettlemoyer.
+The myt5 model was proposed in [MYTE: Morphology-Driven Byte Encoding for Better and Fairer Multilingual Language Modeling](https://huggingface.co/papers/2403.10691) by Tomasz Limisiewicz, Terra Blevins, Hila Gonen, Orevaoghene Ahia, and Luke Zettlemoyer.
 MyT5 (**My**te **T5**) is a multilingual language model based on T5 architecture.
 The model uses a **m**orphologically-driven **byte** (**MYTE**) representation described in our paper.
 **MYTE** uses codepoints corresponding to morphemes in contrast to characters used in UTF-8 encoding.
@@ -39,8 +40,3 @@ The original code can be found [here](https://github.com/tomlimi/MYTE).
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## MyT5Tokenizer
-
-[[autodoc]] MyT5Tokenizer
-

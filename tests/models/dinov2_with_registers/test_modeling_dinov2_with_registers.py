@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,9 @@
 """Testing suite for the PyTorch Dinov2WithRegisters model."""
 
 import unittest
+from functools import cached_property
+
+import pytest
 
 from transformers import Dinov2WithRegistersConfig
 from transformers.testing_utils import (
@@ -23,11 +25,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -70,6 +72,7 @@ class Dinov2WithRegistersModelTester:
         num_register_tokens=2,
         mask_ratio=0.5,
         scope=None,
+        use_swiglu_ffn=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -89,6 +92,7 @@ class Dinov2WithRegistersModelTester:
         self.initializer_range = initializer_range
         self.num_register_tokens = num_register_tokens
         self.scope = scope
+        self.use_swiglu_ffn = use_swiglu_ffn
 
         # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -123,6 +127,7 @@ class Dinov2WithRegistersModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             num_register_tokens=self.num_register_tokens,
+            use_swiglu_ffn=self.use_swiglu_ffn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -232,32 +237,20 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
+
+    def test_reverse_loading_mapping(self):
+        # Force the SwiGLU MLP: weights_in/weights_out -> gate/up/down is the only MLP path with a converter rule.
+        # Plain fc1/fc2 needs no rule and round-trips via test_save_load on the default config.
+        self.model_tester.use_swiglu_ffn = True
+        super().test_reverse_loading_mapping()
 
     def setUp(self):
         self.model_tester = Dinov2WithRegistersModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=32
         )
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad and "register_tokens" not in name:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -266,23 +259,17 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -353,7 +340,11 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.4636, -1.4582, -0.0274], [-1.4738, -0.8858, 0.3002], [0.0714, -0.2407, -1.5940]],
+            [
+                [-0.4638, -1.4563, -0.0289],
+                [-1.4736, -0.8866, 0.3005],
+                [0.0720, -0.2406, -1.5943],
+            ],
             device=torch_device,
         )
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

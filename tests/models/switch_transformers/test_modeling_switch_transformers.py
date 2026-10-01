@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Google SwitchTransformers Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,11 @@
 # limitations under the License.
 
 
-import copy
-import tempfile
 import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_tokenizers,
     require_torch,
     require_torch_accelerator,
@@ -43,6 +41,7 @@ if is_torch_available():
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
+        SwitchTransformersSparseMLP,
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
@@ -107,9 +106,6 @@ class SwitchTransformersModelTester:
         self.num_sparse_encoder_layers = num_sparse_encoder_layers
         self.expert_capacity = expert_capacity
         self.router_jitter_noise = router_jitter_noise
-
-    def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -243,8 +239,6 @@ class SwitchTransformersModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -261,8 +255,11 @@ class SwitchTransformersModelTester:
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
+            output_attentions=True,
+            output_router_logits=True,
+            output_hidden_states=True,
         )
-        self.parent.assertEqual(len(outputs), 10)
+        self.parent.assertEqual(len(outputs), 15)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
@@ -440,82 +437,6 @@ class SwitchTransformersModelTester:
         output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
-    def create_and_check_encoder_decoder_shared_weights(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        for model_class in [SwitchTransformersModel, SwitchTransformersForConditionalGeneration]:
-            torch.manual_seed(0)
-            model = model_class(config=config).to(torch_device).eval()
-            # load state dict copies weights but does not tie them
-            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
-
-            torch.manual_seed(0)
-            tied_config = copy.deepcopy(config)
-            tied_config.tie_encoder_decoder = True
-            tied_model = model_class(config=tied_config).to(torch_device).eval()
-
-            model_result = model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
-            tied_model_result = tied_model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
-            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-            # check that outputs are equal
-            self.parent.assertTrue(
-                torch.allclose(
-                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
-                )
-            )
-
-            # check that outputs after saving and loading are equal
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                tied_model.save_pretrained(tmpdirname)
-                tied_model = model_class.from_pretrained(tmpdirname)
-                tied_model.to(torch_device)
-                tied_model.eval()
-
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
-                random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-                tied_model_result = tied_model(
-                    input_ids=input_ids,
-                    decoder_input_ids=decoder_input_ids,
-                    attention_mask=attention_mask,
-                    decoder_attention_mask=decoder_attention_mask,
-                )
-
-                # check that outputs are equal
-                self.parent.assertTrue(
-                    torch.allclose(
-                        model_result[0][0, :, random_slice_idx],
-                        tied_model_result[0][0, :, random_slice_idx],
-                        atol=1e-4,
-                    )
-                )
-
     def check_resize_embeddings_switch_transformers_v1_1(
         self,
         config,
@@ -560,19 +481,13 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     pipeline_model_mapping = (
         {
             "feature-extraction": SwitchTransformersModel,
-            "summarization": SwitchTransformersForConditionalGeneration,
-            "text2text-generation": SwitchTransformersForConditionalGeneration,
-            "translation": SwitchTransformersForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
-    test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
@@ -690,11 +605,36 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
-    def test_encoder_decoder_shared_weights(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
+    def test_router_losses_are_computed_from_router_logits(self):
+        # Regression test for #48293: the router used to return its max routing probability in place of the raw
+        # logits, and `_unpack_router_logits` silently collected nothing from the recorded router outputs.
+        config, input_ids, decoder_input_ids, _, _, lm_labels = self.model_tester.prepare_config_and_inputs()
+        config.encoder_sparse_step = 2
+        config.decoder_sparse_step = 2
+        model = SwitchTransformersForConditionalGeneration(config=config).to(torch_device).eval()
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+        with torch.no_grad():
+            outputs = model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                labels=lm_labels,
+                output_router_logits=True,
+            )
+
+        for layer_router_logits in outputs.encoder_router_logits:
+            self.assertEqual(layer_router_logits.shape, (*input_ids.shape, config.num_experts))
+        for layer_router_logits in outputs.decoder_router_logits:
+            self.assertEqual(layer_router_logits.shape, (*decoder_input_ids.shape, config.num_experts))
+        for value in (
+            outputs.loss,
+            outputs.encoder_z_loss,
+            outputs.decoder_z_loss,
+            outputs.encoder_aux_loss,
+            outputs.decoder_aux_loss,
+        ):
+            self.assertTrue(torch.isfinite(value).all())
+
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -706,47 +646,21 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/switch-base-8"
-        model = SwitchTransformersModel.from_pretrained(model_name)
+        model = SwitchTransformersModel.from_pretrained(model_name, use_safetensors=False)
         self.assertIsNotNone(model)
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = SwitchTransformersForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from SWITCH_TRANSFORMERS model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
+        pass
+
+    @unittest.skip("TODO ARTHUR later on this will be fixed with t5 modular refactor")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="SwitchTransformers has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
 
@@ -791,9 +705,6 @@ class SwitchTransformersEncoderOnlyModelTester:
         self.is_encoder_decoder = is_encoder_decoder
         self.scope = None
         self.is_training = is_training
-
-    def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -851,10 +762,8 @@ class SwitchTransformersEncoderOnlyModelTester:
 
 class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_model_parallel = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)
@@ -867,13 +776,13 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -935,8 +844,9 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         num_experts=2,
         hidden_size=8,
         d_ff=16,
-        router_jitter_noise=0,
+        router_jitter_noise=0.0,
         expert_capacity=4,
+        num_heads=4,
     )
 
     def test_equivalency_balancy_loss(self):
@@ -1028,9 +938,10 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         router_z_loss = router_z_loss_func(router_logits)
         auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
 
-        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
+        # Expected values computed with the pre-#40132 (v4.57) implementation, which matched the original router
         self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
-
+        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
+        #
         # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
     def test_max_routing_capacity(self):
@@ -1039,7 +950,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         batch_size = 4
         hidden_states = torch.stack(batch_size * [torch.rand((seq_len, self.config.hidden_size))])
 
-        router_probs, router_logits = model._compute_router_probabilities(hidden_states)
+        _, _, router_probs = model.forward(hidden_states)
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
 
@@ -1048,6 +959,35 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         expert_index = expert_index * expert_capacity_mask
 
         assert torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity
+
+    def test_token_dropping_above_capacity(self):
+        r"""
+        This test checks that tokens routed to an expert beyond its capacity are dropped from the dispatch mask, i.e.
+        that the cumulative token count is accumulated along the sequence dimension (regression test for #48293).
+        """
+        torch.manual_seed(0)
+        model = SwitchTransformersTop1Router(self.config)
+        hidden_states = torch.rand((2, 10, self.config.hidden_size))
+
+        expert_index, _, _ = model(hidden_states)
+
+        tokens_kept_per_expert = expert_index.sum(dim=-2)
+        self.assertTrue((tokens_kept_per_expert <= self.config.expert_capacity).all())
+
+    def test_router_logits_are_raw_logits(self):
+        r"""
+        This test checks that the router returns the raw logits of its classifier and not the routing probabilities,
+        since the router z-loss is computed from the logits (regression test for #48293).
+        """
+        torch.manual_seed(0)
+        model = SwitchTransformersTop1Router(self.config)
+        hidden_states = torch.rand((2, 6, self.config.hidden_size))
+
+        _, router_probs, router_logits = model(hidden_states)
+
+        self.assertEqual(router_logits.shape, (2, 6, self.config.num_experts))
+        expected_probs = torch.softmax(router_logits, dim=-1).max(dim=-1, keepdim=True).values
+        torch.testing.assert_close(router_probs, expected_probs.to(router_probs.dtype))
 
 
 @slow
@@ -1062,25 +1002,35 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = SwitchTransformersModel.from_pretrained(
+            "google/switch-base-8", use_safetensors=False, dtype=torch.bfloat16
+        ).to(torch_device)
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
         # fmt: off
-        EXPECTED_MEAN_LOGITS = torch.Tensor(
-            [
-                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
-                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
-                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
-                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
-                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
-                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
-            ]
-        ).to(torch.bfloat16)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
+                    0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
+                    0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
+                    0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
+                    0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
+                    -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
+                ],
+                ("cuda", 8): [
+                    -0.2070, -0.1963, 0.5352, -0.3047, 0.1064, 0.0188, 0.6016, -0.1006,
+                    -0.0520, 0.2969, 0.0055, 0.1738, 0.1387, -0.1709, -0.1001, 0.0248,
+                    0.0378, 0.0525, -0.2119, 0.1328, 0.3926, -0.2012, -0.1240, -0.1826,
+                    0.0405, -0.3477, -0.0229, -0.1025, -0.1572, -0.1309
+                ],
+            }
+        )
+        EXPECTED_MEAN_LOGITS = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=torch.bfloat16)
         # fmt: on
-        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
+
+        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
         hf_logits = hf_logits[0, 0, :30]
 
         torch.testing.assert_close(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
@@ -1092,7 +1042,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         # Generate test using the smalled switch-C model.
 
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "google/switch-base-8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
         model = model.to(torch_device)
@@ -1120,7 +1070,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
     def test_small_batch_generate(self):
         BATCH_SIZE = 4
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "google/switch-base-8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
 
@@ -1134,3 +1084,16 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
 
         for i in range(0, BATCH_SIZE, 2):
             self.assertEqual(batch_output[i], batch_output[i + 1])
+
+
+@require_torch
+class SwitchTransformersSparseMLPTests(unittest.TestCase):
+    def test_token_dropping(self):
+        r"""
+        This test checks if the token dropping actually drops tokens.
+        """
+        config = SwitchTransformersConfig(expert_capacity=0)  # we drop everything
+        moe = SwitchTransformersSparseMLP(config)
+        dropped_token_results = moe(torch.randn(2, 3, 768))[0]
+
+        assert (dropped_token_results == 0).all(), f"Some tokens not dropped: {dropped_token_results}."

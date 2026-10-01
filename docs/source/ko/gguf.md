@@ -88,7 +88,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 
 이제 PyTorch 생태계에서 모델의 양자화되지 않은 전체 버전에 접근할 수 있으며, 다른 여러 도구들과 결합하여 사용할 수 있습니다.
 
-`gguf` 파일로 다시 변환하려면 llama.cpp의 [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py)를 사용하는 것을 권장합니다.
+`gguf` 파일로 다시 변환하려면 llama.cpp의 [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py)를 사용하는 것을 권장합니다.
 
 위의 스크립트를 완료하여 모델을 저장하고 다시 `gguf`로 내보내는 방법은 다음과 같습니다:
 

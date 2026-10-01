@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-BROS モデルは、Teakgyu Hon、Donghyun Kim、Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park によって [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) で提案されました。 
+BROS モデルは、Teakgyu Hon、Donghyun Kim、Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park によって [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://huggingface.co/papers/2108.04539) で提案されました。 
 
 BROS は *BERT Relying On Spatality* の略です。これは、一連のトークンとその境界ボックスを入力として受け取り、一連の隠れ状態を出力するエンコーダー専用の Transformer モデルです。 BROS は、絶対的な空間情報を使用する代わりに、相対的な空間情報をエンコードします。
 
@@ -57,11 +57,11 @@ def make_box_first_token_mask(bboxes, words, tokenizer, max_seq_length=512):
 
     box_first_token_mask = np.zeros(max_seq_length, dtype=np.bool_)
 
-    # encode(tokenize) each word from words (List[str])
-    input_ids_list: List[List[int]] = [tokenizer.encode(e, add_special_tokens=False) for e in words]
+    # encode(tokenize) each word from words (list[str])
+    input_ids_list: list[list[int]] = [tokenizer.encode(e, add_special_tokens=False) for e in words]
 
     # get the length of each box
-    tokens_length_list: List[int] = [len(l) for l in input_ids_list]
+    tokens_length_list: list[int] = [len(l) for l in input_ids_list]
 
     box_end_token_indices = np.array(list(itertools.accumulate(tokens_length_list)))
     box_start_token_indices = box_end_token_indices - np.array(tokens_length_list)

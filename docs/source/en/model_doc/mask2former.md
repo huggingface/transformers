@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-12-02 and contributed to Hugging Face Transformers on 2023-01-16.*
 
 # Mask2Former
 
+
 ## Overview
 
-The Mask2Former model was proposed in [Masked-attention Mask Transformer for Universal Image Segmentation](https://arxiv.org/abs/2112.01527) by Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar. Mask2Former is a unified framework for panoptic, instance and semantic segmentation and features significant performance and efficiency improvements over [MaskFormer](maskformer).
+The Mask2Former model was proposed in [Masked-attention Mask Transformer for Universal Image Segmentation](https://huggingface.co/papers/2112.01527) by Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar. Mask2Former is a unified framework for panoptic, instance and semantic segmentation and features significant performance and efficiency improvements over [MaskFormer](maskformer).
 
 The abstract from the paper is the following:
 
@@ -27,7 +29,7 @@ of semantics defines a task. While only the semantics of each task differ, curre
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mask2former_architecture.jpg" alt="drawing" width="600"/>
 
-<small> Mask2Former architecture. Taken from the <a href="https://arxiv.org/abs/2112.01527">original paper.</a> </small>
+<small> Mask2Former architecture. Taken from the <a href="https://huggingface.co/papers/2112.01527">original paper.</a> </small>
 
 This model was contributed by [Shivalika Singh](https://huggingface.co/shivi) and [Alara Dirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/facebookresearch/Mask2Former).
 
@@ -70,7 +72,14 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] Mask2FormerImageProcessor
     - preprocess
-    - encode_inputs
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
+
+## Mask2FormerImageProcessorPil
+
+[[autodoc]] Mask2FormerImageProcessorPil
+    - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation

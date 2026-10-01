@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -188,12 +187,10 @@ class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_missing_keys = False  # why?
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DPRModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DPRConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DPRConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

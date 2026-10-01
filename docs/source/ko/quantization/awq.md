@@ -62,13 +62,13 @@ model_id = "TheBloke/zephyr-7B-alpha-AWQ"
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0")
 ```
 
-AWQ 양자화 모델을 가져오면 자동으로 성능상의 이유로 인해 가중치들의 기본값이 fp16으로 설정됩니다. 가중치를 다른 형식으로 가져오려면, `torch_dtype` 파라미터를 사용하세요:
+AWQ 양자화 모델을 가져오면 자동으로 성능상의 이유로 인해 가중치들의 기본값이 fp16으로 설정됩니다. 가중치를 다른 형식으로 가져오려면, `dtype` 파라미터를 사용하세요:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_id = "TheBloke/zephyr-7B-alpha-AWQ"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
 ```
 
 추론을 더욱 가속화하기 위해 AWQ 양자화와 [FlashAttention-2](../perf_infer_gpu_one#flashattention-2) 를 결합 할 수 있습니다:

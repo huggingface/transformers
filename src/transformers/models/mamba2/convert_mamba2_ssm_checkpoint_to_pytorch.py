@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 state-spaces/mamba2 org and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import argparse
 import json
 from functools import partial
 from os import path
-from typing import Dict, Optional
 
 import torch
 from safetensors import safe_open
@@ -27,7 +25,7 @@ from safetensors.torch import save_model
 from transformers import GPTNeoXTokenizerFast, LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM
 
 
-def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str) -> Dict[str, torch.Tensor]:
+def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str) -> dict[str, torch.Tensor]:
     # Load weights and config from paths
     original_state_dict = {}
     with safe_open(path.join(mamba2_checkpoint_path, ckpt_name), framework="pt") as f:
@@ -37,11 +35,11 @@ def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str
     return original_state_dict
 
 
-def load_state_dict_from_torch(mamba2_checkpoint_path: str, ckpt_name: str) -> Dict[str, torch.Tensor]:
-    return torch.load(path.join(mamba2_checkpoint_path, ckpt_name), map_location="cpu")
+def load_state_dict_from_torch(mamba2_checkpoint_path: str, ckpt_name: str) -> dict[str, torch.Tensor]:
+    return torch.load(path.join(mamba2_checkpoint_path, ckpt_name), map_location="cpu", weights_only=True)
 
 
-def convert_ssm_config_to_hf_config(config_ssm: Dict, mamba2_model_dict: Dict) -> Mamba2Config:
+def convert_ssm_config_to_hf_config(config_ssm: dict, mamba2_model_dict: dict) -> Mamba2Config:
     """Convert a Mamba2Config from mamba_ssm to a Mamba2Config from here."""
     hf_config = Mamba2Config()
 
@@ -71,7 +69,7 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict, mamba2_model_dict: Dict) -
 def load_and_save_tokenizer(
     mamba2_model_type: str,
     output_dir: str,
-    tokenizer_model_path: Optional[str] = None,
+    tokenizer_model_path: str | None = None,
 ) -> None:
     tokenizer = None
 
@@ -118,7 +116,7 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     mamba2_model_type: str,
     precision: str,
     output_dir: str,
-    tokenizer_model_path: Optional[str] = None,
+    tokenizer_model_path: str | None = None,
 ) -> None:
     mamba2_model_dict = _MAMBA2_MODELS_DICT[mamba2_model_type]
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ python utils/update_metadata.py --token <token> --commit_sha <commit_sha>
 ```
 
 Usage to check all pipelines are properly defined in the constant `PIPELINE_TAGS_AND_AUTO_MODELS` of this script, so
-that new pipelines are properly added as metadata (as used in `make repo-consistency`):
+that new pipelines are properly added as metadata (as used in `make check-repo`):
 
 ```bash
 python utils/update_metadata.py --check-only
@@ -34,14 +33,27 @@ import collections
 import os
 import re
 import tempfile
-from typing import Dict, List, Tuple
 
 import pandas as pd
 from datasets import Dataset
 from huggingface_hub import hf_hub_download, upload_folder
 
+from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 from transformers.utils import direct_transformers_import
 
+
+CHECKER_CONFIG = {
+    "name": "update_metadata",
+    "label": "Model metadata",
+    # Approximate: imports the transformers module and inspects pipeline/auto mappings
+    # at runtime. Does not iterate over files matching these globs directly.
+    "cache_globs": ["src/transformers/models/**/*.py", "docs/**/*.md"],
+    "check_args": ["--check-only"],
+    # No safe local "fix" mode: running without `--check-only` pushes to the
+    # `huggingface/transformers-metadata` Hub dataset (requires an auth token).
+    # `fix_args=None` makes `make fix-repo` skip this checker, like other check-only ones.
+    "fix_args": None,
+}
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/update_metadata.py
@@ -52,10 +64,7 @@ TRANSFORMERS_PATH = "src/transformers"
 transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
-# Regexes that match TF/Flax/PT model names.
-_re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
-_re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
-# Will match any TF or Flax model too so need to be in an else branch afterthe two previous regexes.
+# Regexes that match model names
 _re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration|ForRetrieval)")
 
 
@@ -69,8 +78,8 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("automatic-speech-recognition", "MODEL_FOR_CTC_MAPPING_NAMES", "AutoModelForCTC"),
     ("image-classification", "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForImageClassification"),
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
+    ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
     ("image-text-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
-    ("image-to-image", "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES", "AutoModelForImageToImage"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
     (
@@ -110,7 +119,6 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
     ),
-    ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
     (
         "zero-shot-image-classification",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
@@ -121,10 +129,11 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("mask-generation", "MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "AutoModelForMaskGeneration"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
+    ("keypoint-matching", "MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES", "AutoModelForKeypointMatching"),
 ]
 
 
-def camel_case_split(identifier: str) -> List[str]:
+def camel_case_split(identifier: str) -> list[str]:
     """
     Split a camel-cased name into words.
 
@@ -132,7 +141,7 @@ def camel_case_split(identifier: str) -> List[str]:
         identifier (`str`): The camel-cased name to parse.
 
     Returns:
-        `List[str]`: The list of words in the identifier (as seprated by capital letters).
+        `List[str]`: The list of words in the identifier (as separated by capital letters).
 
     Example:
 
@@ -152,26 +161,17 @@ def get_frameworks_table() -> pd.DataFrame:
     modules.
     """
     # Dictionary model names to config.
-    config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    config_mapping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
     model_prefix_to_model_type = {
-        config.replace("Config", ""): model_type for model_type, config in config_maping_names.items()
+        config.replace("Config", ""): model_type for model_type, config in config_mapping_names.items()
     }
 
-    # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
     pt_models = collections.defaultdict(bool)
-    tf_models = collections.defaultdict(bool)
-    flax_models = collections.defaultdict(bool)
 
     # Let's lookup through all transformers object (once) and find if models are supported by a given backend.
     for attr_name in dir(transformers_module):
         lookup_dict = None
-        if _re_tf_models.match(attr_name) is not None:
-            lookup_dict = tf_models
-            attr_name = _re_tf_models.match(attr_name).groups()[0]
-        elif _re_flax_models.match(attr_name) is not None:
-            lookup_dict = flax_models
-            attr_name = _re_flax_models.match(attr_name).groups()[0]
-        elif _re_pt_models.match(attr_name) is not None:
+        if _re_pt_models.match(attr_name) is not None:
             lookup_dict = pt_models
             attr_name = _re_pt_models.match(attr_name).groups()[0]
 
@@ -183,14 +183,12 @@ def get_frameworks_table() -> pd.DataFrame:
                 # Try again after removing the last word in the name
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
 
-    all_models = set(list(pt_models.keys()) + list(tf_models.keys()) + list(flax_models.keys()))
+    all_models = set(pt_models.keys())
     all_models = list(all_models)
     all_models.sort()
 
     data = {"model_type": all_models}
     data["pytorch"] = [pt_models[t] for t in all_models]
-    data["tensorflow"] = [tf_models[t] for t in all_models]
-    data["flax"] = [flax_models[t] for t in all_models]
 
     # Now let's find the right processing class for each model. In order we check if there is a Processor, then a
     # Tokenizer, then a FeatureExtractor, then an ImageProcessor
@@ -213,9 +211,9 @@ def get_frameworks_table() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
+def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> dict[str, tuple[str, str]]:
     """
-    Update the table maping models to pipelines and auto classes without removing old keys if they don't exist anymore.
+    Update the table mapping models to pipelines and auto classes without removing old keys if they don't exist anymore.
 
     Args:
         table (`Dict[str, Tuple[str, str]]`):
@@ -225,29 +223,23 @@ def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> D
     Returns:
         `Dict[str, Tuple[str, str]]`: The updated table in the same format.
     """
-    auto_modules = [
-        transformers_module.models.auto.modeling_auto,
-        transformers_module.models.auto.modeling_tf_auto,
-        transformers_module.models.auto.modeling_flax_auto,
-    ]
-    for pipeline_tag, model_mapping, auto_class in PIPELINE_TAGS_AND_AUTO_MODELS:
-        model_mappings = [model_mapping, f"TF_{model_mapping}", f"FLAX_{model_mapping}"]
-        auto_classes = [auto_class, f"TF_{auto_class}", f"Flax_{auto_class}"]
-        # Loop through all three frameworks
-        for module, cls, mapping in zip(auto_modules, auto_classes, model_mappings):
-            # The type of pipeline may not exist in this framework
-            if not hasattr(module, mapping):
-                continue
-            # First extract all model_names
-            model_names = []
-            for name in getattr(module, mapping).values():
-                if isinstance(name, str):
-                    model_names.append(name)
-                else:
-                    model_names.extend(list(name))
+    module = transformers_module.models.auto.modeling_auto
+    for pipeline_tag, model_mapping, cls in PIPELINE_TAGS_AND_AUTO_MODELS:
+        if not hasattr(module, model_mapping):
+            continue
 
-            # Add pipeline tag and auto model class for those models
-            table.update({model_name: (pipeline_tag, cls) for model_name in model_names})
+        # Iterate over all model_names for given mapping
+        for names in getattr(module, model_mapping).values():
+            if isinstance(names, str):
+                names = [names]
+
+            for name in names:
+                # For multimodal LLMs, keep the fine-grained pipeline tag but use a generic `AutoClass`
+                if name in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values():
+                    table[name] = (pipeline_tag, "AutoModelForMultimodalLM")
+                else:
+                    # Add pipeline tag and auto model class for those models
+                    table[name] = (pipeline_tag, cls)
 
     return table
 
@@ -290,7 +282,7 @@ def update_metadata(token: str, commit_sha: str):
         repo_type="dataset",
         token=token,
     )
-    with open(hub_frameworks_json) as f:
+    with open(hub_frameworks_json, encoding="utf-8") as f:
         hub_frameworks_json = f.read()
 
     hub_pipeline_tags_json = hf_hub_download(
@@ -299,16 +291,16 @@ def update_metadata(token: str, commit_sha: str):
         repo_type="dataset",
         token=token,
     )
-    with open(hub_pipeline_tags_json) as f:
+    with open(hub_pipeline_tags_json, encoding="utf-8") as f:
         hub_pipeline_tags_json = f.read()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
         tags_dataset.to_json(os.path.join(tmp_dir, "pipeline_tags.json"))
 
-        with open(os.path.join(tmp_dir, "frameworks.json")) as f:
+        with open(os.path.join(tmp_dir, "frameworks.json"), encoding="utf-8") as f:
             frameworks_json = f.read()
-        with open(os.path.join(tmp_dir, "pipeline_tags.json")) as f:
+        with open(os.path.join(tmp_dir, "pipeline_tags.json"), encoding="utf-8") as f:
             pipeline_tags_json = f.read()
 
         frameworks_equal = hub_frameworks_json == frameworks_json
@@ -359,6 +351,30 @@ def check_pipeline_tags():
         )
 
 
+def check_multimodal_auto_class_assignment():
+    """
+    Check that non-multimodal models are never assigned ``AutoModelForMultimodalLM`` as their auto
+    class by ``update_pipeline_and_auto_class_table``.
+
+    The bug this guards against: the old code mutated the ``cls`` loop variable when a multimodal
+    model was encountered, causing subsequent non-multimodal models processed in the same outer
+    loop iteration to inherit ``"AutoModelForMultimodalLM"`` instead of their correct auto class.
+    """
+    table = update_pipeline_and_auto_class_table({})
+    multimodal_names = set(MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values())
+    incorrect = [
+        name
+        for name, (_, auto_class) in table.items()
+        if auto_class == "AutoModelForMultimodalLM" and name not in multimodal_names
+    ]
+    if incorrect:
+        raise ValueError(
+            "The following non-multimodal models were incorrectly assigned `AutoModelForMultimodalLM` "
+            f"by `update_pipeline_and_auto_class_table`: {', '.join(sorted(incorrect))}. "
+            "This is likely caused by mutating the `cls` loop variable inside the function."
+        )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", type=str, help="The token to use to push to the transformers-metadata dataset.")
@@ -368,5 +384,6 @@ if __name__ == "__main__":
 
     if args.check_only:
         check_pipeline_tags()
+        check_multimodal_auto_class_assignment()
     else:
         update_metadata(args.token, args.commit_sha)

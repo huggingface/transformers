@@ -56,15 +56,15 @@ class LlavaConfigTest(unittest.TestCase):
 
     def test_arbitrary_reload(self):
         """
-        Simple test for reloading arbirarily composed subconfigs
+        Simple test for reloading arbitrarily composed subconfigs
         """
-        default_values = LlavaConfig().to_dict()
-        default_values["vision_config"]["model_type"] = "qwen2_vl"
+        default_values = LlavaConfig().to_diff_dict()
+        default_values["vision_config"]["model_type"] = "pixtral"
         default_values["text_config"]["model_type"] = "opt"
-
+        self.maxDiff = None
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = LlavaConfig(**default_values)
             config.save_pretrained(tmp_dir)
 
             reloaded = LlavaConfig.from_pretrained(tmp_dir)
-            assert config.to_dict() == reloaded.to_dict()
+            self.assertDictEqual(config.to_dict(), reloaded.to_dict())

@@ -23,14 +23,12 @@ if is_sagemaker_available():
 @parameterized_class(
     [
         {
-            "framework": "pytorch",
             "script": "run_glue_model_parallelism.py",
             "model_name_or_path": "FacebookAI/roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
             "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
         {
-            "framework": "pytorch",
             "script": "run_glue.py",
             "model_name_or_path": "FacebookAI/roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
@@ -40,12 +38,11 @@ if is_sagemaker_available():
 )
 class MultiNodeTest(unittest.TestCase):
     def setUp(self):
-        if self.framework == "pytorch":
-            subprocess.run(
-                f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
-                encoding="utf-8",
-                check=True,
-            )
+        subprocess.run(
+            f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
+            encoding="utf-8",
+            check=True,
+        )
         assert hasattr(self, "env")
 
     def create_estimator(self, instance_count):
@@ -118,5 +115,5 @@ class MultiNodeTest(unittest.TestCase):
         assert all(t <= self.results["eval_loss"] for t in eval_loss)
 
         # dump tests result into json file to share in PR
-        with open(f"{estimator.latest_training_job.name}.json", "w") as outfile:
+        with open(f"{estimator.latest_training_job.name}.json", "w", encoding="utf-8") as outfile:
             json.dump({"train_time": train_runtime, "eval_accuracy": eval_accuracy, "eval_loss": eval_loss}, outfile)

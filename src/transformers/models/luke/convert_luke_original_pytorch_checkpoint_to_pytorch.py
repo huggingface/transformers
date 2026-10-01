@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,12 +26,12 @@ from transformers.tokenization_utils_base import AddedToken
 @torch.no_grad()
 def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, pytorch_dump_folder_path, model_size):
     # Load configuration defined in the metadata file
-    with open(metadata_path) as metadata_file:
+    with open(metadata_path, encoding="utf-8") as metadata_file:
         metadata = json.load(metadata_file)
     config = LukeConfig(use_entity_aware_attention=True, **metadata["model_config"])
 
     # Load in the weights from the checkpoint_path
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # Load the entity vocab file
     entity_vocab = load_entity_vocab(entity_vocab_path)
@@ -47,7 +46,11 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
-    with open(os.path.join(pytorch_dump_folder_path, LukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:
+    with open(
+        os.path.join(pytorch_dump_folder_path, LukeTokenizer.vocab_files_names["entity_vocab_file"]),
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(entity_vocab, f)
 
     tokenizer = LukeTokenizer.from_pretrained(pytorch_dump_folder_path)
@@ -127,7 +130,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         raise ValueError
 
     # Finally, save our PyTorch model and tokenizer
-    print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))
+    print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
 

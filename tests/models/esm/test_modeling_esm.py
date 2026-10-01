@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,22 @@
 # limitations under the License.
 """Testing suite for the PyTorch ESM model."""
 
+import tempfile
 import unittest
 
-from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
+import pytest
+
+from transformers import BitsAndBytesConfig, DataCollatorWithFlattening, EsmConfig, is_torch_available, set_seed
+from transformers.testing_utils import (
+    TestCasePlus,
+    is_flaky,
+    require_bitsandbytes,
+    require_flash_attn,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -60,6 +71,7 @@ class EsmModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
+        position_embedding_type="rotary",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,6 +95,7 @@ class EsmModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.position_embedding_type = position_embedding_type
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -117,6 +130,7 @@ class EsmModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            position_embedding_type=self.position_embedding_type,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
@@ -211,7 +225,7 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = EsmModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=48)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -219,12 +233,6 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -237,6 +245,90 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_esm_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    def test_model_generation_flash_attn_with_packing(self):
+        """Test that packing two sequences produces the same per-sample outputs as running
+        them in a batched run.
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        config.position_embedding_type = "rotary"
+        config.attn_implementation = "flash_attention_2"
+
+        model = EsmModel(config=config).to(dtype=torch.bfloat16, device=torch_device).eval()
+
+        seq_len_a = 3
+        seq_len_b = 4
+
+        input_ids_a = ids_tensor([1, seq_len_a], config.vocab_size)
+        input_ids_b = ids_tensor([1, seq_len_b], config.vocab_size)
+
+        # --- Batched run ----
+        max_len = max(seq_len_a, seq_len_b)
+        pad_a = max_len - seq_len_a
+        pad_b = max_len - seq_len_b
+
+        batched_input_ids = torch.cat(
+            [
+                torch.nn.functional.pad(input_ids_a, (0, pad_a), value=config.pad_token_id),
+                torch.nn.functional.pad(input_ids_b, (0, pad_b), value=config.pad_token_id),
+            ],
+            dim=0,
+        ).to(torch_device)
+
+        batched_attention_mask = torch.cat(
+            [
+                torch.nn.functional.pad(torch.ones(1, seq_len_a, dtype=torch.long), (0, pad_a)),
+                torch.nn.functional.pad(torch.ones(1, seq_len_b, dtype=torch.long), (0, pad_b)),
+            ],
+            dim=0,
+        ).to(torch_device)
+
+        with torch.no_grad():
+            result_batched = model(batched_input_ids, attention_mask=batched_attention_mask)
+
+        # --- Packed run ----
+        collator = DataCollatorWithFlattening(
+            return_position_ids=True,
+            return_flash_attn_kwargs=True,
+        )
+
+        features = [
+            {"input_ids": input_ids_a.squeeze(0)},
+            {"input_ids": input_ids_b.squeeze(0)},
+        ]
+
+        packed = collator(features)
+
+        packed_kwargs = {
+            "input_ids": packed["input_ids"].to(torch_device),
+            "attention_mask": None,
+            "position_ids": packed["position_ids"].to(torch_device),
+            "cu_seq_lens_q": packed["cu_seq_lens_q"].to(torch_device),
+            "cu_seq_lens_k": packed["cu_seq_lens_k"].to(torch_device),
+            "max_length_q": packed["max_length_q"],
+            "max_length_k": packed["max_length_k"],
+        }
+
+        with torch.no_grad():
+            result_packed = model(**packed_kwargs)
+
+        # Compare per-sample outputs
+        torch.testing.assert_close(
+            result_batched.last_hidden_state[0, :seq_len_a],
+            result_packed.last_hidden_state[0, :seq_len_a],
+            atol=1e-5,
+            rtol=1e-5,
+        )
+        torch.testing.assert_close(
+            result_batched.last_hidden_state[1, :seq_len_b],
+            result_packed.last_hidden_state[0, seq_len_a:],
+            atol=1e-5,
+            rtol=1e-5,
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -297,6 +389,45 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_2_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(reason="Model does not support Flash Attention 2")
+
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            set_seed(42)
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.float16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                torch.testing.assert_close(logits_fa, logits, atol=1e-2, rtol=1e-3)
+
+    @unittest.skip("ESM embeddings are scaled due to token dropout so the test does not apply")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
 
 @slow
 @require_torch
@@ -331,16 +462,35 @@ class EsmModelIntegrationTest(TestCasePlus):
             )
             torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
+    def test_inv_freq_preserves_checkpoint_precision(self):
+        """The checkpoint's inv_freq was saved after an fp16 cast, so it differs from a fresh
+        float32 computation but matches exactly when the fresh values are round-tripped through fp16."""
+        model_from_ckpt = EsmModel.from_pretrained("facebook/esm2_t6_8M_UR50D")
+        config = EsmConfig.from_pretrained("facebook/esm2_t6_8M_UR50D")
+        model_fresh = EsmModel(config)
+
+        inv_freq_ckpt = model_from_ckpt.rotary_embeddings.inv_freq
+        inv_freq_fresh = model_fresh.rotary_embeddings.inv_freq
+
+        self.assertFalse(torch.equal(inv_freq_ckpt, inv_freq_fresh))
+        self.assertTrue(torch.equal(inv_freq_ckpt, inv_freq_fresh.to(torch.float16).float()))
+
     @require_bitsandbytes
     def test_inference_bitsandbytes(self):
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "hf-internal-testing/esm2_t36_3B_UR50D-safetensors",
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+        )
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works
         with torch.no_grad():
             _ = model(input_ids)[0]
 
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_4bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "hf-internal-testing/esm2_t36_3B_UR50D-safetensors",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+        )
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works

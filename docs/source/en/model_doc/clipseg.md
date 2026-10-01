@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-12-18 and contributed to Hugging Face Transformers on 2022-11-08.*
 
 # CLIPSeg
 
+
 ## Overview
 
-The CLIPSeg model was proposed in [Image Segmentation Using Text and Image Prompts](https://arxiv.org/abs/2112.10003) by Timo Lüddecke
+The CLIPSeg model was proposed in [Image Segmentation Using Text and Image Prompts](https://huggingface.co/papers/2112.10003) by Timo Lüddecke
 and Alexander Ecker. CLIPSeg adds a minimal decoder on top of a frozen [CLIP](clip) model for zero-shot and one-shot image segmentation.
 
 The abstract from the paper is the following:
@@ -42,9 +44,9 @@ can be formulated. Finally, we find our system to adapt well
 to generalized queries involving affordances or properties*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
-<small> CLIPSeg overview. Taken from the <a href="https://arxiv.org/abs/2112.10003">original paper.</a> </small>
+<small> CLIPSeg overview. Taken from the <a href="https://huggingface.co/papers/2112.10003">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/timojl/clipseg).
@@ -67,7 +69,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## CLIPSegConfig
 
 [[autodoc]] CLIPSegConfig
-    - from_text_vision_configs
 
 ## CLIPSegTextConfig
 
@@ -80,6 +81,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## CLIPSegProcessor
 
 [[autodoc]] CLIPSegProcessor
+    - __call__
 
 ## CLIPSegModel
 

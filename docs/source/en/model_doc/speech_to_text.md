@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2020-10-11 and contributed to Hugging Face Transformers on 2021-03-10.*
 
 # Speech2Text
 
+
 ## Overview
 
-The Speech2Text model was proposed in [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://arxiv.org/abs/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a
+The Speech2Text model was proposed in [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://huggingface.co/papers/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a
 transformer-based seq2seq (encoder-decoder) model designed for end-to-end Automatic Speech Recognition (ASR) and Speech
 Translation (ST). It uses a convolutional downsampler to reduce the length of speech inputs by 3/4th before they are
 fed into the encoder. The model is trained with standard autoregressive cross-entropy loss and generates the
@@ -46,21 +48,22 @@ be installed as follows: `apt install libsndfile1-dev`
 - ASR and Speech Translation
 
 ```python
->>> import torch
->>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
->>> from datasets import load_dataset
+from datasets import load_dataset
 
->>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
->>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+from transformers import Speech2TextForConditionalGeneration, Speech2TextProcessor
 
 
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr", device_map="auto")
+processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
->>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
->>> generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
 
->>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
->>> transcription
+ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").to(model.device)
+generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
+
+transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+transcription
 ['mister quilter is the apostle of the middle classes and we are glad to welcome his gospel']
 ```
 
@@ -69,28 +72,29 @@ be installed as follows: `apt install libsndfile1-dev`
   For multilingual speech translation models, `eos_token_id` is used as the `decoder_start_token_id` and
   the target language id is forced as the first generated token. To force the target language id as the first
   generated token, pass the `forced_bos_token_id` parameter to the `generate()` method. The following
-  example shows how to transate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
+  example shows how to translate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
   checkpoint.
 
 ```python
->>> import torch
->>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
->>> from datasets import load_dataset
+from datasets import load_dataset
 
->>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
->>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
+from transformers import Speech2TextForConditionalGeneration, Speech2TextProcessor
 
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
 
->>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
->>> generated_ids = model.generate(
-...     inputs["input_features"],
-...     attention_mask=inputs["attention_mask"],
-...     forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"],
-... )
+model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st", device_map="auto")
+processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
->>> translation = processor.batch_decode(generated_ids, skip_special_tokens=True)
->>> translation
+ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").to(model.device)
+generated_ids = model.generate(
+    inputs["input_features"],
+    attention_mask=inputs["attention_mask"],
+    forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"],
+)
+
+translation = processor.batch_decode(generated_ids, skip_special_tokens=True)
+translation
 ["(Vidéo) Si M. Kilder est l'apossible des classes moyennes, et nous sommes heureux d'être accueillis dans son évangile."]
 ```
 
@@ -122,9 +126,6 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
     - batch_decode
     - decode
 
-<frameworkcontent>
-<pt>
-
 ## Speech2TextModel
 
 [[autodoc]] Speech2TextModel
@@ -134,19 +135,3 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
 
 [[autodoc]] Speech2TextForConditionalGeneration
     - forward
-
-</pt>
-<tf>
-
-## TFSpeech2TextModel
-
-[[autodoc]] TFSpeech2TextModel
-    - call
-
-## TFSpeech2TextForConditionalGeneration
-
-[[autodoc]] TFSpeech2TextForConditionalGeneration
-    - call
-
-</tf>
-</frameworkcontent>

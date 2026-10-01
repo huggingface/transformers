@@ -47,7 +47,7 @@ ONNX形式にエクスポートされたモデルは、以下のように使用�
 🤗 TransformersモデルをONNXにエクスポートするには、まず追加の依存関係をインストールしてください：
 
 ```bash
-pip install optimum[exporters]
+pip install optimum-onnx
 ```
 
 すべての利用可能な引数を確認するには、[🤗 Optimumドキュメント](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli)を参照してください。または、コマンドラインでヘルプを表示することもできます：
@@ -128,64 +128,3 @@ CLIの代わりに、🤗 TransformersモデルをONNXにプログラム的に�
 ### Exporting a model for an unsupported architecture
 
 現在エクスポートできないモデルをサポートするために貢献したい場合、まず[`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/overview)でサポートされているかどうかを確認し、サポートされていない場合は[🤗 Optimumに貢献](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute)してください。
-
-### Exporting a model with `transformers.onnx`
-
-<Tip warning={true}>
-
-`transformers.onnx`はもはやメンテナンスされていないため、モデルを上記で説明したように🤗 Optimumでエクスポートしてください。このセクションは将来のバージョンで削除されます。
-
-</Tip>
-
-🤗 TransformersモデルをONNXにエクスポートするには、追加の依存関係をインストールしてください：
-
-
-```bash
-pip install transformers[onnx]
-```
-
-`transformers.onnx`パッケージをPythonモジュールとして使用して、事前に用意された設定を使用してチェックポイントをエクスポートする方法は以下の通りです：
-
-```bash
-python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
-```
-
-この方法は、`--model`引数で定義されたチェックポイントのONNXグラフをエクスポートします。🤗 Hubのいずれかのチェックポイントまたはローカルに保存されたチェックポイントを渡すことができます。エクスポートされた`model.onnx`ファイルは、ONNX標準をサポートする多くのアクセラレータで実行できます。例えば、ONNX Runtimeを使用してモデルを読み込んで実行する方法は以下の通りです：
-
-
-```python
->>> from transformers import AutoTokenizer
->>> from onnxruntime import InferenceSession
-
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
->>> session = InferenceSession("onnx/model.onnx")
->>> # ONNX Runtime expects NumPy arrays as input
->>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
->>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
-```
-
-必要な出力名（例: `["last_hidden_state"]`）は、各モデルのONNX構成を確認することで取得できます。例えば、DistilBERTの場合、次のようになります：
-
-
-```python
->>> from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
-
->>> config = DistilBertConfig()
->>> onnx_config = DistilBertOnnxConfig(config)
->>> print(list(onnx_config.outputs.keys()))
-["last_hidden_state"]
-```
-
-ハブから純粋なTensorFlowのチェックポイントをプログラム的にエクスポートするプロセスは、以下のように同様です：
-
-```bash
-python -m transformers.onnx --model=keras-io/transformers-qa onnx/
-```
-
-ローカルに保存されたモデルをエクスポートする場合、モデルの重みとトークナイザのファイルを同じディレクトリに保存してください（例： `local-pt-checkpoint`）。その後、`transformers.onnx`パッケージの `--model`引数を希望するディレクトリに向けて設定して、ONNXにエクスポートします：
-
-
-```bash
-python -m transformers.onnx --model=local-pt-checkpoint onnx/
-```
-

@@ -4,29 +4,36 @@ on:
   workflow_dispatch:
     inputs:
       runner_type:
-        description: 'Type of runner to test (a10 or t4)'
-        required: true 
+        description: 'Type of runner to test (a10, cpu)'
+        required: true
       docker_image:
         description: 'Name of the Docker image'
         required: true
       num_gpus:
-        description: 'Type of the number of gpus to use (`single` or `multi`)'
-        required: true
+        description: 'Number of GPUs to use (`single` or `multi`; not needed for cpu runner)'
+        required: false
+        default: 'none'
+      cache_type:
+        description: 'Cache backend for a10 runners: `bucket` (default) or `efs`'
+        required: false
+        default: 'bucket'
 
 env:
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  HF_HOME: /mnt/cache 
-  TRANSFORMERS_IS_CI: yes 
-  OMP_NUM_THREADS: 8 
-  MKL_NUM_THREADS: 8 
-  RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`. 
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }} 
-  TF_FORCE_GPU_ALLOW_GROWTH: true 
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`.
+  TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
-  RUN_PT_TF_CROSS_TESTS: 1
+
+
+permissions: {}
 
 jobs:
   get_runner:
+    permissions: {}
     name: "Get runner to use"
     runs-on: ubuntu-22.04
     outputs:
@@ -34,15 +41,27 @@ jobs:
     steps:
       - name: Get runner to use
         shell: bash
+        env:
+          NUM_GPUS: ${{ github.event.inputs.num_gpus }}
+          RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
+          CACHE_TYPE: ${{ github.event.inputs.cache_type }}
         run: |
-          if [[ "${{ github.event.inputs.num_gpus }}" == "single" && "${{ github.event.inputs.runner_type }}" == "t4" ]]; then
-            echo "RUNNER=aws-g4dn-2xlarge-cache" >> $GITHUB_ENV
-          elif [[ "${{ github.event.inputs.num_gpus }}" == "multi" && "${{ github.event.inputs.runner_type }}" == "t4" ]]; then
-            echo "RUNNER=aws-g4dn-12xlarge-cache" >> $GITHUB_ENV
-          elif [[ "${{ github.event.inputs.num_gpus }}" == "single" && "${{ github.event.inputs.runner_type }}" == "a10" ]]; then
-            echo "RUNNER=aws-g5-4xlarge-cache" >> $GITHUB_ENV
-          elif [[ "${{ github.event.inputs.num_gpus }}" == "multi" && "${{ github.event.inputs.runner_type }}" == "a10" ]]; then
-            echo "RUNNER=aws-g5-12xlarge-cache" >> $GITHUB_ENV
+          if [[ "$RUNNER_TYPE" == "a10" ]]; then
+            if [[ "$NUM_GPUS" != "single" && "$NUM_GPUS" != "multi" ]]; then
+              echo "WARNING: num_gpus not set or invalid for a10 runner, defaulting to 'single'"
+              NUM_GPUS="single"
+            fi
+            if [[ "$NUM_GPUS" == "single" ]]; then
+              if [[ "$CACHE_TYPE" == "efs" ]]; then
+                echo "RUNNER=aws-g5-4xlarge-cache-ssh-efs" >> $GITHUB_ENV
+              else
+                echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
+              fi
+            else
+              echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
+            fi
+          elif [[ "$RUNNER_TYPE" == "cpu" ]]; then
+            echo "RUNNER=aws-m8i-l-cache" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
           fi
@@ -50,25 +69,29 @@ jobs:
       - name: Set runner to use
         id: set_runner
         run: |
-          echo ${{ env.RUNNER }}
-          echo "RUNNER=${{ env.RUNNER }}" >> $GITHUB_OUTPUT
+          echo "$RUNNER"
+          echo "RUNNER=$RUNNER" >> $GITHUB_OUTPUT
 
   ssh_runner:
+    permissions:
+      contents: read
     name: "SSH"
     needs: get_runner
     runs-on:
       group: ${{ needs.get_runner.outputs.RUNNER }}
     container:
       image: ${{ github.event.inputs.docker_image }}
-      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-
     steps:
       - name: Update clone
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
+        env:
+          commit_sha: ${{ github.sha }}
         run: |
-          git fetch && git checkout ${{ github.sha }}
+          git fetch && git checkout "$commit_sha"
 
       - name: Cleanup
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
@@ -76,39 +99,84 @@ jobs:
           rm -rf reports
 
       - name: Show installed libraries and their versions
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: pip freeze
-      
+
       - name: NVIDIA-SMI
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         run: |
           nvidia-smi
 
-      - name: Store Slack infos
-        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
-        shell: bash
+      - name: Create python alias
         run: |
-          echo "${{ github.actor }}"
-          github_actor=${{ github.actor }}
-          github_actor=${github_actor/'-'/'_'}
-          echo "$github_actor"
-          echo "github_actor=$github_actor" >> $GITHUB_ENV
+          ln -sf $(which python3) /usr/local/bin/python
+          ln -sf $(which pip3) /usr/local/bin/pip
+          echo "✅ python -> python3 symlink created"
 
-      - name: Store Slack infos
-        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
-        shell: bash
+      - name: Install psutil for memory monitor
         run: |
-          echo "${{ env.github_actor }}"
-          if [ "${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" != "" ]; then
-            echo "SLACKCHANNEL=${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" >> $GITHUB_ENV
+          pip install psutil --break-system-packages
+
+      - name: Download memory monitor script
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
+        working-directory: /transformers
+        run: |
+          apt-get update && apt-get install -y curl
+          curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
+
+      - name: Start memory monitor
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
+        working-directory: /transformers
+        continue-on-error: true  # Don't fail workflow if monitor has issues
+        run: |
+          python3 memory_monitor.py --threshold 90 --interval 1 > memory_monitor.log 2>&1 &
+          echo $! > memory_monitor.pid
+          echo "Memory monitor started with PID $(cat memory_monitor.pid)"
+          # Give it a moment to start
+          sleep 2
+          # Verify it's running
+          ps aux | grep memory_monitor | grep -v grep || echo "Warning: memory monitor may not be running"
+
+      - name: Install utilities
+        run: |
+          apt-get install -y nano
+
+      - name: Setup automatic environment for SSH login
+        run: |
+          # Create shared environment setup
+          cat > /root/.env_setup << 'EOF'
+          # Auto-setup (non-sensitive vars)
+          export HF_HOME=/mnt/cache
+          export TRANSFORMERS_IS_CI=yes
+          export OMP_NUM_THREADS=8
+          export MKL_NUM_THREADS=8
+          export RUN_SLOW=yes
+          export TF_FORCE_GPU_ALLOW_GROWTH=true
+          export CUDA_VISIBLE_DEVICES=0,1
+          
+          cd /transformers 2>/dev/null || true
+          
+          # Remind user to set token if needed
+          if [ -z "$HF_TOKEN" ]; then
+              echo "⚠️  HF_TOKEN not set. Set it with:"
+              echo "    export HF_TOKEN=hf_xxxxx"
           else
-            echo "SLACKCHANNEL=${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}" >> $GITHUB_ENV
+              echo "✅ HF_TOKEN is set"
           fi
+          
+          echo "📁 Working directory: $(pwd)"
+          EOF
+          
+          # Source from both .bash_profile and .bashrc
+          echo 'source /root/.env_setup' >> /root/.bash_profile
+          echo 'source /root/.env_setup' >> /root/.bashrc
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@main
+        uses: huggingface/tailscale-action@9d1a67c46875a956cf2d1975473da978a970a2a9  # main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
-          slackChannel: ${{ env.SLACKCHANNEL }}
+          slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           waitForSSH: true
           sshTimeout: 15m

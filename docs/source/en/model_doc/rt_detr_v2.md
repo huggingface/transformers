@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2024-07-24 and contributed to Hugging Face Transformers on 2025-02-06.*
 
 # RT-DETRv2
 
+
 ## Overview
 
-The RT-DETRv2 model was proposed in [RT-DETRv2: Improved Baseline with Bag-of-Freebies for Real-Time Detection Transformer](https://arxiv.org/abs/2407.17140) by Wenyu Lv, Yian Zhao, Qinyao Chang, Kui Huang, Guanzhong Wang, Yi Liu.
+The RT-DETRv2 model was proposed in [RT-DETRv2: Improved Baseline with Bag-of-Freebies for Real-Time Detection Transformer](https://huggingface.co/papers/2407.17140) by Wenyu Lv, Yian Zhao, Qinyao Chang, Kui Huang, Guanzhong Wang, Yi Liu.
 
 RT-DETRv2 refines RT-DETR by introducing selective multi-scale feature extraction, a discrete sampling operator for broader deployment compatibility, and improved training strategies like dynamic data augmentation and scale-adaptive hyperparameters. These changes enhance flexibility and practicality while maintaining real-time performance.
 
@@ -29,39 +31,42 @@ The abstract from the paper is the following:
 This model was contributed by [jadechoghari](https://huggingface.co/jadechoghari).
 The original code can be found [here](https://github.com/lyuwenyu/RT-DETR).
 
-## Usage tips 
+## Usage tips
 
-This second version of RT-DETR improves how the decoder finds objects in an image. 
+This second version of RT-DETR improves how the decoder finds objects in an image.
 
 - **better sampling** – adjusts offsets so the model looks at the right areas
 - **flexible attention** – can use smooth (bilinear) or fixed (discrete) sampling
 - **optimized processing** – improves how attention weights mix information
 
-```py
->>> import torch
->>> import requests
+The model is meant to be used on images resized to a size 640x640 with the corresponding ImageProcessor. Reshaping to other sizes will generally degrade performance.
 
->>> from PIL import Image
->>> from transformers import RTDetrV2ForObjectDetection, RTDetrImageProcessor
+```python
+import requests
+import torch
+from PIL import Image
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
+from transformers import RTDetrImageProcessor, RTDetrV2ForObjectDetection
 
->>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_v2_r18vd")
->>> model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/rtdetr_v2_r18vd")
 
->>> inputs = image_processor(images=image, return_tensors="pt")
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_v2_r18vd")
+model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/rtdetr_v2_r18vd", device_map="auto")
 
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.5)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
->>> for result in results:
-...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-...         score, label = score.item(), label_id.item()
-...         box = [round(i, 2) for i in box.tolist()]
-...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.5)
+
+for result in results:
+    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+        score, label = score.item(), label_id.item()
+        box = [round(i, 2) for i in box.tolist()]
+        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
 cat: 0.97 [341.14, 25.11, 639.98, 372.89]
 cat: 0.96 [12.78, 56.35, 317.67, 471.34]
 remote: 0.95 [39.96, 73.12, 175.65, 117.44]
@@ -80,17 +85,15 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Object detection task guide](../tasks/object_detection).
 - Notebooks for [inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_inference.ipynb) and [fine-tuning](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_finetune_on_a_custom_dataset.ipynb) RT-DETRv2 on a custom dataset (🌎).
 
-
 ## RTDetrV2Config
 
 [[autodoc]] RTDetrV2Config
-
 
 ## RTDetrV2Model
 
 [[autodoc]] RTDetrV2Model
     - forward
- 
+
 ## RTDetrV2ForObjectDetection
 
 [[autodoc]] RTDetrV2ForObjectDetection

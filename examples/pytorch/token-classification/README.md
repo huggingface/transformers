@@ -19,7 +19,7 @@ limitations under the License.
 ## PyTorch version
 
 Fine-tuning the library models for token classification task such as Named Entity Recognition (NER), Parts-of-speech
-tagging (POS) or phrase extraction (CHUNKS). The main scrip `run_ner.py` leverages the 🤗 Datasets library and the Trainer API. You can easily
+tagging (POS) or phrase extraction (CHUNKS). The main script `run_ner.py` leverages the 🤗 Datasets library and the Trainer API. You can easily
 customize it to your needs if you need extra processing on your datasets.
 
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
@@ -44,7 +44,7 @@ The following example fine-tunes BERT on CoNLL-2003:
 ```bash
 python run_ner.py \
   --model_name_or_path google-bert/bert-base-uncased \
-  --dataset_name conll2003 \
+  --dataset_name tomaarsen/conll2003 \
   --output_dir /tmp/test-ner \
   --do_train \
   --do_eval
@@ -99,7 +99,7 @@ export TASK_NAME=ner
 
 python run_ner_no_trainer.py \
   --model_name_or_path google-bert/bert-base-cased \
-  --dataset_name conll2003 \
+  --dataset_name tomaarsen/conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \
   --per_device_train_batch_size 32 \
@@ -127,7 +127,7 @@ export TASK_NAME=ner
 
 accelerate launch run_ner_no_trainer.py \
   --model_name_or_path google-bert/bert-base-cased \
-  --dataset_name conll2003 \
+  --dataset_name tomaarsen/conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \
   --per_device_train_batch_size 32 \

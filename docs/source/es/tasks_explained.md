@@ -120,7 +120,7 @@ Esta sección explica brevemente las convoluciones, pero sería útil tener un e
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convolution.gif"/>
 </div>
 
-<small>Una convolución básica sin relleno ni paso, tomada de <a href="https://arxiv.org/abs/1603.07285">Una guía para la aritmética de convoluciones para el aprendizaje profundo.</a></small>
+<small>Una convolución básica sin relleno ni paso, tomada de <a href="https://huggingface.co/papers/1603.07285">Una guía para la aritmética de convoluciones para el aprendizaje profundo.</a></small>
 
 Puedes alimentar esta salida a otra capa convolucional, y con cada capa sucesiva, la red aprende cosas más complejas y abstractas como perros calientes o cohetes. Entre capas convolucionales, es común añadir una capa de agrupación para reducir la dimensionalidad y hacer que el modelo sea más robusto a las variaciones de la posición de una característica.
 

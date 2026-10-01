@@ -13,21 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2019-06-19 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # XLNet
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=xlnet">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlnet-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/xlnet-base-cased">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
-</div>
 
 ## Overview
 
-The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
+The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://huggingface.co/papers/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
 Quoc V. Le. XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method to learn
 bidirectional contexts by maximizing the expected likelihood over all permutations of the input sequence factorization
 order.
@@ -73,14 +66,8 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 ## XLNetTokenizer
 
 [[autodoc]] XLNetTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## XLNetTokenizerFast
-
-[[autodoc]] XLNetTokenizerFast
 
 ## XLNet specific outputs
 
@@ -97,21 +84,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 [[autodoc]] models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
 
 [[autodoc]] models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
-
-[[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
-
-<frameworkcontent>
-<pt>
 
 ## XLNetModel
 
@@ -147,39 +119,3 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] XLNetForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFXLNetModel
-
-[[autodoc]] TFXLNetModel
-    - call
-
-## TFXLNetLMHeadModel
-
-[[autodoc]] TFXLNetLMHeadModel
-    - call
-
-## TFXLNetForSequenceClassification
-
-[[autodoc]] TFXLNetForSequenceClassification
-    - call
-
-## TFXLNetForMultipleChoice
-
-[[autodoc]] TFXLNetForMultipleChoice
-    - call
-
-## TFXLNetForTokenClassification
-
-[[autodoc]] TFXLNetForTokenClassification
-    - call
-
-## TFXLNetForQuestionAnsweringSimple
-
-[[autodoc]] TFXLNetForQuestionAnsweringSimple
-    - call
-
-</tf>
-</frameworkcontent>

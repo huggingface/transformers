@@ -22,19 +22,9 @@ rendered properly in your Markdown viewer.
 - 继承自 `_LRSchedule` 多个调度器：
 - 一个梯度累积类，用于累积多个批次的梯度
 
-## AdamW (PyTorch)
-
-[[autodoc]] AdamW
-
 ## AdaFactor (PyTorch)
 
 [[autodoc]] Adafactor
-
-## AdamWeightDecay (TensorFlow)
-
-[[autodoc]] AdamWeightDecay
-
-[[autodoc]] create_optimizer
 
 ## Schedules
 
@@ -65,13 +55,3 @@ rendered properly in your Markdown viewer.
 [[autodoc]] get_polynomial_decay_schedule_with_warmup
 
 [[autodoc]] get_inverse_sqrt_schedule
-
-### Warmup (TensorFlow)
-
-[[autodoc]] WarmUp
-
-## Gradient Strategies
-
-### GradientAccumulator (TensorFlow)
-
-[[autodoc]] GradientAccumulator

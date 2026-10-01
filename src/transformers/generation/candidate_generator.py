@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,21 +13,22 @@
 # limitations under the License.
 
 import copy
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+import weakref
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
 import torch
+import torch.nn as nn
 
-from ..utils import is_sklearn_available
+from ..pytorch_utils import prune_linear_layer
+from ..utils import ModelOutput, is_sklearn_available
+from ..utils.deprecation import deprecate_kwarg
+from .configuration_utils import GenerationConfig
+from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
 
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
-
-from ..cache_utils import DynamicCache
-from ..pytorch_utils import isin_mps_friendly
-from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
-
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -39,7 +39,9 @@ if TYPE_CHECKING:
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    requires_model_outputs: bool = False
+
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -58,7 +60,7 @@ class CandidateGenerator:
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
         """
-        Updates the candidate generation strategy based on the outcomes.
+        Updates the candidate generation strategy based on the outcomes if needed.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -69,10 +71,7 @@ class CandidateGenerator:
             num_matches (`int`):
                 The number of matches between the candidate sequences and the model predictions.
         """
-        raise NotImplementedError(
-            f"{self.__class__} is an abstract class. Only classes inheriting this class can call "
-            "`update_candidate_strategy`."
-        )
+        pass
 
 
 class AssistedCandidateGenerator(CandidateGenerator):
@@ -103,9 +102,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         generation_config: "GenerationConfig",
-        model_kwargs: Dict,
-        inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
+        model_kwargs: dict,
+        inputs_tensor: torch.Tensor | None = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
@@ -115,11 +114,16 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
-        self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
-        self.assistant_confidence_threshold = assistant_model.generation_config.assistant_confidence_threshold
+
+        # Prepare the generation config by updating with default values if not already set by users
+        self.assistant_generation_config = copy.deepcopy(assistant_model.generation_config)
+        global_defaults = self.assistant_generation_config._get_default_generation_params()
+        self.assistant_generation_config.update(**global_defaults, defaults_only=True)
+        self.num_assistant_tokens = self.assistant_generation_config.num_assistant_tokens
+        self.assistant_confidence_threshold = self.assistant_generation_config.assistant_confidence_threshold
 
         # Set eos in assistant same as in target model
-        self.assistant_model.generation_config.eos_token_id = generation_config.eos_token_id
+        self.assistant_generation_config.eos_token_id = generation_config.eos_token_id
 
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
@@ -130,19 +134,21 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 )
 
         # Remove potential default "logits_to_keep" key
-        if "logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_logits_to_keep():
+        if "logits_to_keep" in assistant_kwargs and not assistant_model._supports_logits_to_keep():
             del assistant_kwargs["logits_to_keep"]
 
         # If the assistant is an encoder-decoder model, assume the encoder is different on the assistant.
         if assistant_model.config.is_encoder_decoder:
             inputs_tensor, model_input_name, assistant_kwargs = assistant_model._prepare_model_inputs(
-                inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_kwargs
+                inputs_tensor, self.assistant_generation_config.bos_token_id, assistant_kwargs
             )
-            assistant_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
-                inputs_tensor, assistant_kwargs, model_input_name, assistant_model.generation_config
+            assistant_kwargs = assistant_model._maybe_prepare_encoder_kwargs_for_generation(
+                inputs_tensor, assistant_kwargs, model_input_name, self.assistant_generation_config
             )
         elif "encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
+        elif "mm_encoder_outputs" in model_kwargs:
+            assistant_kwargs["mm_encoder_outputs"] = model_kwargs["mm_encoder_outputs"]
         self.assistant_kwargs = assistant_kwargs
 
         # Prepare assistant model's keys of inputs
@@ -173,27 +179,23 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
         # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
         self.main_model_min_length = self.generation_config.min_length
-        self.generation_config.min_length = 0
+        self.generation_config.min_length = None
         self.generation_config.min_new_tokens = None
-        for processor in self.logits_processor:
-            if isinstance(processor, MinLengthLogitsProcessor):
-                raise ValueError(
-                    "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
-                    "Please pass in `min_length` into `.generate()` instead"
-                )
-
-        # We need to roll back the cache in assisted generation, only DynamicCache is supported
-        self.generation_config.cache_implementation = None
+        self.main_model_max_length = self.generation_config.max_length
+        self.generation_config.max_length = None
+        self.logits_processor = [
+            processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
+        ]
 
         if (
             is_sklearn_available()
-            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and self.assistant_generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
             self.probs = []
             self.matches = []
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -234,21 +236,21 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
         # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
         # cost of forecasting incorrect assistant tokens.
-        if self.assistant_model.generation_config.num_assistant_tokens_schedule in {
+        if self.assistant_generation_config.num_assistant_tokens_schedule in {
             "heuristic",
             "heuristic_transient",
         }:
             # len(scores[0])-1 is the number of candidates according to the target tokenizer.
             if num_matches == len(scores[0]) - 1:
-                self.num_assistant_tokens += 2.0
+                self.num_assistant_tokens += 2
             else:
-                self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+                self.num_assistant_tokens = max(1, self.num_assistant_tokens - 1)
 
         # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
         # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
         if (
             is_sklearn_available()
-            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and self.assistant_generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
             # update self.matches
@@ -274,30 +276,39 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 optimal_threshold_index = np.argmin(costs)
                 best_threshold = thresholds[optimal_threshold_index]
 
-                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
+                self.assistant_generation_config.assistant_confidence_threshold = best_threshold
+                # Sync to generation_config so ConfidenceCriteria picks up the updated threshold on the next round
+                self.generation_config.assistant_confidence_threshold = best_threshold
 
-    def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> Tuple[int, int]:
+    def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
         new_cur_len = input_ids.shape[-1]
-        max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
+        max_new_tokens = min(int(self.num_assistant_tokens), self.main_model_max_length - new_cur_len - 1)
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         return min_new_tokens, max_new_tokens
 
-    def _update_past_and_masks(self, input_ids: torch.LongTensor, remove_from_pkv: int = 0) -> bool:
+    def _update_past_and_masks(
+        self, input_ids: torch.LongTensor, remove_from_pkv: int = 0, num_added_tokens: int = 1
+    ) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
-                self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1
-            )
+            target_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens
+            current_cache_size = self.assistant_kwargs["past_key_values"].get_seq_length()
+            tokens_to_remove = current_cache_size - target_cache_size
+            if tokens_to_remove >= 0:
+                self.assistant_kwargs["past_key_values"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
+            self.assistant_kwargs = _prepare_position_ids(
+                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
+
         return has_past_key_values
 
-    def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> Dict:
+    def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> dict:
         """Prepare arguments for the generation call."""
         return {
             self.input_ids_key: input_ids,
@@ -307,13 +318,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "logits_processor": self.logits_processor,
         }
 
-    def _generate_candidates(self, generation_args: Dict) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def _generate_candidates(self, generation_args: dict) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """Generate candidate sequences using the assistant model."""
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         if (
             is_sklearn_available()
-            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and self.assistant_generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
             scores_tensor = torch.cat(assistant_output.scores, dim=0)
@@ -366,18 +377,18 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         generation_config: "GenerationConfig",
-        model_kwargs: Dict,
-        inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
+        model_kwargs: dict,
+        inputs_tensor: torch.Tensor | None = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
 
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
-        self.prev_target_ids_len: Optional[int] = None
-        self.prev_assistant_ids = None
-        self.target_lookbehind = assistant_model.generation_config.target_lookbehind
-        self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
+        self.prev_target_ids_len: int | None = None
+        self.prev_assistant_ids: torch.LongTensor | None = None
+        self.target_lookbehind = self.assistant_generation_config.target_lookbehind
+        self.assistant_lookbehind = self.assistant_generation_config.assistant_lookbehind
 
     @staticmethod
     def _get_longest_diag_dict(input_matrix, nonzero_idx):
@@ -446,7 +457,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             new_tokens_only: 2D array of shape (batch_size, new_token_length), represents the new tokens that are not in prompt
             discrepancy_only: 2D array of shape (batch_size, discrepancy_length), represents the new tokens that are in prompt but not in prompt_plus_new_tokens
         """
-        compare_mat = prompt_plus_new_tokens.T == prompt
+        compare_mat = prompt == prompt_plus_new_tokens.T
         if not torch.is_tensor(compare_mat):
             compare_mat = torch.tensor(compare_mat)
 
@@ -483,11 +494,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         Returns:
             The converted token IDs.
         """
-        text = source_tokenizer.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        text = source_tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -515,9 +526,10 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self._update_past_and_masks(assistant_input_ids, remove_from_pkv)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
         self.assistant_kwargs.pop("attention_mask", None)
+        self.assistant_kwargs.pop("position_ids", None)
 
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
-        new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences, assistant_input_ids)
+        new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences)
 
         # Update state
         self.prev_target_ids_len = input_ids.shape[1]
@@ -529,7 +541,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         return new_target_ids, None
 
-    def _prepare_assistant_input_ids(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, int]:
+    def _prepare_assistant_input_ids(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, int]:
         """Converts target input IDs to assistant input IDs, handling discrepancies."""
         convert_kwargs = {
             "source_tokenizer": self.target_tokenizer,
@@ -576,10 +588,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return assistant_input_ids, remove_from_pkv
 
     def _process_assistant_outputs(
-        self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor, assistant_input_ids: torch.LongTensor
+        self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
     ) -> torch.LongTensor:
         """Processes assistant outputs to obtain target input IDs."""
-        num_prev_assistant = self.prev_assistant_ids.shape[1]
+        prev_assistant_ids = cast(torch.LongTensor, self.prev_assistant_ids)
+        num_prev_assistant = prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
         new_target_ids_from_window = self.convert_source_tokens_to_target_tokens(
@@ -602,10 +615,403 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             # edge case: in case of no intersection between prompt and new_target_ids
             new_target_ids = torch.cat([new_target_ids, new_target_ids_from_window], dim=-1)
 
-        if hasattr(self.generation_config, "max_length"):
-            new_target_ids = new_target_ids[:, : self.generation_config.max_length]
+        if self.main_model_max_length is not None:
+            new_target_ids = new_target_ids[:, : self.main_model_max_length]
 
         return new_target_ids
+
+
+class _PruneReindexingLMHead(nn.Module):
+    """
+    A class to prune and reindex the language model head.
+
+    This class prunes the language model head to only include the specified token IDs and reindexes the logits
+    to map back to the original vocabulary.
+
+    Args:
+        original_lm_head (nn.Module): The original language model head.
+        token_ids (list[int]): The list of token IDs to keep.
+    """
+
+    def __init__(self, original_lm_head, assistant_overlap_token_ids):
+        super().__init__()
+        self.pruned_lm_head = prune_linear_layer(original_lm_head, assistant_overlap_token_ids).to(
+            original_lm_head.weight.dtype
+        )
+
+    def forward(self, hidden_states):
+        pruned_logits = self.pruned_lm_head(hidden_states)
+        return pruned_logits
+
+
+class _MapInputEmbedding(nn.Module):
+    def __init__(self, original_embedding: nn.Embedding, assistant_overlap_token_ids):
+        """
+        Wraps an existing embedding layer and remaps token IDs before lookup.
+
+        Args:
+            original_embedding (nn.Embedding): Pre-trained or existing embedding layer.
+            assistant_overlap_token_ids (dict): Mapping from original token IDs to new token IDs.
+                          Example: {old_id: new_id}
+        """
+        super().__init__()
+        self.original_embedding = original_embedding
+        self.weight = original_embedding.weight
+        self.assistant_overlap_token_ids = assistant_overlap_token_ids
+        self.map = False
+
+    def forward(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
+        """
+        Args:
+            input_ids (torch.LongTensor): Tensor of token IDs (batch_size, seq_len).
+
+        Returns:
+            torch.FloatTensor: Corresponding input embeddings.
+        """
+        if self.map:
+            # Get the last item from input_ids
+            my_input_ids = self.assistant_overlap_token_ids[input_ids[0, -1]].unsqueeze(0).unsqueeze(0)
+        else:
+            self.map = True
+            my_input_ids = input_ids
+
+        return self.original_embedding(my_input_ids)
+
+
+class AssistantToTargetTranslator:
+    """
+    Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
+    vocabulary mismatches when using different tokenizers for the assistant and target models in speculative decoding,
+    as introduced in the paper "Lossless Speculative Decoding Algorithms for Heterogeneous Vocabularies"
+    (https://huggingface.co/papers/2502.05202).
+    It maintains mappings between the two vocabularies and handles token/logit conversion.
+
+    Args:
+        target_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used by the target (main) model.
+        assistant_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used by the assistant model.
+        target_vocab_size (`int`):
+            The size of the target model's vocabulary. If not provided, will be inferred from the target tokenizer.
+        assistant_model (Optional[PreTrainedModel], optional): The assistant model to be used. Defaults to None for backward compatibility.
+        assistant_prune_lm_head (bool): Whether to prune the assistant model's language model
+            head to match the target vocabulary. This is only applicable if `assistant_model` is provided.
+            Defaults to False for backward compatibility.
+    """
+
+    FILTER_VALUE: float = -float("Inf")  # The value used to filter out unmapped tokens in the logits.
+    SUPPRESS_TOKEN_ID: int = -1  # The ID used to mark suppressed tokens in the mapping.
+
+    def __init__(
+        self,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
+        target_vocab_size: int,  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
+        assistant_model: Optional["PreTrainedModel"] = None,
+        assistant_prune_lm_head: bool = False,
+    ):
+        self._target_tokenizer: PreTrainedTokenizerBase = target_tokenizer
+        self._assistant_tokenizer: PreTrainedTokenizerBase = assistant_tokenizer
+        self._assistant_model_device = assistant_model.device if assistant_model is not None else "cpu"
+        self.target_vocab_size: int = target_vocab_size
+        self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
+            self._get_assistant_to_target_input_ids()
+        )
+        self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
+        self.logits_processors: LogitsProcessorList | None = None
+        self.assistant_prune_lm_head = assistant_prune_lm_head and assistant_model is not None
+        if len(self._suppress_input_ids) > 0:
+            # the assistant vocab is not a subset of the target vocab
+            if self.assistant_prune_lm_head and assistant_model is not None:
+                self.assistant_overlap_token_ids = torch.tensor(
+                    list(self.target_to_assistant_input_ids.values()),
+                    dtype=torch.long,
+                    device=self._assistant_model_device,
+                )
+                original_lm_head = assistant_model.get_output_embeddings()
+                pruned_lm_head = _PruneReindexingLMHead(original_lm_head, self.assistant_overlap_token_ids)
+                del original_lm_head
+                assistant_model.set_output_embeddings(pruned_lm_head)
+
+                original_input_embeddings = assistant_model.get_input_embeddings()
+                map_input_embeddings = _MapInputEmbedding(original_input_embeddings, self.assistant_overlap_token_ids)
+                del original_input_embeddings
+                assistant_model.set_input_embeddings(map_input_embeddings)
+                self.map_input_embeddings = map_input_embeddings
+            else:
+                self.logits_processors = LogitsProcessorList(
+                    [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
+                )
+
+    def unmap_input_ids(self):
+        """
+        Disables the mapping of input ids despite the assistant pruning for the language model head being enabled.
+
+        This method is required for the first forward pass of `_MapInputEmbedding` where input ids are already in the assistant vocabulary space. By disabling the mapping, it ensures that the input ids are processed correctly without remapping.
+
+        """
+        # map_input_embeddings is only initialized when _suppress_input_ids is non-empty
+        # (i.e., the assistant vocab is not a strict subset of the target vocab, such as
+        # when models share the same tokenizer but have different vocab sizes due to padding,
+        # e.g., Qwen2.5-7B (152064) + Qwen2.5-0.5B (151936))
+        if self.assistant_prune_lm_head and len(self._suppress_input_ids) > 0:
+            self.map_input_embeddings.map = False
+
+    def _get_assistant_to_target_input_ids(self):
+        target_vocab = self._target_tokenizer.get_vocab()
+        assistant_vocab = self._assistant_tokenizer.get_vocab()
+
+        space_str = " "
+        target_space_ids = self._target_tokenizer(space_str, add_special_tokens=False)["input_ids"]
+        if len(target_space_ids) > 0:
+            target_space_sign = self._target_tokenizer.convert_ids_to_tokens(target_space_ids)[0][0]
+
+            assistant_space_ids = self._assistant_tokenizer(space_str, add_special_tokens=False)["input_ids"]
+            if len(assistant_space_ids) > 0:
+                assistant_space_sign = self._assistant_tokenizer.convert_ids_to_tokens(assistant_space_ids)[0][0]
+
+                if target_space_sign != assistant_space_sign:
+                    # If the assistant tokenizer has a different space sign than the target tokenizer,
+                    # we need to replace the assistant space sign with the target space sign in the assistant_vocab.
+                    assistant_vocab = {
+                        (
+                            tok.replace(assistant_space_sign, target_space_sign, 1)
+                            if tok.startswith(assistant_space_sign)
+                            else tok
+                        ): idx
+                        for tok, idx in assistant_vocab.items()
+                    }
+
+        max_assistant_index = max(assistant_vocab.values())
+        assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.SUPPRESS_TOKEN_ID, dtype=int)
+        target_to_assistant_input_ids: dict[int, int] = {}
+        for tok, assistant_id in assistant_vocab.items():
+            target_id = target_vocab.get(tok)
+            if target_id is not None:
+                assistant_to_target_input_ids[assistant_id] = target_id
+                target_to_assistant_input_ids[target_id] = assistant_id
+        return assistant_to_target_input_ids.to(self._assistant_model_device), target_to_assistant_input_ids
+
+    def _get_suppress_input_ids(self) -> list[int]:
+        """
+        Get the input ids that are in the assistant vocab but not in the target vocab.
+        """
+        return torch.where(self._assistant_to_target_input_ids == self.SUPPRESS_TOKEN_ID)[0]
+
+    def get_target_ids(
+        self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor
+    ) -> torch.LongTensor:
+        """
+        Return the target candidate ids that correspond to the assistant candidate ids.
+        Note that we have already the target ids for the prompt and we only need to find the target ids for the new tokens.
+        Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
+        """
+
+        num_new_tokens = len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]
+        if num_new_tokens == 0:
+            return target_input_ids
+        else:
+            # Get last `num_new_tokens` candidate IDs
+            last_candidate_ids = assistant_candidate_ids[0, -num_new_tokens:]
+            if self.assistant_prune_lm_head:
+                # Map assistant IDs -> target input IDs
+                last_candidate_ids = self.assistant_overlap_token_ids[last_candidate_ids]
+            transformed_slice = self._assistant_to_target_input_ids[last_candidate_ids]
+            return torch.cat((target_input_ids, transformed_slice.unsqueeze(0)), dim=1)
+
+    def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Return the target logits that correspond to the assistant logits.
+        """
+
+        target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
+        target_logits: torch.FloatTensor = torch.full(
+            target_shape, self.FILTER_VALUE, device=self._assistant_model_device
+        )
+        # Mask for valid indices
+        assistant_indices_mask = self._assistant_to_target_input_ids != self.SUPPRESS_TOKEN_ID
+        # Exclude invalid indices
+        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]
+
+        if self.assistant_prune_lm_head:
+            target_logits[..., target_logits_supported_indices] = assistant_logits
+        else:
+            valid_assistant_logits = assistant_logits[..., : self._assistant_to_target_input_ids.shape[0]]
+            target_logits[..., target_logits_supported_indices] = valid_assistant_logits[..., assistant_indices_mask]
+        return target_logits
+
+
+class AssistantVocabTranslatorCache:
+    """
+    Cache for `AssistantToTargetTranslator` instances. The instances are computed at
+    pre-processing time, and this cache allows us to avoid recomputing them.
+    """
+
+    _cache = weakref.WeakKeyDictionary()
+
+    @classmethod
+    def get_translator(
+        cls,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
+        target_vocab_size: int,
+        assistant_model: Optional["PreTrainedModel"] = None,
+        assistant_prune_lm_head: bool = False,
+    ) -> AssistantToTargetTranslator:
+        assistant_dict = cls._cache.get(target_tokenizer)
+        if assistant_dict is None:
+            assistant_dict = weakref.WeakKeyDictionary()
+            cls._cache[target_tokenizer] = assistant_dict
+
+        mapping = assistant_dict.get(assistant_tokenizer)
+        if mapping is None:
+            mapping = AssistantToTargetTranslator(
+                target_tokenizer,
+                assistant_tokenizer,
+                target_vocab_size,
+                assistant_model,
+                assistant_prune_lm_head,
+            )
+            assistant_dict[assistant_tokenizer] = mapping
+
+        return mapping
+
+    @classmethod
+    def cleanup(cls):
+        """
+        Clean up dead references in the cache.
+        This removes entries where either the target_tokenizer or assistant_tokenizer
+        has been garbage collected.
+        """
+        # Remove entries from the outer cache where the target_tokenizer is no longer alive
+        dead_keys = [key for key in cls._cache if key is None]
+        for key in dead_keys:
+            del cls._cache[key]
+
+        # For each assistant_dict, remove entries where assistant_tokenizer is no longer alive
+        for assistant_dict in cls._cache.values():
+            dead_keys = [key for key in assistant_dict if key is None]
+            for key in dead_keys:
+                del assistant_dict[key]
+
+
+class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):
+    """
+    `CandidateGenerator` class to be used for Universal Speculative Decoding (USD): speculative decoding with different tokenizers
+    for the assistant and main models. This class generates candidates through the use of a smaller model.
+    """
+
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
+        generation_config: "GenerationConfig",
+        model_kwargs: dict,
+        atm_translator: AssistantToTargetTranslator,
+        inputs_tensor: torch.Tensor | None = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
+    ):
+        # Initialize translator before parent class
+        self._atm_translator = atm_translator
+        super().__init__(
+            input_ids,
+            assistant_model,
+            target_tokenizer,
+            assistant_tokenizer,
+            generation_config,
+            model_kwargs,
+            inputs_tensor,
+            logits_processor,
+        )
+        # Track sequence lengths and previous assistant IDs
+        self._target_seq_len_with_candidates: int = 0
+        self._prev_assistant_ids: torch.LongTensor | None = None
+
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
+        """
+        Simplified version of get_candidates that uses the translator cache for token conversion.
+        """
+        target_input_ids = input_ids.to(self.assistant_model.device)
+        assistant_input_ids, num_added_tokens = self._prepare_assistant_input_ids(target_input_ids)
+        min_new_tokens, max_new_tokens = self._calculate_new_tokens(target_input_ids)
+
+        if max_new_tokens == 0:
+            return input_ids, None
+
+        self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+        generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
+
+        # Ensure scores are returned
+        generation_args["generation_config"].output_scores = True
+        generation_args["generation_config"].return_dict_in_generate = True
+
+        # Generate and process outputs using translator
+        if self._atm_translator.logits_processors is not None:
+            generation_args["logits_processor"] = self._atm_translator.logits_processors
+        self._prev_assistant_ids, assistant_candidate_logits = self._generate_candidates(generation_args)
+
+        # Use translator to convert tokens and logits
+        target_candidate_ids = self._atm_translator.get_target_ids(
+            assistant_input_ids, target_input_ids, self._prev_assistant_ids
+        )
+        self._target_seq_len_with_candidates = target_candidate_ids.shape[-1]
+        target_candidate_logits = self._atm_translator.get_target_logits(assistant_candidate_logits)
+
+        return target_candidate_ids, target_candidate_logits
+
+    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor, num_added_tokens: int = 1) -> bool:
+        if self._prev_assistant_ids is None:
+            # Prepare attention mask for the first generation.
+            # For subsequent generations, the attention mask is updated in super()_update_past_and_masks.
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
+            self.assistant_kwargs = _prepare_position_ids(
+                self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
+        return super()._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+
+    def _prepare_assistant_input_ids(self, target_input_ids: torch.LongTensor) -> torch.LongTensor:
+        """
+        Simplified token conversion that only processes new tokens.
+        """
+        # Calculate new tokens since last call
+        target_seq_len = target_input_ids.shape[-1]
+        if self._target_seq_len_with_candidates == 0:
+            new_token_count = target_seq_len
+        else:
+            new_token_count = 1
+        target_new_ids = target_input_ids[:, -new_token_count:]
+
+        # Convert the new tokens
+        assistant_new_ids = None
+        if self._target_seq_len_with_candidates > 0:
+            # we have only one new token and we can directly convert it
+            assistant_new_ids = self._atm_translator.target_to_assistant_input_ids.get(target_new_ids[0].item())
+        if assistant_new_ids is None:
+            target_new_text = self.target_tokenizer.decode(
+                target_new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            )
+            assistant_new_ids = self.assistant_tokenizer(
+                target_new_text, add_special_tokens=False, return_tensors="pt"
+            )["input_ids"].to(self.assistant_model.device)
+        else:
+            assistant_new_ids = torch.tensor([[assistant_new_ids]], device=self.assistant_model.device)
+
+        # Update or initialize assistant IDs
+        if self._prev_assistant_ids is None:
+            assistant_input_ids = assistant_new_ids
+        else:
+            tokens_to_remove = self._target_seq_len_with_candidates + 1 - target_seq_len
+            # If the number of new tokens is greater than zero, truncate the previous assistant IDs
+            if tokens_to_remove > 0:
+                self._prev_assistant_ids = self._prev_assistant_ids[:, :-tokens_to_remove]
+            assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
+        assistant_input_ids = assistant_input_ids.to(dtype=torch.long)
+        self._atm_translator.unmap_input_ids()
+        return assistant_input_ids, len(assistant_new_ids[0])
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
@@ -615,31 +1021,44 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
     Read the following blog post for more information: https://github.com/apoorvumang/prompt-lookup-decoding
 
     Args:
-        max_matching_ngram_size (`int`):
-            The maximum ngram size to be considered for matching in the prompt
-        num_output_tokens (`int`):
+        eos_token_id (`torch.Tensor`, *optional*):
+            The token id of the end of sequence token.
+        num_output_tokens (`int`, *optional*, defaults to 10):
             The number of tokens to be output as candidate tokens.
-        max_length (`int`):
-            The number of total maximum tokens that can be generated. For decoder-only models that includes the prompt length.
-            Defaults to 20, which is the max length used as default in generation config.
+        max_matching_ngram_size (`int`, *optional*, defaults to 2):
+            The maximum ngram size to be considered for matching in the prompt
+        max_length (`int`, *optional*, defaults to 20):
+            The number of total maximum tokens that can be generated. For decoder-only models that includes the
+            prompt length. Defaults to 20, which is the max length used as default in generation config.
+        logits_processor (`LogitsProcessorList`, *optional*):
+            An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+            used to modify the prediction scores of the language modeling head applied at each generation step. In
+            prompt lookup assisted generation, they are not used to manipulate probabilities, but rather to find
+            forbidden tokens (p = -inf) and block them from being valid candidates.
+        vocab_size (`int`, *optional*):
+            The size of the vocabulary. Required if `logits_processor` is provided.
     """
 
     def __init__(
         self,
-        eos_token_id: torch.Tensor = None,
+        eos_token_id: torch.Tensor | None = None,
         num_output_tokens: int = 10,
-        max_matching_ngram_size: int = None,
+        max_matching_ngram_size: int = 2,
         max_length: int = 20,
+        logits_processor: Optional["LogitsProcessorList"] = None,
+        vocab_size: int | None = None,
     ):
         self.num_output_tokens = num_output_tokens
-        self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
+        self.max_matching_ngram_size = max_matching_ngram_size
         self.max_length = max_length
         self.eos_token_id = eos_token_id
+        self.logits_processor = logits_processor
+        self.vocab_size = vocab_size
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -650,7 +1069,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         Return:
             `torch.LongTensor` of shape `(num_candidates, candidate_length)`: The candidate sequences to be tried.
         """
-        input_length = input_ids.size(1)
+        bsz, input_length = input_ids.shape
 
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
         if self.max_length == input_length + 1:
@@ -672,6 +1091,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             match_indices = matches.nonzero(as_tuple=True)[1]
 
             # Iterate through match indices to find a valid continuation
+            # TODO (joao): this finds the first valid candidates (left to right), but perhaps we should find the
+            # longest valid candidates?
             for idx in match_indices:
                 start_idx = idx + ngram_size
                 end_idx = start_idx + self.num_output_tokens
@@ -679,22 +1100,51 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]
+
+                    # Check if the each new candidate token is forbidden according to the logits processor. If all
+                    # tokens are allowed, we keep `chosen_ids` as is.
+                    # 1. create random logits.
+                    # 2. apply the logits processor to get output logits for the next token, using the arbitrary
+                    #    logits as input.
+                    # 3. compare the output logits with the next candidate token. If they are -inf, then the next
+                    #    candidate token is forbidden and we don't want to generate it.
+                    if self.logits_processor is not None:
+                        sequence_with_candidate = input_ids
+                        fake_input_logits = torch.ones(
+                            (bsz, self.vocab_size), device=input_ids.device, dtype=torch.float32
+                        )
+                        for candidate_idx, new_candidate_token in enumerate(chosen_ids):
+                            fake_output_logits = self.logits_processor(sequence_with_candidate, fake_input_logits)
+                            fake_candidate_logits = fake_output_logits[0, new_candidate_token]
+                            # next candidate token is forbidden -> crop chosen_ids accordingly
+                            if fake_candidate_logits in (-float("Inf"), torch.finfo(fake_candidate_logits.dtype).min):
+                                chosen_ids = chosen_ids[:candidate_idx]
+                                break
+                            else:
+                                sequence_with_candidate = torch.cat(
+                                    (input_ids, chosen_ids[: candidate_idx + 1].unsqueeze(0)), dim=1
+                                )
+                        # no valid candidate tokens -> look for a different match
+                        if chosen_ids.shape[0] == 0:
+                            continue
+
                     match_found = True
 
                     # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
                     # accept eos and the rest as valid, thus not stopping generation after "eos"
                     # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
-                    mask = isin_mps_friendly(chosen_ids, self.eos_token_id)
-                    match_indices_eos = torch.nonzero(mask)
-                    if match_indices_eos.numel() > 0:
-                        first_eos_index = match_indices_eos[0].item()
-                        chosen_ids = chosen_ids[:first_eos_index]
+                    if self.eos_token_id is not None:
+                        mask = torch.isin(chosen_ids, self.eos_token_id)
+                        match_indices_eos = torch.nonzero(mask)
+                        if match_indices_eos.numel() > 0:
+                            first_eos_index = match_indices_eos[0].item()
+                            chosen_ids = chosen_ids[:first_eos_index]
                     break
             if match_found:
                 break
 
-        if chosen_ids is None or len(chosen_ids) == 0:
-            # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
+        # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
+        if not match_found or chosen_ids is None or len(chosen_ids) == 0:
             return input_ids, None
 
         # Now need extend input_ids with chosen_ids
@@ -702,22 +1152,6 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         candidate_input_ids = torch.cat((input_ids, chosen_ids), dim=1)
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
-
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
-        """
-        Updates the candidate generation strategy based on the outcomes.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
-                Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
-                beam search or log softmax for each vocabulary token when using beam search
-            num_matches (`int`):
-                The number of matches between the candidate sequences and the model predictions.
-        """
-        # Currently does nothing
-        return
 
 
 class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
@@ -749,9 +1183,9 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         generation_config: "GenerationConfig",
-        model_kwargs: Dict,
-        inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
+        model_kwargs: dict,
+        inputs_tensor: torch.Tensor | None = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
     ):
         super().__init__(
             input_ids=input_ids,
@@ -766,7 +1200,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         self.assistant_early_exit = self.generation_config.assistant_early_exit
         self.generation_config.assistant_early_exit = None
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
         # Temporarily sets the number of hidden layers to the early exit value
         base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
         original_num_hidden_layers = base_model.config.num_hidden_layers
@@ -776,48 +1210,485 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         return candidate_ids, candidate_logits
 
 
-def _crop_past_key_values(model, past_key_values, max_length):
-    """Crops the past key values up to a certain maximum length."""
-    new_past = []
-    if model.config.is_encoder_decoder:
-        for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :max_length, :],
-                    past_key_values[idx][1][:, :, :max_length, :],
-                    past_key_values[idx][2],
-                    past_key_values[idx][3],
-                )
-            )
-        past_key_values = tuple(new_past)
-    # gptbigcode is special and stores kv in shape (batch_size, seq_len, dim), if it's a multi_query model
-    elif "gptbigcode" in model.__class__.__name__.lower() or (
-        model.config.architectures is not None and "gptbigcode" in model.config.architectures[0].lower()
+class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
+    """Candidate generator for predicting multiple draft tokens from a single token position using the MTP method.
+
+    The Multi-Token Prediction (MTP) method defines an assisted candidate generator with an assistant model that
+    autoregressively drafts multiple candidate tokens from a constant `position_ids` value, the last "seen" token, with
+    the goals of reducing assistant model compute, increasing drafted token acceptance rates, and increasing target
+    model throughput.
+
+    This capability is enabled by three concrete requirements for assistant models:
+
+    *   **Use KV cache sharing techniques for the entire assistant model** (see Gemma 4) to reduce attention computation
+        in the assistant model. This method of cache sharing passes the `key_states` and `value_states` from the main
+        model in a dictionary, allowing the assistant model to skip pre-fill entirely, and reducing attention
+        computations (e.g., `k_proj`, `k_norm`, `v_proj`, and `v_norm` in the Gemma 4 architecture) as applicable to the
+        main and assistant models' architectures. This architectural feature effectively locks the assistant into a
+        constant `position_ids` value.
+    *   **Concatenate the embedding and hidden states for the seen last token** from the target model as the input to
+        the assistant. This adaptation allows the assistant to retain rich context about the preceding (possibly
+        drafted) tokens while working from a constant `position_ids` value. For the first token drafted after pre-fill,
+        the last seen token will be the last token from the prompt. For subsequent drafting steps, the last seen token
+        will be the last token generated by the assistant (within a drafting round) or the last token accepted by the
+        target model (between drafting rounds).
+    *   **Use cross-attention** to allow Q from the assistant to attend to KV from the main model.
+
+    Args:
+        assistant_model (`PreTrainedModel`):
+            The model to be used for generating candidates. This model should be smaller than the main model.
+        target_model_input_embeddings (`torch.nn.Embedding`):
+            The input embedding table from main model, used to get the embeddings from the last seen token.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+    """
+
+    requires_model_outputs: bool = True
+    # We always need to pass the hidden states and the shared kv states from the main model
+    # NOTE: This could be done more efficiently for `output_hidden_states` as we actually only care about the last one
+    model_kwargs_overrides: dict[str, Any] = {
+        "output_hidden_states": True,
+        "return_shared_kv_states": True,
+    }
+
+    @deprecate_kwarg("input_ids", version="5.20.0")
+    @deprecate_kwarg("model_kwargs", version="5.20.0")
+    @deprecate_kwarg("inputs_tensor", version="5.20.0")
+    @deprecate_kwarg("logits_processor", version="5.20.0")
+    @deprecate_kwarg("eos_token_id", version="5.20.0")
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        target_model_input_embeddings: nn.Embedding,
+        generation_config: "GenerationConfig",
+        model_kwargs: dict,
+        inputs_tensor: torch.Tensor | None = None,
+        logits_processor: Optional["LogitsProcessorList"] = None,
+        eos_token_id: int | list[int] | torch.Tensor | None = None,
+        **kwargs,
     ):
-        if model.config.multi_query:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :max_length, :]
+        if (
+            "Gemma4Assistant" not in assistant_model.__class__.__name__
+            and "Gemma4UnifiedAssistant" not in assistant_model.__class__.__name__
+        ):
+            raise ValueError(
+                f"Expected assistant_model to be a Gemma4AssistantForCausalLM or Gemma4UnifiedAssistantForCausalLM. Got {assistant_model.__class__.__name__}"
+                " This candidate generator requires that the assistant model is able to work from a shared_kv_states"
+                " dictionary. Currently, only the Gemma4AssistantForCausalLM and Gemma4UnifiedAssistantForCausalLM support this."
+            )
+
+        # Prepare the assistant and the embedding
+        self.assistant_model = assistant_model
+        self.target_model_input_embeddings = target_model_input_embeddings
+
+        self.assistant_generation_config = copy.deepcopy(assistant_model.generation_config)
+        self.generation_config = copy.deepcopy(generation_config)
+        self.num_assistant_tokens = self.assistant_generation_config.num_assistant_tokens
+        self.main_model_max_length = self.generation_config.max_length
+
+        self.is_main_model_prefill = True
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        """Generate draft token candidates using the drafter."""
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Early exit if we cannot generate new tokens.
+        max_new_tokens = min(int(self.num_assistant_tokens), self.main_model_max_length - input_ids.shape[1] - 1)
+        if max_new_tokens <= 0:
+            return input_ids, None
+
+        # Make sure we correctly collected all the main model outputs we needed
+        if (
+            model_outputs is None
+            or not hasattr(model_outputs, "hidden_states")
+            or not hasattr(model_outputs, "shared_kv_states")
+        ):
+            raise ValueError(
+                "`model_outputs` cannot be None, and they need to contain `hidden_states` and `shared_kv_states`"
+            )
+
+        last_hidden_state: torch.Tensor = model_outputs.hidden_states[-1]
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] = model_outputs.shared_kv_states
+
+        # If we validated less tokens, the new `input_ids` are shorter than the last model's outputs, so we need
+        # to get the last hidden states and kv states according to the correct length
+        current_length = input_ids.shape[1]
+        shared_kv_states = {
+            k: (v[0][:, :, :current_length, :], v[1][:, :, :current_length, :]) for k, v in shared_kv_states.items()
+        }
+        # For the first assistant step, the main model only processed the prompt, so use its last hidden state.
+        # Afterwards, use the last hidden state of only the last validated token.
+        if self.is_main_model_prefill:
+            last_hidden_state = last_hidden_state[:, -1:]
         else:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :, :max_length, :]
-    elif isinstance(past_key_values, DynamicCache):
-        past_key_values.crop(max_length)
-    elif past_key_values is not None:
-        for idx in range(len(past_key_values)):
-            if past_key_values[idx] != ([], []):
-                new_past.append(
-                    (
-                        past_key_values[idx][0][:, :, :max_length, :],
-                        past_key_values[idx][1][:, :, :max_length, :],
-                    )
+            last_hidden_state = last_hidden_state[:, n_last_matches : n_last_matches + 1]
+        last_token_id = input_ids[:, -1:]
+        position_ids = torch.tensor([[input_ids.shape[1] - 1]], dtype=torch.long, device=self.assistant_model.device)
+
+        # Drafter autoregressive loop
+        drafted_logits = []
+        drafted_tokens = []
+
+        for _ in range(max_new_tokens):
+            last_token_embedding = self.target_model_input_embeddings(last_token_id)
+            inputs_embeds = torch.cat([last_token_embedding, last_hidden_state], dim=-1)
+
+            with torch.no_grad():
+                outputs = self.assistant_model(
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=model_kwargs.get("attention_mask"),
+                    position_ids=position_ids,
+                    shared_kv_states=shared_kv_states,
+                    use_cache=False,
                 )
+
+            last_token_id = outputs.logits.argmax(dim=-1)
+            last_hidden_state = outputs.last_hidden_state
+
+            drafted_logits.append(outputs.logits)
+            drafted_tokens.append(last_token_id)
+
+        self.is_main_model_prefill = False
+
+        # --- Assemble output ---
+        candidate_ids = torch.cat([input_ids, torch.cat(drafted_tokens, dim=1)], dim=1)
+        candidate_logits = torch.cat(drafted_logits, dim=1)
+        return candidate_ids, candidate_logits
+
+
+class MTPCandidateGenerator(CandidateGenerator):
+    requires_model_outputs: bool = True
+    # We always need to pass the hidden states from the main model - it will be overriden in the __init__ to capture only the
+    # last layer's hidden_states
+    model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
+
+    def __init__(
+        self,
+        main_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+        model_kwargs: dict[str, Any],
+        logits_processor: Optional["LogitsProcessorList"] = None,
+    ):
+        from ..cache_utils import MtpCache
+        from ..modeling_layers import MtpModel
+
+        self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
+        if self.num_mtp_layers is None:
+            raise ValueError(
+                "Could not find `num_mtp_layers` in the model config. This model probably has no associated "
+                "mtp weights."
+            )
+
+        # Override to capture only the last main model's layer to save memory
+        last_layer_idx = main_model.config.get_text_config().num_hidden_layers - 1
+        self.model_kwargs_overrides = {"output_hidden_states": [last_layer_idx]}
+
+        # Heuristic: use the device of the last layer of the main model for the MTP layers
+        base_model = main_model.get_decoder()
+        self.device = next(x.device for x in base_model.layers[-1].parameters())  # type: ignore
+        self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
+
+        # Create the mtp cache and allow it to keep its past before we crop it
+        self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
+        self.mtp_cache.activate_past_recording()
+
+        # Save those to know how to decode mtp tokens
+        self.do_sample = generation_config.do_sample
+        self.logits_processor = logits_processor
+
+        self.is_main_model_prefill = True
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Make sure we correctly collected all the main model outputs we needed
+        if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
+            raise ValueError("`model_outputs` cannot be None, and they need to contain `hiden_states`")
+
+        last_hidden_states: torch.Tensor = model_outputs.hidden_states[-1]
+
+        # Here `input_ids`/`attention_mask`/`position_ids` are the full sequence inputs, including the last token that was
+        # just drafted from the main model. We need to slice to get only what the main model just processed, shifted by 1 to the
+        # right to take the new token as well. Say the main model just had token positions [2, 3] as input, the tensors
+        # contains the data for position [0, 1, 2, 3, 4], i.e. full inputs + new drafted token from last position 3 that was processed.
+        # We want to slice to get data for positions [3, 4] for the 1st mtp layer, i.e. same as main model, shifted by 1 to the right.
+        # On the other hand, the `full_seq_last_hidden_states` contains data for only already processed positions by the main_model, i.e.
+        # one less than `input_ids`/`positions_ids`/`attention_mask`
+        num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
+
+        # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
+        # last hidden states of only the last validated tokens
+        last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
+
+        # We need to cache the full last_hidden_states from the main model to be able to correct the mtp cache based on validated tokens
+        if self.num_mtp_layers > 1:
+            # To correct the mtp cache based on validated tokens, we need to keep all previous last_hidden_states
+            if self.is_main_model_prefill:
+                self.full_seq_last_hidden_states = last_hidden_states
             else:
-                new_past.append((past_key_values[idx][0], past_key_values[idx][1]))
-        past_key_values = tuple(new_past)
-    return past_key_values
+                self.full_seq_last_hidden_states = torch.cat(
+                    [self.full_seq_last_hidden_states, last_hidden_states], dim=1
+                )
+
+        mtp_attention_mask = None
+        # This is the tricky part: potentially invalidate and recreate the mtp cache for wrong positions if necessary
+        # With one layer, or if validating enough tokens, the cache is always correct since the first mtp layer sees the token
+        # drafted directly from main model, which is necessarily correct, so we don't need any correction
+        if self.num_mtp_layers > 1 and n_last_matches < self.num_mtp_layers - 1 and not self.is_main_model_prefill:
+            # Invalidate the full chains of layers before recomputing with the validated tokens, even if the first layers may
+            # have a valid cache, because we need to have the same sequence length for all MTP layers due to the cat of tokens
+            # and prev hidden_states
+            self.mtp_cache.crop(-self.num_mtp_layers)
+
+            # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
+            mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            if model_kwargs.get("attention_mask") is not None:
+                mtp_attention_mask = model_kwargs["attention_mask"][
+                    :, -num_last_main_model_tokens - self.num_mtp_layers :
+                ]
+            last_hidden_states = self.full_seq_last_hidden_states[
+                :, -num_last_main_model_tokens - self.num_mtp_layers :, :
+            ]
+        # If we have a single layer, or validated enough, we can simply pass the new tokens
+        else:
+            mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
+            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+            if model_kwargs.get("attention_mask") is not None:
+                mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
+
+        candidate_ids, candidate_logits, _ = self.mtp_model(
+            input_ids=mtp_input_ids,
+            last_hidden_states=last_hidden_states,
+            attention_mask=mtp_attention_mask,
+            position_ids=mtp_position_ids,
+            mtp_cache=self.mtp_cache,
+            do_sample=self.do_sample,
+            logits_processor=self.logits_processor,
+            full_input_ids=input_ids,
+            **kwargs,
+        )
+
+        # Once we arrive here the first time, it's no longer the case
+        self.is_main_model_prefill = False
+
+        # cat everything back together (we need to return the full ids here)
+        candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+        return candidate_ids, candidate_logits
 
 
-def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_encoder_decoder: bool) -> Dict[str, Any]:
+class DFlashTokenCandidateGenerator(CandidateGenerator):
+    """
+    Candidate generator for predicting multiple draft tokens from a single forward pass with a draft model.
+    Dflash reuses the main model's `hidden_states` at several `config.target_layer_ids` to populate the kv cache of the assistant,
+    and then uses the last "bonus" decoded token from the main model, along with `config.block_size` as its main forward to
+    draft `config.block_size` new tokens at every iteration, similar to a diffusion window.
+
+    Args:
+        assistant_model (`PreTrainedModel`):
+            The model to be used for generating candidates. This model should be smaller than the main model.
+        main_model_input_embeddings (`torch.nn.Embedding`):
+            The input embedding table from main model, used to get the embeddings from the last seen token.
+        main_model_output_embeddings (`torch.nn.Linear`):
+            The output embedding table from main model, used to get the candidate logits.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+    """
+
+    requires_model_outputs: bool = True
+    # This will be overriden in the __init__ to capture only the required layer's hidden_states
+    model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
+
+    def __init__(
+        self,
+        assistant_model: "PreTrainedModel",
+        main_model_input_embeddings: nn.Embedding,
+        main_model_output_embeddings: nn.Linear,
+        generation_config: "GenerationConfig",
+        logits_processor: Optional["LogitsProcessorList"] = None,
+        **kwargs,
+    ):
+        from ..cache_utils import DFlashCache
+
+        # Get the assistant model and the embeddings of the main model
+        self.assistant_model = assistant_model
+        self.device = self.assistant_model.device
+        self.main_model_max_length = generation_config.max_length
+        self.main_model_input_embeddings = main_model_input_embeddings
+        self.main_model_output_embeddings = main_model_output_embeddings
+
+        # Get the layers used to obtain the intermediate hidden_states from main model, and prepare the diffusion window ids tensor
+        self.target_layer_ids = assistant_model.config.target_layer_ids
+        # Override to capture only those specific layers
+        self.model_kwargs_overrides = {"output_hidden_states": self.target_layer_ids}
+        self.block_size = assistant_model.config.block_size
+        self.mask_token_id = assistant_model.config.mask_token_id
+        self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
+
+        # Prepare a cache for the assistant, and activate the past recording
+        self.cache = DFlashCache(config=self.assistant_model.config)
+        self.cache.activate_past_recording()
+
+        # Save those to allow logits manipulations
+        self.do_sample = generation_config.do_sample
+        self.logits_processor = logits_processor
+
+        self.is_main_model_prefill = True
+
+    def _get_noise_embeds(self, noise_ids: torch.LongTensor) -> torch.Tensor:
+        """
+        Get noise token embeddings from the main model while bypassing its optional embedding normalization, which should not be used
+        for DFlash (the embedding may be a subclass of nn.Embedding with the additional normalization).
+        """
+        embed_norm = getattr(self.main_model_input_embeddings, "embed_norm", None)
+        if embed_norm is None:
+            return self.main_model_input_embeddings(noise_ids)
+
+        # For TP-aware models, the easiest workaround to avoid the norm is to temporarily set it to Identity
+        try:
+            self.main_model_input_embeddings.embed_norm = nn.Identity()
+            embeds = self.main_model_input_embeddings(noise_ids)
+        finally:
+            self.main_model_input_embeddings.embed_norm = embed_norm
+
+        return embeds
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        """Generate draft token candidates using the drafter."""
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Early exit if we cannot generate new tokens.
+        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
+        if max_new_tokens <= 0:
+            return input_ids, None
+
+        # Make sure we correctly collected all the main model outputs we needed
+        if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
+            raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
+
+        num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
+        # The hidden states hold all tokens from the last main model's forward on all the candidates. We need the
+        # hidden states of only accepted tokens thus crop out the rest
+        context_hidden_states: torch.Tensor = torch.cat(
+            [
+                model_outputs.hidden_states[i][:, :num_last_main_model_tokens].to(self.device)
+                for i in self.target_layer_ids
+            ],
+            dim=-1,
+        )
+
+        # We need to tell the cache how many new states to expect into its k/v states, additional to the "noise" or "diffusion window"
+        self.cache.set_previous_accepted_tokens(num_last_main_model_tokens)
+        # We need to remvoe the previous "noise" from the cache
+        if not self.is_main_model_prefill:
+            self.cache.crop(-self.block_size)
+
+        # Here `position_ids`/`attention_mask` are the full sequence inputs, including the last "bonus" token that was just drafted
+        # from the main model. We need to slice to get only what the main model just processed. Say the main model just had token
+        # positions [2, 3] as input, the tensors contains the data for position [0, 1, 2, 3, 4], i.e. full inputs + new drafted token
+        # from last position 3 that was processed
+        # For `position_ids`, we need only the last token positions, whereas the `attention_mask` should be passed fully (except last "bonus" token)
+        position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - 1 : -1]
+        attention_mask = model_kwargs["attention_mask"][:, :-1] if model_kwargs["attention_mask"] is not None else None
+
+        # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
+        # the main model, and the noise tokens
+        noise_ids = torch.cat([input_ids[:, -1:], self.noise_ids_mask.to(input_ids.device)], dim=-1)
+        noise_embeds = self._get_noise_embeds(noise_ids)
+
+        # Append positions and mask for the noise tokens, because they correspond to positions beyond the last `num_last_main_model_tokens`
+        # that will first be used to populate the assistant kv cache at those positions through the `context_hidden_states`
+        noise_position_ids = torch.arange(self.block_size, device=position_ids.device) + position_ids[..., -1:] + 1
+        position_ids = torch.cat([position_ids, noise_position_ids], dim=-1)
+        if attention_mask is not None:
+            noise_attention_mask = torch.ones(
+                1, self.block_size, device=attention_mask.device, dtype=attention_mask.dtype
+            )
+            attention_mask = torch.cat([attention_mask, noise_attention_mask], dim=-1)
+
+        # Get assistant model outputs
+        outputs = self.assistant_model(
+            noise_embeds=noise_embeds.to(self.device),
+            context_hidden_states=context_hidden_states,
+            position_ids=position_ids.to(self.device),
+            attention_mask=attention_mask.to(self.device) if attention_mask is not None else None,
+            past_key_values=self.cache,
+        )
+
+        # Once we arrive here the first time, it's no longer the case
+        self.is_main_model_prefill = False
+
+        candidate_logits = self.main_model_output_embeddings(
+            outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
+        ).to(input_ids.device)
+
+        # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
+        if self.logits_processor is not None:
+            candidate_ids = input_ids
+            # Upcast for logit manipulations
+            candidate_logits = candidate_logits.to(dtype=torch.float32)
+            # We need to sample 1 by 1 for the processors
+            for i in range(candidate_logits.shape[1]):
+                # Re-assign so we later return the correct logits
+                candidate_logits[:, i, :] = self.logits_processor(candidate_ids, candidate_logits[:, i, :])
+                if self.do_sample:
+                    probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
+                    next_token = torch.multinomial(probs, num_samples=1)
+                else:
+                    next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+                # Append it to the full sequence to be used by the next round of `self.logits_processor`
+                candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
+        # Here we can vectorize as we don't have any processors
+        else:
+            if self.do_sample:
+                probs = nn.functional.softmax(candidate_logits, dim=-1, dtype=torch.float32)
+                # Multinomial only works on 2d matrices, and assisted decoding restrict to batch size == 1 anyway
+                candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1).transpose(0, 1)
+            else:
+                candidate_ids = candidate_logits.argmax(dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+
+        return candidate_ids, candidate_logits
+
+
+def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 
     mask_key = "decoder_attention_mask" if is_encoder_decoder else "attention_mask"
@@ -825,8 +1696,10 @@ def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_en
         return model_kwargs
 
     mask = model_kwargs[mask_key]
-    mask_length_diff = new_length - mask.shape[1]
+    if mask is None:
+        return model_kwargs
 
+    mask_length_diff = new_length - mask.shape[1]
     if mask_length_diff < 0:
         model_kwargs[mask_key] = mask[:, :mask_length_diff]
     elif mask_length_diff > 0:
@@ -853,17 +1726,44 @@ def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_en
     return model_kwargs
 
 
-def _prepare_token_type_ids(model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
-    """Expands or crops the model's token_type_ids for decoding purposes, to the defined length"""
-    if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
+def _prepare_position_ids(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
+    """Expands or crops the model's position ids for decoding purposes, to the defined length"""
+
+    position_key = "decoder_position_ids" if is_encoder_decoder else "position_ids"
+    if model_kwargs.get(position_key) is None:
         return model_kwargs
 
+    positions = model_kwargs[position_key]
+    position_length_diff = new_length - positions.shape[-1]
+
+    if position_length_diff < 0:
+        model_kwargs[position_key] = positions[:, :position_length_diff]
+    elif position_length_diff > 0:
+        # Works for 2D and 3D position tensors
+        required_dim = [1] * (positions.dim() - 1) + [-1]
+        next_position_ids = (
+            torch.arange(position_length_diff, dtype=positions.dtype, device=positions.device).view(*required_dim)
+            + positions[..., -1:]
+            + 1
+        )
+        next_position_ids = torch.cat([positions, next_position_ids], dim=-1)
+        model_kwargs[position_key] = next_position_ids
+
+    return model_kwargs
+
+
+def _prepare_token_type_ids(model_kwargs: dict[str, Any], new_length: int) -> dict[str, Any]:
+    """Expands or crops the model's token_type_ids for decoding purposes, to the defined length"""
+    if model_kwargs.get("token_type_ids") is None:
+        return model_kwargs
+
+    # Multimodal models call this arg `mm_token_type_ids`
     token_type_ids = model_kwargs["token_type_ids"]
     final_token_type = token_type_ids[:, -1].unsqueeze(-1)
     type_length_diff = new_length - token_type_ids.shape[1]
 
     if type_length_diff < 0:
-        token_type_ids = token_type_ids[:, :type_length_diff]
+        model_kwargs["token_type_ids"] = token_type_ids[:, :type_length_diff]
     elif type_length_diff > 0:
         token_type_copies = final_token_type.repeat(1, type_length_diff)
         model_kwargs["token_type_ids"] = torch.cat([model_kwargs["token_type_ids"], token_type_copies], dim=-1)

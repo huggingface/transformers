@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,26 @@
 # limitations under the License.
 """Testing suite for the PyTorch ViTMAE model."""
 
+import copy
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 import numpy as np
+from pytest import mark
 
 from transformers import ViTMAEConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    is_flaky,
+    require_flash_attn,
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -33,13 +43,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTMAEForPreTraining, ViTMAEModel
+    from transformers import PreTrainedModel, ViTMAEForPreTraining, ViTMAEModel, set_seed
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
 class ViTMAEModelTester:
@@ -159,6 +169,17 @@ class ViTMAEModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_model_class(self, model_class):
+        config, inputs_dict = self.prepare_config_and_inputs_for_common()
+        # `random_masking` draws its own `noise` when none is passed, so anything comparing two runs
+        # of this model (eager against exported, batched against unbatched) would be comparing two
+        # different random subsets of patches. `forward` takes `noise` precisely so a caller can pin
+        # it; the integration tests above do the same.
+        generator = torch.Generator().manual_seed(0)
+        noise = torch.rand(self.batch_size, self.mask_length, generator=generator)
+        inputs_dict["noise"] = noise.to(torch_device)
+        return config, inputs_dict
+
 
 @require_torch
 class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -170,15 +191,147 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ViTMAEModel, ViTMAEForPreTraining) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": ViTMAEModel} if is_torch_available() else {}
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ViTMAEModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTMAEConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViTMAEConfig, has_text_modality=False, hidden_size=32)
+
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ) -> None:
+        r"""
+        Same as `ModelTesterMixin.flash_attn_inference_equivalence`, but resets RNG before each loaded
+        model's eager/kernel forward pair so random masking in ViTMAE matches between backends.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        _has_run_at_least_one_model = False
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
+                continue
+
+            set_seed(42)
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            config = self._prepare_config_headdim(config, 16)
+
+            if getattr(config, "sliding_window", None):
+                config.sliding_window = 2
+
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                continue
+
+            _has_run_at_least_one_model = True
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                main_input = inputs_dict[model.main_input_name]
+                if isinstance(main_input, torch.Tensor):
+                    main_input = main_input[:1]
+                    if torch.is_floating_point(main_input):
+                        main_input = main_input.to(torch.bfloat16)
+                first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
+                if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
+                    first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
+                if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
+                    if "image_grid_thw" in inputs_dict:
+                        continue
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
+                if "image_sizes" in inputs_dict:
+                    first_inputs["image_sizes"] = inputs_dict["image_sizes"][:1]
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
+                    if decoder_input_ids is not None:
+                        first_inputs["decoder_input_ids"] = decoder_input_ids[:1]
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, 0] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1] = 0
+
+                second_inputs = copy.deepcopy(first_inputs)
+                if dummy_attention_mask is not None:
+                    second_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        second_inputs["decoder_attention_mask"] = dummy_attention_mask
+
+                first_inputs = self._prepare_for_class(first_inputs, model_class)
+                first_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in first_inputs.items()
+                }
+                second_inputs = self._prepare_for_class(second_inputs, model_class)
+                second_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
+                }
+
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                )
+
+                set_seed(12345)
+
+                outputs = model(**first_inputs)
+                logits_1_eager = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                outputs = model(**second_inputs)
+                logits_2_eager = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+
+                del model
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                )
+
+                set_seed(12345)
+
+                outputs = model(**first_inputs)
+                logits_1_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                outputs = model(**second_inputs)
+                logits_2_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
+                if padding_side == "left":
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
+                else:
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+        if not _has_run_at_least_one_model:
+            self.skipTest(
+                f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
+            )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -203,22 +356,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
-
-    # overwrite from common since ViTMAEForPretraining has random masking, we need to fix the noise
-    # to generate masks during test
-    def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
-        # make masks reproducible
-        np.random.seed(2)
-
-        num_patches = int((pt_model.config.image_size // pt_model.config.patch_size) ** 2)
-        noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
-        pt_noise = torch.from_numpy(noise)
-
-        # Add `noise` argument.
-        # PT inputs will be prepared in `super().check_pt_tf_models()` with this added `noise` argument
-        pt_inputs_dict["noise"] = pt_noise
-
-        super().check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -257,20 +394,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load""")
     def test_model_outputs_equivalence(self):
         pass
@@ -285,6 +408,63 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = ViTMAEModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @require_flash_attn
+    @require_torch_accelerator
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                # ForPretraining model has random `noise` -> need to set seed
+                # to make the test deterministic
+                torch.manual_seed(12345)
+                outputs = model(**inputs_dict, output_hidden_states=True)
+                torch.manual_seed(12345)
+                outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(**inputs_dict)
+
+    @unittest.skip("Not applicable for VideoMAE")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -297,7 +477,7 @@ def prepare_img():
 class ViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
+        return ViTImageProcessorPil.from_pretrained("facebook/vit-mae-base")
 
     @cached_property
     def default_model(self):
@@ -305,7 +485,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_pretraining(self):
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -314,8 +493,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = int((vit_mae_config.image_size // vit_mae_config.patch_size) ** 2)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -341,7 +518,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -350,8 +526,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt", do_resize=False).to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = (image.height // vit_mae_config.patch_size) * (image.width // vit_mae_config.patch_size)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -368,7 +542,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding_custom_sizes(self):
         # Ensure custom sizes are correctly handled when interpolating the position embeddings
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model

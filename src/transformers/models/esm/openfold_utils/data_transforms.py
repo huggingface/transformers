@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
 
 import numpy as np
 import torch
@@ -22,7 +21,7 @@ from . import residue_constants as rc
 from .tensor_utils import tensor_tree_map, tree_map
 
 
-def make_atom14_masks(protein: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def make_atom14_masks(protein: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """Construct denser atom positions (14 dimensions instead of 37)."""
     restype_atom14_to_atom37_list = []
     restype_atom37_to_atom14_list = []
@@ -32,9 +31,7 @@ def make_atom14_masks(protein: Dict[str, torch.Tensor]) -> Dict[str, torch.Tenso
         atom_names = rc.restype_name_to_atom14_names[rc.restype_1to3[rt]]
         restype_atom14_to_atom37_list.append([(rc.atom_order[name] if name else 0) for name in atom_names])
         atom_name_to_idx14 = {name: i for i, name in enumerate(atom_names)}
-        restype_atom37_to_atom14_list.append(
-            [(atom_name_to_idx14[name] if name in atom_name_to_idx14 else 0) for name in rc.atom_types]
-        )
+        restype_atom37_to_atom14_list.append([(atom_name_to_idx14.get(name, 0)) for name in rc.atom_types])
 
         restype_atom14_mask_list.append([(1.0 if name else 0.0) for name in atom_names])
 
@@ -87,7 +84,7 @@ def make_atom14_masks(protein: Dict[str, torch.Tensor]) -> Dict[str, torch.Tenso
     return protein
 
 
-def make_atom14_masks_np(batch: Dict[str, torch.Tensor]) -> Dict[str, np.ndarray]:
+def make_atom14_masks_np(batch: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:
     batch = tree_map(lambda n: torch.tensor(n, device=batch["aatype"].device), batch, np.ndarray)
     out = tensor_tree_map(lambda t: np.array(t), make_atom14_masks(batch))
     return out

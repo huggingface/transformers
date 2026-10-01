@@ -15,9 +15,7 @@ limitations under the License.
 
 # Examples
 
-We host a wide range of example scripts for multiple learning frameworks. Simply choose your favorite: [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch) or [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
-
-We also have some [research projects](https://github.com/huggingface/transformers/tree/main/examples/research_projects), as well as some [legacy examples](https://github.com/huggingface/transformers/tree/main/examples/legacy). Note that unlike the main examples these are not actively maintained, and may require specific older versions of dependencies in order to run.
+We host a wide range of example scripts, in addition to [research projects](https://github.com/huggingface/transformers-research-projects/), as well as some [legacy examples](https://github.com/huggingface/transformers/tree/main/examples/legacy). Note that unlike the main examples these are not actively maintained, and may require specific older versions of dependencies in order to run.
 
 While we strive to present as many use cases as possible, the example scripts are just that - examples. It is expected that they won't work out-of-the-box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs. To help you with that, most of the examples fully expose the preprocessing of the data, allowing you to tweak and edit them as required.
 
@@ -94,6 +92,24 @@ Alternatively, you can switch your cloned 🤗 Transformers to a specific versio
 git checkout tags/v3.5.1
 ```
 and run the example command as usual afterward.
+
+## Running the Examples on Hugging Face Jobs
+
+Each example script declares its dependencies in a [PEP 723](https://peps.python.org/pep-0723/) `# /// script` header, so it runs on [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs) straight from its GitHub URL, with no environment to set up. Pass the URL to `hf jobs uv run` and the script's arguments after it:
+
+```bash
+hf jobs uv run --flavor a10g-small --timeout 30m -s HF_TOKEN -- \
+    https://raw.githubusercontent.com/huggingface/transformers/main/examples/pytorch/image-classification/run_image_classification.py \
+    --model_name_or_path google/vit-base-patch16-224-in21k \
+    --dataset_name ethz/food101 \
+    --do_train --do_eval \
+    --remove_unused_columns False \
+    --max_train_samples 2000 --max_eval_samples 500 --num_train_epochs 1 \
+    --output_dir vit-food101 \
+    --push_to_hub
+```
+
+`--flavor` picks the hardware, `--timeout` sets the time limit (30 minutes by default), and `-s HF_TOKEN` forwards your token so the script can push the model. The `--` before the URL keeps the two apart, so a script argument that shares a name with an `hf` flag, such as `--token`, goes to the script. This trains on 2,000 images and finishes in about three minutes. For the full run, drop the `--max_*` and `--num_train_epochs` flags and raise `--timeout` to `2h`: three epochs over Food-101 take about an hour on `a10g-small`. See [Train Models on Jobs](https://huggingface.co/docs/hub/jobs-training) for the details.
 
 ## Running the Examples on Remote Hardware with Auto-Setup
 

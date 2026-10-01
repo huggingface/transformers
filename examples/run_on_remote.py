@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,7 +55,7 @@ if __name__ == "__main__":
     cluster.run(["pip install torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu117"])
 
     # Run example. You can bypass the CLI wrapper and paste your own code here.
-    cluster.run([f'python transformers/examples/{args.example} {" ".join(shlex.quote(arg) for arg in unknown)}'])
+    cluster.run([f"python transformers/examples/{args.example} {shlex.join(unknown)}"])
 
     # Alternatively, we can just import and run a training function (especially if there's no wrapper CLI):
     # from my_script... import train

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,7 +51,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
             siblings = parent.find_all(child.name, recursive=False)
             xpath_tags.append(child.name)
             xpath_subscripts.append(
-                0 if 1 == len(siblings) else next(i for i, s in enumerate(siblings, 1) if s is child)
+                0 if len(siblings) == 1 else next(i for i, s in enumerate(siblings, 1) if s is child)
             )
             child = parent
         xpath_tags.reverse()
@@ -101,7 +100,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         Main method to prepare for the model one or several HTML strings.
 
         Args:
-            html_strings (`str`, `List[str]`):
+            html_strings (`str`, `list[str]`):
                 The HTML string or batch of HTML strings from which to extract nodes and corresponding xpaths.
 
         Returns:
@@ -155,11 +154,11 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
         if not valid_strings:
             raise ValueError(
-                "HTML strings must of type `str`, `List[str]` (batch of examples), "
+                "HTML strings must of type `str`, `list[str]` (batch of examples), "
                 f"but is of type {type(html_strings)}."
             )
 
-        is_batched = bool(isinstance(html_strings, (list, tuple)) and (isinstance(html_strings[0], str)))
+        is_batched = isinstance(html_strings, (list, tuple)) and (isinstance(html_strings[0], str))
 
         if not is_batched:
             html_strings = [html_strings]

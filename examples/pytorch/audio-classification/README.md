@@ -26,15 +26,14 @@ very little annotated data to yield good performance on speech classification da
 
 ## Single-GPU
 
-The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) on the 🗣️ [Keyword Spotting subset](https://huggingface.co/datasets/superb#ks) of the SUPERB dataset.
+The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) on the 🗣️ [Keyword Spotting subset](https://huggingface.co/datasets/s3prl/superb#ks) of the SUPERB dataset.
 
 ```bash
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
-    --dataset_name superb \
+    --dataset_name s3prl/superb \
     --dataset_config_name ks \
     --output_dir wav2vec2-base-ft-keyword-spotting \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
@@ -42,7 +41,7 @@ python run_audio_classification.py \
     --learning_rate 3e-5 \
     --max_length_seconds 1 \
     --attention_mask False \
-    --warmup_ratio 0.1 \
+    --warmup_steps 0.1 \
     --num_train_epochs 5 \
     --per_device_train_batch_size 32 \
     --gradient_accumulation_steps 4 \
@@ -67,16 +66,15 @@ On a single V100 GPU (16GB), this script should run in ~14 minutes and yield acc
 
 ## Multi-GPU
 
-The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/anton-l/common_language).
+The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/regisss/common_language).
 
 ```bash
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
-    --dataset_name common_language \
+    --dataset_name regisss/common_language \
     --audio_column_name audio \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
@@ -84,7 +82,7 @@ python run_audio_classification.py \
     --learning_rate 3e-4 \
     --max_length_seconds 16 \
     --attention_mask False \
-    --warmup_ratio 0.1 \
+    --warmup_steps 0.1 \
     --num_train_epochs 10 \
     --per_device_train_batch_size 8 \
     --gradient_accumulation_steps 4 \
@@ -115,10 +113,10 @@ On 4 V100 GPUs (16GB), this script should run in ~1 hour and yield accuracy of *
 $ apt install git-lfs
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`
+2. Log in with your HuggingFace account credentials using `hf`
 
 ```bash
-$ huggingface-cli login
+$ hf auth login
 # ...follow the prompts
 ```
 
@@ -136,8 +134,8 @@ python run_audio_classification.py \
 The following table shows a couple of demonstration fine-tuning runs.
 It has been verified that the script works for the following datasets:
 
-- [SUPERB Keyword Spotting](https://huggingface.co/datasets/superb#ks)
-- [Common Language](https://huggingface.co/datasets/common_language)
+- [SUPERB Keyword Spotting](https://huggingface.co/datasets/s3prl/superb#ks)
+- [Common Language](https://huggingface.co/datasets/regisss/common_language)
 
 | Dataset | Pretrained Model | # transformer layers | Accuracy on eval | GPU setup | Training time | Fine-tuned Model & Logs |
 |---------|------------------|----------------------|------------------|-----------|---------------|--------------------------|

@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2022-11-02 and contributed to Hugging Face Transformers on 2022-12-01.*
 
 # Chinese-CLIP
 
+
 ## Overview
 
-The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://arxiv.org/abs/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
+The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://huggingface.co/papers/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
 Chinese-CLIP is an implementation of CLIP (Radford et al., 2021) on a large-scale dataset of Chinese image-text pairs. It is capable of performing cross-modal retrieval and also playing as a vision backbone for vision tasks like zero-shot image classification, open-domain object detection, etc. The original Chinese-CLIP code is released [at this link](https://github.com/OFA-Sys/Chinese-CLIP).
 
 The abstract from the paper is the following:
@@ -32,33 +34,35 @@ The Chinese-CLIP model was contributed by [OFA-Sys](https://huggingface.co/OFA-S
 The code snippet below shows how to compute image & text features and similarities:
 
 ```python
->>> from PIL import Image
->>> import requests
->>> from transformers import ChineseCLIPProcessor, ChineseCLIPModel
+import requests
+from PIL import Image
 
->>> model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
->>> processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
+from transformers import ChineseCLIPModel, ChineseCLIPProcessor
 
->>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
->>> image = Image.open(requests.get(url, stream=True).raw)
->>> # Squirtle, Bulbasaur, Charmander, Pikachu in English
->>> texts = ["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"]
 
->>> # compute image feature
->>> inputs = processor(images=image, return_tensors="pt")
->>> image_features = model.get_image_features(**inputs)
->>> image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)  # normalize
+model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16", device_map="auto")
+processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
->>> # compute text features
->>> inputs = processor(text=texts, padding=True, return_tensors="pt")
->>> text_features = model.get_text_features(**inputs)
->>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)  # normalize
+url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+# Squirtle, Bulbasaur, Charmander, Pikachu in English
+texts = ["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"]
 
->>> # compute image-text similarity scores
->>> inputs = processor(text=texts, images=image, return_tensors="pt", padding=True)
->>> outputs = model(**inputs)
->>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
->>> probs = logits_per_image.softmax(dim=1)  # probs: [[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]]
+# compute image feature
+inputs = processor(images=image, return_tensors="pt").to(model.device)
+image_features = model.get_image_features(**inputs)
+image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)  # normalize
+
+# compute text features
+inputs = processor(text=texts, padding=True, return_tensors="pt").to(model.device)
+text_features = model.get_text_features(**inputs)
+text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)  # normalize
+
+# compute image-text similarity scores
+inputs = processor(text=texts, images=image, return_tensors="pt", padding=True).to(model.device)
+outputs = model(**inputs)
+logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+probs = logits_per_image.softmax(dim=1)  # probs: [[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]]
 ```
 
 Currently, following scales of pretrained Chinese-CLIP models are available on 🤗 Hub:
@@ -71,7 +75,6 @@ Currently, following scales of pretrained Chinese-CLIP models are available on �
 ## ChineseCLIPConfig
 
 [[autodoc]] ChineseCLIPConfig
-    - from_text_vision_configs
 
 ## ChineseCLIPTextConfig
 
@@ -86,13 +89,15 @@ Currently, following scales of pretrained Chinese-CLIP models are available on �
 [[autodoc]] ChineseCLIPImageProcessor
     - preprocess
 
-## ChineseCLIPFeatureExtractor
+## ChineseCLIPImageProcessorPil
 
-[[autodoc]] ChineseCLIPFeatureExtractor
+[[autodoc]] ChineseCLIPImageProcessorPil
+    - preprocess
 
 ## ChineseCLIPProcessor
 
 [[autodoc]] ChineseCLIPProcessor
+    - __call__
 
 ## ChineseCLIPModel
 

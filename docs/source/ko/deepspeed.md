@@ -211,7 +211,7 @@ ZeRO-2는 GPU에서 옵티마이저와 그레이디언트를 분할합니다. �
         "overlap_comm": true,
         "reduce_scatter": true,
         "reduce_bucket_size": 5e8,
-        "contiguous_gradients": true
+        "contiguous_gradients": true,
         "round_robin_gradients": true
     }
 }
@@ -280,7 +280,7 @@ model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
-fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `torch_dtype=torch.float16`을 지정해야 합니다.
+fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `dtype=torch.float16`을 지정해야 합니다.
 
 ZeRO-3의 또 다른 고려 사항은 여러 개의 GPU를 사용하는 경우 현재 실행 중인 레이어의 매개변수가 아닌 한 단일 GPU에 모든 매개변수가 없다는 것입니다. 사전 훈련된 모델 가중치를 [`~PreTrainedModel.from_pretrained`]에 로드하는 등 모든 레이어의 모든 매개변수에 한 번에 액세스하려면 한 번에 하나의 레이어를 로드하고 즉시 모든 GPU에 파티셔닝합니다. 이는 매우 큰 모델의 경우 메모리 제한으로 인해 하나의 GPU에 가중치를 로드한 다음 다른 GPU에 분산할 수 없기 때문입니다.
 
@@ -354,13 +354,6 @@ ZeRO-3로 대규모 모델을 초기화하고 매개변수에 액세스하는 �
             "buffer_size": 1e8,
             "max_in_cpu": 1e9
         },
-        "aio": {
-            "block_size": 262144,
-            "queue_depth": 32,
-            "thread_count": 1,
-            "single_submit": false,
-            "overlap_events": true
-        },
         "overlap_comm": true,
         "contiguous_gradients": true,
         "sub_group_size": 1e9,
@@ -371,7 +364,13 @@ ZeRO-3로 대규모 모델을 초기화하고 매개변수에 액세스하는 �
         "stage3_max_reuse_distance": 1e9,
         "stage3_gather_16bit_weights_on_model_save": true
     },
-
+    "aio": {
+        "block_size": 262144,
+        "queue_depth": 32,
+        "thread_count": 1,
+        "single_submit": false,
+        "overlap_events": true
+    },
     "gradient_accumulation_steps": "auto",
     "gradient_clipping": "auto",
     "steps_per_print": 2000,
@@ -492,7 +491,7 @@ Ampere GPU 및 PyTorch 1.7 이상의 경우 일부 연산에 대해 더 효율�
 </hfoption>
 <hfoption id="fp16">
 
-PyTorch AMP와 같은 fp16 혼합 정밀도를 구성하면 메모리 사용량이 줄어들고 훈련 속도가 빨라집니다.[`Trainer`]는 `args.fp16_backend` 값에 따라 fp16을 자동으로 활성화 또는 비활성화하며, 나머지 구성은 사용자가 설정할 수 있습니다. 명령줄에서 다음 인수를 전달하면 fp16이 활성화됩니다: `fp16`, `--fp16_backend amp` 또는 `--fp16_full_eval`.
+fp16 혼합 정밀도를 구성하려면 아래와 같이 `"auto"` 또는 직접 값을 설정하세요. [`Trainer`]는 `fp16` 또는 `fp16_full_eval` 값에 따라 fp16을 자동으로 활성화 또는 비활성화하며, 나머지 구성은 사용자가 설정할 수 있습니다. 명령줄에서 `--fp16` 또는 `--fp16_full_eval` 인수를 전달하면 fp16이 활성화됩니다.
 
 ```yaml
 {
@@ -508,17 +507,6 @@ PyTorch AMP와 같은 fp16 혼합 정밀도를 구성하면 메모리 사용량�
 ```
 
 추가 딥스피드 fp16 훈련 옵션은 [fp16 훈련 옵션](https://www.deepspeed.ai/docs/config-json/#fp16-training-options) 참조를 참조하세요.
-
-Apex와 같은 fp16 혼합 정밀도를 구성하려면 아래 그림과 같이 `"auto"` 또는 직접 값을 설정합니다.[`Trainer`]는 `args.fp16_backend` 및 `args.fp16_opt_level`의 값에 따라 `amp`를 자동으로 구성합니다. 다음 인수를 전달하면 명령줄에서 활성화할 수도 있습니다: `fp16`, `--fp16_backend apex` 또는 `--fp16_opt_level 01`.
-
-```yaml
-{
-    "amp": {
-        "enabled": "auto",
-        "opt_level": "auto"
-    }
-}
-```
 
 </hfoption>
 <hfoption id="bf16">
@@ -601,7 +589,7 @@ bf16은 설정 파일에서 설정하거나 다음 인수를 전달하면 명령
 deepspeed --num_gpus=2 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -616,7 +604,7 @@ deepspeed --num_gpus=2 examples/pytorch/translation/run_translation.py \
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -1165,7 +1153,7 @@ python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
 
 ### DeepSpeed 프로세스가 시작 단계에서 종료되었을 경우[[deepspeed-process-killed-at-startup]]
 
-실행 중에 트레이스백 없이 DeepSpeed 프로세스가 종료되면 일반적으로 프로그램이 시스템보다 많은 CPU 메모리를 할당하려고 시도했거나 프로세스가 허용된 것보다 많은 CPU 메모리를 할당하려고 시도하여 OS 커널이 프로세스를 종료했음을 의미합니다. 이 경우 구성 파일에 `offload_optimizer`, `offload_param` 또는 둘 다 CPU로 오프로드하도록 구성되어 있는지 확인하세요.  
+실행 중에 트레이스백 없이 DeepSpeed 프로세스가 종료되면 일반적으로 프로그램이 시스템보다 많은 CPU 메모리를 할당하려고 시도했거나 프로세스가 허용된 것보다 많은 CPU 메모리를 할당하려고 시도하여 OS 커널이 프로세스를 종료했음을 의미합니다. 이 경우 구성 파일에 `offload_optimizer`, `offload_param` 또는 둘 다 CPU로 오프로드하도록 구성되어 있는지 확인하세요.
 
 NVMe 및 ZeRO-3를 설정한 경우 NVMe로 오프로드를 실험해 보세요(모델의 메모리 요구 사항을 [확인](https://deepspeed.readthedocs.io/en/latest/memory.html)하세요).
 
@@ -1211,7 +1199,7 @@ NVMe 및 ZeRO-3를 설정한 경우 NVMe로 오프로드를 실험해 보세요(
 
 ## 리소스[[resources]]
 
-DeepSpeed ZeRO는 제한된 GPU 리소스로 추론을 위해 매우 큰 모델을 훈련하고 로드하는 강력한 기술로, 누구나 쉽게 사용할 수 있습니다. DeepSpeed에 대해 자세히 알아보려면 [블로그 포스트](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [공식 문서](https://www.deepspeed.ai/getting-started/), [깃허브 리포지토리](https://github.com/deepspeedai/DeepSpeed)를 참조하세요. 
+DeepSpeed ZeRO는 제한된 GPU 리소스로 추론을 위해 매우 큰 모델을 훈련하고 로드하는 강력한 기술로, 누구나 쉽게 사용할 수 있습니다. DeepSpeed에 대해 자세히 알아보려면 [블로그 포스트](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [공식 문서](https://www.deepspeed.ai/getting-started/), [깃허브 리포지토리](https://github.com/deepspeedai/DeepSpeed)를 참조하세요.
 
 다음 문서도 ZeRO에 대해 자세히 알아볼 수 있는 훌륭한 자료입니다:
 

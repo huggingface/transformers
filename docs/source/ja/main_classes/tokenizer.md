@@ -28,8 +28,7 @@ Rust ライブラリ [🤗 Tokenizers](https://github.com/huggingface/tokenizers
 モデル入力の文字列入力をエンコードし (以下を参照)、Python をインスタンス化/保存するための一般的なメソッドを実装します。
 ローカル ファイルまたはディレクトリ、またはライブラリによって提供される事前トレーニング済みトークナイザーからの「高速」トークナイザー
 (HuggingFace の AWS S3 リポジトリからダウンロード)。二人とも頼りにしているのは、
-共通メソッドを含む [`~tokenization_utils_base.PreTrainedTokenizerBase`]
-[`~tokenization_utils_base.SpecialTokensMixin`]。
+共通メソッドを含む [`~tokenization_utils_base.PreTrainedTokenizerBase`]。
 
 したがって、[`PreTrainedTokenizer`] と [`PreTrainedTokenizerFast`] はメインを実装します。
 すべてのトークナイザーを使用するためのメソッド:

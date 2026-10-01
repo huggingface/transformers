@@ -9,12 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was published in HF papers on 2020-10-26 and contributed to Hugging Face Transformers on 2024-01-03.*
 
 # FastSpeech2Conformer
 
+
 ## Overview
 
-The FastSpeech2Conformer model was proposed with the paper [Recent Developments On Espnet Toolkit Boosted By Conformer](https://arxiv.org/abs/2010.13956) by Pengcheng Guo, Florian Boyer, Xuankai Chang, Tomoki Hayashi, Yosuke Higuchi, Hirofumi Inaguma, Naoyuki Kamo, Chenda Li, Daniel Garcia-Romero, Jiatong Shi, Jing Shi, Shinji Watanabe, Kun Wei, Wangyou Zhang, and Yuekai Zhang.
+The FastSpeech2Conformer model was proposed with the paper [Recent Developments On Espnet Toolkit Boosted By Conformer](https://huggingface.co/papers/2010.13956) by Pengcheng Guo, Florian Boyer, Xuankai Chang, Tomoki Hayashi, Yosuke Higuchi, Hirofumi Inaguma, Naoyuki Kamo, Chenda Li, Daniel Garcia-Romero, Jiatong Shi, Jing Shi, Shinji Watanabe, Kun Wei, Wangyou Zhang, and Yuekai Zhang.
 
 The abstract from the original FastSpeech2 paper is the following:
 
@@ -22,17 +24,20 @@ The abstract from the original FastSpeech2 paper is the following:
 
 This model was contributed by [Connor Henderson](https://huggingface.co/connor-henderson). The original code can be found [here](https://github.com/espnet/espnet/blob/master/espnet2/tts/fastspeech2/fastspeech2.py).
 
-
 ## 🤗 Model Architecture
+
 FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, and the traditional transformer blocks were replaced with conformer blocks as done in the ESPnet library.
 
-#### FastSpeech2 Model Architecture
+### FastSpeech2 Model Architecture
+
 ![FastSpeech2 Model Architecture](https://www.microsoft.com/en-us/research/uploads/prod/2021/04/fastspeech2-1.png)
 
 #### Conformer Blocks
+
 ![Conformer Blocks](https://www.researchgate.net/profile/Hirofumi-Inaguma-2/publication/344911155/figure/fig2/AS:951455406108673@1603856054097/An-overview-of-Conformer-block.png)
 
 #### Convolution Module
+
 ![Convolution Module](https://d3i71xaburhd42.cloudfront.net/8809d0732f6147d4ad9218c8f9b20227c837a746/2-Figure1-1.png)
 
 ## 🤗 Transformers Usage
@@ -49,15 +54,16 @@ pip install --upgrade transformers g2p-en
 2. Run inference via the Transformers modelling code with the model and hifigan separately
 
 ```python
-
-from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerModel, FastSpeech2ConformerHifiGan
 import soundfile as sf
 
+from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerModel, FastSpeech2ConformerTokenizer
+
+
 tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
+inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt").to(model.device)
 input_ids = inputs["input_ids"]
 
-model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
+model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer", device_map="auto")
 output_dict = model(input_ids, return_dict=True)
 spectrogram = output_dict["spectrogram"]
 
@@ -70,11 +76,13 @@ sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
 3. Run inference via the Transformers modelling code with the model and hifigan combined
 
 ```python
-from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerWithHifiGan
 import soundfile as sf
 
+from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerWithHifiGan
+
+
 tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
+inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt").to(model.device)
 input_ids = inputs["input_ids"]
 
 model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan")
@@ -85,9 +93,12 @@ sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
 ```
 
 4. Run inference with a pipeline and specify which vocoder to use
+
 ```python
-from transformers import pipeline, FastSpeech2ConformerHifiGan
 import soundfile as sf
+
+from transformers import FastSpeech2ConformerHifiGan, pipeline
+
 
 vocoder = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan")
 synthesiser = pipeline(model="espnet/fastspeech2_conformer", vocoder=vocoder)
@@ -96,7 +107,6 @@ speech = synthesiser("Hello, my dog is cooler than you!")
 
 sf.write("speech.wav", speech["audio"].squeeze(), samplerate=speech["sampling_rate"])
 ```
-
 
 ## FastSpeech2ConformerConfig
 

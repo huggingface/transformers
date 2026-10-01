@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,42 +17,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
 
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import torch
+from torch import nn
+
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    ModelOutput,
+)
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.import_utils import is_torch_available
-from ..auto import AutoModel, AutoModelForCausalLM
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from .configuration_aria import AriaConfig, AriaTextConfig
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
-
-
-logger = logging.get_logger(__name__)
-_CONFIG_FOR_DOC = "AriaTextConfig"
-
-
+@use_kernel_forward_from_hub("RMSNorm")
 class AriaTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         AriaTextRMSNorm is equivalent to T5LayerNorm
         """
@@ -61,7 +59,7 @@ class AriaTextRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -183,7 +181,7 @@ class AriaProjector(nn.Module):
         self.layer_norm = nn.LayerNorm(self.in_features)
         self.feed_forward = AriaProjectorMLP(self.in_features, self.hidden_features, self.output_dim)
 
-    def forward(self, key_value_states: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
+    def forward(self, key_value_states: torch.Tensor, attn_mask: torch.Tensor | None = None):
         """
         Forward pass of the Projector module.
 
@@ -198,11 +196,17 @@ class AriaProjector(nn.Module):
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
-        if num_patches not in self.patch_to_query_dict.keys():
+        # Compared rather than hashed so the lookup also works when `num_patches` is a symbolic
+        # shape: `torch.export` specialises on the equality guard instead of raising on the hash.
+        query_num = None
+        for patches, queries in self.patch_to_query_dict.items():
+            if num_patches == patches:
+                query_num = queries
+                break
+        if query_num is None:
             raise KeyError(
                 f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
             )
-        query_num = self.patch_to_query_dict[num_patches]
 
         queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, 1, 1)
 
@@ -243,192 +247,87 @@ class AriaSharedExpertsMLP(nn.Module):
         return down_proj
 
 
-def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
-    """
-    Compute the matrix multiplication (GEMM) for each expert sequentially. This approach is computationally inefficient, especially when dealing with a large number of experts.
+class AriaTextTopKRouter(nn.Module):
+    """Top-k router for the Aria MoE block.
 
-    Args:
-        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
-        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
-        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-
-    Returns:
-        torch.Tensor: Output tensor of shape (num_tokens, out_features).
-    """
-    num_tokens = token_states.shape[0]
-    out_features = expert_weights.shape[-1]
-    output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
-
-    cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
-    # Insert zero at the begining for offset index's convenience
-    zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
-    cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
-
-    for expert_num in range(expert_weights.shape[0]):
-        start = cumsum_num_tokens[expert_num]
-        end = cumsum_num_tokens[expert_num + 1]
-        tokens = token_states[start:end]
-
-        out = torch.matmul(tokens, expert_weights[expert_num])
-        output[start:end] = out
-    return output
-
-
-class AriaGroupedExpertsGemm(nn.Module):
-    """
-    Grouped GEMM (General Matrix Multiplication) module for efficient expert computation.
-    This module utilizes the grouped_gemm library (https://github.com/fanshiqing/grouped_gemm)
-    for optimized performance. If the grouped_gemm library is not installed, it gracefully
-    falls back to a sequential GEMM implementation, which may be slower but ensures
-    functionality.
-
-    Args:
-        in_features (`int`):
-            Number of input features.
-        out_features (`int`):
-            Number of output features.
-        groups (`int`):
-            Number of expert groups.
-    """
-
-    def __init__(self, in_features, out_features, groups):
-        super().__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.groups = groups
-        self.weight = nn.Parameter(torch.empty(groups, in_features, out_features))
-
-    def forward(self, input, tokens_per_expert):
-        """
-        Perform grouped matrix multiplication.
-
-        Args:
-            input (`torch.Tensor`):
-                Input tensor of shape (num_tokens, in_features).
-            tokens_per_expert (`torch.Tensor`):
-                Number of tokens assigned to each expert.
-
-        Returns:
-            torch.Tensor: Output tensor of shape (num_tokens, out_features).
-        """
-        return sequential_experts_gemm(
-            input,
-            self.weight,
-            tokens_per_expert.cpu(),
-        )
-
-
-class AriaGroupedExpertsMLP(nn.Module):
-    """
-    Grouped MLP module for Mixture of Experts.
-
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the model.
-    """
-
-    def __init__(self, config: AriaTextConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
-
-    def forward(self, permuted_tokens, tokens_per_expert):
-        """
-        Forward pass of the Grouped MLP.
-
-        Args:
-            permuted_tokens (torch.Tensor): Permuted input tokens.
-            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-
-        Returns:
-            torch.Tensor: Output tensor after passing through the MLP.
-        """
-        fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        projection, gate = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = nn.functional.silu(projection) * gate
-        fc2_output = self.fc2(fc1_output, tokens_per_expert)
-        return fc2_output
-
-
-# Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
-class AriaTextMoELayer(nn.Module):
-    """
-    Aria Text Mixture of Experts (MoE) Layer.
-
-    This layer applies a gating mechanism to route input tokens to different experts.
-
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the text component of the model.
+    Experts are selected on the raw logits and the routing weights are the softmax over the selected
+    logits only, which is equivalent to renormalizing a softmax taken over every expert.
     """
 
     def __init__(self, config: AriaTextConfig):
         super().__init__()
+        self.num_experts = config.moe_num_experts
+        self.top_k = config.moe_topk
+        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
-        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
-        self.experts = AriaGroupedExpertsMLP(config)
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
+        top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
+        return top_k_index, top_k_weights, router_logits
+
+
+@use_experts_implementation(is_transposed=True)
+class AriaExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors.
+
+    Aria's checkpoints store each expert's projections as (in_features, out_features), i.e. the layout
+    `grouped_mm` consumes directly, hence `is_transposed=True`.
+    """
+
+    def __init__(self, config: AriaTextConfig) -> None:
+        super().__init__()
+        self.num_experts = config.moe_num_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, 2 * self.intermediate_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.intermediate_dim, self.hidden_dim))
+        # The routed experts are always SiLU-gated, unlike the shared experts which follow `config.hidden_act`.
+        self.act_fn = ACT2FN["silu"]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = (current_state @ self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = current_hidden_states @ self.down_proj[expert_idx]
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class AriaTextMoELayer(nn.Module):
+    """Sparsely-gated mixture-of-experts block: router decides, experts compute, shared experts always run."""
+
+    def __init__(self, config: AriaTextConfig):
+        super().__init__()
+        self.router = AriaTextTopKRouter(config)
+        self.experts = AriaExperts(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
-        self.config = config
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the MoE Layer.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input tensor of shape (batch_size, sequence_length, hidden_size).
-
-        Returns:
-            torch.Tensor: Output tensor after passing through the MoE layer.
-
-        Process:
-        1. Route tokens to experts using the router.
-        2. Permute tokens based on routing decisions.
-        3. Process tokens through experts.
-        4. Unpermute and combine expert outputs.
-        5. Add shared expert output to the final result.
-        """
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-
-        # Top K Routing
-        logits = self.router(hidden_states)
-        top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = nn.functional.softmax(top_logits, dim=-1)
-
-        original_dtype = top_indices.dtype
-
-        tokens_per_expert = torch.histc(
-            top_indices.flatten().to(torch.float32),
-            bins=self.config.moe_num_experts,
-            min=0,
-            max=self.config.moe_num_experts - 1,
-        ).to(original_dtype)
-        indices = top_indices
-
-        # Token permutation
-        flatten_indices = indices.view(-1)
-        sorted_indices = torch.argsort(flatten_indices)
-        permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
-
-        # Process through experts
-        expert_output = self.experts(permuted_tokens, tokens_per_expert)
-
-        # Token unpermutation
-        unpermuted_tokens = torch.zeros(
-            (scores.shape[0] * self.config.moe_topk, expert_output.size(1)),
-            dtype=expert_output.dtype,
-            device=expert_output.device,
-        )
-        unpermuted_tokens.index_copy_(0, sorted_indices, expert_output)
-        unpermuted_tokens = unpermuted_tokens.view(-1, self.config.moe_topk, expert_output.size(1))
-
-        output = (unpermuted_tokens * scores.unsqueeze(-1)).sum(dim=1).view(original_shape)
-
-        # Add shared expert output
+        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
-        return output + shared_expert_output
+        return expert_output + shared_expert_output
 
 
 def rotate_half(x):
@@ -438,7 +337,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -446,8 +346,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -482,18 +380,17 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -503,6 +400,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class AriaTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -532,12 +430,11 @@ class AriaTextAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -548,20 +445,12 @@ class AriaTextAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -579,7 +468,7 @@ class AriaTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class AriaTextDecoderLayer(nn.Module):
+class AriaTextDecoderLayer(GradientCheckpointingLayer):
     """
     Aria Text Decoder Layer.
 
@@ -604,28 +493,22 @@ class AriaTextDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
+            past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -636,243 +519,119 @@ class AriaTextDecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
+@auto_docstring
 class AriaTextPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = AriaConfig
+    config: AriaTextConfig
     base_model_prefix = "model"
-    _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
+    input_modalities = ("image", "text")
+    _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = False
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": AriaTextDecoderLayer,
+        "attentions": AriaTextAttention,
+    }
+
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaGroupedExpertsGemm):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, AriaExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, AriaTextTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
-ARIA_TEXT_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`AriaTextConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Aria Model outputting raw hidden-states without any specific head on top.",
-    ARIA_TEXT_START_DOCSTRING,
-)
+@auto_docstring
 class AriaPreTrainedModel(PreTrainedModel):
-    config_class = AriaTextConfig
+    config: AriaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AriaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = False
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": AriaTextDecoderLayer,
+        "attentions": AriaTextAttention,
+    }
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaProjector):
-            nn.init.trunc_normal_(module.query, std=std)
+        super()._init_weights(module)
+        if isinstance(module, AriaProjector):
+            init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
 class AriaTextRotaryEmbedding(nn.Module):
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: AriaTextConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-    def _dynamic_frequency_update(self, position_ids, device):
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: AriaTextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
 
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
+        # Disable any outside autocast context if any, to really force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-ARIA_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare AriaText Model outputting raw hidden-states without any specific head on top.",
-    ARIA_TEXT_START_DOCSTRING,
-)
+@auto_docstring
 class AriaTextModel(AriaTextPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AriaTextDecoderLayer`]
-
-    Args:
-        config: AriaTextConfig
-    """
-
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -889,262 +648,68 @@ class AriaTextModel(AriaTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-    @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
 
         hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
-        return output if return_dict else output.to_tuple()
-
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        sequence_length = input_tensor.shape[1]
-        if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
+            past_key_values=past_key_values,
         )
 
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to plcae the 4D attention mask on.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
+@auto_docstring
 class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
-    """
-    Aria model for causal language modeling tasks.
-
-    This class extends `LlamaForCausalLM` to incorporate the Mixture of Experts (MoE) approach,
-    allowing for more efficient and scalable language modeling.
-
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the model.
-    """
-
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config_class = AriaTextConfig
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1155,59 +720,20 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-
         Example:
 
         ```python
@@ -1224,28 +750,17 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -1253,10 +768,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1267,121 +778,180 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for Aria causal language model (or autoregressive) outputs.
+    """
+)
 @dataclass
 class AriaCausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for Aria causal language model (or autoregressive) outputs.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
-ARIA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor`, *optional*):
-            Input token IDs.
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Pixel values of the images.
-        pixel_mask (`torch.LongTensor`, *optional*):
-            Mask for the pixel values.
-        attention_mask (`torch.Tensor`, *optional*):
-            Attention mask.
-        position_ids (`torch.LongTensor`, *optional*):
-            Position IDs.
-        past_key_values (`List[torch.FloatTensor]`, *optional*):
-            Past key values for efficient processing.
-        inputs_embeds (`torch.FloatTensor`, *optional*):
-            Input embeddings.
-        labels (`torch.LongTensor`, *optional*):
-            Labels for computing the language modeling loss.
-        use_cache (`bool`, *optional*):
-            Whether to use the model's cache mechanism.
-        output_attentions (`bool`, *optional*):
-            Whether to output attention weights.
-        output_hidden_states (`bool`, *optional*):
-            Whether to output hidden states.
-        return_dict (`bool`, *optional*):
-            Whether to return a `ModelOutput` object.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            If an `int`, calculate logits for the last `logits_to_keep` tokens, or all `input_ids` if `0`.
-            Otherwise, slice according to the 1D tensor in the sequence length dimension
-        cache_position (`torch.LongTensor`, *optional*):
-            Cache positions.
-        **loss_kwargs:
-            Additional keyword arguments for loss calculation.
-"""
-
-ARIA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config (`AriaConfig`):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    """Aria model for conditional generation tasks.
-
-    This model combines a vision tower, a multi-modal projector, and a language model
-    to perform tasks that involve both image and text inputs.""",
-    ARIA_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Base class for Aria outputs, with hidden states and attentions.
+    """
 )
-class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
-    config_class = AriaConfig
-    _supports_flash_attn_2 = False
-    _supports_sdpa = False
-    _tied_weights_keys = ["language_model.lm_head.weight"]
+@dataclass
+class AriaModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    The Aria model which consists of a vision backbone and a language model, without a language modeling head.
+    """
+)
+class AriaModel(AriaPreTrainedModel):
     def __init__(self, config: AriaConfig):
         super().__init__(config)
-
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.multi_modal_projector = AriaProjector(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
+
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] = -1,
+        output_hidden_states: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
+        kwargs["output_hidden_states"] = True
+        image_outputs = self.vision_tower(
+            pixel_values,
+            patch_attention_mask=patch_attention_mask,
+            return_dict=True,
+            **kwargs,
+        )
+        image_attn_mask = None
+        if patch_attention_mask is not None:
+            flattened_mask = patch_attention_mask.flatten(1)
+            image_attn_mask = torch.logical_not(flattened_mask)
+
+        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+
+        return image_outputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
+        return special_image_mask
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple | AriaModelOutputWithPast:
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        # 2. Merge text and images
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values=pixel_values,
+                pixel_mask=pixel_mask,
+                vision_feature_layer=self.config.vision_feature_layer,
+                return_dict=True,
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return AriaModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+        )
 
     def _create_patch_attention_mask(self, pixel_mask):
         if pixel_mask is None:
@@ -1399,77 +969,71 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
 
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+@auto_docstring(
+    custom_intro="""
+    Aria model for conditional generation tasks.
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
+    This model combines a vision tower, a multi-modal projector, and a language model
+    to perform tasks that involve both image and text inputs.
+    """
+)
+class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
+    def __init__(self, config: AriaConfig):
+        super().__init__(config)
+        self.model = AriaModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
 
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
 
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: torch.FloatTensor = None,
-        vision_feature_layer: int = -1,
-    ):
-        patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        image_outputs = self.vision_tower(
-            pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
+        pixel_mask: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] = -1,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            vision_feature_layer=vision_feature_layer,
+            **kwargs,
         )
-        image_attn_mask = None
-        if patch_attention_mask is not None:
-            flattened_mask = patch_attention_mask.flatten(1)
-            image_attn_mask = torch.logical_not(flattened_mask)
 
-        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-        return image_features
-
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        cache_position: Optional[torch.LongTensor] = None,
-        **loss_kwargs,
-    ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | AriaCausalLMOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics3ForConditionalGeneration`).
-                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
-                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `AriaForConditionalGeneration`).
+            Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
+            computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO
@@ -1478,12 +1042,12 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         >>> from transformers.image_utils import load_image
 
         >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
-        >>> image1 = load_image("https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg")
-        >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
-        >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
+        >>> image1 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg")
+        >>> image2 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg")
+        >>> image3 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
-        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [
@@ -1519,65 +1083,29 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         >>> print(generated_texts[1])
         Assistant: The bridge is in San Francisco.
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        # 2. Merge text and images
-        if pixel_values is not None and inputs_embeds.shape[1] != 1:
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
-                )
-                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-            else:
-                image_embeds = input_ids == self.config.image_token_index
-                special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (image_embeds).sum(dim=1).sum(dim=0)
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                pixel_mask=pixel_mask,
-                vision_feature_layer=self.config.vision_feature_layer,
-            )
-            n_images, n_features_per_image = image_features.shape[0], image_features.shape[1]
-            n_image_features = n_images * n_features_per_image
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            logits_to_keep=logits_to_keep,
-            cache_position=cache_position,
+            mm_encoder_outputs=mm_encoder_outputs,
+            **kwargs,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **loss_kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return AriaCausalLMOutputWithPast(
             loss=loss,
@@ -1587,41 +1115,12 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_mask=None,
-        attention_mask=None,
-        cache_position=None,
-        logits_to_keep=None,
-        **kwargs,
-    ):
-        model_inputs = self.language_model.prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
-
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_mask"] = pixel_mask
-
-        return model_inputs
-
 
 __all__ = [
     "AriaForConditionalGeneration",
     "AriaPreTrainedModel",
     "AriaTextPreTrainedModel",
     "AriaTextModel",
+    "AriaModel",
     "AriaTextForCausalLM",
 ]

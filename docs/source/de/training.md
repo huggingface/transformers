@@ -32,7 +32,7 @@ Die Verwendung eines vorab trainierten Modells hat erhebliche Vorteile. Es reduz
 
 Bevor Sie die Feinabstimmung eines vortrainierten Modells vornehmen können, müssen Sie einen Datensatz herunterladen und für das Training vorbereiten. Im vorangegangenen Leitfaden haben Sie gelernt, wie man Daten für das Training aufbereitet, und jetzt haben Sie die Gelegenheit, diese Fähigkeiten zu testen!
 
-Laden Sie zunächst den Datensatz [Yelp Reviews](https://huggingface.co/datasets/yelp_review_full):
+Laden Sie zunächst den Datensatz [Yelp Reviews](https://huggingface.co/datasets/Yelp/yelp_review_full):
 
 ```py
 >>> from datasets import load_dataset
@@ -73,15 +73,13 @@ An dieser Stelle sollten Sie dem Abschnitt folgen, der dem Rahmen entspricht, de
 in der rechten Seitenleiste können Sie zu dem gewünschten Abschnitt springen - und wenn Sie den gesamten Inhalt eines bestimmten Frameworks ausblenden möchten,
 klicken Sie einfach auf die Schaltfläche oben rechts im Block des jeweiligen Frameworks!
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## Trainieren mit PyTorch Trainer
 
 🤗 Transformers bietet eine [`Trainer`]-Klasse, die für das Training von 🤗 Transformers-Modellen optimiert ist und es einfacher macht, mit dem Training zu beginnen, ohne manuell eine eigene Trainingsschleife zu schreiben. Die [`Trainer`]-API unterstützt eine breite Palette von Trainingsoptionen und Funktionen wie Logging, Gradientenakkumulation und gemischte Präzision.
 
-Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten Labels an. Aus dem Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields) wissen Sie, dass es fünf Labels gibt:
+Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten Labels an. Aus dem Yelp Review [dataset card](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields) wissen Sie, dass es fünf Labels gibt:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -155,128 +153,11 @@ Anschließend können Sie Ihr Modell durch den Aufruf von [`~transformers.Traine
 ```py
 >>> trainer.train()
 ```
-</pt>
-<tf>
-<a id='keras'></a>
-
-<Youtube id="rnTGBy2ax1c"/>
-
-## Trainieren Sie ein TensorFlow-Modell mit Keras
-
-Sie können auch 🤗 Transformers Modelle in TensorFlow mit der Keras API trainieren!
-
-### Laden von Daten für Keras
-
-Wenn Sie ein 🤗 Transformers Modell mit der Keras API trainieren wollen, müssen Sie Ihren Datensatz in ein Format konvertieren, das
-Keras versteht. Wenn Ihr Datensatz klein ist, können Sie das Ganze einfach in NumPy-Arrays konvertieren und an Keras übergeben.
-Probieren wir das zuerst aus, bevor wir etwas Komplizierteres tun.
-
-Laden Sie zunächst ein Dataset. Wir werden den CoLA-Datensatz aus dem [GLUE-Benchmark](https://huggingface.co/datasets/glue) verwenden,
-da es sich um eine einfache Aufgabe zur Klassifizierung von binärem Text handelt, und nehmen vorerst nur den Trainingssplit.
-
-```py
-from datasets import load_dataset
-
-dataset = load_dataset("glue", "cola")
-dataset = dataset["train"]  # Just take the training split for now
-```
-
-Als nächstes laden Sie einen Tokenizer und tokenisieren die Daten als NumPy-Arrays. Beachten Sie, dass die Beschriftungen bereits eine Liste von 0 und 1en sind,
-Wir können sie also ohne Tokenisierung direkt in ein NumPy-Array konvertieren!
-
-```py
-from transformers import AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-tokenized_data = tokenizer(dataset["text"], return_tensors="np", padding=True)
-# Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
-tokenized_data = dict(tokenized_data)
-
-labels = np.array(dataset["label"])  # Label is already an array of 0 and 1
-```
-
-Schließlich laden, [`compile`](https://keras.io/api/models/model_training_apis/#compile-method) und [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) Sie das Modell:
-
-```py
-from transformers import TFAutoModelForSequenceClassification
-from tensorflow.keras.optimizers import Adam
-
-# Load and compile our model
-model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
-# Lower learning rates are often better for fine-tuning transformers
-model.compile(optimizer=Adam(3e-5))
-
-model.fit(tokenized_data, labels)
-```
-
-<Tip>
-
-Sie müssen Ihren Modellen kein Verlustargument übergeben, wenn Sie sie `compile()`! Hugging-Face-Modelle wählen automatisch
-einen Loss, der für ihre Aufgabe und Modellarchitektur geeignet ist, wenn dieses Argument leer gelassen wird. Sie können jederzeit außer Kraft setzen, indem Sie selbst einen Loss angeben, wenn Sie das möchten!
-
-</Tip>
-
-Dieser Ansatz eignet sich hervorragend für kleinere Datensätze, aber bei größeren Datensätzen kann er zu einem Problem werden. Warum?
-Weil das tokenisierte Array und die Beschriftungen vollständig in den Speicher geladen werden müssten, und weil NumPy nicht mit
-"gezackte" Arrays nicht verarbeiten kann, so dass jedes tokenisierte Sample auf die Länge des längsten Samples im gesamten Datensatz aufgefüllt werden müsste.
-Datensatzes aufgefüllt werden. Dadurch wird das Array noch größer, und all die aufgefüllten Token verlangsamen auch das Training!
-
-### Laden von Daten als tf.data.Dataset
-
-Wenn Sie eine Verlangsamung des Trainings vermeiden wollen, können Sie Ihre Daten stattdessen als `tf.data.Dataset` laden. Sie können zwar Ihre eigene
-tf.data"-Pipeline schreiben können, wenn Sie wollen, haben wir zwei bequeme Methoden, um dies zu tun:
-
-- [`~TFPreTrainedModel.prepare_tf_dataset`]: Dies ist die Methode, die wir in den meisten Fällen empfehlen. Da es sich um eine Methode
-Ihres Modells ist, kann sie das Modell inspizieren, um automatisch herauszufinden, welche Spalten als Modelleingaben verwendet werden können, und
-verwirft die anderen, um einen einfacheren, leistungsfähigeren Datensatz zu erstellen.
-- [`~datasets.Dataset.to_tf_dataset`]: Diese Methode ist eher auf niedriger Ebene angesiedelt und ist nützlich, wenn Sie genau kontrollieren wollen, wie
-Dataset erstellt wird, indem man genau angibt, welche `columns` und `label_cols` einbezogen werden sollen.
-
-Bevor Sie [`~TFPreTrainedModel.prepare_tf_dataset`] verwenden können, müssen Sie die Tokenizer-Ausgaben als Spalten zu Ihrem Datensatz hinzufügen, wie in
-dem folgenden Codebeispiel:
-
-```py
-def tokenize_dataset(data):
-    # Keys of the returned dictionary will be added to the dataset as columns
-    return tokenizer(data["text"])
-
-
-dataset = dataset.map(tokenize_dataset)
-```
-
-Denken Sie daran, dass Hugging Face-Datensätze standardmäßig auf der Festplatte gespeichert werden, so dass dies nicht zu einem erhöhten Arbeitsspeicherbedarf führen wird! Sobald die
-Spalten hinzugefügt wurden, können Sie Batches aus dem Datensatz streamen und zu jedem Batch Auffüllungen hinzufügen, was die Anzahl der Auffüllungs-Token im Vergleich zum Auffüllen des gesamten Datensatzes reduziert.
-
-
-```py
->>> tf_dataset = model.prepare_tf_dataset(dataset, batch_size=16, shuffle=True, tokenizer=tokenizer)
-```
-
-Beachten Sie, dass Sie im obigen Codebeispiel den Tokenizer an `prepare_tf_dataset` übergeben müssen, damit die Stapel beim Laden korrekt aufgefüllt werden können.
-Wenn alle Stichproben in Ihrem Datensatz die gleiche Länge haben und kein Auffüllen erforderlich ist, können Sie dieses Argument weglassen.
-Wenn Sie etwas Komplexeres als nur das Auffüllen von Stichproben benötigen (z. B. das Korrumpieren von Token für die maskierte Sprachmodellierung), können Sie das Argument
-Modellierung), können Sie stattdessen das Argument `collate_fn` verwenden, um eine Funktion zu übergeben, die aufgerufen wird, um die
-Liste von Stichproben in einen Stapel umwandelt und alle gewünschten Vorverarbeitungen vornimmt. Siehe unsere
-[examples](https://github.com/huggingface/transformers/tree/main/examples) oder
-[notebooks](https://huggingface.co/docs/transformers/notebooks), um diesen Ansatz in Aktion zu sehen.
-
-Sobald Sie einen `tf.data.Dataset` erstellt haben, können Sie das Modell wie zuvor kompilieren und anpassen:
-
-```py
-model.compile(optimizer=Adam(3e-5))
-
-model.fit(tf_dataset)
-```
-
-</tf>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## Trainieren in nativem PyTorch
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] kümmert sich um die Trainingsschleife und ermöglicht die Feinabstimmung eines Modells in einer einzigen Codezeile. Für Benutzer, die es vorziehen, ihre eigene Trainingsschleife zu schreiben, können Sie auch eine Feinabstimmung eines 🤗 Transformers-Modells in nativem PyTorch vornehmen.
@@ -418,8 +299,6 @@ Genauso wie Sie eine Bewertungsfunktion zu [`Trainer`] hinzugefügt haben, müss
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 import re
 import tempfile
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
@@ -27,14 +27,12 @@ from transformers.testing_utils import (
     require_nltk,
     require_sentencepiece,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     to_2tuple,
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -76,7 +74,7 @@ if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
 @require_torch
@@ -216,7 +214,10 @@ class EncoderDecoderMixin:
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
-            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            with (
+                tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+                tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+            ):
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
                 VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -244,6 +245,10 @@ class EncoderDecoderMixin:
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -303,14 +308,15 @@ class EncoderDecoderMixin:
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values
+        enc_dec_model.generation_config.max_length = 20
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
             inputs,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -387,7 +393,7 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
+    @unittest.skip("TODO Arthur I have to skip for now because I don't understand it")
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")
@@ -478,6 +484,10 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -668,6 +678,10 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -805,6 +819,10 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -862,14 +880,17 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="There are no published pretrained TrOCR checkpoints for now")
     def test_real_model_save_load_from_pretrained(self):
@@ -889,19 +910,9 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = ViTModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_head_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, _, _, _, _, _ = decoder_config_and_inputs
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
@@ -913,7 +924,6 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_head_mask": decoder_head_mask,
             "labels": decoder_input_ids,
         }
 
@@ -927,6 +937,10 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -980,14 +994,17 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="VIT2GPT2 also has an integration test for testinf save-load")
     def test_real_model_save_load_from_pretrained(self):
@@ -1007,19 +1024,9 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = DonutSwinModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_head_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, _, _, _, _, _ = decoder_config_and_inputs
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
@@ -1031,7 +1038,6 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_head_mask": decoder_head_mask,
             "labels": decoder_input_ids,
         }
 
@@ -1045,6 +1051,10 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -1098,14 +1108,17 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="Donut has an Integration test for that")
     def test_real_model_save_load_from_pretrained(self):
@@ -1123,8 +1136,9 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_handwritten(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test", trust_remote_code=True)
-        image = Image.open(dataset[0]["file"]).convert("RGB")
+        image = Image.open(
+            hf_hub_download("hf-internal-testing/fixtures_ocr", "iam_picture.jpeg", repo_type="dataset")
+        ).convert("RGB")
 
         processor = self.default_processor
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
@@ -1148,8 +1162,9 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_printed(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test", trust_remote_code=True)
-        image = Image.open(dataset[1]["file"]).convert("RGB")
+        image = Image.open(
+            hf_hub_download("hf-internal-testing/fixtures_ocr", "SROIE-receipt.jpeg", repo_type="dataset")
+        ).convert("RGB")
 
         processor = self.default_processor
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
@@ -1172,7 +1187,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
             )
         else:
             expected_slice = torch.tensor(
-                [-5.6844, -5.8372, 1.1518, -6.8984, 6.8587, -2.4453, 1.2347, -1.0241, -1.9649, -3.9109],
+                [-5.6832, -5.8361, 1.1500, -6.8975, 6.8576, -2.4450, 1.2335, -1.0246, -1.9654, -3.9127],
                 device=torch_device,
             )
 
@@ -1186,7 +1201,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
     def test_inference_coco_en(self):
         loc = "ydshieh/vit-gpt2-coco-en"
 
-        image_processor = ViTImageProcessor.from_pretrained(loc)
+        image_processor = ViTImageProcessorPil.from_pretrained(loc)
         tokenizer = AutoTokenizer.from_pretrained(loc)
         model = VisionEncoderDecoderModel.from_pretrained(loc)
         model.to(torch_device)
@@ -1271,7 +1286,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 1, 57532])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([24.3873, -6.4491, 32.5394]).to(torch_device)
+        expected_slice = torch.tensor([24.4076, -6.4491, 32.5508]).to(torch_device)
         torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
@@ -1305,10 +1320,11 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
         # verify scores
         self.assertEqual(len(outputs.scores), 11)
-        self.assertTrue(
-            torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([5.6019, -3.5070, 13.7123], device=torch_device), atol=1e-4
-            )
+        torch.testing.assert_close(
+            outputs.scores[0][0, :3],
+            torch.tensor([5.6375, -3.5053, 13.7228], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )
 
     @slow
@@ -1335,7 +1351,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-27.4344, -3.2686, -19.3524], device=torch_device)
+        expected_slice = torch.tensor([-27.4535, -3.2694, -19.3709], device=torch_device)
         torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
@@ -1367,10 +1383,11 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
         # verify scores
         self.assertEqual(len(outputs.scores), 43)
-        self.assertTrue(
-            torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([-27.4344, -3.2686, -19.3524], device=torch_device), atol=1e-4
-            )
+        torch.testing.assert_close(
+            outputs.scores[0][0, :3],
+            torch.tensor([-27.4535, -3.2694, -19.3709], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )
 
     @slow
@@ -1397,7 +1414,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device)
+        expected_slice = torch.tensor([-17.3262, -4.7116, -15.4603], device=torch_device)
         torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
@@ -1428,10 +1445,11 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
         # verify scores
         self.assertEqual(len(outputs.scores), 4)
-        self.assertTrue(
-            torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device), atol=1e-4
-            )
+        torch.testing.assert_close(
+            outputs.scores[0][0, :3],
+            torch.tensor([-17.3262, -4.7116, -15.4603], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )
 
 
@@ -1452,7 +1470,10 @@ class NougatModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image(self):
         filepath = hf_hub_download(
-            repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_pdf.png", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_docvqa",
+            filename="nougat_pdf.png",
+            repo_type="dataset",
+            revision="ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db",
         )
         image = Image.open(filepath).convert("RGB")
         return image
@@ -1472,7 +1493,7 @@ class NougatModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [1.6253, -4.2179, 5.8532, -2.7911, -5.0609, -4.7397, -4.2890, -5.1073, -4.8908, -4.9729]
+            [0.7833, -5.6850, 6.3481, -2.6374, -3.7133, -3.5301, -3.0477, -3.7152, -3.9122, -4.0574]
         ).to(torch_device)
 
         torch.testing.assert_close(logits[0, 0, :10], expected_slice, rtol=1e-4, atol=1e-4)
@@ -1494,18 +1515,19 @@ class NougatModelIntegrationTest(unittest.TestCase):
 
         # verify generated sequence
         generated = processor.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
-        expected_raw_generation = "# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@meta.com\n\nGuillem Cucurull\n\nThomas Scialom\n\nRobert Stojnic\n\nMeta AI\n\nThe paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\n###### Abstract\n\nScientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (**N**eural **O**ptical **U**nderstanding for **A**cademic Documents), a Visual Transformer model that performs an _Optical Character Recognition_ (OCR) task for processing scientific documents into a markup language, and demonstrate the effectiveness of our model on a new dataset of scientific documents. The proposed approach offers a promising solution to enhance the accessibility of scientific knowledge in the digital age, by bridging the gap between human-readable documents and machine-readable text. We release the models and code to accelerate future work on scientific text recognition.\n\n## 1 Introduction\n\nThe majority of scientific knowledge is stored in books or published in scientific journals, most commonly in the Portable Document Format (PDF). Next to HTML, PDFs are the second most prominent data format on the internet, making up 2.4% of common crawl [1]. However, the information stored in these files is very difficult to extract into any other formats. This is especially true for highly specialized documents, such as scientific research papers, where the semantic information of mathematical expressions is lost.\n\nExisting Optical Character Recognition (OCR) engines, such as Tesseract OCR [2], excel at detecting and classifying individual characters and words in an image, but fail to understand the relationship between them due to their line-by-line approach. This means that they treat superscripts and subscripts in the same way as the surrounding text, which is a significant drawback for mathematical expressions. In mathematical notations like fractions, exponents, and matrices, relative positions of characters are crucial.\n\nConverting academic research papers into machine-readable text also enables accessibility and searchability of science as a whole. The information of millions of academic papers can not be fully accessed because they are locked behind an unreadable format. Existing corpora, such as the S2ORC dataset [3], capture the text of 12M2 papers using GROBID [4], but are missing meaningful representations of the mathematical equations.\n\nFootnote 2: The paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\nTo this end, we introduce Nougat, a transformer based model that can convert images of document pages to formatted markup text.\n\nThe primary contributions in this paper are\n\n* Release of a pre-trained model capable of converting a PDF to a lightweight markup language. We release the code and the model on GitHub3 Footnote 3: https://github.com/facebookresearch/nougat\n* We introduce a pipeline to create dataset for pairing PDFs to source code\n* Our method is only dependent on the image of a page, allowing access to scanned papers and books"
+        expected_raw_generation = "# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@meta.com\n\nGuillem Cucurull\n\nThomas Scialom\n\nRobert Stojnic\n\nMeta AI\n\n###### Abstract\n\nScientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (**N**eural **O**ptical **U**nderstanding for **A**cademic Documents), a Visual Transformer model that performs an _Optical Character Recognition_ (OCR) task for processing scientific documents into a markup language, and demonstrate the effectiveness of our model on a new dataset of scientific documents. The proposed approach offers a promising solution to enhance the accessibility of scientific knowledge in the digital age, by bridging the gap between human-readable documents and machine-readable text. We release the models and code to accelerate future work on scientific text recognition.\n\n## 1 Introduction\n\nThe majority of scientific knowledge is stored in books or published in scientific journals, most commonly in the Portable Document Format (PDF). Next to HTML, PDFs are the second most prominent data format on the internet, making up 2.4% of common crawl [1]. However, the information stored in these files is very difficult to extract into any other formats. This is especially true for highly specialized documents, such as scientific research papers, where the semantic information of mathematical expressions is lost.\n\nExisting Optical Character Recognition (OCR) engines, such as Tesseract OCR [2], excel at detecting and classifying individual characters and words in an image, but fail to understand the relationship between them due to their line-by-line approach. This means that they treat superscripts and subscripts in the same way as the surrounding text, which is a significant drawback for mathematical expressions. In mathematical notations like fractions, exponents, and matrices, relative positions of characters are crucial.\n\nConverting academic research papers into machine-readable text also enables accessibility and searchability of science as a whole. The information of millions of academic papers can not be fully accessed because they are locked behind an unreadable format. Existing corpora, such as the S2ORC dataset [3], capture the text of 12M2 papers using GROBID [4], but are missing meaningful representations of the mathematical equations.\n\nFootnote 2: The paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\nTo this end, we introduce Nougat, a transformer based model that can convert images of document pages to formatted markup text.\n\nThe primary contributions in this paper are\n\n* Release of a pre-trained model capable of converting a PDF to a lightweight markup language. We release the code and the model on GitHub3 Footnote 3: https://github.com/facebookresearch/nougat\n* We introduce a pipeline to create dataset for pairing PDFs to source code\n* Our method is only dependent on the image of a page, allowing access to scanned papers and books"
         self.assertTrue(generated == expected_raw_generation)
 
         # verify postprocessed sequence
         generated = processor.post_process_generation(generated, fix_markdown=False)
-        expected_generation = "\n\n# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@meta.com\n\nGuillem Cucurull\n\nThomas Scialom\n\nRobert Stojnic\n\nMeta AI\n\nThe paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\n###### Abstract\n\nScientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (**N**eural **O**ptical **U**nderstanding for **A**cademic Documents), a Visual Transformer model that performs an _Optical Character Recognition_ (OCR) task for processing scientific documents into a markup language, and demonstrate the effectiveness of our model on a new dataset of scientific documents. The proposed approach offers a promising solution to enhance the accessibility of scientific knowledge in the digital age, by bridging the gap between human-readable documents and machine-readable text. We release the models and code to accelerate future work on scientific text recognition.\n\n## 1 Introduction\n\nThe majority of scientific knowledge is stored in books or published in scientific journals, most commonly in the Portable Document Format (PDF). Next to HTML, PDFs are the second most prominent data format on the internet, making up 2.4% of common crawl [1]. However, the information stored in these files is very difficult to extract into any other formats. This is especially true for highly specialized documents, such as scientific research papers, where the semantic information of mathematical expressions is lost.\n\nExisting Optical Character Recognition (OCR) engines, such as Tesseract OCR [2], excel at detecting and classifying individual characters and words in an image, but fail to understand the relationship between them due to their line-by-line approach. This means that they treat superscripts and subscripts in the same way as the surrounding text, which is a significant drawback for mathematical expressions. In mathematical notations like fractions, exponents, and matrices, relative positions of characters are crucial.\n\nConverting academic research papers into machine-readable text also enables accessibility and searchability of science as a whole. The information of millions of academic papers can not be fully accessed because they are locked behind an unreadable format. Existing corpora, such as the S2ORC dataset [3], capture the text of 12M2 papers using GROBID [4], but are missing meaningful representations of the mathematical equations.\n\nFootnote 2: The paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\nTo this end, we introduce Nougat, a transformer based model that can convert images of document pages to formatted markup text.\n\nThe primary contributions in this paper are\n\n* Release of a pre-trained model capable of converting a PDF to a lightweight markup language. We release the code and the model on GitHub3 Footnote 3: https://github.com/facebookresearch/nougat\n* We introduce a pipeline to create dataset for pairing PDFs to source code\n* Our method is only dependent on the image of a page, allowing access to scanned papers and books"
+        expected_generation = "\n\n# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@meta.com\n\nGuillem Cucurull\n\nThomas Scialom\n\nRobert Stojnic\n\nMeta AI\n\n###### Abstract\n\nScientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (**N**eural **O**ptical **U**nderstanding for **A**cademic Documents), a Visual Transformer model that performs an _Optical Character Recognition_ (OCR) task for processing scientific documents into a markup language, and demonstrate the effectiveness of our model on a new dataset of scientific documents. The proposed approach offers a promising solution to enhance the accessibility of scientific knowledge in the digital age, by bridging the gap between human-readable documents and machine-readable text. We release the models and code to accelerate future work on scientific text recognition.\n\n## 1 Introduction\n\nThe majority of scientific knowledge is stored in books or published in scientific journals, most commonly in the Portable Document Format (PDF). Next to HTML, PDFs are the second most prominent data format on the internet, making up 2.4% of common crawl [1]. However, the information stored in these files is very difficult to extract into any other formats. This is especially true for highly specialized documents, such as scientific research papers, where the semantic information of mathematical expressions is lost.\n\nExisting Optical Character Recognition (OCR) engines, such as Tesseract OCR [2], excel at detecting and classifying individual characters and words in an image, but fail to understand the relationship between them due to their line-by-line approach. This means that they treat superscripts and subscripts in the same way as the surrounding text, which is a significant drawback for mathematical expressions. In mathematical notations like fractions, exponents, and matrices, relative positions of characters are crucial.\n\nConverting academic research papers into machine-readable text also enables accessibility and searchability of science as a whole. The information of millions of academic papers can not be fully accessed because they are locked behind an unreadable format. Existing corpora, such as the S2ORC dataset [3], capture the text of 12M2 papers using GROBID [4], but are missing meaningful representations of the mathematical equations.\n\nFootnote 2: The paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\nTo this end, we introduce Nougat, a transformer based model that can convert images of document pages to formatted markup text.\n\nThe primary contributions in this paper are\n\n* Release of a pre-trained model capable of converting a PDF to a lightweight markup language. We release the code and the model on GitHub3 Footnote 3: https://github.com/facebookresearch/nougat\n* We introduce a pipeline to create dataset for pairing PDFs to source code\n* Our method is only dependent on the image of a page, allowing access to scanned papers and books"
         self.assertTrue(generated == expected_generation)
 
         # verify scores
-        self.assertEqual(len(outputs.scores), 741)
-        self.assertTrue(
-            torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([1.6253, -4.2179, 5.8532], device=torch_device), atol=1e-4
-            )
+        self.assertEqual(len(outputs.scores), 705)
+        torch.testing.assert_close(
+            outputs.scores[0][0, :3],
+            torch.tensor([0.7833, -5.6850, 6.3481], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )

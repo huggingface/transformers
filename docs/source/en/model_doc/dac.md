@@ -9,17 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2023-06-11 and contributed to Hugging Face Transformers on 2024-08-19.*
 
 # DAC
 
+
 ## Overview
 
-
-The DAC model was proposed in [Descript Audio Codec: High-Fidelity Audio Compression with Improved RVQGAN](https://arxiv.org/abs/2306.06546) by Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar.
+The DAC model was proposed in [Descript Audio Codec: High-Fidelity Audio Compression with Improved RVQGAN](https://huggingface.co/papers/2306.06546) by Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar.
 
 The Descript Audio Codec (DAC) model is a powerful tool for compressing audio data, making it highly efficient for storage and transmission. By compressing 44.1 KHz audio into tokens at just 8kbps bandwidth, the DAC model enables high-quality audio processing while significantly reducing the data footprint. This is particularly useful in scenarios where bandwidth is limited or storage space is at a premium, such as in streaming applications, remote conferencing, and archiving large audio datasets.
 
@@ -30,7 +31,6 @@ The abstract from the paper is the following:
 This model was contributed by [Kamil Akesbi](https://huggingface.co/kamilakesbi).
 The original code can be found [here](https://github.com/descriptinc/descript-audio-codec/tree/main?tab=readme-ov-file).
 
-
 ## Model structure
 
 The Descript Audio Codec (DAC) model is structured into three distinct stages:
@@ -39,28 +39,31 @@ The Descript Audio Codec (DAC) model is structured into three distinct stages:
 2. Residual Vector Quantizer (RVQ) Model: Working in tandem with the encoder, this model quantizes the latent codes of the audio, refining the compression and ensuring high-quality reconstruction.
 3. Decoder Model: This final stage reconstructs the audio from its compressed form, restoring it to a state that closely resembles the original input.
 
-## Usage example 
+## Usage example
 
-Here is a quick example of how to encode and decode an audio using this model: 
+Here is a quick example of how to encode and decode an audio using this model:
 
-```python 
->>> from datasets import load_dataset, Audio
->>> from transformers import DacModel, AutoProcessor
->>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+```python
+from datasets import Audio, load_dataset
 
->>> model = DacModel.from_pretrained("descript/dac_16khz")
->>> processor = AutoProcessor.from_pretrained("descript/dac_16khz")
->>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
->>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
->>> inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
+from transformers import AutoProcessor, DacModel
 
->>> encoder_outputs = model.encode(inputs["input_values"])
->>> # Get the intermediate audio codes
->>> audio_codes = encoder_outputs.audio_codes
->>> # Reconstruct the audio from its quantized representation
->>> audio_values = model.decode(encoder_outputs.quantized_representation)
->>> # or the equivalent with a forward pass
->>> audio_values = model(inputs["input_values"]).audio_values
+
+librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+model = DacModel.from_pretrained("descript/dac_16khz", device_map="auto")
+processor = AutoProcessor.from_pretrained("descript/dac_16khz")
+librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+audio_sample = librispeech_dummy[-1]["audio"]["array"]
+inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(model.device)
+
+encoder_outputs = model.encode(inputs["input_values"])
+# Get the intermediate audio codes
+audio_codes = encoder_outputs.audio_codes
+# Reconstruct the audio from its quantized representation
+audio_values = model.decode(encoder_outputs.quantized_representation)
+# or the equivalent with a forward pass
+audio_values = model(inputs["input_values"]).audio_values
 ```
 
 ## DacConfig

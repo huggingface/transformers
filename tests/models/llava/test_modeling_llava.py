@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,26 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava model."""
 
+import copy
 import unittest
 
-import requests
+import pytest
 from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
+    BitsAndBytesConfig,
     LlavaConfig,
     LlavaForConditionalGeneration,
+    LlavaModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_torch,
     require_vision,
     slow,
@@ -38,15 +41,13 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class LlavaVisionText2TextModelTester:
@@ -149,10 +150,12 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -160,34 +163,32 @@ class LlavaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = LlavaForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
-class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LlavaForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaModel,
+            LlavaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
-        {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
+        {
+            "image-text-to-text": LlavaForConditionalGeneration,
+            "any-to-any": LlavaForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
@@ -198,81 +199,33 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         )
 
     def test_config(self):
-        # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077
-        # TODO: avoid overwritten once there is a better fix for #36077
-        def check_config_can_be_init_without_params():
-            config = self.config_tester.config_class()
-            self.config_tester.parent.assertIsNotNone(config)
-
-        self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
+        when number of images doesn't match number of image tokens in the text.
         Also we need to test multi-image cases when one prompr has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two image tokens don't raise an error
@@ -302,30 +255,21 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
@@ -335,6 +279,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
 
 @require_torch
+@slow
 class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
@@ -342,111 +287,147 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_small_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        # Let's make sure we test the preprocessing to replace what is used
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
+        )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        raw_image = load_test_image(image_file)
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+        expected_decoded_texts = Expectations({
+            ("xpu", 3): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
+            ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
+            ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
+        })  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_llama_single(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        raw_image = load_test_image(image_file)
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area."  # fmt: skip
 
-        self.assertEqual(
-            processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that may affect its safety. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
+                ("xpu", 5): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that could lead to accidents. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        decoded_text = processor.decode(output[0], skip_special_tokens=True)
 
-    @slow
+        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
+
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which appears to be a dock or pier extending out into the water,",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on",
+                ],
+            }
         )
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
-    @slow
+        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
+
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        # Let's make sure we test the preprocessing to replace what is used
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
-            torch_device
+            torch_device, torch.float16
         )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = [
-            'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring.',
-            'USER:  \nWhat is this?\nASSISTANT: Cats'
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a mountain lake, there are several things to be cautious about and items', 'USER:  \nWhat is this?\nASSISTANT: Cats'],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+            "llava-hf/llava-1.5-7b-hf",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            attn_implementation="eager",
         )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
@@ -454,8 +435,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
+        image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True).to(
             torch_device
@@ -463,28 +446,35 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending out into a large body",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.",
+                ],
+            }
         )
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
-    @slow
+        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
+
     @require_torch
     @require_vision
+    @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_batched_generation(self):
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
 
         processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
-        prompt1 = "<image>\n<image>\nUSER: What's the the difference of two images?\nASSISTANT:"
+        prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        image1 = Image.open(requests.get(url1, stream=True).raw)
-        image2 = Image.open(requests.get(url2, stream=True).raw)
+        url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1552053831-71594a27632d.jpg"
+        url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1617258683320-61900b281ced.jpg"
+        image1 = load_test_image(url1)
+        image2 = load_test_image(url2)
 
         inputs = processor(
             images=[image1, image2, image1, image2],
@@ -495,11 +485,31 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         model = model.eval()
 
-        EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
-        ]
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("xpu", 3): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one image and a",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
+                ],
+                ("cuda", 7): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT:  In the two images, the primary difference is the presence of a green plant in one and a yellow",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
+                ],
+                ("cuda", 8): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
+                ],
+                ("rocm", (9, 5)): [
+                    "\n\nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
@@ -523,11 +533,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
-    @slow
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # Prepare inputs with no images
@@ -536,19 +547,16 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
 
-    @slow
     @require_bitsandbytes
     def test_generation_siglip_backbone(self):
         model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        # check processing with expansion of inputs (w/o expansion should work with any backbone)
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        image_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
+        raw_image = load_test_image(image_file)
         inputs = processor(
             text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
             images=raw_image,
@@ -558,58 +566,65 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Make sure that `generate` works
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat"
-        self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("xpu", 3): "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat",
+                ("cuda", None): "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        decoded_text = processor.batch_decode(output, skip_special_tokens=True)[0]
+        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
-    @slow
+    @require_deterministic_for_xpu
     def test_pixtral(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id)
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map="auto")
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
-        PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
+        PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
-        # image = Image.open(requests.get(url, stream=True).raw)
-        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
-        generate_ids = model.generate(**inputs, max_new_tokens=500)
-        ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        print(ouptut)
+        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
+        generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        # fmt: off
-        EXPECTED_GENERATION = """
-Describe the images.
-Certainly! Here are the descriptions of the images:
-
-1. **Image 1**: This image features a black dog with a glossy coat sitting on a wooden surface. The dog has a calm and attentive expression, looking directly at the camera. The wooden background has a rustic appearance with visible grain and texture.
-
-2. **Image 2**: This image captures a breathtaking view of a mountainous landscape. The mountains are rugged and covered with patches of green vegetation. The sky above is clear, and the scene conveys a sense of tranquility and natural beauty.
-
-3. **Image 3**: This image shows a beach scene during sunset. The waves are gently rolling onto the shore, and several people can be seen in the water, possibly surfing or swimming. The sky is painted with warm hues of orange and yellow, creating a serene and picturesque atmosphere.
-
-4. **Image 4**: This image depicts a narrow, winding path that cuts through a lush, green landscape. On either side of the path, there is dense grass and various trees, including a prominent tree with white blossoms. The sky is clear and blue, adding to the peaceful and inviting ambiance of the scene.
-
-These descriptions provide a detailed overview of the content and atmosphere of each image.
-"""
-        # fmt: on
+        EXPECTED_GENERATIONS = Expectations(
+            {
+                (None, None): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow",
+                ("cuda", 8): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, giving a rustic and cozy feel to the image.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with",
+            }
+        )  # fmt: skip
+        EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         # check that both inputs are handled correctly and generate the same output
-        self.assertEqual(ouptut, EXPECTED_GENERATION)
+        self.assertEqual(output, EXPECTED_GENERATION)
 
-    @slow
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_pixtral_4bit(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
 
@@ -617,20 +632,35 @@ These descriptions provide a detailed overview of the content and atmosphere of 
         generate_ids = model.generate(**inputs, max_new_tokens=50)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_GENERATION = "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador"  # fmt: skip
-        self.assertEqual(output, EXPECTED_GENERATION)
+        EXPECTED_GENERATIONS = Expectations(
+            {
+                ("cuda", 8): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a puppy,",
+                ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
+            }
+        )  # fmt: skip
+        EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
+        self.assertTrue(output in EXPECTED_GENERATION)
 
-    @slow
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_pixtral_batched(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
+        )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/500", stream=True).raw),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_17_150x500.jpg"
+            ),
         ]
         PROMPT = [
             "<s>[INST][IMG]What breed is the dog?[/INST]",
@@ -643,8 +673,22 @@ These descriptions provide a detailed overview of the content and atmosphere of 
         generate_ids = model.generate(**inputs, max_new_tokens=50)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-        EXPECTED_GENERATION = [
-            'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-            'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
-        ]  # fmt: skip
+        EXPECTED_GENERATIONS = Expectations(
+            {
+                (None, None): [
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is bordered by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there"
+                ],
+                ("cuda", 8): [
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue."
+                ],
+                ("rocm", (9, 5)): [
+                    'What breed is the dog?The dog in the image is a black Labrador Retriever.',
+                    'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
+                ],
+            }
+        )  # fmt: skip
+
+        EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         self.assertEqual(output, EXPECTED_GENERATION)

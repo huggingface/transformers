@@ -9,17 +9,19 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-09-23 and contributed to Hugging Face Transformers on 2021-12-17.*
 
 # Wav2Vec2Phoneme
+
 
 ## Overview
 
 The Wav2Vec2Phoneme model was proposed in [Simple and Effective Zero-shot Cross-lingual Phoneme Recognition (Xu et al.,
-2021](https://arxiv.org/abs/2109.11680) by Qiantong Xu, Alexei Baevski, Michael Auli.
+2021)](https://huggingface.co/papers/2109.11680) by Qiantong Xu, Alexei Baevski, Michael Auli.
 
 The abstract from the paper is the following:
 
@@ -43,15 +45,14 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 - Wav2Vec2Phoneme is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - Wav2Vec2Phoneme model was trained using connectionist temporal classification (CTC) so the model output has to be
   decoded using [`Wav2Vec2PhonemeCTCTokenizer`].
-- Wav2Vec2Phoneme can be fine-tuned on multiple language at once and decode unseen languages in a single forward pass
+- Wav2Vec2Phoneme can be fine-tuned on multiple languages at once and decode unseen languages in a single forward pass
   to a sequence of phonemes
 - By default, the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
   should make use of a dictionary and language model.
 
-
 <Tip>
 
-Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page 
+Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page
 except for the tokenizer.
 
 </Tip>
@@ -59,7 +60,7 @@ except for the tokenizer.
 ## Wav2Vec2PhonemeCTCTokenizer
 
 [[autodoc]] Wav2Vec2PhonemeCTCTokenizer
-	- __call__
-	- batch_decode
-	- decode
-	- phonemize
+    - __call__
+    - batch_decode
+    - decode
+    - phonemize

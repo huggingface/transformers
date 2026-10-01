@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,13 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -162,8 +162,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -188,7 +189,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 21841
         filename = "imagenet-22k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         # this dataset contains 21843 labels but the model only has 21841
         # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
@@ -201,7 +202,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 1000
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -214,7 +215,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 150
         filename = "ade20k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -225,7 +226,8 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # size of the architecture
     if "base" in checkpoint_url:
-        pass
+        if "ade20k" in checkpoint_url:
+            config.out_indices = [3, 5, 7, 11]
     elif "large" in checkpoint_url:
         config.hidden_size = 1024
         config.intermediate_size = 4096
@@ -266,7 +268,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # Check outputs on an image
     if is_semantic:
         image_processor = BeitImageProcessor(size=config.image_size, do_center_crop=False)
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
     else:
         image_processor = BeitImageProcessor(

@@ -9,21 +9,23 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2021-07-30 and contributed to Hugging Face Transformers on 2021-12-08.*
 
 # Perceiver
+
 
 ## Overview
 
 The Perceiver IO model was proposed in [Perceiver IO: A General Architecture for Structured Inputs &
-Outputs](https://arxiv.org/abs/2107.14795) by Andrew Jaegle, Sebastian Borgeaud, Jean-Baptiste Alayrac, Carl Doersch,
+Outputs](https://huggingface.co/papers/2107.14795) by Andrew Jaegle, Sebastian Borgeaud, Jean-Baptiste Alayrac, Carl Doersch,
 Catalin Ionescu, David Ding, Skanda Koppula, Daniel Zoran, Andrew Brock, Evan Shelhamer, Olivier Hénaff, Matthew M.
 Botvinick, Andrew Zisserman, Oriol Vinyals, João Carreira.
 
-Perceiver IO is a generalization of [Perceiver](https://arxiv.org/abs/2103.03206) to handle arbitrary outputs in
+Perceiver IO is a generalization of [Perceiver](https://huggingface.co/papers/2103.03206) to handle arbitrary outputs in
 addition to arbitrary inputs. The original Perceiver only produced a single classification label. In addition to
 classification labels, Perceiver IO can produce (for example) language, optical flow, and multimodal videos with audio.
 This is done using the same building blocks as the original Perceiver. The computational complexity of Perceiver IO is
@@ -76,7 +78,7 @@ size of 262 byte IDs).
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perceiver_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> Perceiver IO architecture. Taken from the <a href="https://arxiv.org/abs/2105.15203">original paper</a> </small>
+<small> Perceiver IO architecture. Taken from the <a href="https://huggingface.co/papers/2105.15203">original paper</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/deepmind/deepmind-research/tree/master/perceiver).
@@ -118,14 +120,14 @@ audio classification, video classification, etc.
 [[autodoc]] PerceiverTokenizer
     - __call__
 
-## PerceiverFeatureExtractor
-
-[[autodoc]] PerceiverFeatureExtractor
-    - __call__
-
 ## PerceiverImageProcessor
 
 [[autodoc]] PerceiverImageProcessor
+    - preprocess
+
+## PerceiverImageProcessorPil
+
+[[autodoc]] PerceiverImageProcessorPil
     - preprocess
 
 ## PerceiverTextPreprocessor

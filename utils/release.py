@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,12 +52,21 @@ import packaging.version
 # All paths are defined with the intent that this script should be run from the root of the repo.
 PATH_TO_EXAMPLES = "examples/"
 PATH_TO_MODELS = "src/transformers/models"
+PATH_TO_UTILS = "utils"
 # This maps a type of file to the pattern to look for when searching where the version is defined, as well as the
 # template to follow when replacing it with the new version.
 REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
+    "uv_script_release": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1>==VERSION",',
+    ),
+    "uv_script_dev": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1> @ git+https://github.com/huggingface/transformers.git",',
+    ),
 }
 # This maps a type of file to its path in Transformers
 REPLACE_FILES = {
@@ -66,6 +74,7 @@ REPLACE_FILES = {
     "setup": "setup.py",
 }
 README_FILE = "README.md"
+UV_SCRIPT_MARKER = "# /// script"
 
 
 def update_version_in_file(fname: str, version: str, file_type: str):
@@ -86,22 +95,27 @@ def update_version_in_file(fname: str, version: str, file_type: str):
         f.write(code)
 
 
-def update_version_in_examples(version: str):
+def update_version_in_examples(version: str, patch: bool = False):
     """
     Update the version in all examples files.
 
     Args:
         version (`str`): The new version to set in the examples.
+        patch (`bool`, *optional*, defaults to `False`): Whether or not this is a patch release.
     """
     for folder, directories, fnames in os.walk(PATH_TO_EXAMPLES):
         # Removing some of the folders with non-actively maintained examples from the walk
-        if "research_projects" in directories:
-            directories.remove("research_projects")
         if "legacy" in directories:
             directories.remove("legacy")
         for fname in fnames:
             if fname.endswith(".py"):
-                update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
+                if UV_SCRIPT_MARKER in Path(folder, fname).read_text(encoding="utf-8"):
+                    # Update the dependencies in UV scripts
+                    uv_script_file_type = "uv_script_dev" if ".dev" in version else "uv_script_release"
+                    update_version_in_file(os.path.join(folder, fname), version, file_type=uv_script_file_type)
+                if not patch:
+                    # We don't update the version in the examples for patch releases.
+                    update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
 
 
 def global_version_update(version: str, patch: bool = False):
@@ -114,9 +128,8 @@ def global_version_update(version: str, patch: bool = False):
     """
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
-    if not patch:
-        # We don't update the version in the examples for patch releases.
-        update_version_in_examples(version)
+    # REMOVED AFTER v5! Uncomment to start updating the version of the examples again
+    # update_version_in_examples(version, patch=patch)
 
 
 def remove_conversion_scripts():
@@ -130,11 +143,18 @@ def remove_conversion_scripts():
         conversion_script.unlink()
 
 
+def remove_internal_utils():
+    """
+    Delete internal utils that should not be included in releases for security reasons.
+    """
+    (Path(PATH_TO_UTILS) / "modular_model_detector.py").unlink()
+
+
 def get_version() -> packaging.version.Version:
     """
     Reads the current version in the main __init__.
     """
-    with open(REPLACE_FILES["init"], "r") as f:
+    with open(REPLACE_FILES["init"], "r", encoding="utf-8") as f:
         code = f.read()
     default_version = REPLACE_PATTERNS["init"][0].search(code).groups()[0]
     return packaging.version.parse(default_version)
@@ -168,8 +188,11 @@ def pre_release_work(patch: bool = False):
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
-    print("Deleting conversion scripts.")
-    remove_conversion_scripts()
+    # If releasing a patch, all those files were already deleted on the branch when releasing the main version
+    if not patch:
+        print("Deleting conversion and internal utils scripts.")
+        remove_conversion_scripts()
+        remove_internal_utils()
 
 
 def post_release_work():

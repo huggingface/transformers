@@ -34,11 +34,11 @@ The script leverages the 🤗 [Trainer API](https://huggingface.co/docs/transfor
 
 ### Using datasets from Hub
 
-Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/beans) dataset, to classify the disease type of bean leaves.
+Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/AI-Lab-Makerere/beans) dataset, to classify the disease type of bean leaves.
 
 ```bash
 python run_image_classification.py \
-    --dataset_name beans \
+    --dataset_name AI-Lab-Makerere/beans \
     --output_dir ./beans_outputs/ \
     --remove_unused_columns False \
     --label_column_name labels \
@@ -129,7 +129,7 @@ dataset = load_dataset("imagefolder", data_files={"train": ["path/to/file1", "pa
 Next, push it to the hub!
 
 ```python
-# assuming you have ran the huggingface-cli login command in a terminal
+# assuming you have ran the hf auth login command in a terminal
 dataset.push_to_hub("name_of_your_dataset")
 
 # if you want to push to a private repo, simply pass private=True:
@@ -152,10 +152,10 @@ $ git config --global user.email "you@example.com"
 $ git config --global user.name "Your Name"
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`:
+2. Log in with your HuggingFace account credentials using `hf`:
 
 ```bash
-$ huggingface-cli login
+$ hf auth login
 # ...follow the prompts
 ```
 

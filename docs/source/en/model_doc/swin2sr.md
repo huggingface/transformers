@@ -9,16 +9,18 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
+*This model was published in HF papers on 2022-09-22 and contributed to Hugging Face Transformers on 2022-12-16.*
 
 # Swin2SR
 
+
 ## Overview
 
-The Swin2SR model was proposed in [Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration](https://arxiv.org/abs/2209.11345) by Marcos V. Conde, Ui-Jin Choi, Maxime Burchi, Radu Timofte.
+The Swin2SR model was proposed in [Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration](https://huggingface.co/papers/2209.11345) by Marcos V. Conde, Ui-Jin Choi, Maxime Burchi, Radu Timofte.
 Swin2SR improves the [SwinIR](https://github.com/JingyunLiang/SwinIR/) model by incorporating [Swin Transformer v2](swinv2) layers which mitigates issues such as training instability, resolution gaps between pre-training
 and fine-tuning, and hunger on data.
 
@@ -30,7 +32,7 @@ In this paper, we explore the novel Swin Transformer V2, to improve SwinIR for i
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/swin2sr_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Swin2SR architecture. Taken from the <a href="https://arxiv.org/abs/2209.11345">original paper.</a> </small>
+<small> Swin2SR architecture. Taken from the <a href="https://huggingface.co/papers/2209.11345">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/mv-lab/swin2sr).
@@ -44,6 +46,11 @@ A demo Space for image super-resolution with SwinSR can be found [here](https://
 ## Swin2SRImageProcessor
 
 [[autodoc]] Swin2SRImageProcessor
+    - preprocess
+
+## Swin2SRImageProcessorPil
+
+[[autodoc]] Swin2SRImageProcessorPil
     - preprocess
 
 ## Swin2SRConfig
