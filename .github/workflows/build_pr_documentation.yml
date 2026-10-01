@@ -34,7 +34,7 @@ jobs:
 
       - name: Install doc-builder
         run: |
-          uv pip install --system git+https://github.com/huggingface/doc-builder.git@main
+          uv pip install --prerelease=allow --system git+https://github.com/huggingface/doc-builder.git@main
 
       - name: Check documentation links
         run: |
