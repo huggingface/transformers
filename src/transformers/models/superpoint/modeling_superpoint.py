@@ -266,7 +266,7 @@ class SuperPointInterestPointDecoder(nn.Module):
             # of valid keypoints across the batch. This is fully dynamic.
             valid_flat = valid.reshape(batch_size, height * width)
             k = int(valid_flat.sum(dim=1).max().item())
-            
+
             # To preserve original row-major index ordering, we use negative indices
             # for topk instead of scores. This ensures the output is sorted by original
             # position, mimicking torch.nonzero behavior from the original eager code.
@@ -275,7 +275,11 @@ class SuperPointInterestPointDecoder(nn.Module):
                 topk_scores = torch.zeros((batch_size, 0), device=scores.device)
                 topk_indices = torch.zeros((batch_size, 0), device=scores.device, dtype=torch.long)
             else:
-                index_scores = -torch.arange(height * width, device=scores.device, dtype=torch.float32).unsqueeze(0).expand(batch_size, -1)
+                index_scores = (
+                    -torch.arange(height * width, device=scores.device, dtype=torch.float32)
+                    .unsqueeze(0)
+                    .expand(batch_size, -1)
+                )
                 index_scores = index_scores.masked_fill(~valid_flat, float("-inf"))
                 _, topk_indices = torch.topk(index_scores, k=k, dim=1)
                 topk_scores = torch.gather(masked_scores.reshape(batch_size, height * width), 1, topk_indices)
