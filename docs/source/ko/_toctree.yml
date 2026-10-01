@@ -147,8 +147,8 @@
       title: CPU에서 훈련
     - local: perf_train_special
       title: Apple 실리콘에서 PyTorch 학습
-    - local: in_translation
-      title: (번역중) Intel Gaudi
+    - local: perf_train_gaudi
+      title: Intel Gaudi
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
     title: 하드웨어
