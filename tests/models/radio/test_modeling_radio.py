@@ -194,7 +194,6 @@ class RadioModelTest(ModelTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {}
     test_resize_embeddings = False
     test_head_masking = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = RadioModelTester(self)

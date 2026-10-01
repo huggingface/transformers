@@ -108,7 +108,6 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     test_resize_embeddings = False
     test_head_masking = False
-    test_pruning = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
