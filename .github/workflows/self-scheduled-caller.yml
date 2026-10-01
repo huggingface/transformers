@@ -62,6 +62,6 @@ jobs:
       runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}
-      subdirs: '["exaone4", "nemotron_asr_streaming", "phimoe"]'
+      subdirs: '["llama4", "mistral4", "cohere2_vision"]'
     secrets: inherit
 
