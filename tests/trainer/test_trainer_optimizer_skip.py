@@ -270,13 +270,15 @@ def test_skipped_update_with_partial_accumulation_group(tmp_path, poison_id, exp
     assert len(trainer.model.seen_ids) == (7 if poison_id is not None else 5)
 
 
-def test_epoch_based_training_stops_after_requested_epoch(tmp_path):
-    trainer, recorder = _make_trainer(tmp_path, max_steps=-1, epochs=1)
+@pytest.mark.parametrize("epochs, attempts, applied_steps", [(1, 6, 5), (1.5, 9, 7)])
+def test_epoch_based_training_stops_after_requested_epoch(tmp_path, epochs, attempts, applied_steps):
+    trainer, recorder = _make_trainer(tmp_path, max_steps=-1, epochs=epochs)
     trainer.train()
 
-    assert trainer.state.global_step == _applied_steps(trainer) == 5
-    assert trainer.state.optimizer_step_attempts == recorder.attempts == 6
-    assert len(trainer.model.seen_ids) == 12
+    assert trainer.state.global_step == _applied_steps(trainer) == applied_steps
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == attempts
+    assert len(trainer.model.seen_ids) == 2 * attempts
+    assert trainer.state.epoch == epochs
 
 
 def test_callback_can_stop_persistent_skips(tmp_path):
