@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Mistral4 model."""
 
 import gc
+import os
 import unittest
 
 import pytest
@@ -78,6 +79,10 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Mistral4IntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 

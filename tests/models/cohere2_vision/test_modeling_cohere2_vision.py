@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GotOcr2 model."""
 
+import os
 import unittest
 
 from transformers import (
@@ -173,6 +174,10 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
+
     def setUp(self):
         super().setUp()
         self.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
@@ -480,6 +485,10 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
     """Integration tests for Cohere2VisionForConditionalGeneration with the Command A+ Model."""
 
     model_checkpoint = "/root/repos/moe/engines/command_a+_bf16"
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llama4 model."""
 
+import os
 import unittest
 
 from transformers import is_torch_available
@@ -43,6 +44,7 @@ class Llama4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "meta-llama/Llama-4-Scout-17B-16E",
             device_map="auto",

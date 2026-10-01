@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
 
+import os
 import tempfile
 import unittest
 
@@ -75,6 +76,7 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
         cls.model = None
         cls.tokenizer = None
         cls.offload_dir = None

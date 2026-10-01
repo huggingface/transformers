@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch MiniMax-M3-VL model."""
 
 import copy
+import os
 import unittest
 
 from parameterized import parameterized
@@ -504,6 +505,10 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 @require_torch
 class MiniMaxM3VLIntegrationTest(unittest.TestCase):
     model_id = "MiniMaxAI/MiniMax-M3-MXFP8"
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
 
     def _load_model(self):
         # The indexer feeds SDPA an additive float mask (the block-sparse bias). On B200 + this

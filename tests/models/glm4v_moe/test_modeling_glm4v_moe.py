@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch GLM-4.5V model."""
 
 import copy
+import os
 import tempfile
 import unittest
 
@@ -296,6 +297,7 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 class Glm4vMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
         cls.model = None
         cls.offload_dir = None
 
