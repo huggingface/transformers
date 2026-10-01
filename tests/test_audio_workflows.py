@@ -143,12 +143,6 @@ class AudioWorkflowTest(unittest.TestCase):
 
     def test_unsupported_workflow_switches_fail_at_validation(self):
         cases = (
-            (
-                "audio_spectrogram_transformer",
-                "AudioSpectrogramTransformerAudioProcessor",
-                {"do_batch_spectrogram": True},
-            ),
-            ("speech_to_text", "SpeechToTextAudioProcessor", {"do_batch_spectrogram": True}),
             ("kyutai_speech_to_text", "KyutaiSpeechToTextAudioProcessor", {"do_extract_spectrogram": True}),
             ("nemotron_asr_streaming", "NemotronAsrStreamingAudioProcessor", {"do_extract_spectrogram": False}),
             ("xcodec2", "Xcodec2AudioProcessor", {"padding_side": "left"}),

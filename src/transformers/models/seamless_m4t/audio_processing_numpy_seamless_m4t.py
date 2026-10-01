@@ -12,20 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_seamless_m4t import SeamlessM4tAudioProcessorMixin
 
 
 class SeamlessM4tAudioProcessorNumpy(SeamlessM4tAudioProcessorMixin, NumpyAudioBackend):
-    def _finalize_features(self, features, feature_lengths, **kwargs):
-        normalized = []
-        for f in features:
-            mean = np.expand_dims(f.mean(axis=0), 0)
-            var = np.expand_dims(f.var(axis=0, ddof=1), 0)
-            normalized.append((f - mean) / np.sqrt(var + 1e-7))
-        return normalized
+    pass
 
 
 __all__ = ["SeamlessM4tAudioProcessorNumpy"]

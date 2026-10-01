@@ -35,13 +35,17 @@ class AudioSpectrogramTransformerAudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class AudioSpectrogramTransformerAudioProcessorMixin:
-    do_batch_spectrogram = False
     # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
     # `num_mel_bins`, so `feature_size` opts out of the base mapping rather than overwriting it.
     # `mean`/`std` are the dataset normalisation statistics; without the mapping a checkpoint's
     # own values were dropped and every AST model normalised with AudioSet's, which is what the
-    # class defaults happen to be.
-    legacy_field_mapping = {"feature_size": None, "mean": "ast_mean", "std": "ast_std"}
+    # class defaults happen to be. Its `max_length` counts mel frames, not samples.
+    legacy_field_mapping = {
+        "feature_size": None,
+        "mean": "ast_mean",
+        "std": "ast_std",
+        "max_length": "max_length_frames",
+    }
     model_input_names = ["audio_values"]
     return_padding_mask = False
     sampling_rate = 16000
@@ -76,17 +80,25 @@ class AudioSpectrogramTransformerAudioProcessorMixin:
     max_length_frames = 1024
     valid_kwargs = AudioSpectrogramTransformerAudioProcessorKwargs
 
-    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, do_batch_spectrogram, **kwargs):
-        if not do_extract_spectrogram or do_batch_spectrogram:
-            raise ValueError("AST requires per-utterance spectrogram extraction.")
-        super()._validate_preprocess_kwargs(
-            do_extract_spectrogram=do_extract_spectrogram, do_batch_spectrogram=do_batch_spectrogram, **kwargs
-        )
-
-    def _pad_features(
-        self, features, padding, max_length, truncation, pad_to_multiple_of, *, max_length_frames, **kwargs
+    def _compute_batched_features(
+        self, audio, *, audio_ranges, spectrogram_config, max_length_frames, padding_value, **kwargs
     ):
-        return super()._pad_features(features, "max_length", max_length_frames, True, pad_to_multiple_of, **kwargs)
+        # The legacy extractor zero-padded or truncated each clip's fbank to `max_length_frames`.
+        features, frame_counts = super()._compute_batched_features(
+            audio,
+            audio_ranges=audio_ranges,
+            spectrogram_config=spectrogram_config,
+            padding_value=padding_value,
+            **kwargs,
+        )
+        features = features[:, :max_length_frames]
+        if features.shape[1] < max_length_frames:
+            features = self._pad_axis(features, 0, max_length_frames - features.shape[1], axis=1, value=padding_value)
+        frame_counts = frame_counts.clip(max=max_length_frames)
+        return self._mask_padded_frames(features, frame_counts, padding_value=padding_value), frame_counts
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, *, max_length_frames, **kwargs) -> int:
+        return max_length_frames
 
     def _finalize_output(self, output, *, do_normalize, ast_mean, ast_std, **kwargs):
         features = output.pop("audio_features")

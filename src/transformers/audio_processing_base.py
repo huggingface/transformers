@@ -170,6 +170,8 @@ class AudioProcessingMixin(PreprocessingMixin):
         "preemphasis": "spectrogram_config.preemphasis",
         "mel_floor": "spectrogram_config.mel_floor",
         "nb_max_frames": None,
+        # Saved by development builds; extraction is always batched now.
+        "do_batch_spectrogram": None,
         "nb_frequency_bins": None,
     }
     legacy_field_mapping: dict | None = None

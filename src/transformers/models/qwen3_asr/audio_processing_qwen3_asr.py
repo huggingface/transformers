@@ -63,7 +63,7 @@ class Qwen3ASRAudioProcessorMixin:
     n_window = 50
     valid_kwargs = Qwen3ASRAudioProcessorKwargs
 
-    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:
         # The legacy FE strides the sample-level mask by hop_length and trims the tail column
         return int(padded_length // spectrogram_config.stft_config.hop_length)
 

@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -29,8 +26,6 @@ class SeamlessM4tAudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class SeamlessM4tAudioProcessorMixin:
-    do_batch_spectrogram = False
-    pad_to_multiple_of = 2
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {
@@ -62,12 +57,42 @@ class SeamlessM4tAudioProcessorMixin:
     stride = 2
     valid_kwargs = SeamlessM4tAudioProcessorKwargs
 
-    def _validate_preprocess_kwargs(self, *, stride, do_extract_spectrogram, do_batch_spectrogram, **kwargs):
-        if stride < 1 or not do_extract_spectrogram or do_batch_spectrogram:
-            raise ValueError("SeamlessM4T requires a positive stride and per-utterance spectrogram extraction.")
-        super()._validate_preprocess_kwargs(
-            do_extract_spectrogram=do_extract_spectrogram, do_batch_spectrogram=do_batch_spectrogram, **kwargs
+    def _validate_preprocess_kwargs(self, *, stride, **kwargs):
+        if stride < 1:
+            raise ValueError("SeamlessM4T requires a positive stride.")
+        super()._validate_preprocess_kwargs(**kwargs)
+
+    def _compute_batched_features(self, audio, *, audio_ranges, spectrogram_config, stride, padding_value, **kwargs):
+        features, frame_counts = super()._compute_batched_features(
+            audio,
+            audio_ranges=audio_ranges,
+            spectrogram_config=spectrogram_config,
+            padding_value=padding_value,
+            **kwargs,
         )
+        # The legacy extractor normalized each clip, padded the features, then padded the frame axis to an
+        # even count (its `pad_to_multiple_of=2`) so the stride stacking below keeps the last frame.
+        features = self._mask_padded_frames(
+            self._normalize_utterances(features, frame_counts), frame_counts, padding_value=padding_value
+        )
+        if features.shape[1] % stride:
+            features = self._pad_axis(features, 0, -features.shape[1] % stride, axis=1, value=padding_value)
+        return features, frame_counts
+
+    def _normalize_utterances(self, features, frame_counts):
+        """Zero-mean, unit-variance each clip over its own frames (unbiased variance, `1e-7` inside the root)."""
+        # float64 moments, rounded once to the log stage's float32: independent of the batch layout and of
+        # the reduction order
+        features = self._astype(features, "float64")
+        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float64")[:, None, None]
+        valid = self._arange(features.shape[1], like=features)[None, :, None] < counts
+        mean = (features * valid).sum(axis=1)[:, None, :] / counts
+        variance = (((features - mean) * valid) ** 2).sum(axis=1)[:, None, :] / (counts - 1)
+        return self._astype((features - mean) / self._sqrt(variance + 1e-7), "float32")
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, *, stride, **kwargs) -> int:
+        count = super()._padded_frame_count(padded_length, spectrogram_config, **kwargs)
+        return count - count % -stride
 
     def _finalize_output(self, output, feature_ranges=None, *, stride, **kwargs):
         features = output["audio_features"]
@@ -90,15 +115,7 @@ class SeamlessM4tAudioProcessorMixin:
 
 
 class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
-    def _finalize_features(self, features, feature_lengths, **kwargs):
-        # bit-exact with the legacy FE: numpy reductions use pairwise summation, whose
-        # accumulation order differs from torch's float32 `mean`/`var`. The legacy features are
-        normalized = []
-        for f in features:
-            x = np.asfortranarray(f.detach().cpu().numpy())
-            x = (x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
-            normalized.append(torch.from_numpy(x))
-        return normalized
+    pass
 
 
 __all__ = ["SeamlessM4tAudioProcessor"]

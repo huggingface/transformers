@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -38,7 +35,6 @@ class SpeechToTextAudioProcessorKwargs(AudioKwargs, total=False):
 
 class SpeechToTextAudioProcessorMixin:
     do_ceptral_normalize = True
-    do_batch_spectrogram = False
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {
@@ -70,57 +66,49 @@ class SpeechToTextAudioProcessorMixin:
     normalize_vars = True
     valid_kwargs = SpeechToTextAudioProcessorKwargs
 
-    def _validate_preprocess_kwargs(
-        self, *, do_extract_spectrogram, do_batch_spectrogram, do_ceptral_normalize, **kwargs
-    ):
-        if do_ceptral_normalize and (not do_extract_spectrogram or do_batch_spectrogram):
-            raise ValueError("SpeechToText CMVN requires per-utterance spectrogram extraction.")
-        super()._validate_preprocess_kwargs(
-            do_extract_spectrogram=do_extract_spectrogram,
-            do_batch_spectrogram=do_batch_spectrogram,
-            do_ceptral_normalize=do_ceptral_normalize,
-            **kwargs,
-        )
-
-
-class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBackend):
-    @staticmethod
-    def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):
-        # CMVN is computed in numpy to stay bit-exact with the legacy feature extractor
-        # accumulation order differs from torch's `mean`/`std` (~1e-5 drift in float32).
-        x = x.detach().cpu().numpy()
-        if normalize_means:
-            mean = x[:input_length].mean(axis=0)
-            x = np.subtract(x, mean)
-        if normalize_vars:
-            std = x[:input_length].std(axis=0)
-            x = np.divide(x, std)
-        if input_length < x.shape[0]:
-            if not (normalize_means or normalize_vars):
-                x = x.copy()
-            x[input_length:] = padding_value
-        return torch.from_numpy(x.astype(np.float32))
-
-    def _finalize_output(
+    def _compute_batched_features(
         self,
-        output,
-        feature_ranges=None,
+        audio,
         *,
+        audio_ranges,
+        spectrogram_config,
         do_ceptral_normalize,
         normalize_means,
         normalize_vars,
         padding_value,
         **kwargs,
     ):
-        if not do_ceptral_normalize:
-            return output
-        features = output["audio_features"]
-        normalized = []
-        for i, (start, end) in enumerate(feature_ranges):
-            length = end - start
-            normalized.append(self.utterance_cmvn(features[i], length, normalize_means, normalize_vars, padding_value))
-        output["audio_features"] = torch.stack(normalized)
-        return output
+        features, frame_counts = super()._compute_batched_features(
+            audio,
+            audio_ranges=audio_ranges,
+            spectrogram_config=spectrogram_config,
+            padding_value=padding_value,
+            **kwargs,
+        )
+        if do_ceptral_normalize:
+            features = self._utterance_cmvn(
+                features, frame_counts, normalize_means=normalize_means, normalize_vars=normalize_vars
+            )
+        # the legacy extractor padded the features, not the audio
+        return self._mask_padded_frames(features, frame_counts, padding_value=padding_value), frame_counts
+
+    def _utterance_cmvn(self, features, frame_counts, *, normalize_means, normalize_vars):
+        """Cepstral mean and variance normalization of each clip over its own frames (biased std)."""
+        # float64 moments, rounded once to the log stage's float32: independent of the batch layout and of
+        # the reduction order
+        features = self._astype(features, "float64")
+        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float64")[:, None, None]
+        valid = self._arange(features.shape[1], like=features)[None, :, None] < counts
+        if normalize_means:
+            features = features - (features * valid).sum(axis=1)[:, None, :] / counts
+        if normalize_vars:
+            mean = (features * valid).sum(axis=1)[:, None, :] / counts
+            features = features / self._sqrt((((features - mean) * valid) ** 2).sum(axis=1)[:, None, :] / counts)
+        return self._astype(features, "float32")
+
+
+class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["SpeechToTextAudioProcessor"]

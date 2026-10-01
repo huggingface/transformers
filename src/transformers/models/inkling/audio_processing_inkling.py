@@ -101,7 +101,7 @@ class InklingAudioProcessorMixin:
         power = spectrogram_config.stft_config.power
         return magnitudes**power if power != 1.0 else magnitudes
 
-    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:
         # Inkling right-pads to a whole number of hops, so it emits ceil(length / hop) frames.
         hop = spectrogram_config.stft_config.hop_length
         return int((padded_length + hop - 1) // hop)

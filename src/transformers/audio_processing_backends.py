@@ -24,7 +24,7 @@ from .audio_utils import (
     mel_to_hertz,
 )
 from .processing_utils import AudioKwargs
-from .utils import is_speech_available, is_torch_available, logging, requires_backends
+from .utils import is_torch_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -368,29 +368,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
         else:
             mel_spec = np.matmul(mel_filters.T, features)
         return np.maximum(spectrogram_config.mel_floor, mel_spec)
-
-    # ── Kaldi fbank helper ────────────────────────────────────────────────
-
-    def _kaldi_fbank(self, waveform, num_mel_bins, sample_frequency=None, **kwargs):
-        """Extract kaldi-compatible fbank features using torchaudio (or fallback to base pipeline).
-
-        Returns numpy array of shape (time, num_mel_bins).
-        """
-        if sample_frequency is None:
-            sample_frequency = self.sampling_rate
-
-        if is_speech_available():
-            import torchaudio.compliance.kaldi as ta_kaldi
-
-            waveform_tensor = torch.from_numpy(np.asarray(waveform)).unsqueeze(0)
-            fbank = ta_kaldi.fbank(
-                waveform_tensor, num_mel_bins=num_mel_bins, sample_frequency=sample_frequency, **kwargs
-            )
-            return fbank.numpy()
-
-        waveform = np.squeeze(waveform)
-        features = self.spectrogram(waveform, spectrogram_config=self.spectrogram_config, dither=self.dither)
-        return features.T
 
 
 class TorchAudioBackend(BaseAudioProcessor):

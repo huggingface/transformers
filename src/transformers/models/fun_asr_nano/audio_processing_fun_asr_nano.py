@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -53,10 +51,6 @@ class FunAsrNanoAudioProcessorMixin:
         "frame_length": _ms_to_samples("win_length"),
         "frame_shift": _ms_to_samples("hop_length"),
     }
-    # Keep each clip unpadded through the fbank so the mel projection remains bit-exact
-    # with the legacy extractor. The base then pads the LFR features and builds their mask.
-    do_batch_spectrogram = False
-
     # `torchaudio.compliance.kaldi.fbank` geometry: 25 ms frames, 10 ms shift, 80 mel bins,
     # hamming window (FunASR's front-end uses hamming where most kaldi callers use povey).
     # Unlike XCodec2 the legacy extractor feeds unit-scale audio straight in, so there is no
@@ -90,8 +84,45 @@ class FunAsrNanoAudioProcessorMixin:
     stride_lfr = 6
     valid_kwargs = FunAsrNanoAudioProcessorKwargs
 
-    def _finalize_features(self, features, feature_lengths, *, num_frames_lfr, stride_lfr, **kwargs):
-        return [self._apply_lfr(feature, num_frames_lfr=num_frames_lfr, stride_lfr=stride_lfr) for feature in features]
+    def _compute_batched_features(
+        self, audio, *, audio_ranges, spectrogram_config, num_frames_lfr, stride_lfr, padding_value, **kwargs
+    ):
+        # The legacy extractor ran its fbank clip by clip, an artefact of
+        # `torchaudio.compliance.kaldi.fbank` taking one utterance. Batched, the mel projection accumulates
+        # over the batch's frame count and moves the features by float32 rounding: the exception recorded
+        # in ADR 0001's 2026-09-30 amendment.
+        features, frame_counts = super()._compute_batched_features(
+            audio,
+            audio_ranges=audio_ranges,
+            spectrogram_config=spectrogram_config,
+            padding_value=padding_value,
+            **kwargs,
+        )
+        return self._apply_lfr(
+            features, frame_counts, num_frames_lfr=num_frames_lfr, stride_lfr=stride_lfr, padding_value=padding_value
+        )
+
+    def _apply_lfr(self, features, frame_counts, *, num_frames_lfr, stride_lfr, padding_value):
+        """Low frame rate: stack `num_frames_lfr` mel frames, hop by `stride_lfr`, per clip.
+
+        A window reaching past a clip's edge repeats that clip's first or last real frame rather than
+        zero-padding, so it never mixes audio with silence or with the batch padding. LFR frames past a
+        clip's own count are `padding_value`, as the legacy extractor's feature-level padding left them.
+        """
+        batch_size, num_frames, num_mels = features.shape
+        num_output_frames = -(-num_frames // stride_lfr)
+        counts = self._as_backend_array(frame_counts, like=features)
+        windows = self._arange(num_output_frames, like=features)[None, :, None] * stride_lfr
+        windows = windows + self._arange(num_frames_lfr, like=features)[None, None, :] - (num_frames_lfr - 1) // 2
+        # clamp each source frame to the clip's own `[0, count - 1]`
+        sources = -self._maximum(-self._clamp_min(windows, 0), 1 - counts[:, None, None])
+        stacked = features[self._arange(batch_size, like=features)[:, None, None], sources]
+        stacked = stacked.reshape(batch_size, num_output_frames, num_frames_lfr * num_mels)
+        lfr_counts = -(-frame_counts // stride_lfr)
+        return self._mask_padded_frames(stacked, lfr_counts, padding_value=padding_value), lfr_counts
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, *, stride_lfr, **kwargs) -> int:
+        return -(-super()._padded_frame_count(padded_length, spectrogram_config, **kwargs) // stride_lfr)
 
     def _finalize_output(self, output, **kwargs):
         if "audio_features_mask" in output:
@@ -100,22 +131,7 @@ class FunAsrNanoAudioProcessorMixin:
 
 
 class FunAsrNanoAudioProcessor(FunAsrNanoAudioProcessorMixin, TorchAudioBackend):
-    def _apply_lfr(self, features, *, num_frames_lfr, stride_lfr):
-        """Low frame rate: stack `num_frames_lfr` mel frames, hop by `stride_lfr`.
-
-        Edges are handled by repeating the first and last frame rather than zero-padding, so a
-        stacked window never mixes real audio with silence.
-        """
-        num_input_frames = features.shape[0]
-        left_pad = (num_frames_lfr - 1) // 2
-        right_pad = num_frames_lfr - 1 - left_pad
-        padded = torch.cat([features[0:1].expand(left_pad, -1), features, features[-1:].expand(right_pad, -1)], dim=0)
-        num_output_frames = -(-num_input_frames // stride_lfr)
-        required = (num_output_frames - 1) * stride_lfr + num_frames_lfr
-        if required > padded.shape[0]:
-            padded = torch.cat([padded, padded[-1:].expand(required - padded.shape[0], -1)], dim=0)
-        windows = padded.unfold(0, num_frames_lfr, stride_lfr).transpose(1, 2)
-        return windows.reshape(num_output_frames, -1)
+    pass
 
 
 __all__ = ["FunAsrNanoAudioProcessor"]

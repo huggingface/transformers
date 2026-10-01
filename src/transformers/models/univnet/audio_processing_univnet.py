@@ -118,7 +118,7 @@ class UnivNetAudioProcessorMixin:
         features = _clamp_min(features, compression_clip_val) * compression_factor
         return super()._log_compress(features, spectrogram_config=replace(spectrogram_config, mel_floor=0.0), **kwargs)
 
-    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:
         # UnivNet's frame count is exactly `samples // hop_length` — not the base's window
         # geometry. Deleting this override changes the mask width.
         return int(padded_length // spectrogram_config.stft_config.hop_length)

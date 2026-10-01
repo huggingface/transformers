@@ -43,8 +43,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     padding_side = "right"
     padding_value = 0.0
     return_padding_mask = True
-    do_batch_spectrogram = True
-    
+
     dither: float = 0.0
     feature_normalization: str | None = None
     feature_normalization_eps: float = 1e-5
@@ -229,56 +228,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return_tensors: str | TensorType | None,
         spectrogram_config: SpectrogramConfig | None,
         do_extract_spectrogram: bool | None,
-        do_batch_spectrogram: bool | None,
         padding_side: str,
         padding_value: float,
         return_padding_mask: bool,
         **kwargs: Any,
     ) -> BatchFeature:
-        # Path 1: per-waveform spectrogram extraction, padded at the feature level.
-        if do_extract_spectrogram and not do_batch_spectrogram:
-            features = [
-                self.spectrogram(
-                    waveform,
-                    spectrogram_config=spectrogram_config,
-                    **kwargs,
-                )
-                for waveform in audio
-            ]
-            feature_lengths = [f.shape[0] for f in features]
-            features = self._finalize_features(features, feature_lengths, **kwargs)
-            features, feature_ranges = self._pad_features(
-                features,
-                padding,
-                max_length,
-                truncation,
-                pad_to_multiple_of,
-                padding_value=padding_value,
-                **kwargs,
-            )
-            output = {"audio_features": self._stack_features(features, padding=padding)}
-            if return_padding_mask:
-                output["audio_features_mask"] = self._get_mask(
-                    feature_ranges, features[0].shape[0], like=output["audio_features"]
-                )
-            output = self._finalize_output(
-                output,
-                feature_ranges=feature_ranges,
-                padding=padding,
-                max_length=max_length,
-                truncation=truncation,
-                pad_to_multiple_of=pad_to_multiple_of,
-                spectrogram_config=spectrogram_config,
-                padding_side=padding_side,
-                padding_value=padding_value,
-                return_padding_mask=return_padding_mask,
-                **kwargs,
-            )
-            return BatchFeature(
-                data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
-            )
-
-        # Path 2: pad audio first, then optionally extract a spectrogram on the padded batch.
+        # Pad the audio, then optionally extract a spectrogram on the padded batch.
         audio, audio_ranges = self.pad(
             audio,
             padding,
@@ -313,7 +268,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if return_padding_mask:
             # Features live on the frame axis: map audio ranges → feature ranges via hop_length.
             if do_extract_spectrogram:
-                mask_length = self._padded_frame_count(padded_length, spectrogram_config)
+                mask_length = self._padded_frame_count(padded_length, spectrogram_config, **kwargs)
                 output["audio_features_mask"] = self._get_mask_from_lengths(
                     feature_lengths, mask_length, like=next(iter(output.values()))
                 )
@@ -371,17 +326,21 @@ class BaseAudioProcessor(AudioProcessingMixin):
         features = self._standardize_features(features, feature_lengths, eps=self.feature_normalization_eps)
         return features, feature_lengths
 
-    def _finalize_features(self, features, feature_lengths, **kwargs):
-        """Hook: per-utterance feature processing after extraction, before feature-level padding.
-        Override for normalization that must happen on unpadded features
-        """
-        return features
-
     def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         """Hook: augment or modify the output dict after main processing.
         Override to add custom fields (e.g., audio_embed_sizes) or post-hoc normalization on the stacked/batched output.
         """
         return output
+
+    def _mask_padded_frames(self, features, frame_counts, *, padding_value):
+        """Set each clip's frames at or past its `frame_counts` entry to `padding_value`, on the time axis 1.
+
+        For models whose legacy extractor padded the *features* rather than the audio: on the padded batch,
+        those frames hold features of silence instead of the padding value.
+        """
+        counts = self._as_backend_array(frame_counts, like=features)[:, None]
+        valid = (self._arange(features.shape[1], like=features)[None, :] < counts)[..., None]
+        return features * valid + padding_value * ~valid
 
     def _standardize_features(self, features, frame_counts, eps):
         """Zero-mean, unit-variance each utterance over its first `frame_counts` frames; padded frames come out zero.
@@ -744,7 +703,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             return (lengths - (stft_cfg.win_length + stft_cfg.extra_samples_per_frame)) // stft_cfg.hop_length + 1
         return lengths // stft_cfg.hop_length
 
-    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:
         """Width of the extracted features' frame axis, and therefore of the padding mask.
 
         Override when the framing produces a frame count the geometry above can't express

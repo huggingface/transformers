@@ -424,9 +424,6 @@ class AudioKwargs(TypedDict, total=False):
             A plain dict is coerced to [`~audio_utils.SpectrogramConfig`].
         do_extract_spectrogram (`bool`, *optional*):
             Whether to extract spectrogram features from the audio (otherwise padded raw waveforms are returned).
-        do_batch_spectrogram (`bool`, *optional*):
-            Whether to extract the spectrogram on the padded batch at once (`True`) or per waveform with
-            feature-level padding (`False`).
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
             Select a strategy to pad the returned sequences. Prefer the named string strategies in new code; the
             boolean forms remain compatibility aliases:
@@ -466,7 +463,6 @@ class AudioKwargs(TypedDict, total=False):
     sampling_rate: Annotated[int | None, positive_int]
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
-    do_batch_spectrogram: bool | None
     padding: Annotated[bool | str | PaddingStrategy | None, padding_validator]
     max_length: Annotated[int | None, positive_int]
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator]

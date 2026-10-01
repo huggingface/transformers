@@ -12,45 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_speech_to_text import SpeechToTextAudioProcessorMixin
 
 
 class SpeechToTextAudioProcessorNumpy(SpeechToTextAudioProcessorMixin, NumpyAudioBackend):
-    @staticmethod
-    def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):
-        if normalize_means:
-            mean = x[:input_length].mean(axis=0)
-            x = np.subtract(x, mean)
-        if normalize_vars:
-            std = x[:input_length].std(axis=0)
-            x = np.divide(x, std)
-        if input_length < x.shape[0]:
-            x[input_length:] = padding_value
-        return x.astype(np.float32)
-
-    def _finalize_output(
-        self,
-        output,
-        feature_ranges=None,
-        *,
-        do_ceptral_normalize,
-        normalize_means,
-        normalize_vars,
-        padding_value,
-        **kwargs,
-    ):
-        if not do_ceptral_normalize:
-            return output
-        features = output["audio_features"]
-        normalized = []
-        for i, (start, end) in enumerate(feature_ranges):
-            length = end - start
-            normalized.append(self.utterance_cmvn(features[i], length, normalize_means, normalize_vars, padding_value))
-        output["audio_features"] = np.stack(normalized)
-        return output
+    pass
 
 
 __all__ = ["SpeechToTextAudioProcessorNumpy"]
