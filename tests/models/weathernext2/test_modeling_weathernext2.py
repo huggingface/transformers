@@ -209,6 +209,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skipUnless(is_torch_flex_attn_available(), "Flex attention is not available")
     def test_flex_attention_kernel_options(self):
         from transformers.integrations import flex_attention
+        from transformers.models.weathernext2 import modeling_weathernext2
 
         config = self.model_tester.get_config()
         config._attn_implementation = "flex_attention"
@@ -227,7 +228,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if "BACKEND" not in expected and "FORCE_USE_FLEX_ATTENTION" not in expected:
                         expected.update(default)
                     with (
-                        patch.object(flex_attention, "_TORCH_FLEX_USE_BACKEND", use_backend),
+                        patch.object(modeling_weathernext2, "_TORCH_FLEX_USE_BACKEND", use_backend),
                         patch.object(flex_attention, "compile_friendly_flex_attention") as compile_attention,
                     ):
                         compile_attention.side_effect = compiled_attention
@@ -304,6 +305,19 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                         model.mesh_transformer(states, mask, conditioning)
                     hook.remove()
                     torch.testing.assert_close(captured[0], expected, atol=0, rtol=0)
+
+    def test_banded_mask_selects_independent_axes(self):
+        from transformers.models.weathernext2.modeling_weathernext2 import banded_mask_function
+
+        for device in dict.fromkeys(("cpu", torch_device)):
+            with self.subTest(device=device):
+                mask = torch.rand(3, 1, 7, 21, device=device) > 0.5
+                batch = torch.tensor([0, 3, 5, 1], device=device)[:, None, None, None]
+                queries = torch.tensor([6, 0, 2], device=device)[None, None, :, None]
+                keys = torch.tensor([20, 0, 5, 18], device=device)[None, None, None, :]
+                actual = banded_mask_function(mask)(batch, None, queries, keys)
+                expected = mask[:, 0][batch % 3, queries, keys]
+                torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
     def test_noise_drives_the_ensemble(self):
         """Two members that share inputs but not noise must differ; two that share both must not."""

@@ -44,7 +44,6 @@ _TORCH_FLEX_USE_AUX = is_torch_greater_or_equal("2.9.0")
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention import flex_attention as flex_attention_module
     from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
@@ -52,11 +51,6 @@ if is_torch_flex_attn_available():
         from torch.nn.attention.flex_attention import AuxRequest
     else:
         AuxRequest = None
-
-
-_TORCH_FLEX_USE_BACKEND = is_torch_flex_attn_available() and "BACKEND" in getattr(
-    getattr(flex_attention_module, "FlexKernelOptions", None), "__annotations__", {}
-)
 
 
 logger = logging.get_logger(__name__)
@@ -315,15 +309,6 @@ def flex_attention_forward(
         enable_gqa = False
 
     kernel_options = kwargs.get("kernel_options")
-    if not getattr(module, "use_flex_attention_decoding", True):
-        # Some bidirectional workloads prefer the standard flex kernel even for short blocks.
-        # The decoding kernel also still uses block pointers removed in Triton 3.8.
-        kernel_options = dict(kernel_options or {})
-        if "BACKEND" not in kernel_options and "FORCE_USE_FLEX_ATTENTION" not in kernel_options:
-            if _TORCH_FLEX_USE_BACKEND:
-                kernel_options["BACKEND"] = "TRITON"
-            else:
-                kernel_options["FORCE_USE_FLEX_ATTENTION"] = True
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
 

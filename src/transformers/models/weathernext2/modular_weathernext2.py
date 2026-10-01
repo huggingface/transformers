@@ -47,6 +47,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torch_flex_attn_available,
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -54,6 +55,14 @@ from ..bert.modeling_bert import eager_attention_forward
 from ..clip.modeling_clip import CLIPMLP
 from .configuration_weathernext2 import WeatherNext2Config
 from .generation_weathernext2 import WeatherNext2GenerationMixin
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention import flex_attention as flex_attention_module
+
+_TORCH_FLEX_USE_BACKEND = is_torch_flex_attn_available() and "BACKEND" in getattr(
+    getattr(flex_attention_module, "FlexKernelOptions", None), "__annotations__", {}
+)
 
 
 class WeatherNext2MLP(CLIPMLP):
@@ -320,6 +329,12 @@ def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
     mask = attention_mask[:, 0]
 
     def inner(batch_idx, head_idx, q_idx, kv_idx):
+        if batch_idx.ndim == 4:
+            # Broadcast advanced indexing can materialize three full-size integer tensors.
+            # Select each independent axis instead; scalar callbacks (flex/vmap) keep the path below.
+            selected = mask.index_select(0, batch_idx.flatten() % num_blocks)
+            selected = selected.index_select(1, q_idx.flatten())
+            return selected.index_select(2, kv_idx.flatten()).unsqueeze(1)
         return mask[batch_idx % num_blocks, q_idx, kv_idx]
 
     return inner
@@ -379,6 +394,15 @@ class WeatherNext2Attention(nn.Module):
         key_states = key_states.reshape(-1, *key_states.shape[-3:]).float()
         value_states = value_states.reshape(-1, *value_states.shape[-3:]).float()
 
+        if not self.use_flex_attention_decoding:
+            kernel_options = dict(kwargs.get("kernel_options") or {})
+            if "BACKEND" not in kernel_options and "FORCE_USE_FLEX_ATTENTION" not in kernel_options:
+                if _TORCH_FLEX_USE_BACKEND:
+                    kernel_options["BACKEND"] = "TRITON"
+                else:
+                    kernel_options["FORCE_USE_FLEX_ATTENTION"] = True
+            kwargs["kernel_options"] = kernel_options
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -422,12 +446,41 @@ class WeatherNext2Layer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("WeatherNext2AttentionMask")
+class WeatherNext2AttentionMask(nn.Module):
+    """Prepares the shared mesh mask for the selected attention backend."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    def forward(self, attention_mask, batch_size, dtype):
+        num_blocks, _, block_size, kv_length = attention_mask.shape
+        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS.get(self.config._attn_implementation)
+        return (
+            mask_interface(
+                batch_size=batch_size * num_blocks,
+                q_length=block_size,
+                kv_length=kv_length,
+                mask_function=banded_mask_function(attention_mask),
+                allow_is_causal_skip=False,
+                allow_is_bidirectional_skip=False,
+                dtype=dtype,
+                device=attention_mask.device,
+                use_vmap=False,
+            )
+            if mask_interface is not None
+            else None
+        )
+
+
 class WeatherNext2MeshTransformer(nn.Module):
     """The processor: a stack of pre-norm blocks over the mesh nodes."""
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
         self.config = config
+        self.mask_preparer = WeatherNext2AttentionMask(config)
         self.layers = nn.ModuleList(
             [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -446,24 +499,8 @@ class WeatherNext2MeshTransformer(nn.Module):
         hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
         hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
 
-        # This mask function is index-based, so broadcasting avoids vmap's large index tensors.
         # Build the backend's geometry mask once and share it across all layers.
-        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS.get(self.config._attn_implementation)
-        attention_mask = (
-            mask_interface(
-                batch_size=batch_size * num_blocks,
-                q_length=block_size,
-                kv_length=kv_length,
-                mask_function=banded_mask_function(attention_mask),
-                allow_is_causal_skip=False,
-                allow_is_bidirectional_skip=False,
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
-                use_vmap=False,
-            )
-            if mask_interface is not None
-            else None
-        )
+        attention_mask = self.mask_preparer(attention_mask, batch_size, hidden_states.dtype)
 
         for layer in self.layers:
             hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
