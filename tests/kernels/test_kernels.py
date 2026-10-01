@@ -295,7 +295,7 @@ class TestHubKernels(MemoryCleanupTestCase):
         if not hasattr(kernels, "KernelizeFallback"):
             self.skipTest("Falling back when a kernel cannot be loaded requires kernels>=0.18")
 
-        model = copy.deepcopy(self.model_not_kernelized)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map=torch_device)
         # This repo only has torch 2.4 builds, so no build variant is compatible with this system
         repo = LayerRepository(repo_id="kernels-test/only-torch-2.4", layer_name="Silu", revision="main")
         with use_kernel_mapping({"SiLU": {model.device.type: repo}}, inherit_mapping=False):
