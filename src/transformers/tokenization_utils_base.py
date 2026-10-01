@@ -1165,10 +1165,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
-        if "additional_special_tokens" in special_tokens_dict:
-            special_tokens_dict.setdefault(
-                "extra_special_tokens", special_tokens_dict.pop("additional_special_tokens")
-            )
+        if "additional_special_tokens" in special_tokens_dict and not special_tokens_dict.get("extra_special_tokens"):
+            special_tokens_dict["extra_special_tokens"] = special_tokens_dict.pop("additional_special_tokens")
 
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
@@ -1795,7 +1793,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if template_file is None:
                 continue  # I think this should never happen, but just in case
             template_name = extra_chat_template.removeprefix("chat_template_")
-            with open(template_file) as chat_template_handle:
+            with open(template_file, encoding="utf-8") as chat_template_handle:
                 chat_templates[template_name] = chat_template_handle.read()
         if len(chat_templates) == 1 and "default" in chat_templates:
             init_kwargs["chat_template"] = chat_templates["default"]
@@ -1812,8 +1810,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         init_kwargs.update(kwargs)
 
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens
-        if "additional_special_tokens" in init_kwargs:
-            init_kwargs.setdefault("extra_special_tokens", init_kwargs.pop("additional_special_tokens"))
+        if "additional_special_tokens" in init_kwargs and not init_kwargs.get("extra_special_tokens"):
+            init_kwargs["extra_special_tokens"] = init_kwargs.pop("additional_special_tokens")
 
         # V5: Collect model-specific tokens (custom *_token keys not in standard attributes)
         default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)

@@ -146,7 +146,7 @@ class FalconRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -482,7 +482,7 @@ class FalconFlashAttention2(FalconAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_layer.dtype
-        device_type = query_layer.device.type if query_layer.device.type != "mps" else "cpu"
+        device_type = query_layer.device.type
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)

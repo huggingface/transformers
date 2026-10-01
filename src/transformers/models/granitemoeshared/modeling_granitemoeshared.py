@@ -39,7 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
 
@@ -395,6 +395,7 @@ class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeSharedTopKRouter, index=2),
         "hidden_states": GraniteMoeSharedDecoderLayer,
         "attentions": GraniteMoeSharedAttention,
     }
@@ -457,7 +458,7 @@ class GraniteMoeSharedRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -676,6 +677,7 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

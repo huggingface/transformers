@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+import warnings
 from typing import Optional
 
 import torch
@@ -131,7 +132,13 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         **kwargs,
     ) -> dict:
         if min_pixels is not None or max_pixels is not None:
-            size_dict = dict(size) if isinstance(size, dict) else {}
+            warnings.warn(
+                "Passing `min_pixels` and `max_pixels` to a processor call is deprecated and will be removed in v5.23. "
+                "Pass in `size={'longest_edge': xxx, 'shortest_edge': xxx} to override the target size.`",
+                FutureWarning,
+            )
+
+            size_dict = dict(size) if isinstance(size, (dict, SizeDict)) else {}
             if min_pixels is not None:
                 size_dict["shortest_edge"] = min_pixels
             if max_pixels is not None:
@@ -169,8 +176,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
@@ -206,7 +212,6 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
         else:
             indices = torch.arange(0, total_num_frames).int()
-
         return indices
 
     def resize(
@@ -278,7 +283,6 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | int | None",
@@ -299,8 +303,6 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     videos=stacked_videos,
@@ -375,20 +377,25 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             videos_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the video processor.
         Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+            `int`: Number of video patches per video.
         """
-        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        size = videos_kwargs.get("size", None) or self.size
+        size = {
+            "shortest_edge": size["shortest_edge"],
+            "longest_edge": size["longest_edge"] // num_frames,
+        }  # diff from Qwen!
+        videos_kwargs = {**videos_kwargs, "size": size}
+        size = videos_kwargs.get("size") or self.size
+        patch_size = videos_kwargs.get("patch_size") or self.patch_size
+        merge_size = videos_kwargs.get("merge_size") or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size") or self.temporal_patch_size
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_t = num_frames // temporal_patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
         return grid_t * grid_h * grid_w
 
     def _get_compression_mask(
