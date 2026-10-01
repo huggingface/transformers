@@ -103,6 +103,15 @@ if is_kernels_available():
     )
     from kernels import use_kernelized_func as _kernels_use_kernelized_func
 
+    try:
+        from kernels import KernelizeFallback
+
+        # Also keep the original forward when a kernel cannot be loaded, e.g. its repo has no build for this hardware
+        _KERNELIZE_USE_FALLBACK = KernelizeFallback.ALL
+    except ImportError:
+        # `KernelizeFallback` was added in kernels 0.18, older versions only fall back on missing mappings
+        _KERNELIZE_USE_FALLBACK = True
+
     def use_kernel_forward_from_hub(layer_name: str):
         if _kernels_enabled:
             return _kernels_use_kernel_forward_from_hub(layer_name)
@@ -957,9 +966,9 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if model.kernel_config is not None:
         inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
         with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-            _kernels_kernelize(model, device=device, mode=mode)
+            _kernels_kernelize(model, device=device, mode=mode, use_fallback=_KERNELIZE_USE_FALLBACK)
     else:
-        _kernels_kernelize(model, device=device, mode=mode)
+        _kernels_kernelize(model, device=device, mode=mode, use_fallback=_KERNELIZE_USE_FALLBACK)
 
     model._use_kernels = True
 

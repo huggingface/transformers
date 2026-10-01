@@ -52,7 +52,8 @@ from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, LocalLayerRepository, Mode, kernelize
+    import kernels
+    from kernels import Device, LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -824,7 +825,7 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     def test_train_eval_calls_kernelize_with_correct_mode(self):
         last_modes = []
 
-        def spy_kernelize(model, device=None, mode=None):
+        def spy_kernelize(model, device=None, mode=None, **kwargs):
             last_modes.append(mode)
 
         with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
@@ -833,6 +834,34 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
             self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
             self.model.eval()
             self.assertTrue(any(m == Mode.INFERENCE for m in last_modes))
+
+
+@require_kernels
+class TestKernelizeFallback(TestCasePlus):
+    def test_kernel_without_compatible_build_falls_back(self):
+        if not hasattr(kernels, "KernelizeFallback"):
+            self.skipTest("Falling back when a kernel cannot be loaded requires kernels>=0.18")
+
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
+        model = LlamaForCausalLM(config).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        with torch.no_grad():
+            expected = model(input_ids).logits
+
+        # A kernel is mapped for the model's device, but its repo has no build compatible with it
+        repo = LayerRepository(repo_id="kernels-test/no-compatible-build", layer_name="RMSNorm", version=1)
+        with (
+            use_kernel_mapping({"RMSNorm": {model.device.type: repo}}, inherit_mapping=False),
+            patch.object(repo, "load", side_effect=FileNotFoundError("Cannot find a build variant")) as mock_load,
+        ):
+            hub_kernels_pkg.kernelize(model)
+
+        mock_load.assert_called()
+        self.assertTrue(model._use_kernels)
+        with torch.no_grad():
+            torch.testing.assert_close(model(input_ids).logits, expected)
 
 
 @require_kernels
