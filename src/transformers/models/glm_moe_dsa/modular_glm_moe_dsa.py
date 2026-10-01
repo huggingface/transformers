@@ -27,6 +27,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3ForCausalLM,
     DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
@@ -34,7 +35,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32DecoderLayer,
-    DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
     DeepseekV32PreTrainedModel,
@@ -78,6 +78,9 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    output_indexer_loss = AttributeError()
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 154880
     hidden_size: int = 6144
@@ -327,6 +330,11 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
 
 class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    # The indexer returns only indices and the attention its shared top-k, neither is an indexer loss input
+    _can_record_outputs = {
+        "hidden_states": GlmMoeDsaDecoderLayer,
+        "attentions": GlmMoeDsaAttention,
+    }
 
 
 class GlmMoeDsaModel(DeepseekV32Model):
@@ -389,7 +397,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
         )
 
 
-class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
+class GlmMoeDsaForCausalLM(DeepseekV3ForCausalLM):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
 

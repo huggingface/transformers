@@ -30,6 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3ForCausalLM,
     DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
@@ -39,7 +40,6 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32Attention,
     DeepseekV32DecoderLayer,
     DeepseekV32Experts,
-    DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
     DeepseekV32MoE,
@@ -119,6 +119,8 @@ class AXK2Config(DeepseekV32Config):
     n_group: int | None = None
     topk_group: int | None = None
 
+    output_indexer_loss = AttributeError()
+    keys_to_ignore_at_inference = ["past_key_values"]
     first_k_dense_replace = AttributeError()
     mlp_bias = AttributeError()
 
@@ -359,7 +361,7 @@ class AXK2Attention(DeepseekV32Attention):
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
-        )
+        )[0]
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
@@ -411,6 +413,11 @@ class AXK2DecoderLayer(DeepseekV32DecoderLayer):
 
 class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    # The indexer loss is not supported here, so its inputs are not recorded
+    _can_record_outputs = {
+        "hidden_states": AXK2DecoderLayer,
+        "attentions": AXK2Attention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -427,7 +434,7 @@ class AXK2Model(DeepseekV32Model):
     pass
 
 
-class AXK2ForCausalLM(DeepseekV32ForCausalLM):
+class AXK2ForCausalLM(DeepseekV3ForCausalLM):
     pass
 
 

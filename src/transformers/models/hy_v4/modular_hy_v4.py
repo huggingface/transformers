@@ -215,6 +215,23 @@ class HYV4Indexer(DeepseekV32Indexer):
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        Same as [`DeepseekV32Indexer.forward`], but RoPE rotates the trailing slice of each head instead of the
+        leading one, the key norm runs in fp32 with `rms_norm_eps`, and the softmax scale is folded into the head
+        weights. Only the indices are returned.
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`.
+        """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
         q = self.wq_b(q_resid)  # [B, S, H*D]

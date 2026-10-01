@@ -39,6 +39,9 @@ class DeepseekV32Config(PreTrainedConfig):
         Number of heads for the indexer projections (DSA).
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
+    output_indexer_loss (`bool`, *optional*, defaults to `False`):
+        Whether [`DeepseekV32ForCausalLM`] computes the indexer's distillation loss from the indexer scores and
+        attention targets recorded in every layer, and adds it to `loss`. Only the indexer receives gradients from it.
 
     ```python
     >>> from transformers import DeepseekV32Config, DeepseekV32Model
@@ -54,7 +57,7 @@ class DeepseekV32Config(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_v32"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["past_key_values", "indexer_loss", "indexer_scores", "indexer_targets"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
@@ -123,6 +126,7 @@ class DeepseekV32Config(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int = 64
     first_k_dense_replace: int = 3
+    output_indexer_loss: bool = False
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
