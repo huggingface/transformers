@@ -172,7 +172,7 @@ def check_spliced_stream_parity(processor, vision_tokenizer, device):
     # reference: PIL preprocessing -> VQ codes -> reference prompt string
     reference_pixels = reference_preprocess(image, **dict(processor.image_processor.size)).to(device)
     with torch.no_grad():
-        reference_codes = vision_tokenizer.encode(reference_pixels)[0].cpu()
+        reference_codes = vision_tokenizer.encode(reference_pixels).image_tokens[0].cpu()
     reference = reference_image_prompt(reference_codes)
 
     # transformers: processor expansion + the SAME codes spliced into the placeholder positions
@@ -220,8 +220,8 @@ def check_backend_drift(processor, vision_tokenizer, device):
             )
             return
         with torch.no_grad():
-            reference_codes = vision_tokenizer.encode(reference_pixels)
-            torchvision_codes = vision_tokenizer.encode(torchvision_pixels)
+            reference_codes = vision_tokenizer.encode(reference_pixels).image_tokens
+            torchvision_codes = vision_tokenizer.encode(torchvision_pixels).image_tokens
         agreements.append((reference_codes == torchvision_codes).float().mean().item())
     report(
         "torchvision-vs-PIL resize code drift",
