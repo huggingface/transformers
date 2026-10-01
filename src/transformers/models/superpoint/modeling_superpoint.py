@@ -217,12 +217,11 @@ class SuperPointInterestPointDecoder(nn.Module):
     def _extract_keypoints(self, scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Extract keypoints from the score map using a statically-shaped pipeline
-        compatible with ``torch.export``.
+        compatible with ``torch.export`` when `max_keypoints > 0`.
 
-        Instead of ``torch.nonzero`` and boolean-index masking (both of which
-        produce data-dependent shapes), we apply threshold and border
-        constraints as additive ``-inf`` penalties and delegate selection to
-        ``torch.topk``, which always returns exactly ``k`` entries.
+        When `max_keypoints == -1` (eager mode default), we preserve the original
+        dynamic behavior, padding exactly up to the max number of valid keypoints
+        in the batch and preserving row-major ordering.
 
         Args:
             scores: ``(batch_size, height, width)`` pixel score map after NMS.
@@ -231,7 +230,7 @@ class SuperPointInterestPointDecoder(nn.Module):
             keypoints: ``(batch_size, k, 2)`` float tensor of ``(x, y)``
                 keypoint coordinates in pixel space.
             topk_scores: ``(batch_size, k)`` float tensor of keypoint scores.
-            mask: ``(batch_size, k)`` bool tensor; ``True`` where the entry is
+            mask: ``(batch_size, k)`` int tensor; ``1`` where the entry is
                 a real keypoint rather than padding.
         """
         batch_size, height, width = scores.shape
@@ -257,15 +256,29 @@ class SuperPointInterestPointDecoder(nn.Module):
         # Replace invalid positions with -inf so they sink to the end of topk.
         masked_scores = scores.masked_fill(~valid, float("-inf"))
 
-        # Determine k — must be a concrete integer for export.
-        # When max_keypoints is -1 ("no limit") we use every pixel; this path
-        # is valid in eager mode but cannot be exported because k is
-        # data-dependent via height * width.  Users who need export must set
-        # max_keypoints to a positive value.
-        k = self.max_keypoints if self.max_keypoints > 0 else height * width
-
-        # torch.topk always returns exactly k entries → static output shape.
-        topk_scores, topk_indices = torch.topk(masked_scores.reshape(batch_size, height * width), k=k, dim=1)
+        if self.max_keypoints > 0:
+            k = self.max_keypoints
+            # torch.topk always returns exactly k entries → static output shape.
+            topk_scores, topk_indices = torch.topk(masked_scores.reshape(batch_size, height * width), k=k, dim=1)
+        else:
+            # Eager mode compatibility (max_keypoints == -1):
+            # We want to keep all valid keypoints and pad exactly up to the max number
+            # of valid keypoints across the batch. This is fully dynamic.
+            valid_flat = valid.reshape(batch_size, height * width)
+            k = int(valid_flat.sum(dim=1).max().item())
+            
+            # To preserve original row-major index ordering, we use negative indices
+            # for topk instead of scores. This ensures the output is sorted by original
+            # position, mimicking torch.nonzero behavior from the original eager code.
+            # We fall back to 0 if k == 0 to avoid empty topk issues in some edge cases.
+            if k == 0:
+                topk_scores = torch.zeros((batch_size, 0), device=scores.device)
+                topk_indices = torch.zeros((batch_size, 0), device=scores.device, dtype=torch.long)
+            else:
+                index_scores = -torch.arange(height * width, device=scores.device, dtype=torch.float32).unsqueeze(0).expand(batch_size, -1)
+                index_scores = index_scores.masked_fill(~valid_flat, float("-inf"))
+                _, topk_indices = torch.topk(index_scores, k=k, dim=1)
+                topk_scores = torch.gather(masked_scores.reshape(batch_size, height * width), 1, topk_indices)
 
         # Convert flat indices to (x, y) pixel coordinates (pure arithmetic,
         # no data-dependent shapes).
@@ -275,7 +288,12 @@ class SuperPointInterestPointDecoder(nn.Module):
 
         # A position is a real keypoint if and only if its score is finite.
         # Cast to int (0/1) to match the original mask dtype expected by callers.
-        mask = (topk_scores > float("-inf")).to(torch.int)  # (B, k) int
+        is_valid = topk_scores > float("-inf")
+        mask = is_valid.to(torch.int)  # (B, k) int
+
+        # Zero-pad invalid entries to match eager mode contract precisely.
+        keypoints = keypoints.masked_fill(~is_valid.unsqueeze(-1), 0.0)
+        topk_scores = topk_scores.masked_fill(~is_valid, 0.0)
 
         return keypoints, topk_scores, mask
 
