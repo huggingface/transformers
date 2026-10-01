@@ -213,11 +213,12 @@ def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, 
     safe_index_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
     safe_weights_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)
 
-    if is_sharded_checkpoint(checkpoint_dir):
-        _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir, strict=strict)
-    elif is_sharded_checkpoint(os.path.join(checkpoint_dir, "sharded")):
-        _load_sharded_checkpoint_in_distributed_model(model, os.path.join(checkpoint_dir, "sharded"), strict=strict)
-    elif os.path.isfile(safe_index_file):
+    for dcp_dir in (checkpoint_dir, os.path.join(checkpoint_dir, "sharded")):
+        if is_sharded_checkpoint(dcp_dir):
+            _load_sharded_checkpoint_in_distributed_model(model, dcp_dir, strict=strict)
+            return
+
+    if os.path.isfile(safe_index_file):
         with open(safe_index_file, "r", encoding="utf-8") as f:
             index = json.load(f)
         shard_paths = []
