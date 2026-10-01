@@ -697,7 +697,7 @@ class ContinuousBatchingManager:
 
         # Model-related attributes
         self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
-        self.switch_to_cb_friendly_attn(model)
+        self.switch_to_cb_friendly_attn(model, continuous_batching_config.auto_switch_to_flash)
         self.model = model.eval()
 
         # Generation config related attributes
@@ -733,38 +733,50 @@ class ContinuousBatchingManager:
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
-    def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is
-        requested and, in any cases, switch to a paged implementation."""
+    def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel, auto_switch_to_flash: bool = True) -> None:
+        """Switch the attn implementation to one that is CB compatible. If auto_switch_to_flash is True, and the attn
+        implementation is SDPA or eager, also switch to flash if it is supported and available."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
         original_attn_impl = model.config._attn_implementation
         target_implem = original_attn_impl
 
         # Check if flash attention is supported and available
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
-        is_paged = "paged|" in target_implem
-        if not is_flash and not is_paged and model._supports_flash_attn:
+        is_paged = target_implem == "paged|eager"
+        if not is_flash and not is_paged and model._supports_flash_attn and auto_switch_to_flash:
             # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
             elif is_flash_attn_2_available(kernels_fallback_ok=True):
                 version = 2
+            # TODO: add FA4 to this list
             else:
                 version = None
             # Change and warn
             msg = "Continuous batching is much better when using flash attention."
             if version is not None:
-                target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
+                target_implem = f"flash_attention_{version}"
                 logger.warning(
-                    f"{msg} Switching from {original_attn_impl} to {target_implem}. "
-                    "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
+                    f"{msg} Switching from {original_attn_impl} to {target_implem}. If you need to use eager or sdpa, "
+                    "set `auto_switch_to_flash=False` in the continuous batching config."
                 )
             else:
                 logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
-        # Switch to a paged implementation (always entered if conversion to flash happened)
-        if "paged|" not in target_implem:
-            model.set_attn_implementation(f"paged|{target_implem}")
+        # If the implementation is still eager, switch to paged|eager to avoid a crash
+        target_implem = "paged|eager" if target_implem == "eager" else target_implem
+
+        # Check the implementation is valid for CB
+        is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
+        if not (target_implem in ["paged|eager", "sdpa"] or is_flash):
+            raise ValueError(
+                f"Implementation {target_implem} is not supported for continuous batching. Use 'paged|eager', 'sdpa' "
+                "or a flash implementation instead."
+            )
+
+        # If the target implementation is different from the original, set it and save the original
+        if target_implem != original_attn_impl:
+            model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:
@@ -1265,7 +1277,8 @@ class ContinuousMixin:
                 "Cached continuous batching manager found: it will be re-used instead of creating a new one. If you"
                 " want to create a new manager, you should call `destroy_cached_continuous_batching_manager` first."
             )
-            cached_manager.switch_to_cb_friendly_attn(self)  # might have switched in .stop
+            auto_switch_to_flash = cached_manager.continuous_batching_config.auto_switch_to_flash
+            cached_manager.switch_to_cb_friendly_attn(self, auto_switch_to_flash)  # might have switched in .stop
             return cached_manager
 
         # Retrieve generation config
