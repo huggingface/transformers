@@ -332,10 +332,14 @@ def get_max_seqlen(
 
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
     """
-    Split the optional `paged|` prefix from an attention implementation string.
-
-    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    Deprecated because the "paged|" prefix is no longer needed for flash or SDPA. This used to split the optional
+    `paged|` prefix from an attention implementation string.
     """
+    warnings.warn(
+        "split_attention_implementation is deprecated as the 'paged|' prefix is no longer needed for flash or SDPA.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if implementation is None:
         return False, None
 
