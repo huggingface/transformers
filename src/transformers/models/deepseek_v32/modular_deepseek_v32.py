@@ -36,6 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import no_inherit_decorator
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
@@ -276,7 +277,13 @@ class DeepseekV32Attention(AXK1Attention):
 
     def __init__(self, config: DeepseekV32Config, layer_idx: int):
         super().__init__(config, layer_idx)
+        # TODO: needs proper handling around the indexer
+        self.is_mla = False
         self.indexer = DeepseekV32Indexer(config, layer_idx)
+
+    @no_inherit_decorator
+    def expand_kv(self, **super_kwargs):
+        super().expand_kv(**super_kwargs)
 
     def forward(
         self,

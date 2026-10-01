@@ -282,6 +282,8 @@ class AXK2Attention(DeepseekV32Attention):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+        # TODO: needs proper handling around the indexer
+        self.is_mla = False
         # Unlike DeepseekV3.2, this model does not use q_b_proj
         self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
         self.q_a_layernorm = AXK2RMSNorm(self.q_lora_rank)
