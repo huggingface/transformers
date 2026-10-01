@@ -35,6 +35,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ModelOutput,
     TensorType,
     TransformersKwargs,
     auto_docstring,
@@ -43,13 +44,14 @@ from ...utils import (
 )
 from ..apertus.configuration_apertus import ApertusConfig
 from ..apertus.modeling_apertus import ApertusForCausalLM, ApertusModel, ApertusPreTrainedModel
+from ..auto import CONFIG_MAPPING
 from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderConvDownsample,
     ChameleonVQVAEEncoderResnetBlock,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
-from ..wavtokenizer import WavTokenizerConfig, WavTokenizerEncoderModel
+from ..wavtokenizer import WavTokenizerEncoderModel
 
 
 class Apertus1p5ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -264,16 +266,17 @@ class Apertus1p5TextConfig(ApertusConfig):
     output_vocab_size: int | None = None
 
     def __post_init__(self, **kwargs):
-        if self.output_vocab_size is not None:
-            if not 1 <= self.output_vocab_size <= self.vocab_size:
-                raise ValueError(
-                    f"`output_vocab_size` ({self.output_vocab_size}) must be in `[1, vocab_size]` "
-                    f"(vocab_size is {self.vocab_size})."
-                )
-            if self.output_vocab_size == self.vocab_size:
-                # Represent a full-width head with the canonical unpruned configuration.
-                self.output_vocab_size = None
+        if self.output_vocab_size == self.vocab_size and self.vocab_size > 0:
+            # Represent a full-width head with the canonical unpruned configuration.
+            self.output_vocab_size = None
         super().__post_init__(**kwargs)
+
+    def validate_output_vocab_size(self):
+        if self.output_vocab_size is not None and not 1 <= self.output_vocab_size <= self.vocab_size:
+            raise ValueError(
+                f"`output_vocab_size` ({self.output_vocab_size}) must be in `[1, vocab_size]` "
+                f"(vocab_size is {self.vocab_size})."
+            )
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
@@ -321,12 +324,12 @@ class Apertus1p5Config(PreTrainedConfig):
     sub_configs = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
-        "audio_config": WavTokenizerConfig,
+        "audio_config": CONFIG_MAPPING["wavtokenizer"],
     }
 
     text_config: dict | Apertus1p5TextConfig | None = None
     vision_config: dict | Apertus1p5VisionTokenizerConfig | None = None
-    audio_config: dict | WavTokenizerConfig | None = None
+    audio_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 131079
     audio_token_id: int = 131085
     image_token_offset: int = 131272
@@ -334,7 +337,7 @@ class Apertus1p5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        """Resolve nested configs and validate multimodal token ranges."""
+        """Resolve nested configs."""
         if isinstance(self.text_config, dict):
             self.text_config = Apertus1p5TextConfig(**self.text_config)
         elif self.text_config is None:
@@ -347,16 +350,14 @@ class Apertus1p5Config(PreTrainedConfig):
             self.vision_config = Apertus1p5VisionTokenizerConfig()
 
         if isinstance(self.audio_config, dict):
-            model_type = self.audio_config.get("model_type", WavTokenizerConfig.model_type)
-            if model_type != WavTokenizerConfig.model_type:
-                raise ValueError(
-                    f"`audio_config.model_type` must be 'wavtokenizer', got {model_type!r}. Apertus 1.5 audio "
-                    "tokens use the WavTokenizer codebook."
-                )
-            self.audio_config = WavTokenizerConfig(**self.audio_config)
+            self.audio_config = CONFIG_MAPPING["wavtokenizer"](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = WavTokenizerConfig()
+            self.audio_config = CONFIG_MAPPING["wavtokenizer"]()
+        super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        super().validate_architecture()
+        self.text_config.validate_output_vocab_size()
         if self.image_token_offset + self.vision_config.codebook_size != self.audio_token_offset:
             raise ValueError(
                 "The visual token range must end where the audio token range begins: expected "
@@ -369,7 +370,26 @@ class Apertus1p5Config(PreTrainedConfig):
                 f"The audio token range ends at {audio_vocab_end}, beyond the vocabulary "
                 f"(`text_config.vocab_size` = {self.text_config.vocab_size})."
             )
-        super().__post_init__(**kwargs)
+
+    def validate_backbones(self):
+        if self.audio_config.model_type != "wavtokenizer":
+            raise ValueError(
+                f"`audio_config.model_type` must be 'wavtokenizer', got {self.audio_config.model_type!r}. "
+                "Apertus 1.5 audio tokens use the WavTokenizer codebook."
+            )
+
+
+@auto_docstring
+@dataclass
+class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
+    r"""
+    image_tokens (`torch.LongTensor` of shape `(batch_size, height // factor, width // factor)`):
+        Discrete codebook indices in `[0, config.codebook_size)`, with one index per spatial cell.
+        `height` and `width` are the input pixel dimensions and `factor` is `config.spatial_scale_factor`
+        (16 by default). The indices have no language-vocabulary offset applied.
+    """
+
+    image_tokens: torch.LongTensor | None = None
 
 
 @auto_docstring
@@ -559,24 +579,26 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
 
         self.post_init()
 
-    def encode(self, pixel_values: torch.Tensor) -> torch.LongTensor:
+    def encode(self, pixel_values: torch.Tensor) -> Apertus1p5VisionTokenizerEncoderOutput:
         """
         Tokenizes images into a grid of discrete codebook indices.
 
         Args:
             pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-                RGB images normalized to `[-1, 1]`, with sides that are multiples of the spatial factor.
+                RGB images normalized to `[-1, 1]`.
 
         Returns:
-            `torch.LongTensor` of shape `(batch_size, height // factor, width // factor)` with values in
-            `[0, codebook_size)`.
+            `Apertus1p5VisionTokenizerEncoderOutput`: The `image_tokens` field contains discrete codebook
+            indices of shape `(batch_size, height // factor, width // factor)`, where `factor` is
+            `config.spatial_scale_factor`. Values are in `[0, config.codebook_size)`, before applying the
+            language-vocabulary offset.
         """
         # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
         # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
         pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
-        return self.quantize(hidden_states)
+        return Apertus1p5VisionTokenizerEncoderOutput(image_tokens=self.quantize(hidden_states))
 
 
 @auto_docstring
@@ -687,12 +709,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
         Tokenizes each unpadded image and returns flattened shared-vocabulary ids.
@@ -709,7 +725,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         vocab_ids_list = []
         for image, size in zip(pixel_values, image_sizes):
             image = image[None, :, : int(size[0]), : int(size[1])]
-            codes = self.vision_tokenizer.encode(image)[0]
+            codes = self.vision_tokenizer.encode(image).image_tokens[0]
             vocab_ids_list.append(codes.flatten() + self.config.image_token_offset)
         return torch.cat(vocab_ids_list)
 
@@ -918,15 +934,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         )
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
 
     @can_return_tuple
     @auto_docstring
