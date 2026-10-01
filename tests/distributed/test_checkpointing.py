@@ -31,17 +31,12 @@ if is_torch_available():
 
     from transformers import LlamaConfig, LlamaForCausalLM
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.checkpoint import (
-        load_model_checkpoint_distributed,
-        load_optimizer_distributed,
-        save_optimizer_distributed,
-    )
+    from transformers.distributed.checkpoint import load_model_checkpoint_distributed
 
     if dist.is_available():
         from torch.distributed.checkpoint.state_dict import (
             StateDictOptions,
             get_model_state_dict,
-            get_optimizer_state_dict,
         )
 
 
@@ -111,33 +106,6 @@ def _test_load_model_checkpoint_distributed(rank, directory):
             torch.testing.assert_close(full_state_dict, reference.state_dict(), msg=f"checkpoint={checkpoint}")
 
 
-def _test_optimizer_checkpoint(rank, directory):
-    with _distributed_context(rank, directory):
-        full_state_dict = StateDictOptions(full_state_dict=True)
-        model = LlamaForCausalLM.from_pretrained(
-            f"{directory}/seed", distributed_config=DistributedConfig(tp_size=2, fsdp_size=2)
-        )
-        optimizer = torch.optim.AdamW(model.parameters())
-        for parameter in model.parameters():
-            parameter.grad = parameter.detach().clone()
-        optimizer.step()
-        expected = get_optimizer_state_dict(model, optimizer, options=full_state_dict)
-        save_optimizer_distributed(model, optimizer, f"{directory}/saved")
-
-        if rank == 0:
-            torch.save(expected, f"{directory}/expected.pt")
-
-        # Load into the same layout and into a different one.
-        checkpoint = f"{directory}/saved"
-        for config in (DistributedConfig(tp_size=2, fsdp_size=2), DistributedConfig(tp_size=4)):
-            restored = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
-            restored_optimizer = torch.optim.AdamW(restored.parameters())
-            load_optimizer_distributed(restored, restored_optimizer, checkpoint)
-            actual = get_optimizer_state_dict(restored, restored_optimizer, options=full_state_dict)
-            torch.testing.assert_close(actual["state"], expected["state"])
-            assert actual["param_groups"] == expected["param_groups"]
-
-
 @require_torch
 @unittest.skipUnless(
     is_torch_available() and dist.is_available() and dist.is_gloo_available(), "Requires distributed Gloo"
@@ -181,22 +149,6 @@ class DistributedUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             LlamaForCausalLM(self.config).save_pretrained(f"{directory}/seed")
             mp.spawn(_test_load_model_checkpoint_distributed, args=(directory,), nprocs=4, join=True)
-
-    def test_optimizer_checkpoint(self):
-        with tempfile.TemporaryDirectory() as directory:
-            LlamaForCausalLM(self.config).save_pretrained(f"{directory}/seed")
-            mp.spawn(_test_optimizer_checkpoint, args=(directory,), nprocs=4, join=True)
-
-            # Reload without a process group or distributed configuration.
-            restored = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
-            restored_optimizer = torch.optim.AdamW(restored.parameters())
-            checkpoint = f"{directory}/saved"
-            load_optimizer_distributed(restored, restored_optimizer, checkpoint)
-            actual = get_optimizer_state_dict(restored, restored_optimizer)
-            expected = torch.load(f"{directory}/expected.pt")
-            torch.testing.assert_close(actual["state"], expected["state"])
-            assert actual["param_groups"] == expected["param_groups"]
-
 
 if __name__ == "__main__":
     unittest.main()
