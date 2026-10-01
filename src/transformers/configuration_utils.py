@@ -228,9 +228,12 @@ class SubConfigSpec:
             )
             return backbone_config
 
-        model_type = subconfig.get("model_type", self.model_type) if subconfig is not None else self.model_type
-        if not model_type:
-            if not issubclass(self.config_class, PreTrainedConfig):
+        # For BC with released models where `config.json` might contain non-existant model types, we don't try to map
+        # config by `model_type` if the spec points to a particular class (e.g. `MyModeltextConfig`). Model-type
+        # resolution takes action only when the spec holds `config_class=AutoConfig`
+        if not issubclass(self.config_class, PreTrainedConfig):
+            model_type = subconfig.get("model_type", self.model_type) if subconfig is not None else self.model_type
+            if not model_type:
                 raise ValueError(f"Cannot resolve `{key}`: no `model_type` found inputs or in `sub_configs_defaults`.")
             subconfig_cls = self.config_class
         else:
