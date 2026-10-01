@@ -216,7 +216,7 @@ class SubConfigSpec:
         """
         # early exit if sub-config is already a config instance
         if isinstance(subconfig, PreTrainedConfig):
-            return subconfig
+            return subconfig, kwargs
 
         # Vision model backbones have their own utility for BC/Timm
         if key == "backbone_config":
@@ -226,7 +226,7 @@ class SubConfigSpec:
                 default_config_kwargs=self.init_kwargs,
                 **kwargs,
             )
-            return backbone_config
+            return backbone_config, kwargs
 
         # For BC with released models where `config.json` might contain non-existant model types, we don't try to map
         # config by `model_type` if the spec points to a particular class (e.g. `MyModeltextConfig`). Model-type
