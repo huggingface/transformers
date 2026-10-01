@@ -267,3 +267,33 @@ def test_callback_can_stop_persistent_skips(tmp_path):
 
     assert trainer.state.global_step == 0
     assert trainer.state.optimizer_step_attempts == recorder.attempts == 3
+
+
+def test_persistent_skips_do_not_run_forever_with_max_steps(tmp_path):
+    trainer, recorder = _make_trainer(tmp_path, poison_id=None)
+    backward_calls = 0
+
+    def poison_from_third_backward(gradient):
+        nonlocal backward_calls
+        backward_calls += 1
+        if backward_calls >= 3:
+            gradient = gradient.clone()
+            gradient.view(-1)[0] = float("inf")
+        return gradient
+
+    trainer.model.linear.weight.register_hook(poison_from_third_backward)
+
+    class StopRunawayTest(TrainerCallback):
+        def on_pre_optimizer_step(self, args, state, control, **kwargs):
+            if state.optimizer_step_attempts >= 200:
+                pytest.fail("Trainer did not stop after 200 optimizer attempts")
+
+    trainer.add_callback(StopRunawayTest())
+    with pytest.raises(RuntimeError, match="consecutive optimizer steps were skipped"):
+        trainer.train()
+
+    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 2
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == backward_calls
+    assert backward_calls < 200
+    assert recorder.optimizer_steps == 2
+    assert recorder.completed_steps == [1, 2]

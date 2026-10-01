@@ -251,6 +251,8 @@ OPTIMIZER_NAME_BIN = "optimizer.bin"
 SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
+MAX_CONSECUTIVE_SKIPPED_OPTIMIZER_STEPS = 100
+
 
 @requires(
     backends=(
@@ -1622,6 +1624,7 @@ class Trainer:
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
         self._optimizer_step_attempts_last_logged = self.state.optimizer_step_attempts
+        self._consecutive_skipped_optimizer_steps = 0
 
         model.zero_grad()
 
@@ -1926,7 +1929,21 @@ class Trainer:
 
                     model.zero_grad()
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
-                    if not optimizer_step_was_skipped:
+                    if optimizer_step_was_skipped:
+                        # Allow temporary GradScaler overflows, but stop after a long streak without progress.
+                        self._consecutive_skipped_optimizer_steps += 1
+                        if (
+                            self.args.max_steps > 0
+                            and self._consecutive_skipped_optimizer_steps >= MAX_CONSECUTIVE_SKIPPED_OPTIMIZER_STEPS
+                            and not self.control.should_training_stop
+                        ):
+                            raise RuntimeError(
+                                f"Training stopped after {self._consecutive_skipped_optimizer_steps} consecutive "
+                                f"optimizer steps were skipped while trying to reach max_steps={self.state.max_steps}. "
+                                "Check for non-finite gradients or adjust mixed precision loss scaling."
+                            )
+                    else:
+                        self._consecutive_skipped_optimizer_steps = 0
                         self.state.global_step += 1
                         self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
                         self._maybe_log_save_evaluate(
