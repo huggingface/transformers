@@ -13,6 +13,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llama4 model."""
 
+import logging
+import os
 import unittest
 
 from transformers import is_torch_available
@@ -43,6 +45,18 @@ class Llama4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        logger = logging.getLogger(__name__)
+        try:
+            with open("/proc/meminfo") as f:
+                meminfo = {line.split(":")[0]: line.split(":")[1].strip() for line in f}
+            logger.warning(
+                f"[SYSTEM] CPU count: {os.cpu_count()} | "
+                f"MemTotal: {meminfo.get('MemTotal', '?')} | "
+                f"MemFree: {meminfo.get('MemFree', '?')} | "
+                f"MemAvailable: {meminfo.get('MemAvailable', '?')}"
+            )
+        except Exception as e:
+            logger.warning(f"[SYSTEM] Could not read system info: {e}")
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "meta-llama/Llama-4-Scout-17B-16E",
             device_map="auto",

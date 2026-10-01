@@ -14,6 +14,8 @@
 """Testing suite for the PyTorch Mistral4 model."""
 
 import gc
+import logging
+import os
 import unittest
 
 import pytest
@@ -78,6 +80,21 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Mistral4IntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        logger = logging.getLogger(__name__)
+        try:
+            with open("/proc/meminfo") as f:
+                meminfo = {line.split(":")[0]: line.split(":")[1].strip() for line in f}
+            logger.warning(
+                f"[SYSTEM] CPU count: {os.cpu_count()} | "
+                f"MemTotal: {meminfo.get('MemTotal', '?')} | "
+                f"MemFree: {meminfo.get('MemFree', '?')} | "
+                f"MemAvailable: {meminfo.get('MemAvailable', '?')}"
+            )
+        except Exception as e:
+            logger.warning(f"[SYSTEM] Could not read system info: {e}")
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 

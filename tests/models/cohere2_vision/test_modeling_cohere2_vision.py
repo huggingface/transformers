@@ -13,6 +13,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch GotOcr2 model."""
 
+import logging
+import os
 import unittest
 
 from transformers import (
@@ -173,6 +175,21 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        logger = logging.getLogger(__name__)
+        try:
+            with open("/proc/meminfo") as f:
+                meminfo = {line.split(":")[0]: line.split(":")[1].strip() for line in f}
+            logger.warning(
+                f"[SYSTEM] CPU count: {os.cpu_count()} | "
+                f"MemTotal: {meminfo.get('MemTotal', '?')} | "
+                f"MemFree: {meminfo.get('MemFree', '?')} | "
+                f"MemAvailable: {meminfo.get('MemAvailable', '?')}"
+            )
+        except Exception as e:
+            logger.warning(f"[SYSTEM] Could not read system info: {e}")
+
     def setUp(self):
         super().setUp()
         self.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
