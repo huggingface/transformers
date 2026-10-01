@@ -21,6 +21,8 @@ import torch
 from torch import nn
 
 from transformers import Trainer, TrainerCallback, TrainingArguments
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import logging
 
 
 class _Dataset(torch.utils.data.Dataset):
@@ -40,6 +42,24 @@ class _Dataset(torch.utils.data.Dataset):
             "sample_id": index,
             "poison": self.poison_all or index == self.poison_id,
         }
+
+
+class _Stream(torch.utils.data.IterableDataset):
+    def __init__(self, length=20, poison_id=4, one_shot=False):
+        self.dataset = _Dataset(length, poison_id=None)
+        self.poison_ids = poison_id if isinstance(poison_id, tuple) else (poison_id,)
+        self.iterator = self._samples() if one_shot else None
+
+    def _samples(self):
+        for index in range(len(self.dataset)):
+            sample = self.dataset[index]
+            sample["poison"] = index in self.poison_ids
+            yield sample
+
+    def __iter__(self):
+        if self.iterator is not None:
+            return self.iterator
+        return self._samples()
 
 
 class _Model(nn.Module):
@@ -107,6 +127,7 @@ def _make_trainer(
     save_steps=500,
     epochs=3,
     save_strategy=None,
+    train_dataset=None,
 ):
     torch.manual_seed(0)
     model = _Model()
@@ -130,7 +151,10 @@ def _make_trainer(
         remove_unused_columns=False,
     )
     trainer = _RecordingTrainer(
-        model=model, args=args, train_dataset=_Dataset(length, poison_id, poison_all), callbacks=[recorder]
+        model=model,
+        args=args,
+        train_dataset=train_dataset if train_dataset is not None else _Dataset(length, poison_id, poison_all),
+        callbacks=[recorder],
     )
     trainer.accelerator.scaler = torch.amp.GradScaler("cpu", init_scale=16.0)
     trainer.accelerator.native_amp = True
@@ -297,3 +321,68 @@ def test_persistent_skips_do_not_run_forever_with_max_steps(tmp_path):
     assert backward_calls < 200
     assert recorder.optimizer_steps == 2
     assert recorder.completed_steps == [1, 2]
+
+
+@pytest.mark.parametrize("poison_id, expected_attempts", [(4, 6), (None, 5)])
+def test_stream_continues_from_unread_samples(tmp_path, poison_id, expected_attempts):
+    trainer, recorder = _make_trainer(tmp_path, max_steps=5, train_dataset=_Stream(poison_id=poison_id))
+    trainer.train()
+
+    assert trainer.model.seen_ids == list(range(2 * expected_attempts))
+    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 5
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == expected_attempts
+    assert recorder.completed_steps == list(range(1, 6))
+
+
+@pytest.mark.parametrize("one_shot", [False, True])
+def test_exhausted_stream_stops_without_replay(tmp_path, one_shot):
+    trainer, recorder = _make_trainer(tmp_path, max_steps=5, train_dataset=_Stream(length=10, one_shot=one_shot))
+    with CaptureLogger(logging.get_logger("transformers.trainer")) as captured:
+        trainer.train()
+
+    assert trainer.model.seen_ids == list(range(10))
+    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 4
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == 5
+    assert "Training data exhausted at global_step=4 before reaching max_steps=5" in captured.out
+
+
+def test_stream_applies_partial_final_accumulation_group(tmp_path):
+    trainer, recorder = _make_trainer(
+        tmp_path, max_steps=3, accumulation=2, train_dataset=_Stream(length=7, poison_id=2)
+    )
+    trainer.train()
+
+    assert trainer.model.seen_ids == list(range(7))
+    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 3
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == 4
+    assert recorder.completed_steps == [1, 2, 3]
+
+
+@pytest.mark.parametrize("accumulation", [1, 2])
+def test_stream_resume_past_original_attempt_limit(tmp_path, accumulation):
+    settings = {"max_steps": 5, "save_steps": 4, "accumulation": accumulation}
+    baseline, _ = _make_trainer(
+        tmp_path / "baseline", train_dataset=_Stream(length=40, poison_id=(4, 6, 8)), **settings
+    )
+    baseline.train()
+    checkpoint = tmp_path / "baseline" / "checkpoint-4"
+    state = json.loads((checkpoint / "trainer_state.json").read_text(encoding="utf-8"))
+    assert state["optimizer_step_attempts"] == 7
+
+    resumed, _ = _make_trainer(tmp_path / "resumed", train_dataset=_Stream(length=40, poison_id=(4, 6, 8)), **settings)
+    resumed.train(resume_from_checkpoint=str(checkpoint))
+
+    assert resumed.model.seen_ids == baseline.model.seen_ids[14:]
+    assert resumed.state.optimizer_step_attempts == baseline.state.optimizer_step_attempts == 8
+    assert resumed.state.global_step == _applied_steps(resumed) == resumed.lr_scheduler.last_epoch == 5
+    torch.testing.assert_close(resumed.model.linear.weight, baseline.model.linear.weight, rtol=0, atol=0)
+
+
+def test_persistent_stream_skips_still_raise(tmp_path):
+    trainer, _ = _make_trainer(tmp_path, train_dataset=_Stream(length=300, poison_id=tuple(range(4, 300))))
+    with pytest.raises(RuntimeError, match="100 consecutive optimizer steps were skipped"):
+        trainer.train()
+
+    assert trainer.model.seen_ids == list(range(204))
+    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 2
+    assert trainer.state.optimizer_step_attempts == 102

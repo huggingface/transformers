@@ -1585,7 +1585,12 @@ class Trainer:
         ) = self.set_initial_training_values(args, train_dataloader)
 
         epochs_trained, steps_trained_in_current_epoch = self._init_training_state(
-            max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
+            max_steps,
+            num_update_steps_per_epoch,
+            num_train_epochs,
+            resume_from_checkpoint,
+            trial,
+            is_unsized_dataloader=not has_length(train_dataloader),
         )
         model, train_dataloader = self._prepare_for_training(max_steps, train_dataloader, resume_from_checkpoint)
 
@@ -1660,7 +1665,13 @@ class Trainer:
         return self._finalize_training(trial, num_train_samples, start_time)
 
     def _init_training_state(
-        self, max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
+        self,
+        max_steps,
+        num_update_steps_per_epoch,
+        num_train_epochs,
+        resume_from_checkpoint,
+        trial,
+        is_unsized_dataloader=False,
     ) -> tuple[int, int]:
         """Initialize TrainerState, optionally restoring from checkpoint. Returns (epochs_trained, steps_trained_in_current_epoch)."""
         self.state = TrainerState(
@@ -1689,9 +1700,16 @@ class Trainer:
             self._load_callback_state()
             if self.state.optimizer_step_attempts is None:
                 self.state.optimizer_step_attempts = self.state.global_step
-            epochs_trained = int(self.state.optimizer_step_attempts // num_update_steps_per_epoch)
+            # An unsized stream has no epoch boundary at max_steps: all attempts consume the same iterator.
+            epochs_trained = (
+                0 if is_unsized_dataloader else int(self.state.optimizer_step_attempts // num_update_steps_per_epoch)
+            )
             if not self.args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.optimizer_step_attempts % num_update_steps_per_epoch
+                steps_trained_in_current_epoch = (
+                    self.state.optimizer_step_attempts
+                    if is_unsized_dataloader
+                    else self.state.optimizer_step_attempts % num_update_steps_per_epoch
+                )
                 steps_trained_in_current_epoch *= self.args.gradient_accumulation_steps
         else:
             self.state.optimizer_step_attempts = 0
@@ -1818,6 +1836,7 @@ class Trainer:
         grad_norm = None
         learning_rate = None
         rng_to_sync = False
+        is_unsized_dataloader = not has_length(train_dataloader)
 
         # Handle resumption from checkpoint: skip already-trained batches in the resumed epoch
         num_update_steps_trained = 0
@@ -1848,11 +1867,23 @@ class Trainer:
         # Outer loop: one iteration per optimizer step. Each iteration prefetches
         # `gradient_accumulation_steps` batches (fewer for the last step if the epoch
         # doesn't divide evenly).
-        for update_step in range(num_update_steps_trained, num_update_steps_per_epoch):
+        # For unsized streams, max_steps limits successful updates, not attempts on this iterator.
+        update_step = num_update_steps_trained
+        while is_unsized_dataloader or update_step < num_update_steps_per_epoch:
             num_batches = (
-                self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
+                self.args.gradient_accumulation_steps
+                if is_unsized_dataloader or update_step != (num_update_steps_per_epoch - 1)
+                else remainder
             )
             batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, self.args.device)
+            if not batch_samples:
+                if is_unsized_dataloader:
+                    logger.warning(
+                        f"Training data exhausted at global_step={self.state.global_step} before reaching "
+                        f"max_steps={self.state.max_steps}. Stopping training without restarting the stream."
+                    )
+                    self.control.should_training_stop = True
+                break
 
             # This is used to correctly scale the loss when the last accumulation step has fewer batches.
             # Not used if `num_items_in_batch` is not None.
@@ -1868,7 +1899,11 @@ class Trainer:
             # step the optimizer, and log/save/evaluate.
             for i, inputs in enumerate(batch_samples):
                 step += 1
-                do_sync_step = (step + 1) % self.args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
+                do_sync_step = (
+                    i == len(batch_samples) - 1
+                    if is_unsized_dataloader
+                    else (step + 1) % self.args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
+                )
                 # Since we perform prefetching, we need to manually set sync_gradients
                 self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
@@ -1963,13 +1998,14 @@ class Trainer:
                     break
             if self.control.should_epoch_stop or self.control.should_training_stop:
                 break
+            update_step += 1
 
         # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.
         # When we break out of the loop early, we flush the pending graph manually.
         if is_torch_xla_available():
             xm.mark_step()
 
-        if step < 0:
+        if step < 0 and not self.control.should_training_stop:
             logger.warning(
                 "There seems not to be a single sample in your epoch_iterator, stopping training at step"
                 f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
