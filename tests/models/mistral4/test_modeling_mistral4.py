@@ -132,3 +132,4 @@ class Mistral4IntegrationTest(unittest.TestCase):
         del model
         backend_empty_cache(torch_device)
         gc.collect()
+# CI: investigate Xet FUSE OOM on bucket runners

@@ -124,3 +124,4 @@ class Llama4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             'system\n\nYou are a helpful assistant.user\n\nAre these images identical?assistant\n\nNo, these images are not identical. The first image shows a cow standing on a beach with a blue sky and a white cloud in the background.'
         ]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
+# CI: investigate Xet FUSE OOM on bucket runners

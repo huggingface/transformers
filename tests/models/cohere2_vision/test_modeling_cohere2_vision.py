@@ -555,3 +555,4 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
 
         expected = "<|START_THINKING|><|END_THINKING|><|START_TEXT|>The image shows two tabby cats sleeping on a bright pink blanket or couch. Both"
         self.assertEqual(decoded, expected, f"Decoded: {decoded!r}")
+# CI: investigate Xet FUSE OOM on bucket runners

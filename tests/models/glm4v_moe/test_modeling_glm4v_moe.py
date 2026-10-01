@@ -491,3 +491,4 @@ class Glm4vMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             decoded,
             EXPECTED_DECODED_TEXT,
         )
+# CI: investigate Xet FUSE OOM on bucket runners

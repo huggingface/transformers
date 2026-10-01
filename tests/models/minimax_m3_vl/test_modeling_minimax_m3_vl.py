@@ -789,3 +789,4 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         self.assertIsInstance(decoded, str)
         self.assertGreater(len(decoded.strip()), 0)
         self.assertIn("red", decoded.lower())
+# CI: investigate Xet FUSE OOM on bucket runners

@@ -149,3 +149,4 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(self.EXPECTED_TEXT_COMPLETION, static_compiled_text)
+# CI: investigate Xet FUSE OOM on bucket runners

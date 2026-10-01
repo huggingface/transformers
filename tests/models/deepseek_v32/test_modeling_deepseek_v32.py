@@ -329,3 +329,4 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         gen_right = model.generate(**inputs_right, max_new_tokens=40, do_sample=False)
         text_right = tok_right.batch_decode(gen_right, skip_special_tokens=True)
         self.assertEqual(EXPECTED_LEFT[1], text_right[1])
+# CI: investigate Xet FUSE OOM on bucket runners
