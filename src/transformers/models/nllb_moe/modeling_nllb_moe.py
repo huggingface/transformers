@@ -351,10 +351,10 @@ class NllbMoeExperts(nn.ModuleDict):
         expert_mask = torch.nn.functional.one_hot(router_mask, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+        for expert_idx in expert_hit[:, 0].tolist():
+            idx, top_x = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[f"expert_{expert_idx[0]}"](current_state) * router_probs[top_x, idx, None]
+            current_hidden_states = self[f"expert_{expert_idx}"](current_state) * router_probs[top_x, idx, None]
             if self.moe_token_dropout > 0:
                 if self.training:
                     current_hidden_states = self.token_dropout(current_hidden_states)
