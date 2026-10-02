@@ -285,6 +285,32 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
 
+    @parameterized.expand([(2,), (3,)])
+    def test_encoder_repetition_penalty_dist_process_expanded_batch(self, expansion_factor):
+        encoder_input_ids = torch.tensor([[0, 1], [5, 6]], device=torch_device, dtype=torch.long)
+        vocab_size = 8
+        batch_size = encoder_input_ids.shape[0] * expansion_factor
+        scores = self._get_uniform_logits(batch_size=batch_size, length=vocab_size)
+        scores[:, 0] = -(1 / vocab_size)
+
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
+            penalty=2.0, encoder_input_ids=encoder_input_ids
+        )
+        processed_scores = rep_penalty_proc(torch.zeros((batch_size, 1), device=torch_device, dtype=torch.long), scores)
+
+        for row in range(batch_size):
+            source_row = row // expansion_factor
+            source_tokens = encoder_input_ids[source_row].tolist()
+            for token in range(vocab_size):
+                value = scores[row, token].item()
+                expected = value
+                if token in source_tokens:
+                    expected = value / 2 if value < 0 else value * 2
+                self.assertAlmostEqual(processed_scores[row, token].item(), expected)
+
+        # The cached source IDs remain in their original, unexpanded shape.
+        self.assertEqual(rep_penalty_proc.encoder_input_ids.shape, encoder_input_ids.shape)
+
     def test_top_k_dist_warper(self):
         input_ids = None
         vocab_size = 10
