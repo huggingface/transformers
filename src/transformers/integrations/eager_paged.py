@@ -16,6 +16,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Compile is disabled because the cache update mutates in place aliased views of the cache tensor, which compile's
+# functionalization handles by making a copy of the full cache for every layer.
+@torch.compiler.disable
 def eager_paged_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -33,33 +36,22 @@ def eager_paged_attention_forward(
             "inputs and the 4D mask that continuous batching prepares; on a standard forward it would attend "
             "bidirectionally. Use `eager` for a standard forward."
         )
-    # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+    # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
     key, value = cache.update(
         key_states=key,
         value_states=value,
         layer_idx=module.layer_idx,
-        read_index=kwargs["read_index"],
-        write_index=kwargs["write_index"],
+        kwargs=kwargs,
     )
-    key = key.transpose(0, 1).unsqueeze(0)
-    value = value.transpose(0, 1).unsqueeze(0)
 
     # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    # Get the right causal mask for the current layer
-    if isinstance(attention_mask, dict):
-        sliding_window = getattr(module, "sliding_window", 1)
-        layer_type = "full_attention" if sliding_window == 1 or sliding_window is None else "sliding_attention"
-        causal_mask = attention_mask[layer_type]
-    else:
-        causal_mask = attention_mask
-
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if causal_mask is not None:
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     # Handle attention sinks if the model has them
     if hasattr(module, "sinks"):

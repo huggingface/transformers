@@ -27,6 +27,7 @@ jobs:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
   verify_pr_commit:
+    permissions: {}
     name: Verify PR commit corresponds to a specific event by comparing timestamps
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     runs-on: ubuntu-22.04

@@ -36,7 +36,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v4 import DeepseekV4Config
@@ -88,7 +87,6 @@ class DeepseekV4RotaryEmbedding(nn.Module):
     when building the per-type inv_freq buffers.
     """
 
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DeepseekV4Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -111,7 +109,6 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: DeepseekV4Config, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -151,7 +148,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             cos = freqs.cos() * attention_scaling
@@ -931,7 +928,7 @@ class DeepseekV4HyperConnection(nn.Module):
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.hc_mult = config.hc_mult  # number of streams, refered as N below
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
@@ -962,7 +959,7 @@ class DeepseekV4HyperConnection(nn.Module):
         flattened = self.input_norm(flattened)
         # Mix the streams together to infer the weight coefficients
         flattened = F.linear(flattened, self.fn.float())
-        # Split the weight cofficients
+        # Split the weight coefficients
         pre_w, post_w, comb_w = flattened.split([hc, hc, hc * hc], dim=-1)
         pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)

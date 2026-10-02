@@ -277,7 +277,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         trust_remote_code=True,
     )
     model_vqgan = AutoModel.from_pretrained(vq_model_id, trust_remote_code=True)
-    with open(f"{output_dir}/tokenizer.json", "r") as file:
+    with open(f"{output_dir}/tokenizer.json", "r", encoding="utf-8") as file:
         tokenizer_config = json.load(file)
     vocabulary_map = tokenizer_config["model"]["vocab"]
 

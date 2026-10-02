@@ -45,7 +45,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -92,7 +91,6 @@ class T5Gemma2MLP(nn.Module):
 
 
 class T5Gemma2RotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: T5Gemma2TextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -115,7 +113,6 @@ class T5Gemma2RotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: T5Gemma2TextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -152,7 +149,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -911,6 +908,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         # Unused for processor compatibility kept in signature.
         token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -924,11 +922,9 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
             image_mask = self.get_image_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         outputs = self.text_model(

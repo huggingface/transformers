@@ -714,8 +714,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaConfig->MllamaTextConfig,Llama->Mllama
 class MllamaRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MllamaTextConfig, device=None):
+    def __init__(self, config: MllamaTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -726,14 +725,13 @@ class MllamaRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: MllamaTextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: MllamaTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -749,7 +747,7 @@ class MllamaRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     # Ignore copy
     @torch.no_grad()
@@ -758,7 +756,7 @@ class MllamaRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -1575,12 +1573,21 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             model_inputs["aspect_ratio_ids"] = None
             model_inputs["aspect_ratio_mask"] = None
 
-        # `cross_attention_mask` gains a row per decoded token: slice it down to the tokens being processed, otherwise
-        # dynamo recompiles at every step. The `clone` gives the slice a consistent stride, which it also guards on.
-        if next_sequence_length is not None and model_inputs.get("cross_attention_mask") is not None:
-            model_inputs["cross_attention_mask"] = model_inputs["cross_attention_mask"][
-                :, -next_sequence_length:
-            ].clone(memory_format=torch.contiguous_format)
+        cross_attention_mask = model_inputs.get("cross_attention_mask")
+        if cross_attention_mask is not None:
+            sequence_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+            padding_length = sequence_length - cross_attention_mask.shape[1]
+            if padding_length > 0:
+                cross_attention_mask = torch.cat(
+                    [cross_attention_mask, cross_attention_mask[:, -1:].expand(-1, padding_length, -1, -1)], dim=1
+                )
+            # The mask gains a row per decoded token: slice it down to the tokens being processed, otherwise dynamo
+            # recompiles at every step. The `clone` gives the slice a consistent stride, which it also guards on.
+            if next_sequence_length is not None:
+                cross_attention_mask = cross_attention_mask[:, -next_sequence_length:].clone(
+                    memory_format=torch.contiguous_format
+                )
+            model_inputs["cross_attention_mask"] = cross_attention_mask
 
         return model_inputs
 

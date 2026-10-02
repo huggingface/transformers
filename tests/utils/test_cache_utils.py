@@ -50,8 +50,13 @@ if is_torch_available():
         Cache,
         DynamicCache,
         Gemma2Config,
+        Gemma4ForCausalLM,
+        Gemma4TextConfig,
         GenerationConfig,
         LlamaConfig,
+        MixtralConfig,
+        MixtralForCausalLM,
+        PreTrainedConfig,
         QuantizedCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -65,8 +70,13 @@ if is_torch_available():
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         StaticLayer,
+        StaticSlidingWindowLayer,
     )
+    from transformers.generation.utils import GenerationMixin
     from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
+    from transformers.integrations.heterogeneity.configuration_utils import (
+        AmbiguousGlobalPerLayerAttributeError,
+    )
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -153,6 +163,16 @@ class CacheTest(unittest.TestCase):
         # before the fix this raised `AttributeError`. It reflects the attention layer's state.
         self.assertTrue(cache.is_initialized)
 
+    def test_static_cache_init_shapes_with_per_layer_attention_heads(self):
+        model = GenerationMixin()
+        model.config = PreTrainedConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            per_layer_config={1: {"num_attention_heads": 2}},
+        )
+        self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16]))
+
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
         reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
@@ -160,6 +180,44 @@ class CacheTest(unittest.TestCase):
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
+
+    def test_dynamic_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={0: {"sliding_window": 32}, 2: {"sliding_window": 16}},
+        )
+        layers = DynamicCache(config=config).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertIsInstance(layers[0], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[0].sliding_window, 32)
+        self.assertFalse(layers[1].is_sliding)
+        self.assertIsInstance(layers[2], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[2].sliding_window, 16)
+        self.assertFalse(layers[3].is_sliding)
+
+    def test_static_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={1: {"sliding_window": 24}, 3: {"sliding_window": 48}},
+        )
+        layers = StaticCache(config=config, max_cache_len=64).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertFalse(layers[0].is_sliding)
+        self.assertIsInstance(layers[1], StaticSlidingWindowLayer)
+        self.assertEqual(layers[1].max_cache_len, 24)
+        self.assertFalse(layers[2].is_sliding)
+        self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
+        self.assertEqual(layers[3].max_cache_len, 48)
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
@@ -188,6 +246,79 @@ class CacheTest(unittest.TestCase):
         for layer_idx in attention_indices:
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
+
+    def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
+        """
+        Regression test for heterogeneous models with per-layer head shapes. The static cache is eagerly initialized
+        for a chunked prefill, and `generate` derives the head shapes of the static cache. Models such as Gemma4 use
+        a different `head_dim` depending on the layer, and reading a single global one raises on them, so the shapes
+        must be derived per layer.
+        """
+        config = Gemma4TextConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            num_hidden_layers=4,
+            intermediate_size=64,
+            vocab_size=99,
+            layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+            per_layer_config={1: {"head_dim": 16}, 3: {"head_dim": 16}},
+        )
+        # On such a config there is no global `head_dim` to read, not even a default one
+        with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+            getattr(config.get_text_config(decoder=True), "head_dim", None)
+
+        model = Gemma4ForCausalLM(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        out = model.generate(
+            inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        # Each layer must be allocated with its own `head_dim`, instead of all of them sharing the global one
+        cache = out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 16, 8, 16])
+
+    def test_chunked_prefill_static_cache_none_head_dim(self):
+        """
+        Regression test for models that declare `head_dim` but leave it `None` (e.g. Mixtral). The head shapes of the
+        eagerly initialized static cache are read with a `getattr` default, which only fires on a missing attribute:
+        a `None` one was returned as is, instead of falling back to `hidden_size // num_attention_heads`.
+        """
+        config = MixtralConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_hidden_layers=2,
+            intermediate_size=64,
+            vocab_size=99,
+            num_local_experts=2,
+            num_experts_per_tok=1,
+        )
+        # The config carries a `head_dim`, it is just left unset
+        self.assertIsNone(config.head_dim)
+
+        model = MixtralForCausalLM(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        out = model.generate(
+            inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        # Each layer must fall back to the `hidden_size // num_attention_heads` division
+        cache = out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 8])
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
@@ -488,6 +619,37 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
     @require_torch_accelerator
     @slow
+    def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
+        """
+        Integration counterpart of the same test in `CacheTest`, on a real Gemma4: its layers do not share a single
+        `head_dim`, so the static cache eagerly initialized for the chunked prefill must be given one per layer.
+        """
+        model_name = "google/gemma-4-E2B-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", dtype=torch.bfloat16)
+        inputs = tokenizer("Fun fact:", return_tensors="pt").to(model.device)
+
+        gen_out = model.generate(
+            **inputs,
+            max_new_tokens=10,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        self.assertEqual(gen_out.sequences.shape[-1], inputs.input_ids.shape[-1] + 10)
+        cache = gen_out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+
+        # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
+        text_config = model.config.get_text_config(decoder=True)
+        expected_head_dims = [text_config.per_layer_config[layer].head_dim for layer in range(len(cache.layers))]
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], expected_head_dims)
+        self.assertGreater(len(set(expected_head_dims)), 1)
+
+    @require_torch_accelerator
+    @slow
     def test_offloaded_cache_uses_less_memory_than_dynamic_cache(self):
         """Tests that offloading uses less memory than the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
@@ -712,7 +874,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
         """Tests caches with GPT-J model. Regression test for https://github.com/huggingface/transformers/pull/34799"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
-        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
+        # Use a dedicated safetensors repo to avoid Xet FUSE cache corruption that affects
+        # pytorch_model.bin in the original repo (wrong wte.weight bytes → wrong golden outputs)
+        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM-for-CacheHardIntegrationTest"
         pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
         pipe.model.config.sliding_window = (
             256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None

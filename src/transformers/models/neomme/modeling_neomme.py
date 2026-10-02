@@ -34,7 +34,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from .configuration_neomme import NeoMMEConfig
@@ -91,7 +90,6 @@ class NeoMMEPatchEmbeddings(nn.Module):
 class NeoMMERotaryEmbedding(nn.Module):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
 
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: NeoMMEConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -114,7 +112,6 @@ class NeoMMERotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: NeoMMEConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -153,7 +150,7 @@ class NeoMMERotaryEmbedding(nn.Module):
         inv_freq_expanded = inv_freq[None, None, :, None].float().expand(2, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # (2, batch, 1, seq_len)
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             # (2, batch, seq_len, rotary_dim // 2)
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)

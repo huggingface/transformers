@@ -246,7 +246,7 @@ def get_last_daily_ci_reports(
                 file_path = os.path.join(target_dir, filename)
                 if not os.path.isdir(file_path):
                     # read the file
-                    with open(file_path) as fp:
+                    with open(file_path, encoding="utf-8") as fp:
                         content = fp.read()
                         results[artifact_name][filename] = content
 
