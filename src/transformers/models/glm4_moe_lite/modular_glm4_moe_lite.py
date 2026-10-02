@@ -22,11 +22,11 @@ from ...utils import auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
+    Glm4MoeExperts,
     Glm4MoeForCausalLM,
     Glm4MoeMLP,
     Glm4MoeModel,
     Glm4MoeMoE,
-    Glm4MoeNaiveMoe,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeRotaryEmbedding,
@@ -76,6 +76,13 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "head_dim": "qk_rope_head_dim",
@@ -144,7 +151,7 @@ class Glm4MoeLiteRMSNorm(Glm4MoeRMSNorm):
     pass
 
 
-class Glm4MoeLiteNaiveMoe(Glm4MoeNaiveMoe):
+class Glm4MoeLiteExperts(Glm4MoeExperts):
     pass
 
 
@@ -158,10 +165,7 @@ class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = Glm4MoeLiteMoE(config)
-        else:
-            self.mlp = Glm4MoeLiteMLP(config)
+        self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
 
         self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)

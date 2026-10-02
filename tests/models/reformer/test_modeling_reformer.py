@@ -20,7 +20,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
     require_torch_fp16,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -572,16 +571,6 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason=(
-            "Reformer does not work with data parallel (DP) because of a bug in PyTorch:"
-            " https://github.com/pytorch/pytorch/issues/36035"
-        )
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, is_decoder=False)
@@ -604,7 +593,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     )
 
     test_sequence_classification_problem_types = True
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = ReformerModelTester(self, text_seq_length=16)
@@ -750,8 +738,7 @@ class ReformerLSHAttnModelTest(
         else {}
     )
 
-    # TODO: Fix the failed tests
-    test_torch_exportable = False
+    test_torch_exportable = False  # LSH attention is fundamentally data-dependent
 
     def is_pipeline_test_to_skip(
         self,

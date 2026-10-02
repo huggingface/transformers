@@ -331,6 +331,13 @@ class OpenAIPrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
     _skip_keys_device_placement = None  # No cache
     _keep_in_fp32_modules = []
     _keep_in_fp32_modules_strict = ["sinks"]
+    # metal-flash-sdpa covers MPS and aiter-flash-attn ROCm, the others CUDA
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/metal-flash-sdpa",
+        "kernels-community/aiter-flash-attn",
+    ]
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(OpenAIPrivacyFilterTopKRouter, index=0),

@@ -16,7 +16,7 @@
 import unittest
 from functools import cached_property
 
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
@@ -227,7 +227,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"image-feature-extraction": ViltModel} if is_torch_available() else {}
 
     model_split_percents = [0.5, 0.8, 0.9]
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent image/text placeholder logic
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -526,8 +526,6 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCase):
     all_model_classes = (ViltForImagesAndTextClassification,) if is_torch_available() else ()
 
-    test_torch_exportable = False
-
     def setUp(self):
         self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
         self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=32)
@@ -622,9 +620,8 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="train")
-        image1 = dataset[0]["image"]
-        image2 = dataset[1]["image"]
+        image1 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image1.jpeg", repo_type="dataset"))
+        image2 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image2.jpeg", repo_type="dataset"))
 
         text = (
             "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"

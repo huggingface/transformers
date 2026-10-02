@@ -30,12 +30,8 @@ _MSA_KERNEL = None
 
 
 def load_and_register_msa_kernel(attn_implementation: str):
-    """Load the MSA hub kernel once and verify the expected callables are present.
-
-    The ``attn_implementation`` string may carry a ``paged|`` prefix and/or an ``@<revision>`` pin
-    (e.g. ``kernels-staging/msa@v0``); the build currently lives on the repo's ``v0`` branch. The
-    loaded module is cached in a module-level global so registration happens once, not per call.
-    """
+    """Loads the MSA kernel from the hub and verifies it provides the necessary functions. This happens only once
+    because the kernel is then cached in a module-level global."""
     global _MSA_KERNEL
     if _MSA_KERNEL is not None:
         return _MSA_KERNEL
@@ -43,7 +39,7 @@ def load_and_register_msa_kernel(attn_implementation: str):
     from .hub_kernels import get_kernel
 
     repo_id = attn_implementation.split("|")[-1]
-    repo_id, _, rev = repo_id.partition("@")
+    repo_id, _, rev = repo_id.partition("@")  # repo_id can have a "@(revision)" suffix
     kernel = get_kernel(repo_id, revision=rev or None, version=None if rev else 0, allow_all_kernels=True)
 
     for fn_name in ("sparse_atten_func", "build_k2q_csr"):
@@ -200,8 +196,11 @@ def _sparse_attention(module, query, key, value, scaling, block_indices, block_s
     else:
         cu_seqlens_k = torch.arange(0, (bsz + 1) * k_len, k_len, device=q.device, dtype=torch.int32)
 
+    # `block_indices` is per-KV-head `[B, num_kv_heads, q_len, topk]` -- one block selection per GQA
+    # group (the indexer has `index_n_heads == num_key_value_heads`). Lay it out as the kernel's
+    # per-KV-head CSR source `[num_kv_heads, total_q, topk]`.
     q2k = block_indices.to(torch.int32)
-    q2k = q2k.reshape(bsz * q_len, topk).unsqueeze(0).expand(num_kv_heads, -1, -1).contiguous()
+    q2k = q2k.permute(1, 0, 2, 3).reshape(num_kv_heads, bsz * q_len, topk).contiguous()
 
     # Opaque custom op: keeps the CuTe-DSL CSR build + block-sparse kernel as a single graph node
     # so ``torch.compile(fullgraph=True)`` doesn't break and ``reduce-overhead`` CUDA graphs capture it.

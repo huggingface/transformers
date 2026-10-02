@@ -53,12 +53,12 @@ class VideoLlama3Processor(ProcessorMixin):
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_video_tokens = [
             grid_thw.prod() // merge_size**2
             for grid_thw, merge_size in zip(video_inputs["video_grid_thw"], video_inputs["video_merge_sizes"])
@@ -113,9 +113,9 @@ class VideoLlama3Processor(ProcessorMixin):
         if video_sizes is not None:
             videos_kwargs = VideoLlama3ProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
-                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
-                for video_size in video_sizes
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]
             num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
             vision_data["num_video_tokens"] = num_video_tokens

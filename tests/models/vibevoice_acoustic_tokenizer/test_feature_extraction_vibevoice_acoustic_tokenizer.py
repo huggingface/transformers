@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import itertools
-import random
 import unittest
 
 import numpy as np
@@ -22,29 +21,12 @@ from transformers import VibeVoiceAcousticTokenizerFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
     import torch
-
-
-global_rng = random.Random()
-
-
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 @require_torch
@@ -145,7 +127,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(normalize_audio=True, target_dB_FS=-25)
 
         # Test with very low amplitude audio (should increase amplitude)
-        low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01
+        low_amplitude_audio = np.random.randn(feature_extractor.pad_to_multiple_of).astype(np.float32) * 0.01
         result = feature_extractor([low_amplitude_audio])
         normalized_audio = result.input_values.squeeze()
         self.assertGreater(
@@ -174,7 +156,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         """Test that padding masks are generated correctly."""
         feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor()
         audio1 = np.random.randn(100).astype(np.float32)
-        audio2 = np.random.randn(200).astype(np.float32)
+        audio2 = np.random.randn(feature_extractor.pad_to_multiple_of).astype(np.float32)
 
         result = feature_extractor([audio1, audio2], padding=True, return_attention_mask=True)
         self.assertIn("padding_mask", result)

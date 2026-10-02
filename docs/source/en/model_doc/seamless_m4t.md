@@ -11,14 +11,19 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was published in HF papers on 2023-08-22 and contributed to Hugging Face Transformers on 2023-10-23.*
 
-# SeamlessM4T
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
+# SeamlessM4T
 
 ## Overview
 
 The SeamlessM4T model was proposed in [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://huggingface.co/papers/2308.11596) by the Seamless Communication team from Meta AI.
 
-This is the **version 1** release of the model. For the updated **version 2** release, refer to the [Seamless M4T v2 docs](https://huggingface.co/docs/transformers/main/model_doc/seamless_m4t_v2).
+This is the **version 1** release of the model. For the updated **version 2** release, refer to the [Seamless M4T v2 docs](./seamless_m4t_v2).
 
 SeamlessM4T is a collection of models designed to provide high quality translation, allowing people from different linguistic communities to communicate effortlessly through speech and text.
 
@@ -48,7 +53,7 @@ processor = AutoProcessor.from_pretrained("facebook/hf-seamless-m4t-medium")
 model = SeamlessM4TModel.from_pretrained("facebook/hf-seamless-m4t-medium", device_map="auto")
 ```
 
-You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
+You can seamlessly use this model on text or on audio, to generate either translated text or translated audio.
 
 Here is how to use the processor to process text and audio:
 
@@ -124,7 +129,7 @@ You have the possibility to change the speaker used for speech synthesis with th
 
 #### 3. Change the generation strategy
 
-You can use different [generation strategies](./generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
+You can use different [generation strategies](../generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
 
 #### 4. Generate speech and text at the same time
 
@@ -183,10 +188,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
     - get_special_tokens_mask
     - save_vocabulary
 
-## SeamlessM4TTokenizerFast
-
-[[autodoc]] SeamlessM4TTokenizerFast
-    - __call__
 
 ## SeamlessM4TFeatureExtractor
 

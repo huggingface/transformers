@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -156,11 +156,11 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
             "content": [
                 {
                     "type": "image",
-                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                 },
                 {
                     "type": "image",
-                    "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                 },
                 {
                     "type": "text",
@@ -201,7 +201,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                    {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"},
                     {"type": "text", "text": "Write a haiku for this image"},
                 ],
             },
@@ -212,11 +212,11 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                     },
                     {
                         "type": "image",
-                        "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {
                         "type": "text",

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -65,7 +65,7 @@ encoder_outputs = outputs.last_hidden_state
 predictor_outputs = outputs.predictor_output.last_hidden_state
 ```
 
-V-JEPA 2 can also be finetuned for video classification. In the following snippet, we show how use finetuned on Something-Something-V2 video classification model.
+V-JEPA 2 can also be finetuned for video classification. In the following snippet, we show how to use the finetuned on Something-Something-V2 video classification model.
 
 ```python
 import numpy as np

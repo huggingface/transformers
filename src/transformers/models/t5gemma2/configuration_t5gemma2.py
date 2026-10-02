@@ -106,6 +106,15 @@ class T5Gemma2TextConfig(PreTrainedConfig):
                 f"heads ({self.num_attention_heads})."
             )
 
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `False` fallback.
+        if getattr(self, "use_bidirectional_attention", False):
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
+
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
@@ -162,7 +171,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
     >>> configuration = T5Gemma2EncoderConfig(vision_config, text_config)
 
     >>> # Initializing a model from the gemma-3-4b style configuration
-    >>> model = T5Gemma2EncoderTextConfig(configuration)
+    >>> model = T5Gemma2EncoderForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -280,6 +289,15 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
+
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `False` fallback.
+        if getattr(self, "use_bidirectional_attention", False):
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
 
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)

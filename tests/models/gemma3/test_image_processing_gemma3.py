@@ -16,11 +16,10 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -30,108 +29,22 @@ if is_vision_available():
     from PIL import Image
 
 
-class Gemma3ImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=IMAGENET_STANDARD_MEAN,
-        image_std=IMAGENET_STANDARD_STD,
-        do_convert_rgb=True,
-        do_pan_and_scan=True,
-        pan_and_scan_min_crop_size=10,
-        pan_and_scan_max_num_crops=2,
-        pan_and_scan_min_ratio_to_activate=1.2,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.do_pan_and_scan = do_pan_and_scan
-        self.pan_and_scan_min_crop_size = pan_and_scan_min_crop_size
-        self.pan_and_scan_max_num_crops = pan_and_scan_max_num_crops
-        self.pan_and_scan_min_ratio_to_activate = pan_and_scan_min_ratio_to_activate
+class Gemma3ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_pan_and_scan", True)
+        kwargs.setdefault("pan_and_scan_min_crop_size", 10)
+        kwargs.setdefault("pan_and_scan_max_num_crops", 2)
+        kwargs.setdefault("pan_and_scan_min_ratio_to_activate", 1.2)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_pan_and_scan": self.do_pan_and_scan,
-            "pan_and_scan_min_crop_size": self.pan_and_scan_min_crop_size,
-            "pan_and_scan_max_num_crops": self.pan_and_scan_max_num_crops,
-            "pan_and_scan_min_ratio_to_activate": self.pan_and_scan_min_ratio_to_activate,
-        }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Gemma3ImageProcessingTester(self)
-
-    @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "do_pan_and_scan"))
-            self.assertTrue(hasattr(image_processing, "pan_and_scan_min_crop_size"))
-            self.assertTrue(hasattr(image_processing, "pan_and_scan_max_num_crops"))
-            self.assertTrue(hasattr(image_processing, "pan_and_scan_min_ratio_to_activate"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=84)
-            self.assertEqual(image_processor.size, {"height": 84, "width": 84})
+    image_processor_tester_class = Gemma3ImageProcessingTester
 
     def test_without_pan_and_scan(self):
         """

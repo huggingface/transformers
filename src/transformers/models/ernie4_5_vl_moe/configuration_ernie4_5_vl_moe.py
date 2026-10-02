@@ -37,6 +37,8 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
 
     model_type = "ernie4_5_vl_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
 
@@ -47,6 +49,7 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     spatial_merge_size: int = 2
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
     base_model_tp_plan = {
         "blocks.*.attn.qkv": "colwise",
@@ -98,6 +101,12 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     vocab_size: int = 103424

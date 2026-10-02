@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
-from ..gemma4.configuration_gemma4 import Gemma4TextConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -34,7 +34,7 @@ class Gemma4AssistantConfig(PreTrainedConfig):
         If True, uses an embedding table ordered for optimal assistant model performance that needs to be re-ordered to
         align with the main model.
     num_centroids (`int`, defaults to 2048):
-        The total numer of centroids.
+        The total number of centroids.
     centroid_intermediate_top_k (`int`, defaults to 32):
         The number of active centroids.
 
@@ -62,10 +62,10 @@ class Gemma4AssistantConfig(PreTrainedConfig):
 
     model_type = "gemma4_assistant"
     sub_configs = {
-        "text_config": Gemma4TextConfig,
+        "text_config": AutoConfig,
     }
 
-    text_config: Gemma4TextConfig | dict[str, Any] | None = None
+    text_config: PreTrainedConfig | dict[str, Any] | None = None
 
     backbone_hidden_size: int = 1536
     use_ordered_embeddings: bool = False
@@ -75,7 +75,7 @@ class Gemma4AssistantConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
-            self.text_config = Gemma4TextConfig(**self.text_config)
+            self.text_config = CONFIG_MAPPING[self.text_config.get("model_type", "gemma4_text")](**self.text_config)
 
         # Assistant reuses the shared kvs across all layers to skip their calculation
         # I.e. it acts as cache shared across the layers
@@ -85,7 +85,7 @@ class Gemma4AssistantConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
-        text_config: Gemma4TextConfig | None = self.text_config
+        text_config: PreTrainedConfig | None = self.text_config
 
         if text_config is not None:
             if text_config.hidden_size_per_layer_input != 0:

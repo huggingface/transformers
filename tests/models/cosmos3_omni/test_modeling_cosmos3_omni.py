@@ -35,6 +35,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -73,7 +74,7 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("depth", 2)
         kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
         kwargs.setdefault("num_heads", 4)
@@ -85,7 +86,7 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
             "rope_parameters",
             {
                 "rope_type": "default",
-                "mrope_section": [16, 8, 8],
+                "mrope_section": [2, 3, 3],
                 "mrope_interleaved": True,
                 "rope_theta": 10000,
             },
@@ -228,7 +229,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
                         ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
@@ -241,7 +242,9 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"),
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "What do you see in this image?"},
                 ],
@@ -251,6 +254,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_small_model_integration(self):
         # Let's make sure we test the preprocessing to replace what is used
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
@@ -265,7 +269,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
         expected_decoded_texts = Expectations({
-            ("cuda", None): 'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
+            (None, None): "user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom",
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
@@ -275,6 +279,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_batched(self):
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
             "nvidia/Cosmos3-Nano", dtype="bfloat16", device_map=torch_device
@@ -294,12 +299,10 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("cuda", None): [
-                    "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and",
-                    "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink couch. The cats appear to be of the same breed, with brown and black striped fur. They're both lying down in a relaxed position",
-                ],
+                (None, None): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom", 'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'],
             }
-        )
+        )  # fmt: skip
+
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         decoded_output = self.processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)

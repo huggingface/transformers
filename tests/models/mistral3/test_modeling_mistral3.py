@@ -37,6 +37,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -177,7 +178,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
     skip_test_image_features_output_shape = True
     _is_composite = True
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
@@ -228,6 +228,10 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @unittest.skip("Pixtral does not support attention interfaces.")
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Pixtral backbone already overrides this test, no need to test again.")
+    def test_vision_axial_rope(self):
         pass
 
 
@@ -282,7 +286,12 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Describe this image"},
                 ],
             }
@@ -300,7 +309,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
-                ("cuda", 8): 'The image features two cats lying on a pink surface, which appears to be a couch or a bed',
+                ("cuda", 8): 'The image features two tabby cats lying on a pink surface, which appears to be a couch or',
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
             }
@@ -311,6 +320,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
         messages = [
             [
@@ -319,7 +329,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/view.jpg",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg",
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -331,7 +341,9 @@ class Mistral3IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image"},
                     ],
@@ -352,10 +364,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
-                ("cuda", (8, 0)): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
-                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the woods",
-                ("rocm", (9, 5)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene"
+                (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -383,6 +392,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
 
         # Prepare inputs
@@ -393,7 +403,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/view.jpg",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg",
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -405,11 +415,11 @@ class Mistral3IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                         },
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/ydshieh/mistral3-test-data/resolve/main/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {
                             "type": "text",
@@ -430,8 +440,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nPeace in nature's hold",
-                ("rocm", (9, 4)): "Calm waters reflect\nWooden path to distant shore\nSilence in the pines"
+                (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
+                ("rocm", (9, 4)): "Dock in still waters,\nMountains reflect in peace,\nNature's calm embrace",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -445,9 +455,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[1], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City.",
-                ("cuda", 8): 'Certainly! The images depict two famous landmarks in the United States:\n\n1. The first image shows the Statue of Liberty,',
-                ("rocm", (9, 4)): 'Certainly! The images depict two famous landmarks in the United States:\n\n1. The first image shows the Statue of Liberty,',
+                (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty, located in New York',
+                ("rocm", (9, 4)): "Yes.\n\n1. The first image is of the Statue of Liberty. It is a symbol of the United States, and was",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

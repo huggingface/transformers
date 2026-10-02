@@ -35,9 +35,14 @@ if is_vision_available():
 @require_vision
 class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm2VlProcessor
+    # Tiny processor created with make_tiny_processor.py from "LiquidAI/LFM2-VL-1.6B"
+    tiny_model_id = "hf-internal-testing/tiny-processor-lfm2_vl"
+    model_id = "LiquidAI/LFM2-VL-1.6B"
 
     @classmethod
     def _setup_image_processor(cls):
+        # Small tile_size and token limits keep tensor allocations minimal.
+        # do_image_splitting=False prevents splitting images into many tiles.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(
             tile_size=14,
@@ -46,12 +51,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             encoder_patch_size=2,
             do_image_splitting=False,
         )
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        processor_kwargs = cls.prepare_processor_dict()
-        return tokenizer_class.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -93,14 +92,10 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         return {"chat_template": chat_template}
 
-    @unittest.skip("Lfm2VlProcessor adds special tokens to the text")
-    def test_tokenizer_defaults(self):
-        pass
-
     # Override as Lfm2VL needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size=None):
+    def prepare_images_inputs(self, batch_size=None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images

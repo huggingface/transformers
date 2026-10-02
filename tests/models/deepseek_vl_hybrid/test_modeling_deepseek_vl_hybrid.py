@@ -35,6 +35,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -51,6 +52,7 @@ class DeepseekVLHybridModelTester:
         initializer_range=0.02,
         is_training=True,
         use_cache=False,
+        image_token_id=3,
         text_config={
             "num_hidden_layers": 2,
             "vocab_size": 99,
@@ -102,14 +104,14 @@ class DeepseekVLHybridModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.high_res_image_size = high_res_vision_config["image_size"]
         self.image_size = vision_config["image_size"]
-        self.num_image_tokens = vision_config["image_size"] // vision_config["patch_size"]
+        self.num_image_tokens = 16
         self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = self.vocab_size - 1
+        self.image_token_id = image_token_id
 
     def get_config(self):
         return DeepseekVLHybridConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+            text_config=self.text_config.copy(),
+            vision_config=self.vision_config.copy(),
             high_res_vision_config=self.high_res_vision_config,
             image_token_id=self.image_token_id,
         )
@@ -137,6 +139,7 @@ class DeepseekVLHybridModelTester:
             ]
         )
         # fill image_tokens
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_id
 
         return config, input_ids, attention_mask, pixel_values, high_res_pixel_values
@@ -301,7 +304,9 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "Describe this image."},
                 ],
@@ -336,7 +341,9 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image."},
                     ],
@@ -348,7 +355,9 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            ),
                         },
                         {"type": "text", "text": "What animal do you see in the image?"},
                     ],
@@ -382,11 +391,18 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "What's the difference between"},
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": " and "},
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                 ],
             }

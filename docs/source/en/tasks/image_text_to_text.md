@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -169,6 +169,10 @@ outputs[0]["generated_text"]
 If you prefer, you can also load the images separately and pass them to the pipeline like so:
 
 ```python
+import requests
+from PIL import Image
+from transformers import pipeline
+
 pipe = pipeline("image-text-to-text", model="HuggingFaceTB/SmolVLM-256M-Instruct")
 
 img_urls = [
@@ -205,9 +209,11 @@ outputs[0]['input_text']
     'image': <PIL.PngImagePlugin.PngImageFile image mode=RGBA size=622x412>},
    {'type': 'image',
     'image': <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=5184x3456>},
-   {'type': 'text', 'text': 'What do you see in these images?'}]}]## Streaming
+   {'type': 'text', 'text': 'What do you see in these images?'}]}]
 """
 ```
+
+## Streaming
 
 We can use [text streaming](../generation_features#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
 
@@ -318,7 +324,7 @@ messages = [
         ]
     },
 ]
-inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(quantized_model.device)
 input_len = len(inputs.input_ids[0])
 
 with torch.no_grad():

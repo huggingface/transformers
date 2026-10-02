@@ -57,6 +57,8 @@ class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Idefics2Processor(ProcessorMixin):
+    valid_processor_kwargs = Idefics2ProcessorKwargs
+
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str | None = None, **kwargs
     ):
@@ -118,7 +120,7 @@ class Idefics2Processor(ProcessorMixin):
         if text is not None:
             if isinstance(text, str):
                 text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
+            elif not isinstance(text, list) or not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`

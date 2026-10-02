@@ -84,6 +84,9 @@ def _get_json_schema_type(param_type: type) -> dict[str, str]:
         str: {"type": "string"},
         bool: {"type": "boolean"},
         type(None): {"type": "null"},
+        list: {"type": "array"},
+        tuple: {"type": "array"},
+        dict: {"type": "object"},
         Any: {},
     }
     if is_vision_available():
@@ -113,9 +116,12 @@ def _parse_type_hint(hint: str) -> dict:
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]
-        elif all("type" in subtype and isinstance(subtype["type"], str) for subtype in subtypes):
-            # A union of basic types can be expressed as a list in the schema
-            return_dict = {"type": sorted([subtype["type"] for subtype in subtypes])}
+        elif all(subtype.keys() == {"type"} and isinstance(subtype["type"], str) for subtype in subtypes):
+            # A union of basic types can be expressed as a list in the schema. Subtypes carrying extra keys
+            # (`items`, `enum`, `prefixItems`, ...) must go through `anyOf` so that information is not lost
+            # Duplicates are dropped, since different hints (e.g. `list | tuple`) can map to the same type
+            subtype_names = sorted({subtype["type"] for subtype in subtypes})
+            return_dict = {"type": subtype_names[0] if len(subtype_names) == 1 else subtype_names}
         else:
             # A union of more complex types requires "anyOf"
             return_dict = {"anyOf": subtypes}
@@ -371,7 +377,7 @@ def get_json_schema(func: Callable) -> dict:
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
         if enum_choices:
-            schema["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
+            schema["enum"] = [c.strip() if isinstance(c, str) else c for c in json.loads(enum_choices.group(1))]
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 

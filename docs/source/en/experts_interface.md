@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -31,8 +31,11 @@ The [`ExpertsInterface`] provides optimized experts backends. It decouples the e
 
 The `"batched_mm"` and `"grouped_mm"` backends also run FP8 and FP4 (`int8`-packed) quantized experts through the Triton finegrained-fp8 kernel, reading either `float32` or UE8M0 scales. They act as the fallback for quantized checkpoints when the `"deepgemm"` backend is unavailable.
 
-> [!NOTE]
-> When using `experts_implementation="grouped_mm"` on GPU, the model automatically switches to `"batched_mm"` during the decode stage of generation (after prefill). This is because `batched_mm` is significantly faster on lower token count during autoregressive decoding on GPU. On CPU, `grouped_mm` remains active throughout generation as it is more efficient for all input sizes.
+## Decode-stage switching
+
+On GPU, a model loaded with `experts_implementation="grouped_mm"` automatically switches to `"batched_mm"` for the decode stage of generation, which is significantly faster on lower token counts. The original backend is restored once generation finishes. On CPU, `grouped_mm` stays active throughout generation because it's more efficient at every input size.
+
+The switch reaches MoE layers in the top-level model and in any sub-config backbone, such as the `text_config` of a vision-language model. Only `grouped_mm` entries switch to `batched_mm`. Experts running any other backend keep it.
 
 ## Set an experts backend
 
@@ -52,6 +55,13 @@ Switch between experts backends at runtime without reloading the model using [`~
 
 ```py
 model.set_experts_implementation("eager")
+```
+
+Read the backend that's currently running with [`~PreTrainedModel.get_experts_implementation`]. It returns a `dict` with one entry for the model, and one entry per sub-config.
+
+```py
+model.get_experts_implementation()
+# {"": "grouped_mm", "text_config": "grouped_mm", "vision_config": "eager"}
 ```
 
 ## Backbone-specific experts backend
@@ -90,8 +100,7 @@ The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://gi
 The `"deepgemm"` backend requires:
 
 - CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
-- CUDA runtime 12.3 or later on Hopper, 12.9 or later on Blackwell.
-- `nvcc`/`nvrtc` available on the system for the kernel's JIT compilation.
+- A full CUDA toolkit with `nvcc` for the kernel's JIT compilation, version 12.3 or later on Hopper and 12.9 or later on Blackwell. A runtime-only install has no `nvcc` and is rejected. Transformers locates the toolkit through `CUDA_HOME`, `CUDA_PATH`, `nvcc` on `PATH`, then `/usr/local/cuda`.
 - The [kernels](https://github.com/huggingface/kernels) package.
 
 ```py
@@ -121,6 +130,9 @@ model = AutoModelForCausalLM.from_pretrained(
 
 For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell). The checkpoint config typically sets `expert_dtype="fp4"` and `scale_fmt="ue8m0"`.
 
+> [!NOTE]
+> On Blackwell (SM100+), the `"deepgemm"` and `"deepgemm_megamoe"` experts kernels require power-of-two UE8M0 expert scales. A checkpoint quantized with plain `float32` scales (`scale_fmt="float"`) raises a `ValueError` on the first forward instead of silently corrupting the output. Load a checkpoint quantized with `scale_fmt="ue8m0"`, or switch to `grouped_mm` or `batched_mm`, which consume `float32` block scales directly. Hopper (SM90+) consumes `float32` scales on the DeepGEMM path without conversion.
+
 The main reason to pass a [`FineGrainedFP8Config`] for a pre-quantized checkpoint is to dequantize it back to `bfloat16`, in which case the experts run in `bfloat16` rather than on the FP8/FP4 DeepGEMM path.
 
 ```py
@@ -139,17 +151,20 @@ On Blackwell (SM100+), set `experts_implementation="deepgemm_megamoe"` to run a 
 
 This backend requires:
 
-- A Blackwell GPU (compute capability ≥ 10.0) with CUDA runtime 12.9 or later.
+- A Blackwell GPU (compute capability ≥ 10.0) with a CUDA toolkit (`nvcc`) 12.9 or later.
 - FP4-packed expert weights paired with UE8M0 weight scales (the pre-quantized checkpoint typically declares `expert_dtype="fp4"` and `scale_fmt="ue8m0"` in its config).
 - A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
 
 ```py
-from transformers import AutoModelForCausalLM
+import os
 
+from transformers import AutoModelForCausalLM, DistributedConfig
+
+distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]))
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V4",
     experts_implementation="deepgemm_megamoe",
-    tp_plan="auto",
+    distributed_config=distributed_config,
 )
 ```
 
@@ -201,7 +216,8 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B",
     dtype="bfloat16",
     experts_implementation="grouped_mm",
-).eval().cuda()
+    device_map="auto",
+).eval()
 
 # Works for grouped_mm (no CUDA graphs)
 model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")

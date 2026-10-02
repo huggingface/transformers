@@ -25,7 +25,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 
 def load_vocab_file(vocab_file):
-    with open(vocab_file, "r") as f:
+    with open(vocab_file, "r", encoding="utf-8") as f:
         lines = f.read().splitlines()
         return [l.strip() for l in lines]
 
@@ -125,7 +125,8 @@ class EsmTokenizer(PreTrainedTokenizer):
                     "ids is already formatted with special tokens for the model."
                 )
 
-            return [1 if token in self.all_special_ids else 0 for token in token_ids_0]
+            all_special_ids = set(self.all_special_ids)
+            return [1 if token in all_special_ids else 0 for token in token_ids_0]
         mask = [1] + ([0] * len(token_ids_0)) + [1]
         if token_ids_1 is not None:
             mask += [0] * len(token_ids_1) + [1]
@@ -133,7 +134,7 @@ class EsmTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory, filename_prefix):
         vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.txt")
-        with open(vocab_file, "w") as f:
+        with open(vocab_file, "w", encoding="utf-8") as f:
             f.write("\n".join(self.all_tokens))
         return (vocab_file,)
 

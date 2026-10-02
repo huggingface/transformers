@@ -17,7 +17,6 @@ import inspect
 import unittest
 
 import numpy as np
-import requests
 from parameterized import parameterized
 
 from transformers import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
@@ -25,6 +24,7 @@ from transformers.testing_utils import is_flaky, require_torch, require_vision, 
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -293,11 +293,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     # AltCLIPTextModel has large embeddings relative to model size, so we need higher split percentages
     model_split_percents = [0.5, 0.8, 0.9]
 
-    # TODO (@SunMarc): Fix me
-    @unittest.skip(reason="It's broken.")
-    def test_resize_tokens_embeddings(self):
-        super().test_resize_tokens_embeddings()
-
     def setUp(self):
         self.model_tester = AltCLIPTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=32)
@@ -392,8 +387,8 @@ class AltCLIPModelTester:
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 

@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 # mT5
 
-[mT5](https://huggingface.co/papers/2010.11934) is a multilingual variant of [T5](./t5), training on 101 languages. It also incorporates a new "accidental translation" technique to prevent the model from incorrectly translating predictions into the wrong language.
+[mT5](https://huggingface.co/papers/2010.11934) is a multilingual variant of [T5](./t5), trained on 101 languages. It also incorporates a new "accidental translation" technique to prevent the model from incorrectly translating predictions into the wrong language.
 
 You can find all the original [mT5] checkpoints under the [mT5](https://huggingface.co/collections/google/mt5-release-65005f1a520f8d7b4d039509) collection.
 
@@ -88,7 +88,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- mT5 must be fine-tuned for downstream tasks because it was only pretrained on the [mc4](https://huggingface.co/datasets/mc4) dataset.
+- mT5 must be fine-tuned for downstream tasks because it was only pretrained on the [mC4](https://huggingface.co/datasets/allenai/c4/viewer/multilingual) dataset (the `multilingual` config of `allenai/c4`).
 
 ## MT5Config
 

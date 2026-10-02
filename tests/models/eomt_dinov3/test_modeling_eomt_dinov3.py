@@ -15,8 +15,6 @@
 
 import unittest
 
-import requests
-
 from transformers import AutoImageProcessor, EomtDinov3Config, EomtDinov3ForUniversalSegmentation, pipeline
 from transformers.testing_utils import (
     Expectations,
@@ -26,19 +24,16 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class EomtDinov3ForUniversalSegmentationTester:
@@ -114,7 +109,7 @@ class EomtDinov3ForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMix
     pipeline_model_mapping = {"image-segmentation": EomtDinov3ForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
     test_missing_keys = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent control flow in segmentation head
 
     def setUp(self):
         self.model_tester = EomtDinov3ForUniversalSegmentationTester(self)
@@ -220,7 +215,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -262,7 +257,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         )
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -282,6 +277,11 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
                     [ 0.0693, -6.8125, -2.1562],
                     [-1.4141, -6.0000, -5.4688]
                 ],
+                ("xpu", 5): [
+                    [-0.3105, -5.6250, -0.7305],
+                    [ 0.0767, -6.8125, -2.1406],
+                    [-1.3984, -6.0000, -5.4688]
+                ],
                 ("cuda", 8): [
                     [-0.3145, -5.6562, -0.7422],
                     [ 0.0542, -6.8438, -2.1875],
@@ -295,6 +295,11 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
                     [-1.5859, -1.1406, -1.0156],
                     [ 2.5938,  5.3125,  6.1875],
                     [ 3.7812,  7.1250,  8.1250]
+                ],
+                ("xpu", 5): [
+                    [-1.6016, -1.1562, -1.0312],
+                    [ 2.5625,  5.3125,  6.1562],
+                    [ 3.7656,  7.1562,  8.1250]
                 ],
                 ("cuda", 8): [
                     [-1.5859, -1.1406, -1.0234],
@@ -319,7 +324,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -375,7 +380,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -421,7 +426,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
 
@@ -463,7 +468,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
             self.assertTrue(0.0 <= info["score"] <= 1.0)
 
     def test_segmentation_pipeline(self):
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
 
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)

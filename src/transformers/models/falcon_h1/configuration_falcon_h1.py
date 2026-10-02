@@ -86,8 +86,6 @@ class FalconH1Config(PreTrainedConfig):
     mamba_proj_bias: bool | None = False
     mamba_norm_before_gate: bool | None = True
     mamba_rms_norm: bool | None = False
-    time_step_min: float | None = 0.001
-    time_step_max: float | None = 0.1
     time_step_limit: list[float, float] | tuple[float, float] | None = (0.0, float("inf"))
     projectors_bias: bool | None = False
     rope_parameters: RopeParameters | dict | None = None

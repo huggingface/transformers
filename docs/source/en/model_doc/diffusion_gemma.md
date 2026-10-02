@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2026-06-10.*
@@ -34,6 +34,9 @@ You can find the model card and checkpoint [here](https://huggingface.co/google/
 ## Usage examples
 
 Despite it being a text diffusion model and having a custom generation loop, most of the interface is shared with other models that can generate text with [`DiffusionGemmaGenerationMixin.generate`]. If you're using another `transformers` model in your app, you should be able to directly replace it with this model.
+
+> [!NOTE]
+> DiffusionGemma is available in both Transformers and Diffusers, but Diffusers is its primary home. Diffusers has the full set of scheduling options, pipeline utilities, and new features (additional schedulers, stopping criteria, sampling strategies) are only added there. See the [DiffusionGemma](https://huggingface.co/docs/diffusers/api/pipelines/diffusion_gemma) for usage examples, and open an [issue](https://github.com/huggingface/diffusers/issues) on Diffusers to experiment with different schedulers or request a feature. The Transformers implementation only receives bug fixes but no new features.
 
 ### Common caveats
 

@@ -25,7 +25,14 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_python import TOKENIZER_CONFIG_FILE
-from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
+from ...utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
+    cached_file,
+    logging,
+    resolve_revision,
+)
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .auto_mappings import PROCESSOR_MAPPING_NAMES
@@ -53,9 +60,11 @@ else:
             ("diffusion_gemma", "Gemma4Processor"),
             ("edgetam", "Sam2Processor"),
             ("glm4v_moe", "Glm4vProcessor"),
+            ("granite_speech5_ctc", "GraniteSpeech5Processor"),
             ("granite_speech_plus", "GraniteSpeechProcessor"),
             ("groupvit", "CLIPProcessor"),
             ("hubert", "Wav2Vec2Processor"),
+            ("inkling_mm_model", "InklingProcessor"),
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),
@@ -69,6 +78,7 @@ else:
             ("qwen3_5", "Qwen3VLProcessor"),
             ("qwen3_5_moe", "Qwen3VLProcessor"),
             ("qwen3_vl_moe", "Qwen3VLProcessor"),
+            ("qwen4_exp", "Qwen3VLProcessor"),
             ("sam3_lite_text", "Sam3Processor"),
             ("sew", "Wav2Vec2Processor"),
             ("sew-d", "Wav2Vec2Processor"),
@@ -194,6 +204,15 @@ class AutoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
+
         processor_class = None
         processor_auto_map = None
 
@@ -305,7 +324,7 @@ class AutoProcessor:
         explicit_local_code = has_local_code and not (
             processor_class or PROCESSOR_MAPPING[type(config)]
         ).__module__.startswith("transformers.")
-        if has_remote_code:
+        if not has_local_code and has_remote_code:
             if "--" in processor_auto_map:
                 upstream_repo = processor_auto_map.split("--")[0]
             else:

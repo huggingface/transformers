@@ -53,7 +53,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained("openai/clip-vit-base-patch32")
+        return tokenizer_class.from_pretrained("hf-internal-testing/tiny-processor-clip")
 
     def get_fake_omdet_turbo_output(self):
         classes = self.get_fake_omdet_turbo_classes()

@@ -28,9 +28,9 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -70,8 +70,6 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation(self):
         model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
-        model.to(torch_device)
-        model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         messages = [
@@ -80,7 +78,9 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "Describe this image."},
                 ],
@@ -102,8 +102,6 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_batched(self):
         model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
-        model.to(torch_device)
-        model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         messages = [
@@ -113,7 +111,9 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image."},
                     ],
@@ -125,7 +125,9 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            ),
                         },
                         {"type": "text", "text": "What animal do you see in the image?"},
                     ],
@@ -133,12 +135,18 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
             ],
         ]
         EXPECTED_TEXT = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:The image depicts a snowy landscape with a focus on a bear. The bear is standing on all",  # fmt: skip
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a bear in the image.What is the significance of the color red in the",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:In the image, a majestic snow leopard is captured in a moment of tranquility. The snow leopard",
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a bear in the image.What is the significance of the color red in the",
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding_side="left",
         )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -148,8 +156,6 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_with_multi_image(self):
         model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
-        model.to(torch_device)
-        model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         messages = [
@@ -157,11 +163,18 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "What's the difference between"},
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": " and "},
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                 ],
             }

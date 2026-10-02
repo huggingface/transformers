@@ -42,12 +42,14 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -116,7 +118,11 @@ class GlmImageVisionText2TextModelTester:
         self.image_end_token_id = image_end_token_id
         self.image_token_id = image_token_id
         self.text_config = text_config
-        self.vision_config = vision_config
+        # `image_size` controls the input image size in this tester. `GlmImageVisionConfig.image_size`
+        # only sets the base resolution of the learnable position-embedding grid, which is always
+        # bilinearly interpolated at runtime, so the two don't need to match exactly. We pass it
+        # here anyway so the tiny model config stays consistent (avoids a 256× oversized embedding table).
+        self.vision_config = {**vision_config, "image_size": image_size}
         self.vq_config = vq_config
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -292,10 +298,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="No available kernels - not supported")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Size mismatch")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @pytest.mark.xfail(
@@ -474,7 +476,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "Add a red hat to this cat"},
                 ],
@@ -496,15 +500,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
 
     def test_processor_image_to_image(self):
         """Test processor correctly prepares image-to-image inputs."""
-        from io import BytesIO
-
-        import requests
-        from PIL import Image
-
         # Load the image
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        response = requests.get(url)
-        image = Image.open(BytesIO(response.content))
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+        image = load_test_image(url)
 
         # Create prompt with target shape and image token
         text = "<|dit_token_16384|><|image|><|dit_token_16385|>Add a red hat to this cat<sop>28 40<eop>"
@@ -603,7 +601,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_tokens = Expectations(
             {
-                ("cuda", None): [9223, 11045, 5705, 14581, 4759, 11667, 1275, 10094, 572, 10543, 9223, 1275, 9223, 10543, 12265, 10543, 2007, 8200, 10543, 1153, 1153, 1153, 10094, 16304, 9223, 11045, 3114, 14581, 4759, 10094],
+                ("cuda", None): [ 9223, 11045, 7240, 14581, 4759, 3094, 10543, 8200, 572, 10543, 9223, 9223, 11667, 9223, 3114, 10543, 1143, 1143, 2007, 1153, 1153, 1153, 8932, 9223, 9223, 11045, 3114, 14581, 10543, 10094],
                 ("xpu", 3): [9223, 11045, 11045, 14581, 4759, 11667, 10543, 10094, 572, 10543, 9223, 1275, 9223, 9223, 4759, 10543, 2007, 4759, 10543, 1153, 1153, 1153, 8932, 9223, 10094, 11045, 5705, 14581, 4759, 10094],
             }
         )

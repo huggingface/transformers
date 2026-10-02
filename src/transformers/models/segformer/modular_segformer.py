@@ -522,7 +522,7 @@ class SegformerPreTrainedModel(ViTPreTrainedModel):
     }
 
     def _init_weights(self, module):
-        raise NotImplementedError("No need to override this method")
+        raise AttributeError("No need to override this method")
 
 
 @auto_docstring
@@ -581,12 +581,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SegFormerImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.segformer(pixel_values, **kwargs)
 
         sequence_output = outputs.last_hidden_state
@@ -709,16 +703,12 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> image_processor = AutoImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")

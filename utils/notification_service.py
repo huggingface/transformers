@@ -23,10 +23,10 @@ import sys
 import time
 from typing import Any
 
-import requests
 from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
+from github_utils import get_github_json
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
@@ -940,7 +940,7 @@ def retrieve_artifact(artifact_path: str, gpu: str | None):
         files = os.listdir(artifact_path)
         for file in files:
             try:
-                with open(os.path.join(artifact_path, file)) as f:
+                with open(os.path.join(artifact_path, file), encoding="utf-8") as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
                 raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
@@ -1077,16 +1077,14 @@ if __name__ == "__main__":
 
         # Retrieve the PR title and author login to complete the report
         github_token = os.environ.get("GITHUB_TOKEN")
-        github_headers = {"Authorization": f"token {github_token}"} if github_token else {}
 
         commit_number = ci_url.split("/")[-1]
         ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
-        ci_details = requests.get(ci_detail_url, headers=github_headers).json()
+        ci_details = get_github_json(ci_detail_url, token=github_token)
 
-        # We use `.get()` to avoid failures when the GitHub API returns an unexpected response (e.g. due to rate
-        # limiting, where the response won't contain the expected fields). It's preferred to continue the CI run
-        # without failing even if we can't retrieve the author info. That said, the GITHUB_TOKEN should always be
-        # set during CI runs to avoid hitting the rate limit in the first place.
+        # get_github_json either returns valid data or raises (e.g. on rate limiting). We still use
+        # .get() defensively in case the response shape changes — it's preferred to continue the CI
+        # run without author info rather than abort the whole report.
         ci_author = (ci_details.get("author") or {}).get("login")
 
         merged_by = None
@@ -1095,7 +1093,7 @@ if __name__ == "__main__":
         if len(numbers) > 0:
             pr_number = numbers[0]
             ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
-            ci_details = requests.get(ci_detail_url, headers=github_headers).json()
+            ci_details = get_github_json(ci_detail_url, token=github_token)
 
             ci_author = ci_details.get("user", {}).get("login") or ci_author
             ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"
@@ -1267,7 +1265,7 @@ if __name__ == "__main__":
                             {"line": line, "trace": trace}
                         )
 
-                        # TODO: How to deal wit this
+                        # TODO: How to deal with this
 
                         if re.search("tests/quantization", line):
                             matrix_job_results[matrix_name]["failed"]["Quantization"][artifact_gpu] += 1
@@ -1400,7 +1398,7 @@ if __name__ == "__main__":
     if job_name == "run_models_gpu":
         if "warnings_in_ci" in available_artifacts:
             directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
-            with open(os.path.join(directory, "selected_warnings.json")) as fp:
+            with open(os.path.join(directory, "selected_warnings.json"), encoding="utf-8") as fp:
                 selected_warnings = json.load(fp)
 
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
@@ -1411,7 +1409,7 @@ if __name__ == "__main__":
         "huggingface/transformers/.github/workflows/self-scheduled-flash-attn-caller.yml",
     )
     amd_daily_ci_workflows = (
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi355-caller.yml",
     )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
@@ -1424,7 +1422,7 @@ if __name__ == "__main__":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
-        with open(event_payload_path) as fp:
+        with open(event_payload_path, encoding="utf-8") as fp:
             event_payload = json.load(fp)
             # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
@@ -1508,9 +1506,16 @@ if __name__ == "__main__":
     other_workflow_run_ids = []
 
     if is_scheduled_ci_run:
+        print(
+            f"[DEBUG notification_service] is_scheduled_ci_run=True, is_nvidia_daily_ci_workflow={is_nvidia_daily_ci_workflow}"
+        )
+        print(
+            f"[DEBUG notification_service] GITHUB_RUN_ID={os.getenv('GITHUB_RUN_ID')!r}, workflow_id={workflow_id!r}"
+        )
         prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
             token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=workflow_id
         )
+        print(f"[DEBUG notification_service] prev_workflow_run_id={prev_workflow_run_id!r}")
         # For a scheduled run that is not the Nvidia's scheduled daily CI, add Nvidia's scheduled daily CI run as a target to compare.
         if not is_nvidia_daily_ci_workflow:
             # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
@@ -1518,6 +1523,9 @@ if __name__ == "__main__":
             # We need to get the Nvidia's scheduled daily CI run that match the current run (i.e. run with the same commit SHA)
             other_workflow_run_id = get_last_daily_ci_workflow_run_id(
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha=ci_sha
+            )
+            print(
+                f"[DEBUG notification_service] other_workflow_run_id={other_workflow_run_id!r} (other_workflow_id={other_workflow_id!r}, ci_sha={ci_sha!r})"
             )
             other_workflow_run_ids.append(other_workflow_run_id)
     else:
@@ -1572,7 +1580,7 @@ if __name__ == "__main__":
 
             report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w", encoding="utf-8") as fp:
                 fp.write(report)
 
             # upload

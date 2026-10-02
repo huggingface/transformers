@@ -14,7 +14,6 @@
 """PyTorch EoMT model backed by DINOv3."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -25,10 +24,7 @@ from ... import initialization as init
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-)
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -148,10 +144,11 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
     pass
 
 
+# FIXME: this is simple axial rope, too much hassle to refactor - maybe some contrib stumbles upon it :)
 class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
     inv_freq: Tensor
 
-    def __init__(self, config: EomtDinov3Config, device=None):
+    def __init__(self, config: EomtDinov3Config):
         nn.Module.__init__(self)
         self.config = config
 
@@ -159,26 +156,18 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: EomtDinov3Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> torch.Tensor:
+    def compute_default_rope_parameters(config: EomtDinov3Config, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -187,9 +176,8 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         head_dim = config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32, device=device)
+        inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32)
         return inv_freq, attention_factor
 
 
@@ -211,7 +199,7 @@ class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
     }
 
     def _init_weights(self, module: nn.Module) -> None:
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):

@@ -404,14 +404,8 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaEncoderLayer", "T5GemmaDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": T5GemmaDecoderLayer,
-        "attentions": [
-            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="cross_attn"),
-            OutputRecorder(T5GemmaCrossAttention, index=1, layer_name="cross_attn"),
-        ],
-    }
+    # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
+    _can_record_outputs = None
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -834,10 +828,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1016,10 +1006,6 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if self.config.is_encoder_decoder and (input_ids is None and inputs_embeds is not None):
             raise NotImplementedError(

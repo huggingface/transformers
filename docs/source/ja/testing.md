@@ -35,7 +35,7 @@ rendered properly in your Markdown viewer.
 
    - [self-hosted (push)](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-push.yml): `main` にコミットが行われた場合に、GPUで高速テストを実行します。このジョブは、`main` でのコミットが以下のフォルダーのコードを更新した場合にのみ実行されます：`src`、`tests`、`.github`（追加されたモデルカード、ノートブックなどの実行を防ぐため）。
 
-   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): GPUで `tests` と `examples` の通常のテストと遅いテストを実行します。
+   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled-caller.yml): GPUで `tests` と `examples` の通常のテストと遅いテストを実行します。
 
 ```bash
 RUN_SLOW=1 pytest tests/

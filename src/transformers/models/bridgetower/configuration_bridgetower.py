@@ -1,14 +1,14 @@
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License=, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing=, software
-# distributed under the License is distributed on an "AS IS" BASIS=,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """BridgeTower model configuration"""
@@ -106,7 +106,7 @@ class BridgeTowerConfig(PreTrainedConfig):
     share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
         Whether cross modal transformer layers are shared.
     share_link_tower_layers (`bool`, *optional*, defaults to `False`):
-        Whether the bride/link tower layers are shared.
+        Whether the bridge/link tower layers are shared.
     link_tower_type (`str`, *optional*, defaults to `"add"`):
         Type of the bridge/link layer.
     init_layernorm_from_vision_encoder (`bool`, *optional*, defaults to `False`):

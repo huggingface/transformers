@@ -27,7 +27,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetVisionConfig(PreTrainedConfig):
     r"""
@@ -74,7 +74,7 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
     decoder_hidden_size: int = 512
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetTextConfig(PreTrainedConfig):
     r"""
@@ -126,7 +126,7 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
     base_config_key = "text_config"
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"

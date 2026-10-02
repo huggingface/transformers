@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch AudioFlamingo3 model."""
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -93,6 +94,37 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ALMModelTest, unittest.Tes
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    def test_embed_positions_loaded_in_requested_dtype(self):
+        audio_config = AudioFlamingo3EncoderConfig(
+            d_model=16,
+            encoder_layers=1,
+            encoder_attention_heads=4,
+            encoder_ffn_dim=32,
+            num_mel_bins=8,
+            max_source_positions=4,
+        )
+        text_config = Qwen2Config(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            pad_token_id=1,
+            bos_token_id=0,
+            eos_token_id=2,
+        )
+        config = AudioFlamingo3Config(audio_config=audio_config, text_config=text_config, pad_token_id=1)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model = AudioFlamingo3ForConditionalGeneration(config)
+            model.save_pretrained(tmpdirname)
+            model = AudioFlamingo3ForConditionalGeneration.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+
+            self.assertIsNone(AudioFlamingo3ForConditionalGeneration._keep_in_fp32_modules_strict)
+            self.assertNotIn("embed_positions", model._get_dtype_plan(torch.bfloat16))
+            self.assertEqual(model.model.audio_tower.embed_positions.weight.dtype, torch.bfloat16)
+
 
 @require_torch
 class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -130,7 +162,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }
@@ -173,7 +205,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                         },
                     ],
                 }
@@ -192,7 +224,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
                         },
                     ],
                 }

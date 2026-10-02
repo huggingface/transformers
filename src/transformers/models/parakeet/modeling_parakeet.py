@@ -28,7 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import CompileConfig, GenerationMixin, GenerationMode
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -65,28 +65,17 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: ParakeetEncoderConfig, device=None):
+    def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        inv_freq = self.compute_default_relative_positional_parameters(config)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: ParakeetEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
+    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig) -> torch.Tensor:
         base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
         return inv_freq
 
     @torch.no_grad()
@@ -98,11 +87,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         )
         position_ids_expanded = position_ids[None, None, :].float()
 
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             sin = freqs.sin()
@@ -208,7 +193,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -340,10 +325,7 @@ class ParakeetEncoderAttention(nn.Module):
         matrix_bd = matrix_bd * self.scaling
 
         if attention_mask is not None:
-            # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
-            # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
-            # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), torch.finfo(matrix_bd.dtype).min)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -580,7 +562,6 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
@@ -690,6 +671,11 @@ class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
         )
 
 
+class ParakeetEncoderCTCHead(nn.Conv1d):
+    def forward(self, hidden_states: torch.Tensor):
+        return super().forward(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+
 @auto_docstring(
     custom_intro="""
     Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
@@ -702,7 +688,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
-        self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
+        self.ctc_head = ParakeetEncoderCTCHead(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         self.post_init()
 
@@ -744,7 +730,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = encoder_outputs.last_hidden_state
-        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
+        logits = self.ctc_head(hidden_states)
 
         loss = None
         if labels is not None:

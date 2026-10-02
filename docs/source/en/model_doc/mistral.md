@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -32,6 +32,8 @@ You can find all the original Mistral checkpoints under the [Mistral AI_](https:
 
 > [!TIP]
 > Click on the Mistral models in the right sidebar for more examples of how to apply Mistral to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
@@ -70,7 +72,7 @@ messages = [
 
 model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
-generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 tokenizer.batch_decode(generated_ids)[0]
 "Mayonnaise can be made as follows: (...)"
 ```
@@ -90,6 +92,7 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
@@ -97,10 +100,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype="torch.float16",
+        bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=quantization_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 prompt = "My favourite condiment is"
@@ -113,7 +116,7 @@ messages = [
 
 model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
-generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
 ```

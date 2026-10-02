@@ -19,7 +19,7 @@ permissions:
 jobs:
   model-ci:
     name: Model CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@50acccfe9afb8927b9b74ed7e750f2b0d3991b62 # main
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -31,7 +31,7 @@ jobs:
 
   torch-pipeline:
     name: Torch pipeline CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@50acccfe9afb8927b9b74ed7e750f2b0d3991b62 # main
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -43,7 +43,7 @@ jobs:
 
   example-ci:
     name: Example CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@50acccfe9afb8927b9b74ed7e750f2b0d3991b62 # main
     with:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -55,7 +55,7 @@ jobs:
 
   deepspeed-ci:
     name: DeepSpeed CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@50acccfe9afb8927b9b74ed7e750f2b0d3991b62 # main
     with:  
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#amd-hf-ci"

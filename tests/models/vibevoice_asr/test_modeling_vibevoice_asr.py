@@ -165,6 +165,13 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_get_audio_features_hidden_states(self):
         pass
 
+    @unittest.skip(
+        reason="The acoustic tokenizer samples VAE noise on every forward (`vae_std * randn`), so two "
+        "`generate` calls see different audio embeddings — measured, the prefill alone differs by up to 0.4."
+    )
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
     @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
     def test_determinism(self):
         pass
@@ -375,7 +382,7 @@ class VibeVoiceAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/vibevoice_tts_german.wav",
                     },
                 ],
             }

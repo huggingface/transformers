@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -54,7 +54,7 @@ Start with a smaller dataset by including the `max_train_samples`, `max_eval_sam
 > Not all example scripts support the `max_predict_samples` parameter. Run the command below to check whether a script supports it or not.
 >
 > ```bash
-> examples/pytorch/summarization/run_summarization.py -h
+> python examples/pytorch/summarization/run_summarization.py -h
 > ```
 
 The example below fine-tunes [T5-small](https://huggingface.co/google-t5/t5-small) on the [CNN/DailyMail](https://huggingface.co/datasets/abisee/cnn_dailymail) dataset. T5 requires an additional `source_prefix` parameter to prompt it to summarize.
@@ -67,16 +67,17 @@ Resuming training from a checkpoint is very useful if training is interrupted be
 
 Share your model on the [Hub](https://huggingface.co/) with the `--push_to_hub` parameter. It creates a repository and uploads the model to the folder name specified in `--output_dir`. You could also use the `--push_to_hub_model_id` parameter to specify the repository name.
 
+Drop the `max_train_samples`, `max_eval_samples`, and `max_predict_samples` parameters once everything works, and add `--resume_from_checkpoint path_to_specific_checkpoint` to resume from a checkpoint.
+
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
     --model_name_or_path google-t5/t5-small \
-    # remove the `max_train_samples`, `max_eval_samples` and `max_predict_samples` if everything works
     --max_train_samples 50 \
     --max_eval_samples 50 \
     --max_predict_samples 50 \
     --do_train \
     --do_eval \
-    --dataset_name cnn_dailymail \
+    --dataset_name abisee/cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir /tmp/tst-summarization \
@@ -84,8 +85,7 @@ python examples/pytorch/summarization/run_summarization.py \
     --per_device_eval_batch_size=4 \
     --push_to_hub \
     --push_to_hub_model_id finetuned-t5-cnn_dailymail \
-    # --resume_from_checkpoint path_to_specific_checkpoint \
-    --predict_with_generate \
+    --predict_with_generate
 ```
 
 For mixed precision and distributed training, include the following parameters and launch training with [torchrun](https://pytorch.org/docs/stable/elastic/run.html).
@@ -109,6 +109,38 @@ python xla_spawn.py --num_cores 8 pytorch/summarization/run_summarization.py \
     ...
     ...
 ```
+
+### Run a script on Hugging Face Jobs
+
+The example scripts declare their dependencies in a [PEP 723](https://peps.python.org/pep-0723/) `# /// script` header, so they run on [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs) straight from their GitHub URL. You rent a GPU for the length of the run and skip setting up a local environment.
+
+[Install](https://huggingface.co/docs/huggingface_hub/en/guides/cli#getting-started) the `hf` CLI and run `hf auth login`. Pass the script URL to `hf jobs uv run` and put the script arguments after it.
+
+- `--flavor`: pick the hardware
+- `--timeout`: set the timeout limit (30 minutes by default)
+- `-s HF_TOKEN`: forward your token so `--push_to_hub` works
+
+The `--` before the URL keeps Job flags and script flags apart, so a script argument that shares a name with an `hf` flag, such as `--token`, goes to the script.
+
+```bash
+hf jobs uv run --flavor a10g-small --timeout 30m -s HF_TOKEN -- \
+    https://raw.githubusercontent.com/huggingface/transformers/main/examples/pytorch/summarization/run_summarization.py \
+    --model_name_or_path google-t5/t5-small \
+    --do_train \
+    --do_eval \
+    --dataset_name abisee/cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --max_train_samples 500 \
+    --max_eval_samples 100 \
+    --output_dir finetuned-t5-cnn_dailymail \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --push_to_hub \
+    --predict_with_generate
+```
+
+This trains on 500 examples and finishes in about three minutes. For the full run, drop `--max_train_samples` and `--max_eval_samples` and raise `--timeout`. The header installs Transformers from `main`, so the run uses the same code as the script. See [Train Models on Jobs](https://huggingface.co/docs/hub/jobs-training) for hardware, checkpoints, and multi-GPU runs.
 
 ## Accelerate
 
@@ -137,7 +169,7 @@ Run [accelerate launch](https://huggingface.co/docs/accelerate/package_reference
 ```bash
 accelerate launch run_summarization_no_trainer.py \
     --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
+    --dataset_name abisee/cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir ~/tmp/tst-summarization \

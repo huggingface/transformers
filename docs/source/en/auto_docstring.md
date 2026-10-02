@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -134,11 +134,11 @@ class MyModelConfig(PreTrainedConfig):
         Description of another model-specific parameter.
 
     ```python
-    >>> from transformers import MyModelConfig, MyModel
+    from transformers import MyModelConfig, MyModel
 
-    >>> configuration = MyModelConfig()
-    >>> model = MyModel(configuration)
-    >>> configuration = model.config
+    configuration = MyModelConfig()
+    model = MyModel(configuration)
+    configuration = model.config
     ```
     """
 
@@ -280,8 +280,8 @@ Write `Returns` and `Examples` sections manually in the docstring to override th
         Example:
 
         ```python
-        >>> model = MyModel.from_pretrained("org/my-model")
-        >>> output = model(input_ids)
+        model = MyModel.from_pretrained("org/my-model")
+        output = model(input_ids)
         ```
         """
         # ...
@@ -365,7 +365,7 @@ The `@auto_docstring` decorator generates docstrings through the following steps
 3. Each parameter's description follows this priority chain:
 
     - A manual docstring (`r""" """` block or `custom_args`) takes priority.
-    - The predefined source dict ([`ModelArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
+    - The predefined source dict ([`ModelArgs`], [`ModelForArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
     - If neither source has a description, the parameter is flagged with `[ERROR]` in the build output.
 
 4. For model classes with standard names like `ModelForCausalLM`, or classes that map to a pipeline, `@auto_docstring` generates the intro. For multimodal processors, the intro lists which components (tokenizer, image processor, and so on) the class wraps. See [ClassDocstring](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/auto_docstring.py#L2437) for the full list.

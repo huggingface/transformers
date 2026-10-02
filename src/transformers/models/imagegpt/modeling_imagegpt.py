@@ -63,8 +63,7 @@ class ImageGPTAttention(nn.Module):
         super().__init__()
         self.config = config
         max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias",
+        self.bias = nn.Buffer(
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
@@ -447,7 +446,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ImageGPTModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -522,6 +521,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
 
         if encoder_attention_mask is not None:
@@ -766,7 +766,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ImageGPTForImageClassification
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

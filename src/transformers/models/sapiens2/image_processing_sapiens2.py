@@ -22,8 +22,8 @@ import torch
 import torch.nn.functional as F
 from torchvision.transforms.v2 import functional as tvF
 
-from transformers.image_processing_backends import TorchvisionBackend
-
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -38,23 +38,24 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
-from .modeling_sapiens2 import (
-    Sapiens2ImageMattingOutput,
-    Sapiens2NormalEstimatorOutput,
-    Sapiens2PointmapEstimatorOutput,
-    Sapiens2PoseEstimatorOutput,
-)
 
 
 class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
+    """
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
         ADE20k). The background label will be replaced by 255.
+    keypoint_heatmap_downscale_factor (`int`, *optional*, defaults to 4):
+        The downscale factor for the target heatmap size relative to the model input size.
+    keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
+        The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
     """
 
     do_reduce_labels: bool
+
+    keypoint_heatmap_downscale_factor: int
+    keypoint_heatmap_sigma: float
 
 
 def box_xywh_to_xyxy(x):
@@ -297,6 +298,111 @@ def post_dark_unbiased_data_processing(
     return keypoints - torch.cat([offset_x, offset_y], dim=-1)
 
 
+def generate_udp_gaussian_heatmaps(
+    boxes: list[list[list[float]]],
+    keypoints: list[list[list[list[float]]]],
+    output_size: tuple[int, int],
+    downscale_factor: int,
+    sigma: float,
+    device: Union[str, "torch.device"] | None = None,
+) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+    """Generates UDP Gaussian heatmaps and visibility weights from raw keypoint coordinates.
+
+    Args:
+        boxes (`list[list[list[float]]]`):
+            List of bounding boxes for each image in COCO format `(top_left_x, top_left_y, width, height)`.
+        keypoints (`list[list[list[list[float]]]]`):
+            List of keypoints for each person in each image. Expected format is COCO-style `[x, y, visibility]`.
+        output_size (`tuple[int, int]`):
+            The target size `(height, width)` of the cropped images.
+        downscale_factor (`int`, *optional*, defaults to 4):
+            The downscale factor for the target heatmap size relative to the output size.
+        sigma (`float`, *optional*, defaults to 6.0):
+            The standard deviation (sigma) for the 2D Gaussian distributions.
+        device (`str` or `torch.device`, *optional*):
+            The device to put the resulting tensors on.
+
+    Returns:
+        tuple:
+        - heatmaps_list (list[torch.Tensor]): The generated heatmaps. Each tensor has shape
+          `(num_persons, num_keypoints, heatmap_height, heatmap_width)`.
+        - weights_list (list[torch.Tensor]): The target weights. Each tensor has shape
+          `(num_persons, num_keypoints)`.
+    """
+    heatmap_height = output_size[0] // downscale_factor
+    heatmap_width = output_size[1] // downscale_factor
+
+    heatmaps_list = []
+    weights_list = []
+
+    grid_y, grid_x = torch.meshgrid(
+        torch.arange(heatmap_height, dtype=torch.float32, device=device),
+        torch.arange(heatmap_width, dtype=torch.float32, device=device),
+        indexing="ij",
+    )
+    heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
+    radius = sigma * 3
+
+    for image_boxes, image_keypoints in zip(boxes, keypoints):
+        boxes_tensor = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=device))
+
+        centers, scales = boxes_to_crop_params(boxes_tensor, output_size=output_size)
+
+        for person_idx in range(len(image_boxes)):
+            person_keypoints = image_keypoints[person_idx]
+
+            if len(person_keypoints) == 0:
+                heatmaps_list.append(
+                    torch.zeros((0, heatmap_height, heatmap_width), dtype=torch.float32, device=device)
+                )
+                weights_list.append(torch.zeros((0,), dtype=torch.float32, device=device))
+                continue
+
+            person_keypoints_tensor = torch.tensor(person_keypoints, dtype=torch.float32, device=device)
+            raw_coords = person_keypoints_tensor[:, :2]
+
+            center = centers[person_idx]
+            scale = scales[person_idx]
+
+            heatmap_coords = ((raw_coords - center) / scale + 0.5) * heatmap_size
+
+            x_coords = heatmap_coords[:, 0].view(-1, 1, 1)
+            y_coords = heatmap_coords[:, 1].view(-1, 1, 1)
+
+            distance_squared = (grid_x.unsqueeze(0) - x_coords) ** 2 + (grid_y.unsqueeze(0) - y_coords) ** 2
+            person_heatmaps = torch.exp(-distance_squared / (2 * (sigma**2)))
+
+            if person_keypoints_tensor.shape[1] > 2:
+                visibilities = person_keypoints_tensor[:, 2]
+                mask = (visibilities > 0).float()
+            else:
+                mask = torch.ones(person_keypoints_tensor.shape[0], dtype=torch.float32, device=device)
+
+            # 3-sigma bounds check matching original implementation
+            mu = (heatmap_coords + 0.5).to(torch.int64)
+            left = mu[:, 0] - int(radius)
+            top = mu[:, 1] - int(radius)
+            right = mu[:, 0] + int(radius) + 1
+            bottom = mu[:, 1] + int(radius) + 1
+
+            out_of_bounds = (left >= heatmap_width) | (top >= heatmap_height) | (right < 0) | (bottom < 0)
+            valid_mask = mask * (~out_of_bounds).float()
+
+            spatial_mask = (
+                (grid_x.unsqueeze(0) >= left.view(-1, 1, 1))
+                & (grid_x.unsqueeze(0) < right.view(-1, 1, 1))
+                & (grid_y.unsqueeze(0) >= top.view(-1, 1, 1))
+                & (grid_y.unsqueeze(0) < bottom.view(-1, 1, 1))
+            )
+
+            person_heatmaps = person_heatmaps * valid_mask.view(-1, 1, 1) * spatial_mask.float()
+
+            heatmaps_list.append(person_heatmaps)
+            weights_list.append(valid_mask)
+
+    return heatmaps_list, weights_list
+
+
 @auto_docstring
 class Sapiens2ImageProcessor(TorchvisionBackend):
     """PIL backend for Sapiens2 with reduce_label support."""
@@ -315,6 +421,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     do_normalize = True
     do_reduce_labels = False
     do_pad = False  # Set to True for normal, albedo, and pointmap estimation
+    keypoint_heatmap_downscale_factor = 4
+    keypoint_heatmap_sigma = 6.0
 
     def __init__(self, **kwargs: Unpack[Sapiens2ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -325,6 +433,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
         boxes: list[list[list[float]]] | None = None,
+        keypoints: list[list[list[list[float]]]] | None = None,
         **kwargs: Unpack[Sapiens2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -335,8 +444,17 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             representing the bounding box coordinates in COCO format
             (top_left_x, top_left_y, width, height). When provided, each person crop is
             affine-warped to the model input size instead of resizing the full image.
+        keypoints (`list[list[list[list[float]]]]`, *optional*):
+            List of keypoints for each person in each image. Expected format is COCO-style `[x, y, visibility]`.
+            The `x` and `y` values are expected to be absolute image pixel coordinates.
+            Format is `[images -> persons -> keypoints -> [x, y, visibility]]`. Used to generate
+            ground-truth heatmaps and visibility weights for pose estimation fine-tuning.
         """
-        return super().preprocess(images, segmentation_maps, boxes, **kwargs)
+        return super().preprocess(
+            images,
+            image_like_kwargs={"segmentation_maps": segmentation_maps, "boxes": boxes, "keypoints": keypoints},
+            **kwargs,
+        )
 
     def _preprocess_image_like_inputs(
         self,
@@ -346,18 +464,26 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
+        device: Union[str, "torch.device"] | None,
+        keypoints: list[list[list[list[float]]]] | None,
+        keypoint_heatmap_downscale_factor: int | None = None,
+        keypoint_heatmap_sigma: float | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
-        kwargs["boxes"] = boxes  # modular trick
+        if segmentation_maps is not None and keypoints is not None:
+            raise ValueError(
+                "Cannot process both `segmentation_maps` and `keypoints` in the same forward pass. "
+                "Please provide only one depending on the task you want to perform."
+            )
+
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
         data = {}
-        data["pixel_values"] = self._preprocess(images, **images_kwargs)
+        data["pixel_values"] = self._preprocess(images, **images_kwargs, boxes=boxes)
 
         # Prepare segmentation maps if provided
         if segmentation_maps is not None:
@@ -372,7 +498,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             segmentation_maps_kwargs = kwargs.copy()
             segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
             processed_segmentation_maps = self._preprocess(
-                images=processed_segmentation_maps, **segmentation_maps_kwargs
+                images=processed_segmentation_maps, **segmentation_maps_kwargs, boxes=boxes
             )
 
             # Convert to int64 and squeeze channel dimension
@@ -381,6 +507,34 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                 for processed_segmentation_map in processed_segmentation_maps
             ]
             data["labels"] = processed_segmentation_maps
+
+        # Prepare pose estimation keypoints if provided
+        if keypoints is not None:
+            if boxes is None:
+                raise ValueError("Bounding `boxes` must be provided when passing `keypoints` for pose estimation.")
+            if keypoint_heatmap_downscale_factor is None:
+                raise ValueError(
+                    "`keypoint_heatmap_downscale_factor` must be provided when passing `keypoints` for pose estimation."
+                )
+            if keypoint_heatmap_sigma is None:
+                raise ValueError(
+                    "`keypoint_heatmap_sigma` must be provided when passing `keypoints` for pose estimation."
+                )
+
+            # Extract dynamic size override if it exists, otherwise fall back to default
+            target_size = kwargs.get("size", self.size)
+
+            heatmaps_list, weights_list = generate_udp_gaussian_heatmaps(
+                boxes=boxes,
+                keypoints=keypoints,
+                output_size=(target_size["height"], target_size["width"]),
+                downscale_factor=keypoint_heatmap_downscale_factor,
+                sigma=keypoint_heatmap_sigma,
+                device=device,
+            )
+
+            data["labels"] = heatmaps_list
+            data["label_weights"] = weights_list
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -453,7 +607,9 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         return reorder_images(processed_images_grouped, grouped_images_index)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: list[tuple] | None = None, return_segmentation_scores: bool = False
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`Sapiens2ForSemanticSegmentation`] into semantic segmentation maps.
 
@@ -463,11 +619,18 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for post_process_semantic_segmentation")
@@ -491,18 +654,30 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={"segmentation": semantic_map, "segmentation_scores": resized_logits[0]}
+                    )
+                )
         else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            seg_maps = logits.argmax(dim=1)
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": seg_maps[i], "segmentation_scores": logits[i]}
+                )
+                for i in range(logits.shape[0])
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
         return semantic_segmentation
 
     def post_process_pose_estimation(
         self,
-        outputs: Sapiens2PoseEstimatorOutput,
+        outputs,
         boxes: list[list[list[float]]],
-        outputs_flipped: Sapiens2PoseEstimatorOutput | None = None,
+        outputs_flipped=None,
         kernel_size: int = 11,
         threshold: float | None = None,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
@@ -541,7 +716,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         Returns:
             `list[list[dict]]`: Outer list is over images, inner list is over persons.
             Each dict contains:
-            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): absolut x/y coordinates in
+            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): absolute x/y coordinates in
               the source image space, or in target space if `target_sizes` is provided.
             - `scores` (`torch.FloatTensor` of shape `(num_keypoints,)`): per-keypoint confidence.
             - `labels` (`torch.LongTensor` of shape `(num_keypoints,)`): keypoint indices.
@@ -642,7 +817,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def post_process_normal_estimation(
         self,
-        outputs: Sapiens2NormalEstimatorOutput,
+        outputs,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
@@ -678,7 +853,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def post_process_pointmap_estimation(
         self,
-        outputs: Sapiens2PointmapEstimatorOutput,
+        outputs,
         source_sizes: TensorType | list[tuple[int, int]] | None = None,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         do_remove_padding: bool | None = None,
@@ -715,7 +890,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
     def post_process_image_matting(
         self,
-        outputs: Sapiens2ImageMattingOutput,
+        outputs,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
         backgrounds: ImageInput | None = None,
     ) -> list[dict[str, torch.Tensor]]:
