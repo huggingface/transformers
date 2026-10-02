@@ -6265,10 +6265,7 @@ class ModelTesterMixin(ExportTesterMixin):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         # CHeck each layer type for nested RoPE configs.
-        # Until a longer input is seen, the dynamic parameters reduce to the default ones, so the two
-        # `inv_freq` are the same computation reached by different arithmetic and can differ by a
-        # last bit on devices that round `pow` differently. The check is that the frequencies do not
-        # grow, so allow one float32 epsilon of slack.
+        # Allow one float32 eps of slack, as some devices round `pow` differently
         slack = 1 + torch.finfo(torch.float32).eps
         if not is_nested_rope:
             self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq * slack).all())
