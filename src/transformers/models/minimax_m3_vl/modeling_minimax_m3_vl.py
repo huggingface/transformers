@@ -82,7 +82,6 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys[indices, ...]
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
         if tokens_to_remove > 0:
@@ -270,8 +269,7 @@ class MiniMaxM3VLSparseMoeBlock(nn.Module):
 
 
 class MiniMaxM3VLRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MiniMaxM3VLConfig, device=None):
+    def __init__(self, config: MiniMaxM3VLConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -282,13 +280,12 @@ class MiniMaxM3VLRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: MiniMaxM3VLConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -995,8 +992,7 @@ class MiniMaxM3VLVisionEmbeddings(nn.Module):
 class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
     """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MiniMaxM3VLVisionConfig, device=None):
+    def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__()
         self.config = config
 
@@ -1004,13 +1000,12 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_axial_rope_parameters
         if self.rope_type != "axial":
             raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_axial_rope_parameters(
         config: MiniMaxM3VLVisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

@@ -58,7 +58,6 @@ from ...utils import (
     is_accelerate_available,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
@@ -711,7 +710,6 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma4VisionConfig, device=None):
         super().__init__()
         self.config = config
@@ -720,13 +718,12 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_axial_rope_parameters
         if self.rope_type != "axial":
             raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -1078,7 +1075,6 @@ class Gemma4TextMLP(nn.Module):
 
 
 class Gemma4TextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma4TextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -1111,7 +1107,6 @@ class Gemma4TextRotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Gemma4TextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
