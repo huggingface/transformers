@@ -2428,3 +2428,28 @@ def prepare_prompt_input(
             )
         return list(inputs)
     raise TypeError(f"`{input_name}` must be a string, a sequence of strings, or `None`.")
+
+
+def prepare_keyword_inputs(
+    keywords: str | list[str] | list[list[str]] | None, batch_size: int
+) -> list[list[str] | None]:
+    """
+    Broadcast and validate a hotword/keyword argument to match ``batch_size``.
+
+    Args:
+        keywords (`str`, `list[str]`, `list[list[str]]`, or `None`):
+            The keyword(s) to bias transcription towards. A single string, or a flat list of strings, is broadcast
+            to every sample in the batch. A list of lists must match ``batch_size``, one keyword list per sample.
+            ``None`` disables keyword biasing for the whole batch.
+        batch_size (`int`):
+            The number of samples in the batch.
+
+    Returns:
+        `list[list[str] | None]`: A list of length ``batch_size``.
+    """
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    if isinstance(keywords, (list, tuple)) and all(isinstance(item, str) for item in keywords):
+        keywords = [list(keywords)] * batch_size
+
+    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
