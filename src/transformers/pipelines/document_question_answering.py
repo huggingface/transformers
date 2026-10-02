@@ -564,9 +564,14 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         is_last = model_inputs.pop("is_last", False)
 
         if self.model_type == ModelType.VisionEncoderDecoder:
+            # `preprocess` sets generation flags alongside the inputs: they belong in the generation config too
+            generation_flags = {
+                key: model_inputs.pop(key)
+                for key in ("return_dict_in_generate", "output_attentions")
+                if key in model_inputs
+            }
             # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
+            generate_kwargs = self._merge_generation_config({**generate_kwargs, **generation_flags})
 
             model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:

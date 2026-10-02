@@ -546,8 +546,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     generate_kwargs["return_segments"] = True
 
             # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
+            generate_kwargs = self._merge_generation_config(generate_kwargs)
 
             main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"
             generate_kwargs = {
@@ -618,12 +617,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 else:
                     out["stride"] = rescale_stride(stride, ratio)
         elif self.type == "tdt":
-            inputs = {
-                self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
-            }
-            if "attention_mask" in model_inputs:
-                inputs["attention_mask"] = model_inputs.pop("attention_mask")
-            outputs = self.model.generate(**inputs)
+            inputs = {self.model.main_input_name: model_inputs.pop(self.model.main_input_name)}
+            if attention_mask is not None:
+                inputs["attention_mask"] = attention_mask
+            # Only forward the caller's generation parameters: the pipeline defaults (e.g. beam search) target
+            # seq2seq models, transducers decode with their own generation config.
+            outputs = self.model.generate(**inputs, **generate_kwargs)
             out = {"tokens": outputs.sequences}
         else:
             raise ValueError(f"Unsupported model type {self.type}.")

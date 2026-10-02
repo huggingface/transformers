@@ -10,9 +10,8 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.from typing import List, Union
+# limitations under the License.
 
-import copy
 from typing import Any, TypedDict, overload
 
 from ..audio_utils import AudioInput
@@ -211,29 +210,11 @@ class TextToAudioPipeline(Pipeline):
             # we expect some kwargs to be additional tensors which need to be on the right device
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" in generate_kwargs:
-                generation_config = generate_kwargs.pop("generation_config")
-            else:
-                generation_config = copy.deepcopy(self.generation_config)
-
-            # ensure dict output to facilitate postprocessing
-            generation_config.return_dict_in_generate = True
-
-            # priotiize max_new_tokens to avoid max_length warning
-            if generation_config.max_new_tokens is not None:
-                generation_config.max_length = None
-
-            # Merge generate_kwargs into generation_config where possible to avoid the
-            # deprecation warning about passing generation_config alongside generation params
-            model_specific_kwargs = {}
-            for k, v in generate_kwargs.items():
-                if hasattr(generation_config, k):
-                    setattr(generation_config, k, v)
-                else:
-                    model_specific_kwargs[k] = v
-            forward_params["generation_config"] = generation_config
-            forward_params.update(model_specific_kwargs)
+            # User-defined `generation_config` passed to the pipeline call take precedence, and `generate_kwargs` take
+            # precedence over `forward_params`. Dict output facilitates postprocessing.
+            forward_params = self._merge_generation_config(
+                {"return_dict_in_generate": True, **forward_params, **generate_kwargs}
+            )
 
             if self.model.config.model_type in ["csm"]:
                 # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
@@ -289,7 +270,8 @@ class TextToAudioPipeline(Pipeline):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
                 guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation). `generate_kwargs` are
-                only passed to the underlying model if the latter is a generative model.
+                only passed to the underlying model if the latter is a generative model, and take precedence over
+                `forward_params`.
 
         Return:
             `AudioOutput` or a list of `AudioOutput`, which is a `TypedDict` with two keys:

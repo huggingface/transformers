@@ -373,6 +373,12 @@ class TextGenerationPipelineTests(unittest.TestCase):
         output = text_generator(prompt, stop_sequence=" fe")
         self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
 
+        # Multi-token stop sequences only stop generation once the whole sequence is generated
+        output = text_generator(prompt, stop_sequence=" fe banana")
+        self.assertEqual(output, [{"generated_text": "Hello I believe in fe fe fe fe fe"}])
+        output = text_generator(prompt, stop_sequence=[" banana", " fe fe"])
+        self.assertEqual(output, [{"generated_text": "Hello I believe in fe fe"}])
+
     def run_pipeline_test(self, text_generator, _):
         model = text_generator.model
         tokenizer = text_generator.tokenizer
@@ -561,6 +567,24 @@ class TextGenerationPipelineTests(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             _ = text_generator(prompt, max_length=10, max_new_tokens=None)
         self.assertNotIn(logger_msg, cl.out)
+
+    def test_pipeline_no_spurious_generation_warnings(self):
+        # The pipeline must not warn about generation parameters it sets itself (generation config defaults or
+        # parameters passed alongside its generation config)
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
+        logger = logging.get_logger("transformers.generation.utils")
+        for kwargs in ({}, {"max_new_tokens": 1}, {"max_length": 10, "min_new_tokens": 1}):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                _ = text_generator("Hello world", **kwargs)
+            self.assertEqual(cl.out, "", f"Unexpected warning with {kwargs}")
+
+    def test_pipeline_length_kwarg_takes_precedence(self):
+        # `max_length` passed at call time must override the pipeline's `max_new_tokens` default
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
+        input_length = len(text_generator.tokenizer("Hello world").input_ids)
+        out = text_generator("Hello world", max_length=input_length + 2, do_sample=False, return_tensors=True)
+        self.assertEqual(len(out[0]["generated_token_ids"]), input_length + 2)
 
     def test_return_dict_in_generate(self):
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
