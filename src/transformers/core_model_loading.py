@@ -332,9 +332,7 @@ class Transpose(ConversionOps):
         # In this case, check the shapes before transposing
         else:
             # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
-            param = kwargs["model"].get_parameter(kwargs["full_layer_name"])
-            # a sharded parameter arrives as this rank's slice
-            expected_shape = param._local_tensor.shape if is_dtensor(param) else param.shape
+            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
             # The shapes are the same: do NOT transpose
             if tensor.shape == expected_shape:
                 return {target_pattern: tensor}

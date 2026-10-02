@@ -1107,18 +1107,6 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "qwen3_vl_moe": [
-            WeightConverter(
-                source_patterns="mlp.experts.gate_up_proj",
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[Transpose(1, 2, check_dims=True)],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.down_proj",
-                target_patterns="mlp.experts.down_proj",
-                operations=[Transpose(1, 2, check_dims=True)],
-            ),
-        ],
         "cosmos3_omni": [
             # Cosmos3 unified checkpoints store the Reasoner LLM with the old `model.` prefix
             # stripped off and the ViT under flat `blocks.*` / `merger.*` / `patch_embed.*` /

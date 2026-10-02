@@ -168,7 +168,7 @@ class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):
 @use_experts_implementation(is_transposed=True)
 class Qwen3VLMoeTextExperts(Qwen3MoeExperts):
     """Collection of expert weights stored as 3D tensors, `(num_experts, in, out)`: the layout Qwen3-VL-MoE checkpoints
-    ship, so they load, and shard on read under tensor parallelism, without a transpose."""
+    ship."""
 
     def __init__(self, config):
         super().__init__(config)
