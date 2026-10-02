@@ -1,6 +1,6 @@
 """Validate batched processor inputs.
 
-Covers nested and flat media ownership, empty media collections, and strict placeholder-count errors.
+Covers nested and flat media ownership, text-only batches, and strict placeholder-count errors.
 """
 
 import numpy as np
@@ -79,14 +79,18 @@ def case_2_flat_media(processor):
     return f"image sizes {flat['image_sizes'].tolist()}"
 
 
-def case_3_empty_media(processor):
-    """CASE 3: EMPTY MEDIA
+def case_3_text_only(processor):
+    """CASE 3: TEXT-ONLY BATCH
 
-    Treat empty media collections as text-only.
+    Process a batch with media arguments omitted.
     """
-    out = processor(text=["plain text", "more plain text"], images=[[], []], audio=[], padding=True)
-    assert "pixel_values" not in out and "input_features" not in out, "empty media produced media tensors"
-    return "no media tensors returned"
+    texts = ["plain text", "more plain text"]
+    out = processor(text=texts, padding=True)
+    expected = processor.tokenizer(texts, padding=True)
+    assert out["input_ids"] == expected["input_ids"], "text-only batch changed token IDs"
+    assert out["attention_mask"] == expected["attention_mask"], "text-only batch changed attention masks"
+    assert "pixel_values" not in out and "input_features" not in out, "text-only batch produced media tensors"
+    return "tokenizer-equivalent text batch without media tensors"
 
 
 def case_4_count_validation(processor):
@@ -119,7 +123,7 @@ def main():
         results = [
             run_case(case_1_nested_media, processor),
             run_case(case_2_flat_media, processor),
-            run_case(case_3_empty_media, processor),
+            run_case(case_3_text_only, processor),
             run_case(case_4_count_validation, processor),
         ]
     return finish(results)
