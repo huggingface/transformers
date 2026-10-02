@@ -775,6 +775,11 @@ class GenerationMixin(ContinuousMixin):
             for key, value in model_inputs.items():
                 if isinstance(value, torch.Tensor):
                     model_inputs[key] = value.to(self.device)
+                # Tensors nested in a dict, such as the masks keyed by layer type
+                elif isinstance(value, dict):
+                    model_inputs[key] = {
+                        k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in value.items()
+                    }
 
         return model_inputs
 
