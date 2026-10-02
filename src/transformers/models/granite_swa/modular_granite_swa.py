@@ -216,9 +216,7 @@ class GraniteSWAAttention(LlamaAttention):
 
 
 class GraniteSWADecoderLayer(GraniteDecoderLayer):
-    def __init__(self, config: GraniteSWAConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.self_attn = GraniteSWAAttention(config=config, layer_idx=layer_idx)
+    pass
 
 
 class GraniteSWAPreTrainedModel(GranitePreTrainedModel):

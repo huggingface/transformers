@@ -203,8 +203,7 @@ class Glm4vMoeTextAttention(Glm4Attention):
 
 
 class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
-    def __init__(self, config: Glm4vMoeTextConfig):
-        super().__init__(config)
+    pass
 
 
 class Glm4vMoeTextExperts(DeepseekV3Experts):
@@ -227,8 +226,7 @@ class Glm4vMoeTextMLP(Glm4MoeMLP):
 
 
 class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
-    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+    pass
 
 
 class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):

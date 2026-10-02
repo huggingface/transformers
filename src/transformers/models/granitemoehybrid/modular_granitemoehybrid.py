@@ -102,8 +102,7 @@ class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):
 
 
 class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
-    def __init__(self, config: GraniteMoeHybridConfig):
-        super().__init__(config)
+    pass
 
 
 class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):

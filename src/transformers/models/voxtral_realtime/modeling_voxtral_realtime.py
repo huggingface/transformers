@@ -696,7 +696,9 @@ class VoxtralRealtimeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = VoxtralRealtimeTextAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = VoxtralRealtimeTextMLP(config)
         self.input_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
