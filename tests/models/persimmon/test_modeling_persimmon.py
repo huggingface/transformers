@@ -85,7 +85,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat",
+            "hf-internal-testing/persimmon-8b-chat-safetensors",
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map={"": 0},
             dtype=torch.float16,
@@ -116,10 +116,10 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that?\n\nadept: The theory of relativity states that the laws of physics are the same for all observers, regardless of their relative motion."""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
-        tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-chat", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/persimmon-8b-chat-safetensors", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat",
+            "hf-internal-testing/persimmon-8b-chat-safetensors",
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map={"": 0},
             dtype=torch.float16,

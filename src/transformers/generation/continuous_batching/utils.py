@@ -13,7 +13,8 @@
 # limitations under the License.
 import queue
 import threading
-from contextlib import contextmanager
+import warnings
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
 from typing import Any
@@ -22,6 +23,10 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from .requests import FutureRequestState, RequestState, RequestStatus
+
+
+# NOTE: AMD GPUs are supported under the "cuda" module
+DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
 
 
 class CudaGraphBuffer:
@@ -58,7 +63,7 @@ class ThreadLocalCounter(threading.local):
 
 def attn_mask_is_needed(config: PreTrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
-    return config._attn_implementation in ["paged|eager", "paged|sdpa"]
+    return config._attn_implementation in ["paged|eager", "sdpa"]
 
 
 def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
@@ -204,20 +209,6 @@ def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
     return new_states
 
 
-def get_cuda_pools() -> tuple:
-    """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs."""
-    mem_pool = torch.cuda.MemPool()
-    graph_pool_id = mem_pool.id
-    return mem_pool, graph_pool_id
-
-
-@contextmanager
-def mem_pool_ctx(mem_pool):
-    """A context manager to use a CUDA mem pool."""
-    with torch.cuda.use_mem_pool(mem_pool):
-        yield
-
-
 def find_num_key_value_heads(config: PreTrainedConfig) -> int:
     """Finds the number of key-value heads for the given config."""
     # If the model supports GQA, we leverage it by using the num_key_value_heads attribute
@@ -251,3 +242,107 @@ def exact_div(a: int, b: int) -> int:
     if remainder:
         raise ValueError(f"Division of {a} by {b} is not exact: {remainder = } != 0")
     return quotient
+
+
+# ---------------------------------------------- DEVICE AGNOSTIC UTILS ----------------------------------------------- #
+
+
+def get_available_accelerator_module() -> Any | None:
+    """Returns the accelerator module if there is one and it is available, None otherwise."""
+    device_module = torch.get_device_module()  # the device is never specified, so that we always get the same module
+    if device_module.__name__.endswith("cpu") or not device_module.is_available():
+        return None
+    return device_module
+
+
+def create_device_stream(device: torch.device) -> torch.cuda.Stream | None:
+    """If the given device is available and supports streams, returns a new stream. Otherwise, returns None."""
+    device_module = torch.get_device_module()
+    if device_module.is_available() and hasattr(device_module, "Stream"):
+        return device_module.Stream(device=device)
+    return None
+
+
+def stream_context(stream: torch.cuda.Stream | None) -> torch.cuda.StreamContext:
+    """If the stream is not None, returns a context manager to use the stream. Otherwise, returns a null context.
+    This function assumes that the current device supports streams."""
+    if stream is None:
+        return nullcontext()
+    return torch.get_device_module().stream(stream)
+
+
+def get_accelerator_graph_name() -> str | None:
+    """If an accelerator is available and has cuda graph-like objects, returns their name. Otherwise, returns None."""
+    # Stop if no accelerator is available
+    accelerator_module = get_available_accelerator_module()
+    if accelerator_module is None:
+        return None
+    # Stop if the accelerator does not support graphs no matter the version (eg. MPS)
+    accelerator_type = accelerator_module.__name__.split(".")[-1]
+    graph_name = DEVICE_TYPE_TO_GRAPH_NAME.get(accelerator_type)
+    if graph_name is None:
+        return None
+    # Stop if the accelerator does not support the graph for this version (eg. XPU before 2.11)
+    return graph_name if hasattr(accelerator_module, graph_name) else None
+
+
+def create_accelerator_graph() -> torch.cuda.CUDAGraph:
+    """If an accelerator is available and supports graphs, returns a new graph. Otherwise, raises an error."""
+    graph_name = get_accelerator_graph_name()
+    if graph_name is None:
+        raise RuntimeError(
+            f"The current device is unavailable or does not support graphs: {torch.get_device_module().__name__ = }."
+        )
+    graph_cls = getattr(torch.get_device_module(), graph_name)
+    return graph_cls()
+
+
+def accelerator_graph_capture_context(
+    graph: torch.cuda.CUDAGraph, stream: torch.cuda.Stream | None, pool: int
+) -> torch.cuda.graph:
+    """Returns a context manager used to capture the graph. This function assumes that the current device supports
+    graphs."""
+    device_module = torch.get_device_module()
+    capture_kwargs = {"stream": stream, "pool": pool}
+    if device_module.__name__.endswith("cuda"):
+        capture_kwargs["capture_error_mode"] = "thread_local"
+    return device_module.graph(graph, **capture_kwargs)
+
+
+def get_memory_pools() -> tuple[Any, int]:
+    """If an accelerator is available and supports graphs, returns a tuple of (mem_pool, graph_pool_id) for the
+    accelerator graphs. Otherwise, raises an error."""
+    if get_accelerator_graph_name() is None:
+        raise RuntimeError(
+            "No graph-capture backend is available for the current accelerator: memory pools cannot be used."
+        )
+    mem_pool = torch.get_device_module().MemPool()
+    graph_pool_id = mem_pool.id
+    return mem_pool, graph_pool_id
+
+
+def memory_pool_context(mem_pool: Any) -> AbstractContextManager:
+    """A context manager to use a specific memory pool for allocations. This function assumes that the current device
+    supports memory pools."""
+    return torch.get_device_module().use_mem_pool(mem_pool)
+
+
+# ------------------------------------------------- DEPRECATED UTILS ------------------------------------------------- #
+
+
+def get_cuda_pools() -> tuple:
+    warnings.warn(
+        "Deprecated. Use get_memory_pools() instead. Will be removed in transformers 5.23",
+        FutureWarning,
+        stacklevel=2,
+    )
+    return get_memory_pools()
+
+
+def mem_pool_ctx(mem_pool: Any):
+    warnings.warn(
+        "Deprecated. Use memory_pool_context() instead. Will be removed in transformers 5.23",
+        FutureWarning,
+        stacklevel=2,
+    )
+    return memory_pool_context(mem_pool)
