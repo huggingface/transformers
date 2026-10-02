@@ -64,9 +64,6 @@ def is_local_dist_rank_0() -> bool:
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
 
-# Single source of truth for the process group backend to use with a given accelerator. Test helpers
-# that bring up their own process groups import this instead of keeping a private copy, which went
-# stale every time a backend was added.
 DISTRIBUTED_BACKEND_MAP = {
     "cuda": "nccl",
     "cpu": "gloo",
