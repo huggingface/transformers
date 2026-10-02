@@ -365,3 +365,42 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+    def test_colwise_local_owner_reads_local_shard(self):
+        """A bare `colwise_local` parameter is sharded like `colwise` and its owner sees the local shard."""
+        import torch.distributed as dist
+        from torch.distributed.device_mesh import init_device_mesh
+        from torch.distributed.tensor import DTensor
+
+        class Attention(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = torch.nn.Linear(4, 8, bias=False)
+                self.sinks = torch.nn.Parameter(torch.arange(4.0))
+
+            def forward(self, hidden_states):
+                # Mixing a DTensor with plain tensors would raise here.
+                return self.q_proj(hidden_states).sum() + self.sinks.sum(), type(self.sinks)
+
+        class Model(torch.nn.Module):
+            tp_plan = {"self_attn.q_proj": "colwise", "self_attn.sinks": "colwise_local"}
+
+            def __init__(self):
+                super().__init__()
+                self.self_attn = Attention()
+
+        created_group = not dist.is_initialized()
+        if created_group:
+            dist.init_process_group("gloo", store=dist.HashStore(), rank=0, world_size=1)
+        try:
+            model = Model()
+            tensor_parallel.apply_tensor_parallelism(model, init_device_mesh("cpu", (1,)))
+            self.assertIsInstance(model.self_attn.sinks, DTensor)
+            with torch.no_grad():
+                _, sinks_type = model.self_attn(torch.ones(1, 4))
+            self.assertIs(sinks_type, torch.Tensor)
+            # The sharded parameter is restored once the forward returns.
+            self.assertIsInstance(model.self_attn.sinks, DTensor)
+        finally:
+            if created_group:
+                dist.destroy_process_group()

@@ -166,6 +166,45 @@ def _build_checkpoint_conversion_mapping():
         ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
+        # HY4-VL: the HY4 text tower plus the HunYuanVL-family vision tower. Text renames are the
+        # same as `hy_v4`; vision renames follow `hunyuan_vl` except for the projector, which has a
+        # single `norm` (not a before/after pair) and no image begin/end/sep embeddings.
+        "hy_v4_vl": [
+            # -- text tower (identical to the `hy_v4` entry) --
+            WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
+            WeightRenaming(r"\.learnable_sink_param$", ".sinks"),
+            WeightRenaming(r"\.linear_gate", ".gate_proj"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_fn", ".attn_hc.fn"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_base", ".attn_hc.base"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_scale", ".attn_hc.scale"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_fn", ".ffn_hc.fn"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_base", ".ffn_hc.base"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_scale", ".ffn_hc.scale"),
+            WeightRenaming(r"\.hc_head_fn", ".hc_fn"),
+            WeightRenaming(r"\.hc_head_base", ".hc_base"),
+            WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
+            # -- vision tower: Megatron-style MLP and pre/post norm names --
+            WeightRenaming(source_patterns="mlp.dense_h_to_4h", target_patterns="mlp.fc1"),
+            WeightRenaming(source_patterns="mlp.dense_4h_to_h", target_patterns="mlp.fc2"),
+            WeightRenaming(
+                source_patterns=r"^vit\.layers\.(\d+)\.input_layernorm\.",
+                target_patterns=r"vit.layers.\1.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vit\.layers\.(\d+)\.post_attention_layernorm\.",
+                target_patterns=r"vit.layers.\1.layer_norm2.",
+            ),
+            # -- projector: give the two checkpoint convolutions explicit module names --
+            WeightRenaming(source_patterns=r"perceive\.proj\.0\.", target_patterns="perceive.proj_conv."),
+            WeightRenaming(source_patterns=r"perceive\.proj\.2\.", target_patterns="perceive.proj_out."),
+            WeightRenaming(source_patterns=r"perceive\.", target_patterns="patch_merger."),
+            # -- module placement: text under `language_model`, tower under `vision_tower` --
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|vit|vision_tower))",
+                target_patterns="model.language_model",
+            ),
+            WeightRenaming(source_patterns=r"^vit", target_patterns="model.vision_tower"),
+        ],
         "cosmos3_edge": [
             WeightRenaming(r"^embed_tokens\.", "model.language_model.embed_tokens."),
             WeightRenaming(r"^norm\.", "model.language_model.norm."),

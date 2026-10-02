@@ -292,6 +292,10 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    # Kept for checkpoint compatibility; consumed by processors / inference engines, not the modeling code
+    "HYV4VLConfig": ["im_end_id", "im_newline_id", "im_start_id"],
+    "HYV4VLTextConfig": ["layer_types"],
+    "HYV4VLVisionConfig": ["img_max_token_num", "max_vit_seq_len", "temporal_patch_size", "text_hidden_size"],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

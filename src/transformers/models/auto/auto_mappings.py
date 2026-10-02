@@ -1073,6 +1073,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glm4v", {"torchvision": "Glm4vVideoProcessor"}),
         ("glm5_next", {"torchvision": "Glm5NextVideoProcessor"}),
         ("glmga", {"torchvision": "GlmgaVideoProcessor"}),
+        ("hy_v4_vl", {"torchvision": "HYV4VLVideoProcessor"}),
         ("instructblipvideo", {"torchvision": "InstructBlipVideoVideoProcessor"}),
         ("internvl", {"torchvision": "InternVLVideoProcessor"}),
         ("kimi_k25", {"torchvision": "Kimi_K25VideoProcessor"}),
