@@ -469,6 +469,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         self.penalty = 1 / penalty
         self.encoder_input_ids = encoder_input_ids
+        self._expanded_encoder_input_ids = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -481,9 +482,14 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
                     "The batch size of `scores` must be a multiple of the batch size of `encoder_input_ids`, "
                     f"but got {scores.shape[0]} and {encoder_input_ids.shape[0]}, respectively."
                 )
-            encoder_input_ids = encoder_input_ids.repeat_interleave(
-                scores.shape[0] // encoder_input_ids.shape[0], dim=0
-            )
+            if (
+                self._expanded_encoder_input_ids is None
+                or self._expanded_encoder_input_ids.shape[0] != scores.shape[0]
+            ):
+                self._expanded_encoder_input_ids = encoder_input_ids.repeat_interleave(
+                    scores.shape[0] // encoder_input_ids.shape[0], dim=0
+                )
+            encoder_input_ids = self._expanded_encoder_input_ids
 
         score = torch.gather(scores, 1, encoder_input_ids)
 
