@@ -97,8 +97,9 @@ def video_processor_class_from_name(class_name: str):
     for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING.items():
         if extractors_dict is None:
             continue
-        if class_name in video_processors_dict.values():
-            module = importlib.import_module(f".{model_type_to_module_name(model_type)}", "transformers.models")
+        if class_name in extractors_dict.values():
+            module_name = model_type_to_module_name(model_type)
+            module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
                 return getattr(module, class_name)
             except AttributeError:
