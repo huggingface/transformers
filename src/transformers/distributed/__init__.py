@@ -20,7 +20,9 @@ from ..utils import _LazyModule
 _import_structure = {
     "checkpoint": [
         "load_model_checkpoint_distributed",
+        "load_optimizer_distributed",
         "save_model_checkpoint_distributed",
+        "save_optimizer_distributed",
     ],
     "configuration_utils": ["DistributedConfig"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
@@ -29,8 +31,6 @@ _import_structure = {
         "gather_full_state_dict",
         "initialize_distributed_mesh",
         "initialize_fully_sharded_data_parallelism",
-        "load_optimizer_distributed",
-        "save_optimizer_distributed",
     ],
 }
 
@@ -38,7 +38,9 @@ _import_structure = {
 if TYPE_CHECKING:
     from .checkpoint import (
         load_model_checkpoint_distributed,
+        load_optimizer_distributed,
         save_model_checkpoint_distributed,
+        save_optimizer_distributed,
     )
     from .configuration_utils import (
         DistributedConfig,
@@ -49,8 +51,6 @@ if TYPE_CHECKING:
         gather_full_state_dict,
         initialize_distributed_mesh,
         initialize_fully_sharded_data_parallelism,
-        load_optimizer_distributed,
-        save_optimizer_distributed,
     )
 
 else:
