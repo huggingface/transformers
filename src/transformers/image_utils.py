@@ -51,7 +51,6 @@ if is_vision_available():
     PILImageResampling = PIL.Image.Resampling
 
 if is_torchvision_available():
-    from torchvision.io import ImageReadMode, decode_image
     from torchvision.transforms import InterpolationMode
     from torchvision.transforms.functional import pil_to_tensor
 
@@ -508,8 +507,9 @@ def load_image(
             "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
     image = PIL.ImageOps.exif_transpose(image)
-    image = image.convert("RGB")
-    return image
+    from .image_transforms import convert_to_rgb
+
+    return convert_to_rgb(image)
 
 
 @requires(backends=("torchvision",))
@@ -529,33 +529,7 @@ def load_image_as_tensor(
     Returns:
         `torch.Tensor`: A `[C, H, W]` uint8 tensor in RGB channel order.
     """
-    import torch
-
-    if isinstance(image, str):
-        if image.startswith("http://") or image.startswith("https://"):
-            raw = httpx.get(image, timeout=timeout, follow_redirects=True).content
-            buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-            return decode_image(buf, mode=ImageReadMode.RGB)
-        elif os.path.isfile(image):
-            return decode_image(image, mode=ImageReadMode.RGB)
-        else:
-            if image.startswith("data:image/"):
-                image = image.split(",")[1]
-            try:
-                raw = base64.decodebytes(image.encode())
-            except Exception as e:
-                raise ValueError(
-                    f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
-                )
-            buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-            return decode_image(buf, mode=ImageReadMode.RGB)
-    elif isinstance(image, PIL.Image.Image):
-        image = PIL.ImageOps.exif_transpose(image)
-        return pil_to_tensor(image.convert("RGB"))
-    else:
-        raise TypeError(
-            "Incorrect format used for image. Should be a URL, a local path, a base64 string, or a PIL image."
-        )
+    return pil_to_tensor(load_image(image, timeout=timeout))
 
 
 def load_images(
