@@ -474,6 +474,13 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         encoder_input_ids = self.encoder_input_ids
         if scores.shape[0] != encoder_input_ids.shape[0]:
+            if encoder_input_ids.shape[0] == 0:
+                raise ValueError("`encoder_input_ids` cannot have an empty batch when `scores` is non-empty.")
+            if scores.shape[0] % encoder_input_ids.shape[0] != 0:
+                raise ValueError(
+                    "The batch size of `scores` must be a multiple of the batch size of `encoder_input_ids`, "
+                    f"but got {scores.shape[0]} and {encoder_input_ids.shape[0]}, respectively."
+                )
             encoder_input_ids = encoder_input_ids.repeat_interleave(
                 scores.shape[0] // encoder_input_ids.shape[0], dim=0
             )
