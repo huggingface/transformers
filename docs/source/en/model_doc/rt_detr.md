@@ -112,6 +112,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] RTDetrForObjectDetection
     - forward
 
+## RTDetrForSegmentation
+
+[[autodoc]] RTDetrForSegmentation
+    - forward
+
 ## RTDetrResNetBackbone
 
 [[autodoc]] RTDetrResNetBackbone

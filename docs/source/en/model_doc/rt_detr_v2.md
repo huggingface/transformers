@@ -98,3 +98,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] RTDetrV2ForObjectDetection
     - forward
+
+## RTDetrV2ForSegmentation
+
+[[autodoc]] RTDetrV2ForSegmentation
+    - forward
