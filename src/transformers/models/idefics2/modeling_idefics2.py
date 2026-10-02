@@ -904,6 +904,13 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        if self.training and self.text_model.gradient_checkpointing and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+            )
+            use_cache = False
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
