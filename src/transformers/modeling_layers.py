@@ -363,6 +363,20 @@ class MtpLayer(nn.Module):
         return hidden_states
 
 
+def _get_mtp_heterogeneous_modeling_spec(main_model: PreTrainedModel) -> HeterogeneousModelingSpec | None:
+    main_heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(main_model)
+    if main_heterogeneous_modeling_spec is None:
+        return None
+
+    return HeterogeneousModelingSpec(
+        layer_cls=MtpLayer,
+        layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+        skip_descriptors=nest_skip_descriptor_paths(
+            main_heterogeneous_modeling_spec.skip_descriptors, parent_path="mtp_block"
+        ),
+    )
+
+
 class MtpModel(PreTrainedModel):
     # These act as dummy values, that are properly set on the upstream model (without it, instantiating this model would
     # fail on an existing model's config where the attn is already set to a custom value)
@@ -376,19 +390,8 @@ class MtpModel(PreTrainedModel):
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         mtp_config = main_model.config.get_mtp_config()
-
-        if (
-            mtp_config.is_heterogeneous
-            and (main_heterogeneous_modeling_spec := get_heterogeneous_modeling_spec(main_model)) is not None
-        ):
-            self._heterogeneous_modeling_spec = HeterogeneousModelingSpec(
-                layer_cls=MtpLayer,
-                layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-                skip_descriptors=nest_skip_descriptor_paths(
-                    main_heterogeneous_modeling_spec.skip_descriptors, parent_path="mtp_block"
-                ),
-            )
-
+        if mtp_config.is_heterogeneous:
+            self._heterogeneous_modeling_spec = _get_mtp_heterogeneous_modeling_spec(main_model)
         super().__init__(mtp_config)
         # Make sure we have the correct loss type in case of training
         self.loss_type = "ForCausalLM"
