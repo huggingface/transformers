@@ -158,6 +158,20 @@ class TensorParallelLayer:
         return module
 
 
+def _from_local_last_dim_shard(local, mesh, placement, size):
+    """Wrap this rank's slice of a tensor split along its last dim, whose full width is ``size``.
+
+    DTensor handles uneven shards (the last rank's slice is shorter when ``size`` does not divide by
+    the world size): it pads before a collective and trims after, to the global shape. But
+    ``from_local`` only sees this rank's slice, so unless told the global shape it assumes every rank
+    holds the same width (``local width * world size``), and the trim then keeps the padding. The
+    shape is therefore passed explicitly."""
+    shape = (*local.shape[:-1], size)
+    return DTensor.from_local(
+        local, mesh, [placement], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
+    )
+
+
 class ColwiseParallel(TensorParallelLayer):
     """Column-wise: weight & bias → Shard(0) (Embedding: Shard(1)); input replicated, output Shard(-1)."""
 
@@ -170,23 +184,6 @@ class ColwiseParallel(TensorParallelLayer):
         use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
-
-    def validate_param(self, module, param, mesh, parameter_name=None):
-        meta = module._parameters.get(param)
-        gathers_output = isinstance(self.output_layouts, Replicate)
-        if meta is None or not gathers_output:
-            return
-
-        shard_dim = 1 if isinstance(module, torch.nn.Embedding) else meta.ndim - 2
-        output_size = meta.shape[shard_dim]
-        tp_size = mesh.size()
-        if output_size % tp_size != 0:
-            parameter_name = parameter_name or param
-            layer_name = parameter_name.rsplit(".", 1)[0]
-            raise ValueError(
-                f"The output size of `{layer_name}` ({output_size}) must be divisible by the tensor parallel size "
-                f"({tp_size}) when gathering a colwise output."
-            )
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -235,7 +232,12 @@ class ColwiseParallel(TensorParallelLayer):
         if self.should_use_local_tensors(module) and self.use_local_output and output_is_local_shard:
             return output
         if not isinstance(output, DTensor):
-            output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
+            weight = module._parameters.get("weight")
+            if isinstance(weight, DTensor):
+                size = weight.shape[1] if isinstance(module, torch.nn.Embedding) else weight.shape[-2]
+                output = _from_local_last_dim_shard(output, mesh, Shard(-1), size)
+            else:
+                output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts])
         return output.to_local() if self.use_local_output else output
@@ -283,7 +285,12 @@ class RowwiseParallel(TensorParallelLayer):
         if self.should_use_local_tensors(module) and input_has_desired_layout and not isinstance(x, DTensor):
             return args, kwargs
         if not isinstance(x, DTensor):
-            x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+            weight = module._parameters.get("weight")
+            if isinstance(self.input_layouts, Shard) and isinstance(weight, DTensor):
+                # the input is this rank's slice of in_features, the weight's (sharded) last dim
+                x = _from_local_last_dim_shard(x, mesh, self.input_layouts, weight.shape[-1])
+            else:
+                x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
             x = x.redistribute(placements=[desired])
         if self.should_use_local_tensors(module):

@@ -44,6 +44,7 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 from ...test_processing_common import url_to_local_path
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -51,6 +52,9 @@ if is_torch_available():
 
 
 class Glm4vMoeVisionText2TextModelTester:
+    if is_torch_available():
+        causal_lm_class = Glm4vMoeForConditionalGeneration
+
     def __init__(
         self,
         parent,
@@ -72,7 +76,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "intermediate_size": 22,
             "num_hidden_layers": 2,
             "num_attention_heads": 2,
-            "num_key_value_heads": 1,
+            "num_key_value_heads": 2,  # divisible by the TP tests' world size
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
@@ -188,7 +192,7 @@ class Glm4vMoeVisionText2TextModelTester:
 
 
 @require_torch
-class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase):
     all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
 
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
