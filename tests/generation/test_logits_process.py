@@ -293,9 +293,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size=batch_size, length=vocab_size)
         scores[:, 0] = -(1 / vocab_size)
 
-        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
-            penalty=2.0, encoder_input_ids=encoder_input_ids
-        )
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(penalty=2.0, encoder_input_ids=encoder_input_ids)
         processed_scores = rep_penalty_proc(
             torch.zeros((batch_size, 1), device=torch_device, dtype=torch.long), scores
         )
