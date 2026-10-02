@@ -141,6 +141,7 @@ class ExecutorchExporter(DynamoExporter):
         partitioner = partitioner if config.partition else []
 
         with (
+            contiguous_nonzero_fake(),
             apply_patches("executorch"),
             apply_patches(f"executorch.{config.backend}"),
         ):
@@ -212,6 +213,27 @@ def _backed_var_to_val(shape_env) -> dict:
     """`shape_env.backed_var_to_val`, falling back to `var_to_val` on older torch."""
     values = getattr(shape_env, "backed_var_to_val", None)
     return shape_env.var_to_val if values is None else values
+
+
+def _contiguous_nonzero(input):
+    count = torch.library.get_ctx().new_dynamic_size(max=input.numel() if isinstance(input.numel(), int) else None)
+    return input.new_empty((count, input.dim()), dtype=torch.long)
+
+
+@contextlib.contextmanager
+def contiguous_nonzero_fake():
+    """Report `nonzero`'s result as contiguous, the layout ExecuTorch's kernel actually writes.
+
+    torch's fake rule returns a transposed layout, so the program re-reads row-major bytes with the wrong strides
+    (scrambled values, or `0x12` in consumers). Fixed at the fake rule since both lowering stages re-run it, and
+    registered for the export only.
+    """
+    library = torch.library.Library("aten", "FRAGMENT")
+    torch.library.register_fake("aten::nonzero", _contiguous_nonzero, lib=library)
+    try:
+        yield
+    finally:
+        library._destroy()
 
 
 @contextlib.contextmanager
@@ -1688,24 +1710,6 @@ def _fix_negative_slice_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> 
     node.args = (*node.args[:2], add_node, *node.args[3:])
     node.meta.pop("unbacked_bindings", None)
     return True
-
-
-@register_patch("executorch", "torch._subclasses.fake_impls.op_implementations_dict")
-def _patch_nonzero_fake_layout(original):
-    """Report `nonzero`'s result as contiguous, the layout ExecuTorch's kernel actually writes.
-
-    The fake kernel returns a transposed layout, so the program re-reads row-major bytes with the wrong strides
-    (scrambled values, or `0x12` in consumers). Fixed at the fake kernel since both lowering stages re-run it.
-    """
-    inner = original.get(torch.ops.aten.nonzero.default)
-    if inner is None:
-        return original
-
-    def contiguous_nonzero(fake_mode, func, arg):
-        result = inner(fake_mode, func, arg)
-        return result.new_empty(result.shape) if isinstance(result, torch.Tensor) else result
-
-    return {**original, torch.ops.aten.nonzero.default: contiguous_nonzero}
 
 
 @register_patch("executorch", "torch.nn.functional.one_hot")
