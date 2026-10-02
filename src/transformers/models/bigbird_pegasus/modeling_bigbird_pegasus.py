@@ -325,7 +325,9 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         attn_mask_penalty = -10000.0
 
         # generate random attention and corresponding masks
-        np.random.seed(seed)
+        # Only seed while training: in eval the helpers below return a constant all-zero list.
+        if self.training:
+            np.random.seed(seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
             rand_attn = [
                 self._bigbird_block_rand_mask(
@@ -1983,10 +1985,6 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
             If you want to change padding behavior, you should read
             [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
             [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example summarization:
 
@@ -2106,9 +2104,6 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
             If you want to change padding behavior, you should read
             [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
             [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
@@ -2327,11 +2322,6 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

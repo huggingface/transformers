@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .transcription import TranscriptionHandler
 
 from .model_manager import ModelManager
-from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState
+from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState, split_model_id
 
 
 logger = logging.get_logger(__name__)
@@ -123,9 +123,11 @@ def build_server(
         model = body.get("model")
         if model is None:
             raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
+        model, gguf_file = split_model_id(model)
         model_id_and_revision = model_manager.process_model_name(model)
         return StreamingResponse(
-            model_manager.load_model_streaming(model_id_and_revision), media_type="text/event-stream"
+            model_manager.load_model_streaming(model_id_and_revision, gguf_file=gguf_file),
+            media_type="text/event-stream",
         )
 
     @app.post("/reset")

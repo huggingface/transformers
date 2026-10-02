@@ -24,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
@@ -154,8 +154,6 @@ class OlmoHybridConfig(LlamaConfig):
             # Ensure at least one full attention layer for small num_hidden_layers
             if "full_attention" not in self.layer_types:
                 self.layer_types[-1] = "full_attention"
-        else:
-            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         if self.linear_num_key_heads is None:
             self.linear_num_key_heads = self.num_attention_heads
@@ -258,7 +256,7 @@ class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)

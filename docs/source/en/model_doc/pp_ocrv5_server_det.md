@@ -45,7 +45,7 @@ from transformers import pipeline
 
 image = Image.open(
     requests.get(
-        "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
+        "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png", stream=True
     ).raw)
 detector = pipeline(
     task="object-detection",
@@ -76,7 +76,7 @@ model = AutoModelForObjectDetection.from_pretrained(
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png", stream=True).raw).convert("RGB")
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
@@ -105,7 +105,7 @@ from transformers import pipeline
 
 image = Image.open(
     requests.get(
-        "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
+        "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png", stream=True
     ).raw)
 detector = pipeline(
     task="object-detection",
@@ -136,7 +136,7 @@ model = AutoModelForObjectDetection.from_pretrained(
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True).raw).convert("RGB")
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png", stream=True).raw).convert("RGB")
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 

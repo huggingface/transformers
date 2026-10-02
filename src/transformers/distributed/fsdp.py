@@ -17,9 +17,9 @@ import inspect
 import os
 from typing import TYPE_CHECKING, Any
 
-from ..integrations.tensor_parallel import replace_layer_number_by_wildcard
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
+from .tensor_parallel import replace_layer_number_by_wildcard
 from .utils import _is_torch_distributed_initialized
 
 
@@ -191,7 +191,7 @@ def apply_fully_sharded_data_parallelism(
     Apply FSDP2 (fully_shard) to a model.
 
     Torch availability, distributed initialization and the version requirement
-    are asserted upstream by `initialize_fully_sharded_data_parallelism`.
+    are asserted upstream by `initialize_distributed_mesh`.
     """
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:

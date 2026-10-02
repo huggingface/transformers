@@ -29,6 +29,8 @@ You can find all the original ViT checkpoints under the [Google](https://hugging
 
 > [!TIP]
 > Click on the ViT models in the right sidebar for more examples of how to apply ViT to different computer vision tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 

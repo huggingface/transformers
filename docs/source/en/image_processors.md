@@ -143,6 +143,14 @@ The benchmarks are obtained from an [AWS EC2 g5.2xlarge](https://aws.amazon.com/
 </div>
 </details>
 
+## Dynamic resolution
+
+Most image processors resize every image to one fixed resolution. Dynamic resolution allows some models to preserve the original aspect ratio and let the amount of preprocessed data grow with the image, so a detailed photo gets more patches than a small icon and the model spends its compute where there's something to look at.
+
+How the image is divided up is model-specific. Some models crop the image into a variable number of fixed-size patches, bounded by parameters like `min_patches` and `max_patches`. Other models resize the image to whichever resolution fits it best, either picked from a predefined list of aspect ratios or derived from a pixel budget.
+
+Refer to a model's doc page for its parameters, defaults, and output shapes.
+
 ## Preprocess
 
 Transformers' vision models expects the input as PyTorch tensors of pixel values. An image processor handles the conversion of images to pixel values, which is represented by the batch size, number of channels, height, and width. To achieve this, an image is resized (center cropped) and the pixel values are normalized and rescaled to the models expected values.

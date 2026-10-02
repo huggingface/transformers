@@ -167,6 +167,15 @@ class Gemma3nTextConfig(PreTrainedConfig):
                 f"heads ({self.num_attention_heads})."
             )
 
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `False` fallback.
+        if getattr(self, "use_bidirectional_attention", False):
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
+
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 

@@ -643,6 +643,8 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         return attn_output, attn_weights
 
 
+# NOTE: the FLA package computes `x / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)` instead, so if we align
+# with the GatedRMSNorm, maybe we can make that change as well.
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
     inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)

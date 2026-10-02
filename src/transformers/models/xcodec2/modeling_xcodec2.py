@@ -36,7 +36,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..auto import AutoModel
 from .configuration_xcodec2 import Xcodec2Config
@@ -97,8 +96,7 @@ class Xcodec2DecoderOutput(ModelOutput):
 
 
 class Xcodec2RotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Xcodec2Config, device=None):
+    def __init__(self, config: Xcodec2Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -109,14 +107,13 @@ class Xcodec2RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: Xcodec2Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Xcodec2Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -132,7 +129,7 @@ class Xcodec2RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -142,7 +139,7 @@ class Xcodec2RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -724,11 +721,7 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # NOTE: could rewrite to pass tensor to a decorator such that device type is handled internally
         original_dtype = hidden_states.dtype
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             hidden_states = hidden_states.float()
             half_width = self.levels // 2
@@ -761,8 +754,9 @@ class Xcodec2ISTFTHead(nn.Module):
         self.window = nn.Buffer(window, persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        stft_pred = self.linear(hidden_states).transpose(1, 2)
-        magnitude, phase = stft_pred.chunk(2, dim=1)
+        stft_pred = self.linear(hidden_states)
+        # Keep the frequency axis last for `torch.polar` compatibility with torch.compile
+        magnitude, phase = stft_pred.chunk(2, dim=-1)
         # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
         magnitude = magnitude.float()
         phase = phase.float()
@@ -772,9 +766,9 @@ class Xcodec2ISTFTHead(nn.Module):
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)
-        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
+        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward").transpose(1, 2)
         time_frames = time_frames * self.window[None, :, None]
-        num_frames = spectrogram_complex.shape[-1]
+        num_frames = spectrogram_complex.shape[1]
         output_size = (num_frames - 1) * self.hop_length + self.n_fft
         audio = F.fold(
             time_frames,

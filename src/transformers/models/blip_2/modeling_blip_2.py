@@ -19,7 +19,6 @@ from typing import Any
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -1174,7 +1173,7 @@ class Blip2Model(Blip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import Blip2Processor, Blip2Model
         >>> import torch
@@ -1246,14 +1245,9 @@ class Blip2Model(Blip2PreTrainedModel):
             if labels is not None:
                 labels = labels.to(logits.device)
                 logits = logits[:, -labels.size(1) :, :]
-                # Shift so that tokens < n predict n
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous().to(logits.device)
-
-                # Flatten the tokens
-                loss_fct = CrossEntropyLoss(reduction="mean")
-
-                loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
+                loss = self.loss_function(
+                    logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                )
         else:
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
@@ -1602,6 +1596,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Blip2ForConditionalGenerationModelOutput:
         r"""
@@ -1624,7 +1619,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
         >>> import torch
@@ -1679,13 +1674,18 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         >>> print(generated_text)
         two
         ```"""
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
-            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
-        )
-        language_model_inputs = image_features.pooler_output
-        qformer_outputs = image_features.qformer_outputs
-        vision_outputs = image_features.vision_outputs
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+                pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
+            )
+
+        language_model_inputs = mm_encoder_outputs["image"].pooler_output
+        qformer_outputs = mm_encoder_outputs["image"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["image"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1711,14 +1711,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             if labels is not None:
                 labels = labels.to(logits.device)
                 logits = logits[:, -labels.size(1) :, :]
-                # Shift so that tokens < n predict n
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous().to(logits.device)
-
-                # Flatten the tokens
-                loss_fct = CrossEntropyLoss(reduction="mean")
-
-                loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
+                loss = self.loss_function(
+                    logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                )
         else:
             kwargs["return_dict"] = True
             outputs = self.language_model(
@@ -1896,7 +1891,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Blip2ForImageTextRetrieval
 

@@ -23,7 +23,7 @@ from ...masking_utils import create_bidirectional_mask, create_bidirectional_sli
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring
 from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
     Exaone4DecoderLayer,
@@ -202,6 +202,7 @@ class MuseGlimmerAssistantModel(Exaone4Model):
             [MuseGlimmerAssistantDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
+    @auto_docstring
     def forward(
         self,
         noise_embeds: torch.FloatTensor,

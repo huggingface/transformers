@@ -1,13 +1,183 @@
 version: 2.1
+setup: true
+orbs:
+    continuation: circleci/continuation@0.1.0
+
+parameters:
+    GHA_Actor:
+        type: string
+        default: ""
+    GHA_Action:
+        type: string
+        default: ""
+    GHA_Event:
+        type: string
+        default: ""
+    GHA_Meta:
+        type: string
+        default: ""
+
+commands:
+    check_run_circleci:
+        description: "Halt the job unless the commit message contains [run-circleci]"
+        steps:
+            - run:
+                name: Check for [run-circleci] in commit message
+                command: |
+                    COMMIT_MSG=$(git log -1 --pretty=%s)
+                    echo "Commit message: $COMMIT_MSG"
+                    if echo "$COMMIT_MSG" | grep -q "\[run-circleci\]"; then
+                        echo "Check passed."
+                    else
+                        echo "Commit message does not contain [run-circleci]. Halting."
+                        circleci-agent step halt
+                    fi
 
 jobs:
-  noop:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - run: echo "CircleCI is disabled — using GitHub Actions for CI."
+    # Used for the public repo where CI runs via GitHub Actions instead
+    noop:
+        docker:
+            - image: cimg/base:stable
+        steps:
+            - run: echo "CircleCI is disabled for the public repo — using GitHub Actions for CI."
+
+    # Ensure running with CircleCI/huggingface
+    check_circleci_user:
+        docker:
+            - image: python:3.10-slim
+        resource_class: small
+        parallelism: 1
+        steps:
+            - run: echo $CIRCLE_PROJECT_USERNAME
+            - run: |
+                if [ "$CIRCLE_PROJECT_USERNAME" = "huggingface" ]; then
+                    exit 0
+                else
+                    echo "The CI is running under $CIRCLE_PROJECT_USERNAME personal account. Please follow https://support.circleci.com/hc/en-us/articles/360008097173-Troubleshooting-why-pull-requests-are-not-triggering-jobs-on-my-organization- to fix it."; exit -1
+                fi
+
+    # Fetch the tests to run
+    fetch_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: huggingface/transformers-quality
+        parallelism: 1
+        steps:
+            - checkout
+            - check_run_circleci
+            - run: uv pip install -U -e .
+            - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
+            - run: mkdir -p test_preparation
+            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
+            - run: python utils/tests_fetcher.py --filter_tests || true
+            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
+            - run: |
+                if [ ! -s test_preparation/generated_config.yml ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
+            - store_artifacts:
+                path: test_preparation
+            - run:
+                name: "Retrieve Artifact Paths"
+                command: |
+                    project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    job_number=${CIRCLE_BUILD_NUM}
+                    url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
+                    curl -o test_preparation/artifacts.json ${url} --header "Circle-Token: $CIRCLE_TOKEN"
+            - run:
+                name: "Prepare pipeline parameters"
+                command: |
+                    python utils/process_test_artifacts.py
+            - store_artifacts:
+                path: test_preparation/transformed_artifacts.json
+            - store_artifacts:
+                path: test_preparation/artifacts.json
+            - continuation/continue:
+                parameters: test_preparation/transformed_artifacts.json
+                configuration_path: test_preparation/generated_config.yml
+
+    check_code_quality:
+        working_directory: ~/transformers
+        docker:
+            - image: huggingface/transformers-quality
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        parallelism: 1
+        steps:
+            - checkout
+            - check_run_circleci
+            - run: uv pip install -e ".[quality,serving]"
+            - run:
+                name: Show installed libraries and their versions
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
+            - run: make check-code-quality
+
+    check_repository_consistency:
+        working_directory: ~/transformers
+        docker:
+            - image: huggingface/transformers-consistency
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        parallelism: 1
+        steps:
+            - checkout
+            - check_run_circleci
+            - run: apt-get update && apt-get install -y make
+            - run: uv pip install -e ".[quality]"
+            - run:
+                name: Show installed libraries and their versions
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
+            - run: make check-repository-consistency
+            - run:
+                name: "Test import with all backends (torch + PIL + torchvision)"
+                command: python -c "from transformers import *" || (echo 'import failed with all backends. Fix unprotected imports!!'; exit 1)
+            - run:
+                name: "Test import with torch only (no PIL, no torchvision)"
+                command: |
+                    uv pip uninstall Pillow torchvision -q
+                    python -c "from transformers import *" || (echo 'import failed with torch only (no PIL). Fix unprotected imports!!'; exit 1)
+                    uv pip install -e ".[quality]" -q
+            - run:
+                name: "Test import with PIL only (no torch, no torchvision)"
+                command: |
+                    uv pip uninstall torch torchvision torchaudio -q
+                    python -c "from transformers import *" || (echo 'import failed with PIL only (no torch). Fix unprotected imports!!'; exit 1)
+                    uv pip install -e ".[quality]" -q
+            - run:
+                name: "Test import with torch + PIL, no torchvision"
+                command: |
+                    uv pip uninstall torchvision -q
+                    python -c "from transformers import *" || (echo 'import failed with torch+PIL but no torchvision. Fix unprotected imports!!'; exit 1)
+                    uv pip install -e ".[quality]" -q
 
 workflows:
-  noop:
-    jobs:
-      - noop
+    version: 2
+
+    # Public repo: CI runs via GitHub Actions, CircleCI is a no-op
+    noop:
+        when:
+            equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+        jobs:
+            - noop
+
+    # Private repo (e.g. new model addition): run full CI
+    setup_and_quality:
+        when:
+            not:
+                equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+        jobs:
+            - check_circleci_user
+            - check_code_quality
+            - check_repository_consistency
+            - fetch_tests:
+                context:
+                    - TRANSFORMERS_CONTEXT

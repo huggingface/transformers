@@ -87,7 +87,7 @@ def save_prefixed_metrics(results, output_dir, file_name: str = "all_results.jso
         if not key.startswith(f"{metric_key_prefix}_"):
             results[f"{metric_key_prefix}_{key}"] = results.pop(key)
 
-    with open(os.path.join(output_dir, file_name), "w") as f:
+    with open(os.path.join(output_dir, file_name), "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4)
 
 
@@ -380,7 +380,7 @@ def main():
             api = HfApi()
             repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+", encoding="utf-8") as gitignore:
                 if "step_*" not in gitignore:
                     gitignore.write("step_*\n")
                 if "epoch_*" not in gitignore:

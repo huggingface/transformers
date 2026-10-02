@@ -119,14 +119,7 @@ print(assistant_response)
 ## 참고[[notes]]
 
 - 모델 성능 저하를 방지하기 위해 Mamba 블록은 양자화하지 마세요.
-- 최적화된 Mamba 커널 없이 Mamba를 사용하면 지연 시간이 크게 증가하므로 권장되지 않습니다. 그래도 커널 없이 Mamba를 사용하고자 한다면 [`~AutoModel.from_pretrained`]에서 `use_mamba_kernels=False`로 설정하세요.
-
-  ```py
-  import torch
-  from transformers import AutoModelForCausalLM
-  model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large",
-                                               use_mamba_kernels=False)
-  ```
+- 최적화된 Mamba 커널은 사용 가능한 경우 자동으로 사용됩니다. 그렇지 않으면 PyTorch 구현으로 대체되며, 지연 시간이 크게 증가합니다.
 
 ## JambaConfig[[transformers.JambaConfig]]
 

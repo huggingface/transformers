@@ -50,8 +50,13 @@ if is_torch_available():
         Cache,
         DynamicCache,
         Gemma2Config,
+        Gemma4ForCausalLM,
+        Gemma4TextConfig,
         GenerationConfig,
         LlamaConfig,
+        MixtralConfig,
+        MixtralForCausalLM,
+        PreTrainedConfig,
         QuantizedCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -65,8 +70,13 @@ if is_torch_available():
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         StaticLayer,
+        StaticSlidingWindowLayer,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.generation.utils import GenerationMixin
+    from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
+    from transformers.integrations.heterogeneity.configuration_utils import (
+        AmbiguousGlobalPerLayerAttributeError,
+    )
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -153,6 +163,16 @@ class CacheTest(unittest.TestCase):
         # before the fix this raised `AttributeError`. It reflects the attention layer's state.
         self.assertTrue(cache.is_initialized)
 
+    def test_static_cache_init_shapes_with_per_layer_attention_heads(self):
+        model = GenerationMixin()
+        model.config = PreTrainedConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            per_layer_config={1: {"num_attention_heads": 2}},
+        )
+        self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16]))
+
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
         reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
@@ -160,6 +180,44 @@ class CacheTest(unittest.TestCase):
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
+
+    def test_dynamic_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={0: {"sliding_window": 32}, 2: {"sliding_window": 16}},
+        )
+        layers = DynamicCache(config=config).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertIsInstance(layers[0], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[0].sliding_window, 32)
+        self.assertFalse(layers[1].is_sliding)
+        self.assertIsInstance(layers[2], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[2].sliding_window, 16)
+        self.assertFalse(layers[3].is_sliding)
+
+    def test_static_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={1: {"sliding_window": 24}, 3: {"sliding_window": 48}},
+        )
+        layers = StaticCache(config=config, max_cache_len=64).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertFalse(layers[0].is_sliding)
+        self.assertIsInstance(layers[1], StaticSlidingWindowLayer)
+        self.assertEqual(layers[1].max_cache_len, 24)
+        self.assertFalse(layers[2].is_sliding)
+        self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
+        self.assertEqual(layers[3].max_cache_len, 48)
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
@@ -188,6 +246,104 @@ class CacheTest(unittest.TestCase):
         for layer_idx in attention_indices:
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
+
+    def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
+        """
+        Regression test for heterogeneous models with per-layer head shapes. The static cache is eagerly initialized
+        for a chunked prefill, and `generate` derives the head shapes of the static cache. Models such as Gemma4 use
+        a different `head_dim` depending on the layer, and reading a single global one raises on them, so the shapes
+        must be derived per layer.
+        """
+        config = Gemma4TextConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            num_hidden_layers=4,
+            intermediate_size=64,
+            vocab_size=99,
+            layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+            per_layer_config={1: {"head_dim": 16}, 3: {"head_dim": 16}},
+        )
+        # On such a config there is no global `head_dim` to read, not even a default one
+        with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+            getattr(config.get_text_config(decoder=True), "head_dim", None)
+
+        model = Gemma4ForCausalLM(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        out = model.generate(
+            inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        # Each layer must be allocated with its own `head_dim`, instead of all of them sharing the global one
+        cache = out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 16, 8, 16])
+
+    def test_chunked_prefill_static_cache_none_head_dim(self):
+        """
+        Regression test for models that declare `head_dim` but leave it `None` (e.g. Mixtral). The head shapes of the
+        eagerly initialized static cache are read with a `getattr` default, which only fires on a missing attribute:
+        a `None` one was returned as is, instead of falling back to `hidden_size // num_attention_heads`.
+        """
+        config = MixtralConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_hidden_layers=2,
+            intermediate_size=64,
+            vocab_size=99,
+            num_local_experts=2,
+            num_experts_per_tok=1,
+        )
+        # The config carries a `head_dim`, it is just left unset
+        self.assertIsNone(config.head_dim)
+
+        model = MixtralForCausalLM(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        out = model.generate(
+            inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        # Each layer must fall back to the `hidden_size // num_attention_heads` division
+        cache = out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 8])
+
+    def test_dynamic_layers_reset_drops_their_states(self):
+        """
+        Regression test: `reset` used to zero the dynamic layers' states in place, inherited from the static layers.
+        That is a no-op for them, as they grow by concatenation and read their length off `keys.shape[-2]`: the layer
+        kept its length and the next `update` appended to a run of stale zeros.
+        """
+        keys = torch.rand(2, 4, 5, 16, device=torch_device)
+        indexer_keys = torch.rand(2, 5, 8, device=torch_device)
+
+        for layer in (DynamicLayer(), DynamicSlidingWindowLayer(sliding_window=1024), DynamicIndexedLayer()):
+            layer.update(keys, keys.clone())
+            if isinstance(layer, DynamicIndexedLayer):
+                layer.update_indexer(indexer_keys)
+
+            layer.reset()
+            self.assertEqual(layer.get_seq_length(), 0)
+
+            # The next update must start from scratch, instead of appending to the pre-reset states.
+            new_keys, _ = layer.update(keys, keys.clone())
+            self.assertEqual(new_keys.shape[-2], 5)
+            if isinstance(layer, DynamicIndexedLayer):
+                # The indexer has to stay in step with the main states, else `topk` indices computed over it go out
+                # of bounds of the (shorter) key length downstream.
+                self.assertEqual(layer.update_indexer(indexer_keys).shape[1], 5)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
@@ -242,6 +398,23 @@ class CacheIntegrationTest(unittest.TestCase):
         # Confirm that the output matches expectations
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+    def test_reset_dynamic_cache_matches_a_fresh_one(self):
+        """A reset cache must behave exactly like a newly built one, so that it can be reused across generations."""
+        first = self.tokenizer(["The capital of France is"], return_tensors="pt").to(self.model.device)
+        second = self.tokenizer(["A sequence: 1, 2, 3, 4, 5"], return_tensors="pt").to(self.model.device)
+
+        cache = DynamicCache(config=self.model.config)
+        self.model.generate(**first, past_key_values=cache, max_new_tokens=10, do_sample=False)
+
+        # Reuse the same cache for a different prompt, which is what `reset` is for.
+        cache.reset()
+        self.assertEqual(cache.get_seq_length(), 0)
+        reused = self.model.generate(**second, past_key_values=cache, max_new_tokens=10, do_sample=False)
+
+        # Before the fix, the reset kept the first prompt's states around, so this silently generated gibberish.
+        expected = self.model.generate(**second, max_new_tokens=10, do_sample=False)
+        self.assertEqual(self.tokenizer.decode(reused[0]), self.tokenizer.decode(expected[0]))
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_beam_search(self, cache_implementation):
@@ -443,6 +616,37 @@ class CacheHardIntegrationTest(unittest.TestCase):
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
+
+    @require_torch_accelerator
+    @slow
+    def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
+        """
+        Integration counterpart of the same test in `CacheTest`, on a real Gemma4: its layers do not share a single
+        `head_dim`, so the static cache eagerly initialized for the chunked prefill must be given one per layer.
+        """
+        model_name = "google/gemma-4-E2B-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", dtype=torch.bfloat16)
+        inputs = tokenizer("Fun fact:", return_tensors="pt").to(model.device)
+
+        gen_out = model.generate(
+            **inputs,
+            max_new_tokens=10,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        self.assertEqual(gen_out.sequences.shape[-1], inputs.input_ids.shape[-1] + 10)
+        cache = gen_out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+
+        # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
+        text_config = model.config.get_text_config(decoder=True)
+        expected_head_dims = [text_config.per_layer_config[layer].head_dim for layer in range(len(cache.layers))]
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], expected_head_dims)
+        self.assertGreater(len(set(expected_head_dims)), 1)
 
     @require_torch_accelerator
     @slow
@@ -670,7 +874,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
         """Tests caches with GPT-J model. Regression test for https://github.com/huggingface/transformers/pull/34799"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
-        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
+        # Use a dedicated safetensors repo to avoid Xet FUSE cache corruption that affects
+        # pytorch_model.bin in the original repo (wrong wte.weight bytes → wrong golden outputs)
+        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM-for-CacheHardIntegrationTest"
         pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
         pipe.model.config.sliding_window = (
             256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
@@ -685,6 +891,50 @@ class CacheHardIntegrationTest(unittest.TestCase):
         )[0]["generated_token_ids"][-10:]
         EXPECTED_OUTPUT = [879, 175, 39, 141, 1000, 975, 951, 991, 683, 441]
         self.assertListEqual(out, EXPECTED_OUTPUT)
+
+
+@require_torch
+class DynamicCacheExportPytreeTest(unittest.TestCase):
+    @pytest.mark.torch_export_test
+    def test_export_preserves_sliding_cache_behavior(self):
+        # Update both layer types so export must preserve their different cache behavior.
+        class CacheUpdateModule(torch.nn.Module):
+            def forward(self, new_states, past_key_values):
+                past_key_values.update(new_states, new_states, layer_idx=0)
+                past_key_values.update(new_states, new_states, layer_idx=1)
+                return past_key_values
+
+        # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
+        new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
+        cache_config = LlamaConfig(
+            num_hidden_layers=2,
+            sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
+        )
+
+        register_dynamic_cache_export_support()
+
+        exported_program = torch.export.export(
+            CacheUpdateModule(),
+            (),
+            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
+            strict=False,
+        )
+        exported_cache = exported_program.module()(
+            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
+        )
+        eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
+
+        self.assertEqual(len(exported_cache.layers), 2)
+        self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
+        self.assertEqual(exported_cache.layers[0].sliding_window, 4)
+        self.assertEqual(exported_cache.layers[0].get_seq_length(), cache_config.sliding_window - 1)
+        torch.testing.assert_close(exported_cache.layers[0].keys, eager_cache.layers[0].keys)
+        torch.testing.assert_close(exported_cache.layers[0].values, eager_cache.layers[0].values)
+        self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
+        self.assertEqual(exported_cache.layers[1].get_seq_length(), new_states.shape[-2])
+        torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
+        torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
 
 
 @require_torch
@@ -1607,3 +1857,50 @@ class CacheCroppingTests(unittest.TestCase):
             if hasattr(layer, "indexer_keys"):
                 self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
                 self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
+
+    def test_update_with_recording_returns_advertised_kv_width(self):
+        """Test that with past recording activated, `update` returns exactly the states advertised by `get_mask_sizes`"""
+        sliding_window = 4
+
+        # Several consecutive single-token updates without an intervening `crop`, as during assisted decoding drafting:
+        # `get_mask_sizes` is queried before the update adds the new states, and `update` must return what it advertises
+        layer = DynamicSlidingWindowLayer(sliding_window=sliding_window)
+        layer.activate_past_recording()
+        for step in range(sliding_window + 2):
+            new_states = torch.ones((1, 1, 1, 2), dtype=float) * step
+            kv_length, _ = layer.get_mask_sizes(new_states.shape[-2])
+            returned_keys, returned_values = layer.update(new_states, new_states)
+
+            self.assertEqual(returned_keys.shape[-2], kv_length)
+            self.assertEqual(returned_values.shape[-2], kv_length)
+            expected_window = torch.arange(float(step + 1))[-kv_length:]
+            self.assertTrue((returned_keys[0, 0, :, 0] == expected_window).all())
+            self.assertTrue((returned_values[0, 0, :, 0] == expected_window).all())
+            # All states stay recorded for `crop` to roll back, even beyond the sliding window
+            self.assertEqual(layer.keys.shape[-2], step + 1)
+            self.assertEqual(layer.values.shape[-2], step + 1)
+
+        # The same must hold for a multi-token update crossing the window size mid-draft
+        layer = DynamicSlidingWindowLayer(sliding_window=sliding_window)
+        layer.activate_past_recording()
+        for step in range(2):
+            new_states = torch.full((1, 1, 1, 2), float(step))
+            kv_length, _ = layer.get_mask_sizes(new_states.shape[-2])
+            returned_keys, _ = layer.update(new_states, new_states)
+            self.assertEqual(returned_keys.shape[-2], kv_length)
+
+        crossing_states = torch.arange(2, 5).view(1, 1, 3, 1).expand(1, 1, 3, 2)
+        kv_length, _ = layer.get_mask_sizes(crossing_states.shape[-2])
+        returned_keys, returned_values = layer.update(crossing_states, crossing_states)
+        self.assertEqual(returned_keys.shape[-2], kv_length)
+        self.assertEqual(returned_values.shape[-2], kv_length)
+        self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [0.0, 1.0, 2.0, 3.0, 4.0])
+        self.assertEqual(layer.keys.shape[-2], 5)
+
+        # And once the buffer is larger than what is advertised, only its trailing window is returned
+        final_states = torch.full((1, 1, 1, 2), 5.0)
+        kv_length, _ = layer.get_mask_sizes(final_states.shape[-2])
+        returned_keys, _ = layer.update(final_states, final_states)
+        self.assertEqual(kv_length, sliding_window)
+        self.assertEqual(returned_keys.shape[-2], kv_length)
+        self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [2.0, 3.0, 4.0, 5.0])

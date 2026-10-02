@@ -455,7 +455,7 @@ def get_all_doctest_files() -> list[str]:
     test_files_to_run = [x for x in test_files_to_run if not x.endswith(("__init__.py",))]
 
     # These are files not doctested yet.
-    with open("utils/not_doctested.txt") as fp:
+    with open("utils/not_doctested.txt", encoding="utf-8") as fp:
         not_doctested = {x.split(" ")[0] for x in fp.read().strip().split("\n")}
 
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
@@ -527,7 +527,7 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     test_files_to_run = list(set(test_files_to_run + new_test_files))
 
     # Do not run slow doctest tests on CircleCI
-    with open("utils/slow_documentation_tests.txt") as fp:
+    with open("utils/slow_documentation_tests.txt", encoding="utf-8") as fp:
         slow_documentation_tests = set(fp.read().strip().split("\n"))
     test_files_to_run = [
         x for x in test_files_to_run if x in all_test_files_to_run and x not in slow_documentation_tests
@@ -1131,8 +1131,11 @@ JOB_TO_TEST_FILE = {
     # consistency image and run alongside the repo utils tests in the same CI job.
     "tests_repo_utils": r"tests/(?:repo_utils|conftest_tests)/test_.*\.py",
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    # don't include peft or conftest tests for non_model (conftest tests run in the repo_utils job)
-    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/)[^/]*?/test_.*\.py",
+    # Exclude the suites that have a job of their own, or they run twice: peft_integration, and
+    # the conftest + repo utils tests that the repo_utils job above already claims. That job runs
+    # them in the consistency image they are written for; non_model would run them again in
+    # torch-light.
+    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/|repo_utils/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
     "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
     "tests_fsdp_ci": r"(tests/models/.*/test_modeling_.*|tests/test_fsdp_mixin\.py)",
@@ -1156,7 +1159,7 @@ def create_test_list_from_filter(full_test_list, out_path):
             to_output.append((job_name, file_name, files_to_test))
 
     for _, file_name, files_to_test in to_output:
-        with open(file_name, "w") as f:
+        with open(file_name, "w", encoding="utf-8") as f:
             f.write("\n".join(files_to_test))
 
 

@@ -43,7 +43,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_modernbert import ModernBertConfig
@@ -92,13 +91,12 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: ModernBertConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        self.layer_types = list(set(config.layer_types))
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
@@ -115,7 +113,6 @@ class ModernBertRotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: ModernBertConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -152,7 +149,7 @@ class ModernBertRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -591,12 +588,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -681,10 +672,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
