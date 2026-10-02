@@ -671,8 +671,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
 
 
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
-    def __init__(self, config: Wav2Vec2ConformerConfig):
-        super().__init__(config)
+    pass
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
@@ -693,18 +692,15 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
 
 
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
-        super().__init__(config)
+    pass
 
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    def __init__(self, config):
-        super().__init__(config)
+    pass
 
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
-    def __init__(self, config):
-        super().__init__(config)
+    pass
 
 
 __all__ = [

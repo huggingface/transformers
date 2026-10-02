@@ -231,11 +231,7 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
 
 
 class Cohere2PreTrainedModel(CoherePreTrainedModel):
-    config: Cohere2Config
-    _can_record_outputs = {
-        "hidden_states": Cohere2DecoderLayer,
-        "attentions": Cohere2Attention,
-    }
+    pass
 
 
 class Cohere2Model(Gemma2Model):
