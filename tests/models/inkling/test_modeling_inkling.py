@@ -37,10 +37,9 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...alm_tester import ALMModelTest, ALMModelTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -81,102 +80,68 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-class InklingAudio2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=4,
-        boi_token_id=5,
-        eoi_token_id=6,
-        audio_token_id=7,
-        video_token_id=10,
-        seq_length=50,
-        audio_num_frames=4,
-        n_mel_bins=4,
-        mel_vocab_size=8,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.audio_token_id = audio_token_id
-        self.video_token_id = video_token_id
-        self.llm_tester = InklingTextModelTester(self.parent)
-        self.llm_tester.use_bidirectional_attention = None
-        self.text_config = self.llm_tester.get_config()
-        self.audio_num_frames = audio_num_frames
-        self.n_mel_bins = n_mel_bins
-        self.mel_vocab_size = mel_vocab_size
-        self.audio_config = {
-            "hidden_size": self.text_config.hidden_size,
-            "n_mel_bins": n_mel_bins,
-            "mel_vocab_size": mel_vocab_size,
+class InklingAudio2TextModelTester(ALMModelTester):
+    if is_torch_available():
+        base_model_class = InklingModel
+        conditional_generation_class = InklingForConditionalGeneration
+    config_class = InklingConfig
+    text_config_class = InklingTextConfig
+    audio_config_class = InklingAudioConfig
+    audio_mask_key = "audio_input_ids_mask"
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("audio_token_id", 7)
+        kwargs.setdefault("pad_token_id", 0)
+        kwargs.setdefault("seq_length", 50)
+        kwargs.setdefault("feat_seq_length", 4)
+        kwargs.setdefault("n_mel_bins", 4)
+        kwargs.setdefault("mel_vocab_size", 8)
+        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("n_routed_experts", 16)
+        super().__init__(parent, **kwargs)
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.swa_num_attention_heads = self.num_attention_heads
+        self.swa_num_key_value_heads = self.num_key_value_heads
+        self.swa_head_dim = self.head_dim
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.image_token_id}
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_audio_features(self):
+        # Quantized mel frames: (num_audios, num_frames, n_mel_bins)
+        return ids_tensor([self.batch_size, self.feat_seq_length, self.n_mel_bins], self.mel_vocab_size)
+
+    def get_audio_embeds_mask(self, audio_mask):
+        return audio_mask
+
+    def get_audio_feature_key(self):
+        return "audio_input_ids"
+
+    def _build_modality_sub_configs(self):
+        return {
+            "audio_config": self.get_audio_config(),
+            "vision_config": InklingVisionConfig(patch_size=5, num_hidden_layers=2, num_channels=3),
         }
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
-
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.encoder_seq_length = seq_length
 
     def get_config(self):
-        config = InklingConfig(
-            text_config=self.text_config,
-            vision_config={"patch_size": 5, "num_hidden_layers": 2, "num_channels": 3},
-            audio_config=self.audio_config,
-            image_token_id=self.image_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            audio_token_id=self.audio_token_id,
-            video_token_id=self.video_token_id,
-        )
+        config = super().get_config()
         config.num_hidden_layers = config.text_config.num_hidden_layers
         return config
 
-    def prepare_config_and_inputs(self):
-        audio_input_ids = ids_tensor([self.batch_size, self.audio_num_frames, self.n_mel_bins], self.mel_vocab_size)
-        audio_input_ids_mask = torch.ones(self.batch_size, self.audio_num_frames, dtype=torch.bool)
-        config = self.get_config()
-        return config, audio_input_ids, audio_input_ids_mask
-
-    def prepare_config_and_inputs_for_common(self):
-        config, audio_input_ids, audio_input_ids_mask = self.prepare_config_and_inputs()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-
-        # One audio embedding is produced per valid frame; place that many audio placeholders per sequence
-        input_ids[:, : self.audio_num_frames] = config.audio_token_id
-
-        inputs_dict = {
-            "audio_input_ids": audio_input_ids,
-            "audio_input_ids_mask": audio_input_ids_mask,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
 
 @require_torch
-class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
+class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
+    model_tester_class = InklingAudio2TextModelTester
     test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
     # Audio embeddings are packed per valid frame, so last_hidden_state[0] is the total frame count, not batch size
     skip_test_audio_features_output_shape = True
-
-    def setUp(self):
-        self.model_tester = InklingAudio2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
 
     @unittest.skip(
         "Inkling chains tower namespace and internal renames, so intermediate source keys are absent after reverse mapping"

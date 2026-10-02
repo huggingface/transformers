@@ -23,6 +23,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
+    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4TextConfig,
     Gemma4VisionConfig,
@@ -44,10 +45,9 @@ from transformers.testing_utils import (
 )
 from transformers.utils import ModelOutput
 
+from ...alm_tester import ALMModelTest, ALMModelTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -193,22 +193,40 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-class Gemma4Audio2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=4,
-        boi_token_id=5,
-        eoi_token_id=6,
-        audio_token_id=7,
-        boa_token_id=8,
-        eoa_token_index=9,
-        video_token_id=10,
-        seq_length=50,
-        audio_seq_length=96,
-        audio_num_channels=16,
-        is_training=True,
-        audio_config={
+class Gemma4Audio2TextModelTester(ALMModelTester):
+    if is_torch_available():
+        base_model_class = Gemma4Model
+        conditional_generation_class = Gemma4ForConditionalGeneration
+    config_class = Gemma4Config
+    text_config_class = Gemma4TextConfig
+    audio_config_class = Gemma4AudioConfig
+    audio_mask_key = "input_features_mask"
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("boi_token_id", 5)
+        kwargs.setdefault("eoi_token_id", 6)
+        kwargs.setdefault("audio_token_id", 7)
+        kwargs.setdefault("boa_token_id", 8)
+        kwargs.setdefault("eoa_token_index", 9)
+        kwargs.setdefault("video_token_id", 10)
+        kwargs.setdefault("pad_token_id", 0)
+        kwargs.setdefault("seq_length", 50)
+        kwargs.setdefault("feat_seq_length", 96)
+        kwargs.setdefault("num_mel_bins", 16)
+        kwargs.setdefault("num_hidden_layers", 4)
+        kwargs.setdefault("num_kv_shared_layers", 2)
+        kwargs.setdefault(
+            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        )
+        kwargs.setdefault("vocab_size_per_layer_input", 99)
+        kwargs.setdefault("hidden_size_per_layer_input", 16)
+        kwargs.setdefault("enable_moe_block", True)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("top_k_experts", 2)
+        super().__init__(parent, **kwargs)
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.audio_config = {
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -222,85 +240,42 @@ class Gemma4Audio2TextModelTester:
             # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
             # comparison logic (inf - inf = NaN). Disable for testing.
             "use_clipped_linears": False,
-        },
-    ):
-        self.parent = parent
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.audio_token_id = audio_token_id
-        self.boa_token_id = boa_token_id
-        self.eoa_token_index = eoa_token_index
-        self.video_token_id = video_token_id
-        self.llm_tester = Gemma4TextModelTester(self.parent)
-        self.llm_tester.use_bidirectional_attention = None
-        self.text_config = self.llm_tester.get_config()
-        self.audio_config = audio_config
-        self.seq_length = seq_length
-        self.audio_seq_length = audio_seq_length
-        self.audio_num_channels = audio_num_channels
-        self.pad_token_id = self.text_config.pad_token_id
-
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.encoder_seq_length = seq_length
-
-    def get_config(self):
-        return Gemma4Config(
-            text_config=self.text_config,
-            vision_config=None,
-            audio_config=self.audio_config,
-            image_token_id=self.image_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            audio_token_id=self.audio_token_id,
-            boa_token_id=self.boa_token_id,
-            eoa_token_index=self.eoa_token_index,
-            video_token_id=self.video_token_id,
-        )
-
-    def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, self.audio_seq_length, self.audio_num_channels])
-        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool, device=torch_device)
-        config = self.get_config()
-        return config, input_features, input_features_mask
-
-    def prepare_config_and_inputs_for_common(self):
-        config, input_features, input_features_mask = self.prepare_config_and_inputs()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-
-        # The audio encoder produces audio_seq_length / 4 tokens per audio sample after subsampling.
-        # We need that many audio placeholder tokens per sequence in input_ids.
-        num_audio_tokens = self.audio_seq_length // 4
-        input_ids[:, :num_audio_tokens] = config.audio_token_id
-
-        inputs_dict = {
-            "input_features": input_features,
-            "input_features_mask": input_features_mask,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
         }
-        return config, inputs_dict
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.image_token_id, self.video_token_id}
+
+    @property
+    def text_config_args(self):
+        return super().text_config_args + ["per_layer_config"]
+
+    def get_audio_config(self):
+        return self.audio_config_class(**self.audio_config)
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_audio_features(self):
+        # (num_audios, num_frames, num_mel_bins)
+        return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
+
+    def create_audio_mask(self):
+        return super().create_audio_mask().bool()
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # Each of the two stride-2 subsampling convs keeps every other mask position
+        return audio_mask[:, ::4]
 
 
 @require_torch
-class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
-
-    def setUp(self):
-        self.model_tester = Gemma4Audio2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
+    model_tester_class = Gemma4Audio2TextModelTester
 
     @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):

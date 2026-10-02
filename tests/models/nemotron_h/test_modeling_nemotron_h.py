@@ -36,6 +36,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -398,7 +399,9 @@ class NemotronHModelTester:
 
 
 @require_torch
-class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class NemotronHModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             NemotronHModel,

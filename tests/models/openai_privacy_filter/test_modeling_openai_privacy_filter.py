@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -160,7 +161,9 @@ class OpenAIPrivacyFilterModelTester:
 
 
 @require_torch
-class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OpenAIPrivacyFilterModelTest(
+    ModelTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             OpenAIPrivacyFilterModel,

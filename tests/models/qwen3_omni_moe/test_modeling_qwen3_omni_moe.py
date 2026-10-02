@@ -54,6 +54,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -261,7 +262,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     """
     Model tester for `Qwen3OmniMoeThinkerForConditionalGeneration`.
     """
