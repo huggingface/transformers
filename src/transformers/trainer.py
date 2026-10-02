@@ -1636,7 +1636,7 @@ class Trainer:
 
         epoch = epochs_trained
         while (args.max_steps > 0 and self.state.global_step < max_steps) or (
-            args.max_steps <= 0 and epoch < num_train_epochs
+            args.max_steps <= 0 and epoch < num_train_epochs and self.state.optimizer_step_attempts < max_steps
         ):
             if epoch >= self.state.num_train_epochs:
                 self.state.num_train_epochs = epoch + 1
@@ -1867,7 +1867,6 @@ class Trainer:
         for update_step in range(num_update_steps_trained, num_update_steps_per_epoch):
             # Epoch-based runs retain their data budget, including a fractional final epoch.
             if self.args.max_steps <= 0 and self.state.optimizer_step_attempts >= self.state.max_steps:
-                self.control.should_training_stop = True
                 break
             num_batches = (
                 self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
@@ -2008,7 +2007,13 @@ class Trainer:
             if self.control.should_epoch_stop or self.control.should_training_stop:
                 break
 
-        if not self.control.should_training_stop:
+        # A sized pass resumed at its boundary can have no remaining update iterations.
+        if rng_to_sync:
+            self._load_rng_state(resume_from_checkpoint)
+
+        if not self.control.should_training_stop and (
+            self.args.max_steps > 0 or self.state.optimizer_step_attempts < self.state.max_steps
+        ):
             self.state.train_dataloader_epoch = epoch + 1
             self.state.train_dataloader_batches_seen = 0
 

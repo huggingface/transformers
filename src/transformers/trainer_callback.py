@@ -599,8 +599,15 @@ class DefaultFlowCallback(TrainerCallback):
         ):
             control.should_save = True
 
-        # End training
-        if state.global_step >= state.max_steps:
+        return self._maybe_stop_training(args, state, control)
+
+    def _maybe_stop_training(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        # Epoch-based runs finish at their data budget, even if some updates were skipped.
+        if state.global_step >= state.max_steps or (
+            args.max_steps <= 0
+            and state.optimizer_step_attempts is not None
+            and state.optimizer_step_attempts >= state.max_steps
+        ):
             control.should_training_stop = True
             # Evaluate at the end if we have a step-based eval strategy and this step
             # wasn't already going to be evaluated (to avoid duplicate evaluation).
@@ -628,6 +635,10 @@ class DefaultFlowCallback(TrainerCallback):
         # Save
         if args.save_strategy == SaveStrategy.EPOCH:
             control.should_save = True
+
+        # A skipped final attempt has no on_step_end event to finalize step-based strategies.
+        if args.max_steps <= 0 and state.optimizer_step_attempts is not None and not control.should_training_stop:
+            return self._maybe_stop_training(args, state, control)
 
         return control
 
