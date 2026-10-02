@@ -1221,7 +1221,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map, interpolate_pos_encoding)
 
-        # Use the box with the highest objectness as the query, as in the original implementation
+        # No query box is given, so use the box with the highest objectness as the query
         objectness_logits = self.objectness_predictor(query_image_features)
         box_indices = objectness_logits.argmax(dim=-1, keepdim=True)
         query_embeds = torch.gather(class_embeds, 1, box_indices[..., None].expand(-1, -1, class_embeds.shape[-1]))
