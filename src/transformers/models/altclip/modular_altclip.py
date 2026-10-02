@@ -155,9 +155,7 @@ class AltRobertaEmbeddings(RobertaEmbeddings):
 
 
 class AltRobertaSelfAttention(ChineseCLIPTextSelfAttention):
-    def __init__(self, config):
-        super().__init__(config)
-        self.is_causal = False
+    pass
 
 
 class AltRobertaSelfOutput(RobertaSelfOutput):
