@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch MiniMax-M3-VL model."""
 
 import copy
+import os
 import unittest
 
 from parameterized import parameterized
@@ -505,6 +506,13 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 class MiniMaxM3VLIntegrationTest(unittest.TestCase):
     model_id = "MiniMaxAI/MiniMax-M3-MXFP8"
 
+    @classmethod
+    def setUpClass(cls):
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
+
     def _load_model(self):
         # The indexer feeds SDPA an additive float mask (the block-sparse bias). On B200 + this
         # cuDNN build, the cuDNN SDPA backend segfaults in ``run_cudnn_SDP_fprop`` on such masks;
@@ -617,8 +625,6 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         self.assertGreater(len(decoded.strip()), 0)
 
     def test_real_image_apple_recognition(self):
-        import os
-
         model = self._load_model()
         processor = self._load_processor()
 

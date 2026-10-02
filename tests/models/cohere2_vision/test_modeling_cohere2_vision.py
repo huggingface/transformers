@@ -173,6 +173,13 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
+
     def setUp(self):
         super().setUp()
         self.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
@@ -480,6 +487,13 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
     """Integration tests for Cohere2VisionForConditionalGeneration with the Command A+ Model."""
 
     model_checkpoint = "/root/repos/moe/engines/command_a+_bf16"
+
+    @classmethod
+    def setUpClass(cls):
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

@@ -78,6 +78,13 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Mistral4IntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
