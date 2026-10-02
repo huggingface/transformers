@@ -407,7 +407,7 @@ class MtpModel(PreTrainedModel):
         norm_cls = type(norm)
 
         # Support generic heterogeneous modeling
-        if hasattr(norm, "_heterogeneity_skipped_class") and main_model.config.generic_modeling_applied:
+        if main_model.config.generic_modeling_applied and hasattr(norm, "_heterogeneity_skipped_class"):
             norm_cls = norm._heterogeneity_skipped_class
 
         # If the config contains the field, we never use per-layer post norm, but maybe a shared one

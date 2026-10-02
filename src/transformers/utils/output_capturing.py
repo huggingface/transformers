@@ -164,12 +164,13 @@ def recursively_install_hooks(
 
     # Potentially install the hook on current `parent_module`
     for key, specs in capture_tasks:
-        module_cls = type(parent_module)
-        # Support generic heterogeneous modeling: match the original attention class when attention is skipped.
-        if hasattr(parent_module, "_heterogeneity_skipped_class") and key == "attentions":
-            module_cls = parent_module._heterogeneity_skipped_class
         # Check if the spec matches the target class
-        match_target_class = specs.target_class is not None and issubclass(module_cls, specs.target_class)
+        match_target_class = specs.target_class is not None and isinstance(parent_module, specs.target_class)
+        # Support generic heterogeneous modeling: a skipped attention module still matches the class it replaced
+        if hasattr(parent_module, "_heterogeneity_skipped_class") and key == "attentions":
+            match_target_class = specs.target_class is not None and issubclass(
+                parent_module._heterogeneity_skipped_class, specs.target_class
+            )
         # This check is for multimodals where only backbone layer suffix is available
         match_class_name = specs.class_name is not None and module_name.endswith(specs.class_name)
 
