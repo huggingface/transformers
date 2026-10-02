@@ -1702,7 +1702,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.to(torch_device)
                 model.train()
 
-                # unfreeze additional layers
+                # unfreeze additional layers. some parameters are frozen by the model on purpose (e.g. the
+                # auxiliary-loss-free MoE router bias, which is updated by a load-balancing rule rather than by
+                # backprop); remember them so the "every trainable parameter got a gradient" check below does not
+                # demand gradients for parameters the architecture never trains.
+                intentionally_frozen = {n for n, p in model.named_parameters() if not p.requires_grad}
                 for p in model.parameters():
                     p.requires_grad_(True)
 
@@ -1770,6 +1774,8 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
+                        if k in intentionally_frozen:
+                            continue
                         if v.requires_grad and v.grad is None:
                             if "expert" in k:
                                 print(

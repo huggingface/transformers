@@ -55,7 +55,6 @@ class ZayaModelTester(CausalLMModelTester):
 @require_torch
 class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
-    test_all_params_have_gradient = False
 
     @unittest.skip("ZAYA hybrid/sliding cache layers are not compatible with QuantizedCache.")
     def test_generate_with_quant_cache(self):
