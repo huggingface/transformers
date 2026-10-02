@@ -230,6 +230,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         model_accepts_loss_kwargs=True,
         compute_loss_func=None,
         label_smoothing_factor=0.0,
+        trainer_cls=Trainer,
     ):
         """
         Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
@@ -248,7 +249,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir, per_device_train_batch_size=base_batch_size, gradient_accumulation_steps=1, **args_kwargs
             )
             base_callback = StoreLossCallback()
-            trainer = Trainer(model, args, callbacks=[base_callback], **trainer_kwargs)
+            trainer = trainer_cls(model, args, callbacks=[base_callback], **trainer_kwargs)
             if not model_accepts_loss_kwargs:
                 trainer.model_accepts_loss_kwargs = False
             trainer.train()
@@ -262,7 +263,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 **args_kwargs,
             )
             gas_callback = StoreLossCallback()
-            trainer = Trainer(model, args, callbacks=[gas_callback], **trainer_kwargs)
+            trainer = trainer_cls(model, args, callbacks=[gas_callback], **trainer_kwargs)
             if not model_accepts_loss_kwargs:
                 trainer.model_accepts_loss_kwargs = False
             trainer.train()
@@ -326,6 +327,30 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             gas_steps=8,
             loss_tolerance=0.001,
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
+        )
+
+    def test_gradient_accumulation_grad_norm_with_loss_is_scaled_for_ga(self):
+        """
+        A subclass whose `compute_loss` returns a per-batch mean sets `loss_is_scaled_for_ga = False`, so the Trainer
+        divides it by the gradient accumulation steps even though the model accepts loss kwargs. Grad norms and losses
+        must still match between a large-batch baseline and an equivalent GAS run.
+        """
+
+        class PerBatchMeanTrainer(Trainer):
+            loss_is_scaled_for_ga = False
+
+            def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+                outputs = model(**inputs)  # without `num_items_in_batch`, so the loss is a per-batch mean
+                return (outputs.loss, outputs) if return_outputs else outputs.loss
+
+        # Same tolerances as without num_items_in_batch: each micro-batch is mean-reduced over its own label count
+        self._check_gradient_accumulation(
+            base_batch_size=8,
+            gas_batch_size=4,
+            gas_steps=2,
+            loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
+            trainer_cls=PerBatchMeanTrainer,
         )
 
     def test_gradient_accumulation_grad_norm_with_label_smoothing(self):
