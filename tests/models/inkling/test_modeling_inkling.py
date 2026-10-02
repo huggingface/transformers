@@ -23,8 +23,10 @@ from safetensors.torch import load_file
 
 from transformers import (
     AutoProcessor,
+    InklingAudioConfig,
     InklingConfig,
     InklingTextConfig,
+    InklingVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -39,6 +41,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -268,121 +271,67 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         pass
 
 
-class InklingVision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_id=4,
-        video_token_id=7,
-        audio_token_id=8,
-        boi_token_id=5,
-        eoi_token_id=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
-            "use_labels": True,
-            "image_size": 20,
-            "patch_size": 5,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "num_key_value_heads": 1,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
-    ):
-        self.parent = parent
-        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.audio_token_id = audio_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.llm_tester = InklingTextModelTester(self.parent)
-        self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
+class InklingVision2TextModelTester(VLMModelTester):
+    if is_torch_available():
+        base_model_class = InklingModel
+        conditional_generation_class = InklingForConditionalGeneration
+    config_class = InklingConfig
+    text_config_class = InklingTextConfig
+    vision_config_class = InklingVisionConfig
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("audio_token_id", 8)
+        kwargs.setdefault("seq_length", 25)
+        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("n_routed_experts", 16)
+        kwargs.setdefault("vision_num_attention_heads", 4)
+        super().__init__(parent, **kwargs)
+        self.swa_num_attention_heads = self.num_attention_heads
+        self.swa_num_key_value_heads = self.num_key_value_heads
+        self.swa_head_dim = self.head_dim
 
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.audio_token_id}
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_pixel_values(self):
+        # One packed patch per image placeholder: (num_patches, time, height, width, channels)
+        return floats_tensor(
+            [self.batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
+        )
+
+    def get_vision_config(self):
+        vision_config = super().get_vision_config()
+        vision_config.num_attention_heads = self.vision_num_attention_heads
+        return vision_config
+
+    def _build_modality_sub_configs(self):
+        return {
+            "vision_config": self.get_vision_config(),
+            "audio_config": InklingAudioConfig(n_mel_bins=4, mel_vocab_size=8),
+        }
 
     def get_config(self):
-        config = InklingConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            audio_config={"hidden_size": self.text_config.hidden_size, "n_mel_bins": 4, "mel_vocab_size": 8},
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            audio_token_id=self.audio_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            mm_tokens_per_image=self.mm_tokens_per_image,
-        )
+        config = super().get_config()
         config.num_hidden_layers = config.text_config.num_hidden_layers
         return config
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        config.vision_config.pooling_kernel_size = 2
-
-        # One packed patch per image placeholder: (num_patches, time, height, width, channels)
-        patch_size = config.vision_config.patch_size
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                config.vision_config.temporal_patch_size,
-                patch_size,
-                patch_size,
-                self.vision_config["num_channels"],
-            ]
-        )
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-        input_ids[:, :1] = config.image_token_id
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
 
 @require_torch
-class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
+class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = InklingVision2TextModelTester
     test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
     test_torch_exportable = False  # data-dependent control flow in the HMLP vision tower (time/space folding)
     model_split_percents = [0.85, 0.9]
-
-    def setUp(self):
-        self.model_tester = InklingVision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
 
     @unittest.skip(
         "Inkling chains tower namespace and internal renames, so intermediate source keys are absent after reverse mapping"

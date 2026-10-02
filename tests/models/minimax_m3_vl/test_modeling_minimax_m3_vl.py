@@ -68,10 +68,10 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("bos_token_id", 0)
         kwargs.setdefault("eos_token_id", 1)
         kwargs.setdefault("pad_token_id", 2)
-        # One patch per image (grid [1, 1, 1]) so that the generation common tests, which crop
-        # all inputs along the batch dim, keep ``pixel_values`` and ``image_grid_thw`` consistent.
         kwargs.setdefault("image_size", 14)
         kwargs.setdefault("patch_size", 14)
+        # One patch per image (grid [1, 1, 1]) so that the generation common tests, which crop
+        # all inputs along the batch dim, keep ``pixel_values`` and ``image_grid_thw`` consistent.
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("temporal_patch_size", 2)
         kwargs.setdefault("spatial_merge_size", 1)

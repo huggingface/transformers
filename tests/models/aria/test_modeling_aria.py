@@ -59,7 +59,6 @@ class AriaVisionText2TextModelTester(VLMModelTester):
     conditional_generation_class = AriaForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 13)
         kwargs.setdefault("image_token_id", 9)
         kwargs.setdefault("pad_token_id", 1)
         kwargs.setdefault("image_size", 16)
