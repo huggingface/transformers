@@ -53,7 +53,6 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -62,7 +61,6 @@ from .generation_diffusion_gemma import DiffusionGemmaGenerationConfig, Diffusio
 
 
 class DiffusionGemmaTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DiffusionGemmaTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
