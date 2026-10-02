@@ -1111,14 +1111,11 @@ class GenerationMixin(ContinuousMixin):
         inputs_embeds: torch.LongTensor | None = None,
     ) -> dict[str, dict]:
         def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            # Tensor of size [bs, seqlen, dim] where `bs` is number of images in this text sample
-            # Each text can have 1+ images associated with it
-            # Inteleaving on first dim does the same thing as `input_ids.repeat_interlave` in leading batch dim!
+            # Repeat the complete image group for each expanded text sample.
             if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
+                return inputs.repeat((repeat_times,) + (1,) * (inputs.ndim - 1))
             else:
-                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
-                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
+                return list(inputs) * repeat_times
 
         for modality in ["image", "video"]:
             modalily_outputs = mm_encoder_output.get(modality)
