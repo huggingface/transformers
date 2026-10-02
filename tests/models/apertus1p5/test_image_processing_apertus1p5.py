@@ -20,20 +20,44 @@ import numpy as np
 
 from transformers import Apertus1p5ImageProcessor, is_torch_available
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_torchvision_available
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
     import torch
 
+if is_torch_available() and is_torchvision_available():
+    from transformers.models.apertus1p5.image_processing_apertus1p5 import smart_resize
+
+
+class Apertus1p5ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("min_resolution", 16)
+        kwargs.setdefault("max_resolution", 96)
+        kwargs.setdefault("size", {"min_pixels": 32**2, "max_pixels": 64**2})
+        kwargs.setdefault("spatial_factor", 16)
+        super().__init__(**kwargs)
+
+    def expected_output_image_shape(self, images):
+        sizes = []
+        for image in images:
+            height, width = image.shape[-2:] if isinstance(image, torch.Tensor) else np.asarray(image).shape[:2]
+            sizes.append(smart_resize(height, width, factor=self.spatial_factor, **self.size))
+        return self.num_channels, max(height for height, _ in sizes), max(width for _, width in sizes)
+
 
 @require_torch
 @require_vision
 @require_torchvision
-class Apertus1p5ImageProcessingTest(unittest.TestCase):
+class Apertus1p5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = Apertus1p5ImageProcessingTester
+    test_cast_dtype = True
+
     def setUp(self):
-        self.image_processor = Apertus1p5ImageProcessor(
-            size={"min_pixels": 32**2, "max_pixels": 64**2}, spatial_factor=16
-        )
+        super().setUp()
+        self.image_processor = Apertus1p5ImageProcessor(**self.image_processor_dict)
 
     def test_resize_and_image_sizes(self):
         for input_size, expected_size in [
