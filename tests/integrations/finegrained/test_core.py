@@ -110,12 +110,9 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertIs(type(model.embed_tokens), torch.nn.Embedding)
         self.assertIs(type(model.other), torch.nn.Embedding)
 
-    # A scale's dtype is the format's, never the ambient default.
-    #
-    # `from_pretrained` sets the default dtype to the checkpoint's for the duration of model
-    # construction, so a scale allocated as `torch.ones(n)` comes out bf16 and the kernels read it
-    # as fp32 — NaN logits, no error. Building under both defaults and comparing is what catches
-    # that, whatever the format decides each scale should be.
+    # `from_pretrained` sets the default dtype to the checkpoint's during construction, so a scale
+    # allocated as `torch.ones(n)` comes out bf16 and the kernels read it as fp32 (NaN logits, no
+    # error). Building under both defaults catches it.
     def _dtypes(self, build, default):
         previous = torch.get_default_dtype()
         torch.set_default_dtype(default)

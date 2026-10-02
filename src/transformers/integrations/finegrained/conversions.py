@@ -65,9 +65,8 @@ def held_scale(model, full_layer_name, key):
 
 
 def finegrained_experts(model, full_layer_name):
-    """The ``FineGrainedExperts`` a converter output fills, else ``None`` (a mixed checkpoint keeps some
-    layers' experts unquantized). Saving names the key past the module (``experts.*.gate_proj.weight``),
-    so the deepest module the name resolves to is the one."""
+    """The ``FineGrainedExperts`` the tensor at ``full_layer_name`` fills, else ``None``. On save the name
+    runs past the module (``experts.*.gate_proj.weight``)."""
     name = full_layer_name or ""
     while model is not None and name:
         name = name.rpartition(".")[0]

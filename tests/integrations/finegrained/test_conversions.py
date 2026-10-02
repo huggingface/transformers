@@ -571,9 +571,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         self.assertIs(op.convert({key: stacked}, model=model, full_layer_name=key)[key], stacked)
 
     def test_interleave_op_follows_the_layer_it_fills(self):
-        """A mixed checkpoint keeps some layers' experts in full precision: their rows stay stacked
-        while a quantized layer's interleave, on load (model key) and on save (the checkpoint's
-        per-expert key)."""
+        """Unquantized experts in a mixed checkpoint keep their stacked rows, on load and on save."""
         from transformers.integrations.finegrained.conversions import FineGrainedInterleaveGateUp
 
         stacked = torch.arange(2 * 6 * 4, dtype=torch.float32).reshape(2, 6, 4)  # rows [g0,g1,g2,u0,u1,u2]
