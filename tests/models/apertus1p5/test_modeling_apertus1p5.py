@@ -342,10 +342,13 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             torch.no_grad(),
         ):
             vocab_ids = model.get_image_tokens(pixel_values, image_sizes)
+            features = model.get_image_features(pixel_values, image_sizes, return_dict=True)
         self.assertEqual(
             [tuple(call.args[0].shape) for call in mock_encode.call_args_list],
-            [(1, 3, height, width) for height, width in sizes],
+            [(1, 3, height, width) for height, width in sizes] * 2,
         )
+        self.assertEqual(len(features.image_tokens), len(sizes))
+        self.assertEqual(len(features.pooler_output), len(sizes))
 
         # per-image results equal encoding each image alone (with the vocabulary offset applied),
         # and counts match the flat H*W formula
@@ -361,6 +364,8 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 )
                 codes = output.image_tokens[0]
                 expected.append(codes.flatten() + config.image_token_offset)
+                self.assertTrue(torch.equal(features.image_tokens[i], codes))
+                torch.testing.assert_close(features.pooler_output[i], model.get_input_embeddings()(expected[-1]))
         self.assertTrue(torch.equal(vocab_ids, torch.cat(expected)))
         expected_counts = [(h // factor) * (w // factor) for h, w in sizes]
         self.assertEqual([len(t) for t in expected], expected_counts)
