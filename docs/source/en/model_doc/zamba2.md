@@ -74,6 +74,8 @@ For issues with model output, or community discussion, please use the Hugging Fa
 
 The model weights are open-sourced via an Apache 2.0 license.
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## Zamba2Config
 
 [[autodoc]] Zamba2Config
