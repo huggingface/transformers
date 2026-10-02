@@ -296,7 +296,9 @@ class LogitsProcessorTest(unittest.TestCase):
         rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
             penalty=2.0, encoder_input_ids=encoder_input_ids
         )
-        processed_scores = rep_penalty_proc(torch.zeros((batch_size, 1), device=torch_device, dtype=torch.long), scores)
+        processed_scores = rep_penalty_proc(
+            torch.zeros((batch_size, 1), device=torch_device, dtype=torch.long), scores
+        )
 
         for row in range(batch_size):
             source_row = row // expansion_factor
