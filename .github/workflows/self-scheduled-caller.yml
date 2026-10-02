@@ -53,7 +53,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@fix-efs-cache-for-large-models
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-daily-models"
@@ -62,6 +62,6 @@ jobs:
       runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}
-      subdirs: '["llama4", "mistral4", "cohere2_vision"]'
+      subdirs: '["llama4", "mistral4", "cohere2_vision", "bert", "vit", "gpt2"]'
     secrets: inherit
 
