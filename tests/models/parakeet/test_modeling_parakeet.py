@@ -21,6 +21,7 @@ from pathlib import Path
 from transformers import is_datasets_available, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    preserve_module_forwards,
     require_kernels,
     require_torch,
     require_torch_gpu,
@@ -55,14 +56,6 @@ if is_torch_available():
 
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/parakeet"
-
-
-def reset_parakeet_kernels():
-    """`use_kernels=True` replaces the forward of the shared kernelized functions: restore the PyTorch ones."""
-    from transformers.models.parakeet import modeling_parakeet
-
-    for fn in (tdt_loss, modeling_parakeet.apply_rotary_pos_emb):
-        vars(fn).pop("forward", None)
 
 
 @require_torch
@@ -685,25 +678,24 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
             "decoder_input_ids": torch.cat([blank, labels], dim=1),
             "labels": labels,
         }
-        try:
-            with torch.no_grad():
-                expected = model(**inputs).loss
+        with torch.no_grad():
+            expected = model(**inputs).loss
 
+        with preserve_module_forwards(model):
             model.set_use_kernels(True)
             self.assertIn("forward", vars(tdt_loss), "`tdt_loss` was not kernelized")
             with torch.no_grad():
                 loss = model(**inputs).loss
             torch.testing.assert_close(loss, expected, rtol=1e-4, atol=1e-4)
+        self.assertNotIn("forward", vars(tdt_loss), "`tdt_loss` was not restored")
 
-            # Training mode also uses the kernel, which has a backward
-            reset_parakeet_kernels()
+        # Training mode also uses the kernel, which has a backward
+        with preserve_module_forwards(model):
             model.train()
             model.set_use_kernels(True)
             self.assertIn("forward", vars(tdt_loss), "`tdt_loss` was not kernelized in training mode")
             model(**inputs).loss.backward()
             self.assertTrue(any(p.grad is not None for p in model.parameters()), "No gradients after backward")
-        finally:
-            reset_parakeet_kernels()
 
     @unittest.skip(reason="ParakeetForTDT does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
