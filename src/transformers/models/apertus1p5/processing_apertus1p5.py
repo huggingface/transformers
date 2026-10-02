@@ -41,11 +41,6 @@ def _is_nested_media(media) -> bool:
     )
 
 
-def _is_all_empty(media) -> bool:
-    # an empty flat list or nested lists with only empty sub-lists carry no media items
-    return isinstance(media, (list, tuple)) and all(isinstance(el, (list, tuple)) and len(el) == 0 for el in media)
-
-
 @auto_docstring(custom_intro="Constructs an Apertus 1.5 processor for text, images, and audio.")
 @requires(backends=("vision", "torch", "torchvision"))
 class Apertus1p5Processor(ProcessorMixin):
@@ -80,11 +75,6 @@ class Apertus1p5Processor(ProcessorMixin):
         **kwargs,
     ):
         """Normalize inputs, supporting nested audio with one sub-list per text sample (empty if unused)."""
-        # collections without a single media item (e.g. `[[], []]` from a uniform collator) mean "no media"
-        if images is not None and _is_all_empty(images):
-            images = None
-        if audio is not None and _is_all_empty(audio):
-            audio = None
         # Preserve sample ownership for validation; `_process_audio` flattens the clips afterward.
         if audio is not None and _is_nested_media(audio):
             sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
