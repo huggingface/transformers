@@ -150,5 +150,6 @@ class DistributedUtilsTest(unittest.TestCase):
             LlamaForCausalLM(self.config).save_pretrained(f"{directory}/seed")
             mp.spawn(_test_load_model_checkpoint_distributed, args=(directory,), nprocs=4, join=True)
 
+
 if __name__ == "__main__":
     unittest.main()
