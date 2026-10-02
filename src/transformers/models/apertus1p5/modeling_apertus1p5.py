@@ -826,9 +826,15 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         self.language_model = Apertus1p5TextModel(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
         self.audio_tokenizer = WavTokenizerEncoderModel(config.audio_config)
-
-        # Initialize weights and apply final processing
         self.post_init()
+
+    def _encode_images(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
+        """Crop batch padding and retain the raw code grid from each individually encoded image."""
+        image_tokens = []
+        for image, size in zip(pixel_values, image_sizes):
+            image = image[None, :, : int(size[0]), : int(size[1])]
+            image_tokens.append(self.vision_tokenizer.encode(image).image_tokens[0])
+        return image_tokens
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
@@ -843,12 +849,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         Returns:
             `torch.LongTensor`: Image code ids offset by `config.image_token_offset`.
         """
-        vocab_ids_list = []
-        for image, size in zip(pixel_values, image_sizes):
-            image = image[None, :, : int(size[0]), : int(size[1])]
-            codes = self.vision_tokenizer.encode(image).image_tokens[0]
-            vocab_ids_list.append(codes.flatten() + self.config.image_token_offset)
-        return torch.cat(vocab_ids_list)
+        image_tokens = self._encode_images(pixel_values, image_sizes)
+        return torch.cat([codes.flatten() for codes in image_tokens]) + self.config.image_token_offset
 
     @can_return_tuple
     @auto_docstring(custom_intro="Tokenizes images and embeds their discrete codes with the text embedding layer.")
@@ -861,16 +863,10 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
             The true size of each image, being (height, width).
         """
-        vocab_ids = self.get_image_tokens(pixel_values, image_sizes)
-        factor = self.vision_tokenizer.vision_spatial_factor
-        grid_sizes = [(int(size[0]) // factor, int(size[1]) // factor) for size in image_sizes]
-        split_sizes = [height * width for height, width in grid_sizes]
+        image_tokens = self._encode_images(pixel_values, image_sizes)
+        vocab_ids = torch.cat([codes.flatten() for codes in image_tokens]) + self.config.image_token_offset
         image_embeddings = self.get_input_embeddings()(vocab_ids)
-        image_features = torch.split(image_embeddings, split_sizes)
-        image_tokens = [
-            (ids - self.config.image_token_offset).reshape(grid)
-            for ids, grid in zip(torch.split(vocab_ids, split_sizes), grid_sizes)
-        ]
+        image_features = torch.split(image_embeddings, [codes.numel() for codes in image_tokens])
         return Apertus1p5VisionTokenizerModelOutput(image_tokens=image_tokens, pooler_output=image_features)
 
     def get_audio_tokens(
