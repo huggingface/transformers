@@ -62,6 +62,6 @@ jobs:
       runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}
-      subdirs: '["llama4", "mistral4", "cohere2_vision", "bert", "vit", "gpt2"]'
+      subdirs: '["bert", "mistral4"]'
     secrets: inherit
 
