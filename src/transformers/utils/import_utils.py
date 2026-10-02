@@ -759,10 +759,10 @@ def enable_tf32(enable: bool) -> None:
 @lru_cache
 @_make_compile_constant
 def is_torch_flex_attn_available() -> bool:
-    # torch's flex_attention refuses TPU tensors; checks the host accelerator, not the model's device
     return (
         is_torch_available()
         and version.parse(get_torch_version()) >= version.parse("2.5.0")
+        # torch's flex_attention refuses TPU tensors; checks the host accelerator, not the model's device
         and get_device_type() != "tpu"
     )
 
