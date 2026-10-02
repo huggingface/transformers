@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import torch
 
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, Qwen3MoeConfig, Qwen3MoeModel
 from transformers.distributed import tensor_parallel
+from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -26,7 +27,400 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
 )
-from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test, require_torch
+
+
+@require_torch
+class TestParallelPlanResolution(TestCasePlus):
+    def setUp(self):
+        super().setUp()
+        model_config = Qwen3MoeConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            moe_intermediate_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            head_dim=4,
+            num_experts=4,
+            num_experts_per_tok=2,
+        )
+        with torch.device("meta"):
+            self.model = Qwen3MoeModel(model_config)
+
+    def test_disabled_parallelism_has_no_plans(self):
+        config = DistributedConfig()
+        expected_tp_plan = {}
+        expected_ep_plan = {}
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+
+    def test_fsdp_only_has_no_tp_or_ep_plan(self):
+        config = DistributedConfig(fsdp_size=8)
+        expected_tp_plan = {}
+        expected_ep_plan = {}
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+
+    def test_tp_only_keeps_experts_in_tp_plan(self):
+        config = DistributedConfig(tp_size=4)
+        expected_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        expected_ep_plan = {}
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+
+    def test_all_reduce_ep_takes_experts_out_of_tp_plan(self):
+        config = DistributedConfig(
+            tp_size=4,
+            ep_size=4,
+            ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"},
+        )
+        expected_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+        }
+        expected_ep_plan = {
+            "layers.*.mlp.gate": "ep_router",
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+        config._validate_resolved_ep_plan(config.ep_plan)
+
+    def test_ep_plan_rejects_auto(self):
+        with self.assertRaisesRegex(ValueError, "`ep_plan` must be a dictionary or None"):
+            DistributedConfig(tp_size=4, ep_size=4, ep_plan="auto")
+
+    def test_ep_forward_override_preserves_default_weight_rules(self):
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"})
+        expected_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+        }
+        expected_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+
+    def test_dispatch_without_tp_has_only_an_ep_plan(self):
+        config = DistributedConfig(fsdp_size=8, ep_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"})
+        expected_tp_plan = {}
+        expected_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+
+    def test_tp_fsdp_and_ep_keep_dense_and_expert_rules_separate(self):
+        config = DistributedConfig(
+            tp_size=2, fsdp_size=4, ep_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"}
+        )
+        expected_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+        }
+        expected_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+
+    def test_custom_ep_rules_take_precedence_over_custom_expert_tp_rules(self):
+        config = DistributedConfig(
+            tp_size=4,
+            ep_size=4,
+            tp_plan={
+                "layers.*.self_attn.q_proj": "colwise_rep",
+                "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
+            },
+            ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"},
+        )
+        expected_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise_rep",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+        }
+        expected_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+
+    def test_ep_override_is_not_applied_when_ep_is_disabled(self):
+        config = DistributedConfig(tp_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"})
+        expected_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        expected_ep_plan = {}
+
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, expected_tp_plan)
+        self.assertEqual(ep_plan, expected_ep_plan)
+        self.assertEqual(config.ep_plan, {})
+
+    def test_stored_overrides_do_not_modify_model_config_defaults(self):
+        default_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        default_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+        config = DistributedConfig(
+            tp_size=4,
+            ep_size=4,
+            tp_plan={"layers.*.self_attn.q_proj": "colwise_rep"},
+            ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"},
+        )
+        tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(
+            self.model.tp_plan,
+            {
+                "layers.*.self_attn.q_proj": "colwise_rep",
+                "layers.*.self_attn.k_proj": "colwise",
+                "layers.*.self_attn.v_proj": "colwise",
+                "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+                "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+                "layers.*.self_attn.o_proj": "rowwise",
+                "layers.*.mlp.gate_proj": "colwise",
+                "layers.*.mlp.up_proj": "colwise",
+                "layers.*.mlp.down_proj": "rowwise",
+                "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+                "layers.*.mlp.experts.down_proj": "rowwise",
+                "layers.*.mlp.experts": "moe_tp_experts",
+            },
+        )
+        self.assertEqual(
+            self.model.ep_plan,
+            {
+                "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                "layers.*.mlp.experts": "ep_dispatch_experts",
+            },
+        )
+        self.assertEqual(self.model.config.base_model_tp_plan, default_tp_plan)
+        self.assertEqual(self.model.config.base_model_ep_plan, default_ep_plan)
+
+    def test_resolution_does_not_apply_sharding(self):
+        config = DistributedConfig(tp_size=4, ep_size=4)
+        with patch.object(tensor_parallel, "apply_tensor_parallelism") as apply:
+            tensor_parallel.resolve_parallel_plans(self.model, config)
+        apply.assert_not_called()
+
+    def test_dispatch_shards_on_ep_and_passes_both_meshes_to_hook(self):
+        tp_mesh, ep_mesh = object(), object()
+        mesh_manager = Mock()
+        mesh_manager.get_mesh.side_effect = {"tp": tp_mesh, "ep": ep_mesh}.__getitem__
+        config = DistributedConfig(
+            tp_size=2, fsdp_size=2, ep_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"}
+        )
+        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        experts = self.model.layers[0].mlp.experts
+        with (
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "validate_param") as validate,
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
+            patch.object(ALL_PARALLEL_STYLES["ep_dispatch_experts"], "install_forward") as install,
+        ):
+            tensor_parallel.apply_expert_parallelism(self.model, config, mesh_manager, ep_plan)
+        self.assertEqual(shard.call_count, 2)
+        for name in ("gate_up_proj", "down_proj"):
+            validate.assert_any_call(experts, name, ep_mesh, parameter_name=f"layers.0.mlp.experts.{name}")
+            shard.assert_any_call(experts, name, ep_mesh)
+        install.assert_called_once_with(experts, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+
+    def test_all_reduce_ep_shards_and_installs_hooks_on_tp_mesh(self):
+        tp_mesh = object()
+        mesh_manager = Mock()
+        mesh_manager.get_mesh.side_effect = {"tp": tp_mesh}.__getitem__
+        config = DistributedConfig(
+            tp_size=4,
+            ep_size=4,
+            ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"},
+        )
+        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        experts = self.model.layers[0].mlp.experts
+        with (
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "validate_param") as validate,
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
+            patch.object(ALL_PARALLEL_STYLES["moe_tp_experts"], "install_forward") as install_experts,
+            patch.object(ALL_PARALLEL_STYLES["ep_router"], "install_forward") as install_router,
+        ):
+            result = tensor_parallel.apply_expert_parallelism(self.model, config, mesh_manager, ep_plan)
+        self.assertIs(result, self.model)
+        self.assertEqual(shard.call_count, 2)
+        for name in ("gate_up_proj", "down_proj"):
+            validate.assert_any_call(experts, name, tp_mesh, parameter_name=f"layers.0.mlp.experts.{name}")
+            shard.assert_any_call(experts, name, tp_mesh)
+        install_experts.assert_called_once_with(experts, tp_mesh)
+        install_router.assert_called_once_with(self.model.layers[0].mlp.gate, tp_mesh)
+
+    def test_dispatcher_is_derived_and_not_serialized(self):
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"})
+        self.assertEqual(config.experts_dispatch, "all-to-all")
+        self.assertNotIn("experts_dispatch", config.to_dict())
+        self.assertEqual(DistributedConfig.from_dict(config.to_dict()), config)
+
+    def test_default_ep_plan_selects_dispatch(self):
+        for tp_size, fsdp_size in ((1, 4), (2, 2), (4, 1)):
+            with self.subTest(tp_size=tp_size, fsdp_size=fsdp_size):
+                config = DistributedConfig(tp_size=tp_size, fsdp_size=fsdp_size, ep_size=4)
+                _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+                self.assertEqual(config.experts_dispatch, "all-to-all")
+                self.assertEqual(ep_plan["layers.*.mlp.experts"], "ep_dispatch_experts")
+                self.assertNotIn("layers.*.mlp.gate", ep_plan)
+                self.assertEqual(ep_plan["layers.*.mlp.experts.gate_up_proj"], "grouped_gemm")
+                self.assertIsNone(config.to_dict()["ep_plan"])
+                self.assertNotIn("_resolved_ep_plan", config.to_dict())
+
+    def test_default_dispatch_validates_pipeline_layout_after_resolution(self):
+        config = DistributedConfig(tp_size=4, ep_size=4, pp_size=2)
+        with self.assertRaisesRegex(ValueError, "pipeline parallelism"):
+            tensor_parallel.resolve_parallel_plans(self.model, config)
+
+    def test_all_reduce_override_requires_matching_tp_and_ep_sizes(self):
+        with self.assertRaisesRegex(ValueError, "All-reduce EP requires"):
+            DistributedConfig(
+                tp_size=2,
+                fsdp_size=2,
+                ep_size=4,
+                ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"},
+            )
+
+    def test_other_model_default_still_selects_all_reduce(self):
+        from transformers import MixtralConfig
+
+        self.model._ep_plan = dict(MixtralConfig.base_model_ep_plan)
+        config = DistributedConfig(tp_size=4, ep_size=4)
+        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(config.experts_dispatch, "all-reduce")
+        self.assertEqual(ep_plan["layers.*.mlp.experts"], "moe_tp_experts")
+        self.assertEqual(ep_plan["layers.*.mlp.gate"], "ep_router")
+
+    def test_unmatched_override_keys_raise_without_changing_plans(self):
+        original_tp_plan, original_ep_plan = self.model.tp_plan.copy(), self.model.ep_plan.copy()
+        for plan_name in ("tp_plan", "ep_plan"):
+            for key in ("layers.*.mlp.experst", "layers.*.mlp.experts.missing_weight"):
+                with self.subTest(plan_name=plan_name, key=key):
+                    config = DistributedConfig(tp_size=4, ep_size=4, **{plan_name: {key: "grouped_gemm"}})
+                    with self.assertRaisesRegex(ValueError, f"Invalid `{plan_name}` override key") as error:
+                        tensor_parallel.resolve_parallel_plans(self.model, config)
+                    self.assertIn(key, str(error.exception))
+                    self.assertEqual(self.model.tp_plan, original_tp_plan)
+                    self.assertEqual(self.model.ep_plan, original_ep_plan)
+
+    def test_override_keys_can_match_modules_parameters_or_existing_plan_keys(self):
+        for plan_name in ("tp_plan", "ep_plan"):
+            for key in ("layers.*.mlp", "layers.0.self_attn.q_proj.weight", "layers.*.mlp.gate_proj"):
+                with self.subTest(plan_name=plan_name, key=key):
+                    # gate_proj exists in the base TP plan even though this MoE model has no such module.
+                    original = getattr(self.model, plan_name).copy()
+                    if plan_name == "ep_plan":
+                        self.model._ep_plan = original | {"layers.*.mlp.gate_proj": "colwise"}
+                    config = DistributedConfig(tp_size=4, **{plan_name: {key: "colwise_rep"}})
+                    tensor_parallel.resolve_parallel_plans(self.model, config)
+                    self.assertEqual(getattr(self.model, plan_name)[key], "colwise_rep")
+                    setattr(self.model, f"_{plan_name}", original)
+
+    def test_dispatch_plan_validates_layout(self):
+        ep_plan = {"layers.*.mlp.experts": "ep_dispatch_experts"}
+        for sizes, message in (
+            ({"fsdp_size": 2, "ep_size": 4}, "must divide"),
+            ({"tp_size": 3, "fsdp_size": 2, "ep_size": 2}, "must be a multiple"),
+            ({"tp_size": 2, "ep_size": 2, "pp_size": 2}, "pipeline parallelism"),
+        ):
+            with self.subTest(sizes=sizes), self.assertRaisesRegex(ValueError, message):
+                DistributedConfig(**sizes, ep_plan=ep_plan)
 
 
 @is_tensor_parallel_test
@@ -75,7 +469,7 @@ class TestTensorParallelProperties(TestCasePlus):
             self.assertIn(repr(style), error_message)
         self.assertIn("Supported styles are", error_message)
 
-    def test_apply_tensor_parallelism_reports_all_invalid_styles(self):
+    def test_resolve_parallel_plans_reports_all_invalid_styles(self):
         model = torch.nn.Module()
         model.tp_plan = {
             "first_layer": "invalid_style",
@@ -83,7 +477,7 @@ class TestTensorParallelProperties(TestCasePlus):
         }
 
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, tp_mesh=None)
+            tensor_parallel.resolve_parallel_plans(model, DistributedConfig(tp_size=2))
 
         error_message = str(context.exception)
         self.assertIn("'invalid_style'", error_message)
