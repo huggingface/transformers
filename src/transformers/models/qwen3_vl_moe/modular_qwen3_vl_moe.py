@@ -20,7 +20,6 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
@@ -88,9 +87,6 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
-        "layers.*.mlp.experts.down_proj": "colwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -165,41 +161,8 @@ class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):
     pass
 
 
-@use_experts_implementation(is_transposed=True)
 class Qwen3VLMoeTextExperts(Qwen3MoeExperts):
-    """Collection of expert weights stored as 3D tensors, `(num_experts, in, out)`: the layout Qwen3-VL-MoE checkpoints
-    ship."""
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, 2 * self.intermediate_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.intermediate_dim, self.hidden_dim))
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = (current_state @ self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = current_hidden_states @ self.down_proj[expert_idx]
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states
+    pass
 
 
 class Qwen3VLMoeTextTopKRouter(nn.Module):
