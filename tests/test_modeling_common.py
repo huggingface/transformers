@@ -4080,18 +4080,9 @@ class ModelTesterMixin(ExportTesterMixin):
 
         dtype = torch.bfloat16
 
-        def _expected_attn_implementations(attention_implementation: str) -> set[str]:
-            # Allow kernels fallbacks for flash attention tests.
-            requested = attention_implementation
-            base = requested.removeprefix("paged|")
-            prefix = "paged|" if requested.startswith("paged|") else ""
-
-            expected = {requested}
-            if base in FLASH_ATTN_KERNEL_FALLBACK:
-                expected.add(f"{prefix}{FLASH_ATTN_KERNEL_FALLBACK[base]}")
-            return expected
-
-        expected_attn_implementations = _expected_attn_implementations(attn_implementation)
+        expected_attn_implementations: set[str] = {attn_implementation}
+        if attn_implementation in FLASH_ATTN_KERNEL_FALLBACK:
+            expected_attn_implementations.add(FLASH_ATTN_KERNEL_FALLBACK[attn_implementation])
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4268,6 +4259,11 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_generative_model_classes:  # TODO: this test should run on all classes instead
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            # Some models only support a sub set of all FA implementations
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
@@ -5885,7 +5881,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
                 )
                 if "router_logits" not in output_fields:
-                    self.skipTest(f"{model_class.__name__} does not declare router_logits in its output type.")
+                    continue
 
                 model = model_class(copy.deepcopy(config)).to(device=torch_device)
                 model.eval()
@@ -5895,8 +5891,6 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 with torch.no_grad():
                     explicit = model(**inputs, output_router_logits=True)
-                    if not explicit.router_logits:
-                        self.skipTest(f"{model_class.__name__} was built without any sparse layer.")
                     self.assertFalse(model(**inputs).router_logits, "router logits returned with the flag off")
 
                     model.config.get_text_config(decoder=True).output_router_logits = True

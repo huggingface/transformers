@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import warnings
 from math import ceil, lcm
 from typing import Any
 
@@ -33,6 +34,13 @@ from .requests import RequestState, RequestStatus, get_device_and_memory_breakdo
 from .utils import find_head_dim, find_num_key_value_heads
 
 
+# Maps each attention type to the allocator class handling its cache
+ATTN_TYPE_TO_ALLOCATOR = {
+    FULL_ATTENTION: FullAttentionCacheAllocator,
+    SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
+}
+
+
 def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
     """Groups layers depending on their attention type.
 
@@ -51,21 +59,12 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
         return {FULL_ATTENTION: list(range(config.num_hidden_layers))}
 
     # Otherwise simply count the number of layers of each type, making sure they are supported at the same time
-    supported_attention_types = {FULL_ATTENTION, SLIDING_ATTENTION}
-
     layer_counts = {}
     for i, layer_type in enumerate(layer_types):
-        if layer_type not in supported_attention_types:
+        if layer_type not in ATTN_TYPE_TO_ALLOCATOR:
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
     return layer_counts
-
-
-# Maps each attention type to the allocator class handling its cache
-ATTN_TYPE_TO_ALLOCATOR = {
-    FULL_ATTENTION: FullAttentionCacheAllocator,
-    SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
-}
 
 
 class PagedAttentionCache:
@@ -219,9 +218,6 @@ class PagedAttentionCache:
         self.allow_block_sharing = continuous_batching_config.allow_block_sharing
         allocators_can_share = all(ca.use_block_sharing for ca in self.cache_allocators.values())
         self.use_prefix_sharing = allocators_can_share and self.allow_block_sharing
-
-        # For block table support, we lazy init the name of the block table key
-        self._block_table_key = None
 
         # Helper attribute: the cache capacity expressed in whole-model blocks
         self.num_blocks = non_trash_bytes // bytes_per_block
@@ -393,27 +389,43 @@ class PagedAttentionCache:
             for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
                 read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
 
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
     def update(
         self,
         key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
         value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
         layer_idx: int,
-        read_index: list[torch.Tensor],  # one tensor per attention group
-        write_index: list[torch.Tensor],  # one tensor per attention group
-    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_q + past_length, num_kv_heads, head_dim]
-        """Updates the cache with new key-value states for a specific layer and retrieves the KV states needed for the
-        attention computation. The actual work is dispatched to the allocator in charge of the layer, using the read
-        and write indices prepared for its group."""
+        kwargs: dict[str, Any],  # updated in place
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, num_kv_heads, seqlen_q + past_length, head_dim]
+        """Updates the cache or the kwargs before entering the flash attention wrapper. The kwargs are updated in place.
+        For an index-based update, the keys and values are actually updated to seqlen "seqlen_q + past_length". For a
+        block table update, the KV states are untouched but the kwargs are filled with what is needed to call flash.
+        """
         allocator = self.layer_to_allocator[layer_idx]
-        layer_read_index = read_index[allocator.index]
-        layer_write_index = write_index[allocator.index]
-        return allocator.update(key_states, value_states, layer_idx, layer_read_index, layer_write_index)
 
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
-        """Returns the K and V cache views for a block table update."""
-        allocator = self.layer_to_allocator[layer_idx]
-        k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
-        return allocator.index, k_cache, v_cache
+        # Select the right keywords arguments for this layer. These are always needed.
+        kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
+        kwargs["max_length_k"] = kwargs["max_length_k"][allocator.layer_type]
+
+        # Block table "update": no real update, just prepare the kwargs for the flash call, which will update the cache
+        block_table = kwargs.get("block_table")
+        if block_table is not None:
+            k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
+            kwargs["block_table"] = block_table[allocator.index]
+            kwargs["k_cache"] = k_cache
+            kwargs["v_cache"] = v_cache
+
+        # Index-based update: actually update the cache and return full KV
+        else:
+            read_index = kwargs["read_index"][allocator.index]
+            write_index = kwargs["write_index"][allocator.index]
+            # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
+            # KV states in the same shape they were passed. It will help when we unify with regular Cache.
+            key_states, value_states = (x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
+            key_states, value_states = allocator.update(key_states, value_states, layer_idx, read_index, write_index)
+            key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in (key_states, value_states))
+
+        return key_states, value_states
 
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
@@ -480,11 +492,29 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             allocator.fill_block_table(request_id, past_length, query_length, block_table[allocator.index])
 
+    # DEPRECATED METHODS
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
+        """Deprecated method to get the K and V cache views for a block table update. Now baked in "update"."""
+        warnings.warn(
+            "The get_cache_for_block_table function is deprecated and will be removed in v5.23 .",
+            FutureWarning,
+            stacklevel=2,
+        )
+        allocator = self.layer_to_allocator[layer_idx]
+        k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
+        return allocator.index, k_cache, v_cache
+
     def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
-        """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
-        signature is only inspected once. This is necessary because different version of flash have different names for
-        the block table key."""
-        if self._block_table_key is None:
+        """Deprecated method to get the name of the block table key for the given flash_attn_with_kvcache_fn. The
+        function's signature is only inspected once. This is necessary because different version of flash have different
+        names for the block table key."""
+        warnings.warn(
+            "The get_block_table_key function is deprecated and will be removed in v5.23 .",
+            FutureWarning,
+            stacklevel=2,
+        )
+        _block_table_key = getattr(self, "_block_table_key", None)
+        if _block_table_key is None:
             kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
             if "block_table" in kwarg_names:
                 self._block_table_key = "block_table"

@@ -37,7 +37,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_hy_v4 import HYV4Config
@@ -75,8 +74,7 @@ class HYV4UnweightedRMSNorm(nn.Module):
 
 
 class HYV4RotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: HYV4Config, device=None):
+    def __init__(self, config: HYV4Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -87,14 +85,13 @@ class HYV4RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: HYV4Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: HYV4Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -110,7 +107,7 @@ class HYV4RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -632,7 +629,7 @@ class HYV4HyperConnection(nn.Module):
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Independent HC implementation with forced fp32 application"""
         # Key difference is to force fp32 in any case
-        device_type = hidden_streams.device.type if hidden_streams.device.type != "mps" else "cpu"
+        device_type = hidden_streams.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = hidden_streams.flatten(2).float()
             # Norm as residual
@@ -665,7 +662,7 @@ class HYV4HyperHead(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
-        device_type = x.device.type if x.device.type != "mps" else "cpu"
+        device_type = x.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = x.flatten(2).float()
             # Norm as residual
