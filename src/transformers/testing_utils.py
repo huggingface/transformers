@@ -1428,21 +1428,9 @@ def require_torch_fp16(test_case):
     )(test_case)
 
 
-# Devices `torch.nn.attention.flex_attention` accepts. It validates against a private local and
-# raises for anything else, so this has to be kept in step with it by hand.
-FLEX_ATTENTION_DEVICES = ("cuda", "cpu", "xpu", "hpu")
-
-
 def require_flex_attention(test_case):
-    """Decorator marking a test that requires a device FlexAttention runs on.
-
-    Without it the test reports that `torch` refuses the device, which says nothing about the model
-    under test.
-    """
-    supported = torch_device is not None and torch_device.split(":")[0] in FLEX_ATTENTION_DEVICES
-    return unittest.skipUnless(
-        is_torch_flex_attn_available() and supported, "test requires a device FlexAttention supports"
-    )(test_case)
+    """Decorator marking a test that requires FlexAttention."""
+    return unittest.skipUnless(is_torch_flex_attn_available(), "test requires FlexAttention")(test_case)
 
 
 def require_fp8(test_case):
