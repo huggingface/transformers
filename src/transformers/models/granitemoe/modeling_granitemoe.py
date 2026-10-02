@@ -383,7 +383,7 @@ class GraniteMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(GraniteMoeTopKRouter, index=2),
+        "router_logits": OutputRecorder(GraniteMoeTopKRouter, index=0),
         "hidden_states": GraniteMoeDecoderLayer,
         "attentions": GraniteMoeAttention,
     }

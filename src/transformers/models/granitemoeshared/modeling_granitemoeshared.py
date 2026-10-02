@@ -394,7 +394,7 @@ class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(GraniteMoeSharedTopKRouter, index=2),
+        "router_logits": OutputRecorder(GraniteMoeSharedTopKRouter, index=0),
         "hidden_states": GraniteMoeSharedDecoderLayer,
         "attentions": GraniteMoeSharedAttention,
     }
