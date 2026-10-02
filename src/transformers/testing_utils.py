@@ -1151,7 +1151,7 @@ if is_torch_available():
             )
         if torch_device == "tpu" and not is_torch_tpu_available():
             raise ValueError(
-                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but TPU is unavailable. Please double-check your testing environment."
+                "TRANSFORMERS_TEST_DEVICE=tpu, but TPU is unavailable. Please double-check your testing environment."
             )
 
         try:
