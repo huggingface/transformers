@@ -52,8 +52,13 @@ class TrainerState:
         global_step (`int`, *optional*, defaults to 0):
             During training, represents the number of update steps completed.
         optimizer_step_attempts (`int`, *optional*):
-            The number of optimizer steps attempted, including steps skipped by gradient scaling. Used to restore the
-            dataloader position when resuming from a checkpoint.
+            The number of optimizer steps attempted, including steps skipped by gradient scaling. Tracks attempted
+            work separately from completed updates.
+        train_dataloader_epoch (`int`, *optional*):
+            The dataloader pass to resume. Together with `train_dataloader_batches_seen`, records the data position
+            without assuming that an iterable dataset has a known length.
+        train_dataloader_batches_seen (`int`, *optional*):
+            The number of batches processed within the dataloader pass, including batches from skipped updates.
         max_steps (`int`, *optional*, defaults to 0):
             The number of update steps to do during the current training.
         logging_steps (`int`, *optional*, defaults to 500):
@@ -98,6 +103,8 @@ class TrainerState:
     epoch: float = 0
     global_step: int = 0
     optimizer_step_attempts: int | None = None
+    train_dataloader_epoch: int | None = None
+    train_dataloader_batches_seen: int | None = None
     max_steps: int = 0
     logging_steps: int = 500
     eval_steps: int = 500

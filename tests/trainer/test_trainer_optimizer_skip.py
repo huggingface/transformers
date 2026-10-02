@@ -128,6 +128,8 @@ def _make_trainer(
     epochs=3,
     save_strategy=None,
     train_dataset=None,
+    dispatch_batches=None,
+    fp16=True,
 ):
     torch.manual_seed(0)
     model = _Model()
@@ -138,7 +140,8 @@ def _make_trainer(
         gradient_accumulation_steps=accumulation,
         max_steps=max_steps,
         num_train_epochs=epochs,
-        fp16=True,
+        fp16=fp16,
+        accelerator_config={"dispatch_batches": dispatch_batches},
         use_cpu=True,
         optim="adamw_torch",
         learning_rate=1e-2,
@@ -156,8 +159,9 @@ def _make_trainer(
         train_dataset=train_dataset if train_dataset is not None else _Dataset(length, poison_id, poison_all),
         callbacks=[recorder],
     )
-    trainer.accelerator.scaler = torch.amp.GradScaler("cpu", init_scale=16.0)
-    trainer.accelerator.native_amp = True
+    if fp16:
+        trainer.accelerator.scaler = torch.amp.GradScaler("cpu", init_scale=16.0)
+        trainer.accelerator.native_amp = True
     return trainer, recorder
 
 
@@ -214,7 +218,8 @@ def test_resume_old_checkpoint_without_attempt_counter(tmp_path):
     checkpoint = tmp_path / "baseline" / "checkpoint-3"
     state_path = checkpoint / "trainer_state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    del state["optimizer_step_attempts"]
+    for field in ("optimizer_step_attempts", "train_dataloader_epoch", "train_dataloader_batches_seen"):
+        del state[field]
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
     resumed, _ = _make_trainer(tmp_path / "resumed", poison_id=None, save_steps=3)
@@ -337,15 +342,115 @@ def test_stream_continues_from_unread_samples(tmp_path, poison_id, expected_atte
 
 
 @pytest.mark.parametrize("one_shot", [False, True])
-def test_exhausted_stream_stops_without_replay(tmp_path, one_shot):
-    trainer, recorder = _make_trainer(tmp_path, max_steps=5, train_dataset=_Stream(length=10, one_shot=one_shot))
+@pytest.mark.parametrize("dispatch_batches", [False, True])
+def test_exhausted_stream_restarts_unless_one_shot(tmp_path, one_shot, dispatch_batches):
+    trainer, recorder = _make_trainer(
+        tmp_path,
+        max_steps=5,
+        train_dataset=_Stream(length=10, one_shot=one_shot),
+        dispatch_batches=dispatch_batches,
+    )
     with CaptureLogger(logging.get_logger("transformers.trainer")) as captured:
         trainer.train()
 
-    assert trainer.model.seen_ids == list(range(10))
-    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 4
+    assert trainer.model.seen_ids == list(range(10)) + ([] if one_shot else [0, 1])
+    assert (
+        trainer.state.global_step
+        == _applied_steps(trainer)
+        == trainer.lr_scheduler.last_epoch
+        == (4 if one_shot else 5)
+    )
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == (5 if one_shot else 6)
+    if one_shot:
+        assert "Training data exhausted at global_step=4 before reaching max_steps=5" in captured.out
+    else:
+        assert "Training data exhausted" not in captured.out
+
+
+@pytest.mark.parametrize("dispatch_batches", [False, True])
+def test_finite_stream_restarts_without_skipped_updates(tmp_path, dispatch_batches):
+    trainer, recorder = _make_trainer(
+        tmp_path,
+        max_steps=5,
+        train_dataset=_Stream(length=6, poison_id=None),
+        dispatch_batches=dispatch_batches,
+        fp16=False,
+    )
+    trainer.train()
+
+    assert trainer.model.seen_ids == list(range(6)) + list(range(4))
+    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 5
     assert trainer.state.optimizer_step_attempts == recorder.attempts == 5
-    assert "Training data exhausted at global_step=4 before reaching max_steps=5" in captured.out
+
+
+@pytest.mark.parametrize("dispatch_batches", [False, True])
+@pytest.mark.parametrize("accumulation", [1, 2])
+@pytest.mark.parametrize("save_steps", [2, 3])
+def test_stream_resume_across_real_passes(tmp_path, dispatch_batches, accumulation, save_steps):
+    settings = {
+        "max_steps": 5,
+        "save_steps": save_steps,
+        "accumulation": accumulation,
+        "dispatch_batches": dispatch_batches,
+    }
+    baseline, _ = _make_trainer(tmp_path / "baseline", train_dataset=_Stream(length=5, poison_id=2), **settings)
+    baseline.train()
+    checkpoint = tmp_path / "baseline" / f"checkpoint-{save_steps}"
+    state = json.loads((checkpoint / "trainer_state.json").read_text(encoding="utf-8"))
+    assert state["train_dataloader_epoch"] == (0 if save_steps == 2 else 1)
+    assert state["train_dataloader_batches_seen"] == (
+        (3 if accumulation == 1 else 5) if save_steps == 2 else accumulation
+    )
+
+    resumed, _ = _make_trainer(tmp_path / "resumed", train_dataset=_Stream(length=5, poison_id=2), **settings)
+    resumed.train(resume_from_checkpoint=str(checkpoint))
+
+    assert resumed.model.seen_ids == baseline.model.seen_ids[5 if save_steps == 2 else 7 :]
+    assert resumed.state.global_step == _applied_steps(resumed) == resumed.lr_scheduler.last_epoch == 5
+    assert resumed.state.optimizer_step_attempts == baseline.state.optimizer_step_attempts == 7
+    torch.testing.assert_close(resumed.model.linear.weight, baseline.model.linear.weight, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("end_early", [False, True])
+def test_stream_epoch_checkpoint_resumes_at_next_pass(tmp_path, end_early):
+    class EndPass(TrainerCallback):
+        def on_step_end(self, args, state, control, **kwargs):
+            control.should_epoch_stop = True
+
+    def random_gradient(gradient):
+        return gradient * (0.5 + torch.rand((), device=gradient.device))
+
+    settings = {"max_steps": 5, "accumulation": 2, "save_strategy": "epoch"}
+    baseline, _ = _make_trainer(tmp_path / "baseline", train_dataset=_Stream(length=5, poison_id=2), **settings)
+    baseline.model.linear.weight.register_hook(random_gradient)
+    if end_early:
+        baseline.add_callback(EndPass())
+    baseline.train()
+    checkpoint = tmp_path / "baseline" / "checkpoint-2"
+    state = json.loads((checkpoint / "trainer_state.json").read_text(encoding="utf-8"))
+    assert state["train_dataloader_epoch"] == (2 if end_early else 1)
+    assert state["train_dataloader_batches_seen"] == 0
+
+    resumed, _ = _make_trainer(tmp_path / "resumed", train_dataset=_Stream(length=5, poison_id=2), **settings)
+    resumed.model.linear.weight.register_hook(random_gradient)
+    if end_early:
+        resumed.add_callback(EndPass())
+    resumed.train(resume_from_checkpoint=str(checkpoint))
+
+    assert resumed.model.seen_ids == baseline.model.seen_ids[4 if end_early else 5 :]
+    torch.testing.assert_close(resumed.model.linear.weight, baseline.model.linear.weight, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("dispatch_batches", [False, True])
+def test_stream_dataset_errors_are_not_treated_as_exhaustion(tmp_path, dispatch_batches):
+    class BrokenStream(torch.utils.data.IterableDataset):
+        def __iter__(self):
+            raise ValueError("dataset read failed")
+            yield
+
+    trainer, _ = _make_trainer(tmp_path, train_dataset=BrokenStream(), dispatch_batches=dispatch_batches)
+    with pytest.raises(ValueError, match="dataset read failed"):
+        trainer.train()
 
 
 def test_stream_applies_partial_final_accumulation_group(tmp_path):

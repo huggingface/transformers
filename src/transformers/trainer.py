@@ -218,6 +218,7 @@ if is_peft_available():
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
+    from accelerate.data_loader import DataLoaderDispatcher
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DataLoaderConfiguration,
@@ -1689,10 +1690,21 @@ class Trainer:
             self._load_callback_state()
             if self.state.optimizer_step_attempts is None:
                 self.state.optimizer_step_attempts = self.state.global_step
-            epochs_trained = int(self.state.optimizer_step_attempts // num_update_steps_per_epoch)
+            has_data_position = (
+                self.state.train_dataloader_epoch is not None and self.state.train_dataloader_batches_seen is not None
+            )
+            epochs_trained = (
+                self.state.train_dataloader_epoch
+                if has_data_position
+                else int(self.state.optimizer_step_attempts // num_update_steps_per_epoch)
+            )
             if not self.args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.optimizer_step_attempts % num_update_steps_per_epoch
-                steps_trained_in_current_epoch *= self.args.gradient_accumulation_steps
+                steps_trained_in_current_epoch = (
+                    self.state.train_dataloader_batches_seen
+                    if has_data_position
+                    else (self.state.optimizer_step_attempts % num_update_steps_per_epoch)
+                    * self.args.gradient_accumulation_steps
+                )
         else:
             self.state.optimizer_step_attempts = 0
 
@@ -1819,6 +1831,8 @@ class Trainer:
         learning_rate = None
         rng_to_sync = False
         is_unsized_dataloader = not has_length(train_dataloader)
+        self.state.train_dataloader_epoch = epoch
+        self.state.train_dataloader_batches_seen = 0
 
         # Handle resumption from checkpoint: skip already-trained batches in the resumed epoch
         num_update_steps_trained = 0
@@ -1826,6 +1840,7 @@ class Trainer:
             if steps_trained_in_current_epoch > 0 and not self.args.ignore_data_skip:
                 train_dataloader = skip_first_batches(train_dataloader, steps_trained_in_current_epoch)
                 step = steps_trained_in_current_epoch - 1
+                self.state.train_dataloader_batches_seen = steps_trained_in_current_epoch
                 num_update_steps_trained = steps_trained_in_current_epoch // self.args.gradient_accumulation_steps
                 rng_to_sync = True
             elif steps_trained_in_current_epoch == 0:
@@ -1857,12 +1872,32 @@ class Trainer:
             num_batches = (
                 self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
             )
-            batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, self.args.device)
+            try:
+                batch_samples, num_items_in_batch = self.get_batch_samples(
+                    epoch_iterator, num_batches, self.args.device
+                )
+            except ValueError as error:
+                # Accelerate's dispatcher raises instead of yielding an empty iterable pass.
+                if not (
+                    is_unsized_dataloader
+                    and isinstance(train_dataloader, DataLoaderDispatcher)
+                    and train_dataloader._stop_iteration
+                    and str(error).startswith("Batch does not contain any data")
+                ):
+                    raise
+                train_dataloader.end()
+                batch_samples, num_items_in_batch = [], None
+
+            # Restore RNG even if resuming exactly at the end of a pass, before starting the next one.
+            if rng_to_sync:
+                self._load_rng_state(resume_from_checkpoint)
+                rng_to_sync = False
+
             if not batch_samples:
-                if is_unsized_dataloader:
+                if is_unsized_dataloader and step < 0:
                     logger.warning(
                         f"Training data exhausted at global_step={self.state.global_step} before reaching "
-                        f"max_steps={self.state.max_steps}. Stopping training without restarting the stream."
+                        f"max_steps={self.state.max_steps}. The next dataloader pass contains no data."
                     )
                     self.control.should_training_stop = True
                 break
@@ -1871,16 +1906,12 @@ class Trainer:
             # Not used if `num_items_in_batch` is not None.
             self.current_gradient_accumulation_steps = len(batch_samples)
 
-            # need to sync after if we skipped the batches in `get_batch_samples` for shuffle order reason
-            if rng_to_sync:
-                self._load_rng_state(resume_from_checkpoint)
-                rng_to_sync = False
-
             # Inner loop: forward + backward for each micro-batch. Gradients are
             # accumulated without syncing until the last micro-batch, then we clip,
             # step the optimizer, and log/save/evaluate.
             for i, inputs in enumerate(batch_samples):
                 step += 1
+                self.state.train_dataloader_batches_seen += 1
                 do_sync_step = i == len(batch_samples) - 1
                 # Since we perform prefetching, we need to manually set sync_gradients
                 self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
@@ -1976,6 +2007,10 @@ class Trainer:
                     break
             if self.control.should_epoch_stop or self.control.should_training_stop:
                 break
+
+        if not self.control.should_training_stop:
+            self.state.train_dataloader_epoch = epoch + 1
+            self.state.train_dataloader_batches_seen = 0
 
         # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.
         # When we break out of the loop early, we flush the pending graph manually.
