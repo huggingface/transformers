@@ -461,9 +461,7 @@ class OlmoHybridMLP(Olmo3MLP):
 
 
 class OlmoHybridAttentionDecoderLayer(Olmo3DecoderLayer):
-    def __init__(self, config: OlmoHybridConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.self_attn = OlmoHybridAttention(config=config, layer_idx=layer_idx)
+    pass
 
 
 class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):

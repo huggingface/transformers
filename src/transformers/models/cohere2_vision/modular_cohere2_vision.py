@@ -87,7 +87,7 @@ class Cohere2VisionCausalLMOutputWithPast(AyaVisionCausalLMOutputWithPast):
 
 
 class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
-    base_model_prefix = "model"
+    pass
 
 
 class Cohere2VisionModel(AyaVisionModel):

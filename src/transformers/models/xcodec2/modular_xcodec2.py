@@ -279,23 +279,7 @@ class Xcodec2UpSample1d(Qwen2_5OmniUpSample1d):
 
 
 class Xcodec2AntiAliasedActivation1d(Qwen2_5OmniAntiAliasedActivation1d):
-    def __init__(
-        self,
-        activation,
-        up_ratio: int = 2,
-        down_ratio: int = 2,
-        up_kernel_size: int = 12,
-        down_kernel_size: int = 12,
-    ):
-        super().__init__(
-            activation=activation,
-            up_ratio=up_ratio,
-            down_ratio=down_ratio,
-            up_kernel_size=up_kernel_size,
-            down_kernel_size=down_kernel_size,
-        )
-        self.upsample = Xcodec2UpSample1d(up_ratio, up_kernel_size)
-        self.downsample = Xcodec2DownSample1d(down_ratio, down_kernel_size)
+    pass
 
 
 class Xcodec2ResidualUnit(DacResidualUnit):

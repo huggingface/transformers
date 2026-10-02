@@ -92,8 +92,7 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
 
 @auto_docstring
 class HyperCLOVAXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
-    config: HyperCLOVAXVisionV2Config
-    input_modalities = ("image", "video", "text")
+    pass
 
 
 @auto_docstring

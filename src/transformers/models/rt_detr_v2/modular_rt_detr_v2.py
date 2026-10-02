@@ -413,16 +413,11 @@ class RTDetrV2PreTrainedModel(RTDetrPreTrainedModel):
 
 
 class RTDetrV2Decoder(RTDetrDecoder):
-    def __init__(self, config: RTDetrV2Config):
-        super().__init__(config)
-        self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
+    pass
 
 
 class RTDetrV2Model(RTDetrModel):
-    def __init__(self, config: RTDetrV2Config):
-        super().__init__(config)
-        # decoder
-        self.decoder = RTDetrV2Decoder(config)
+    pass
 
 
 class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):

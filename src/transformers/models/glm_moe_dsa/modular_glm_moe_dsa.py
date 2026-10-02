@@ -390,7 +390,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
 
 
 class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
+    pass
 
 
 __all__ = [

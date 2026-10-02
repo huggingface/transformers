@@ -1033,13 +1033,12 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
-    config: Qwen4ExpTextConfig
+    pass
 
 
 @auto_docstring
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
-    _no_split_modules = ["Qwen4ExpVisionBlock"]
-    config: Qwen4ExpVisionConfig
+    pass
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):

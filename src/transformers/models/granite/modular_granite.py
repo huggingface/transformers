@@ -104,10 +104,7 @@ class GraniteDecoderLayer(LlamaDecoderLayer):
 
 
 class GranitePreTrainedModel(LlamaPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": GraniteDecoderLayer,
-        "attentions": GraniteAttention,
-    }
+    pass
 
 
 class GraniteModel(LlamaModel):

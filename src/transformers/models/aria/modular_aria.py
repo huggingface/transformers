@@ -760,13 +760,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
 
 
 class AriaTextModel(LlamaModel):
-    def __init__(self, config: AriaTextConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [AriaTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.gradient_checkpointing = False
-        self.post_init()
+    pass
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
