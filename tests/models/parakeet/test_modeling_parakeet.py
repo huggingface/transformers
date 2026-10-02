@@ -143,51 +143,6 @@ class TDTLossTest(unittest.TestCase):
 
 
 @require_torch
-@require_torch_gpu
-@require_kernels
-class TDTLossKernelTest(unittest.TestCase):
-    """Test that `use_kernels=True` swaps `tdt_loss` for the `kernels-community/tdt-loss` kernel. The kernel's
-    correctness is tested in kernels-community."""
-
-    def tearDown(self):
-        reset_parakeet_kernels()
-
-    def test_use_kernels(self):
-        """`use_kernels=True` swaps `tdt_loss` for the kernel in `ParakeetForTDT`, with the same loss."""
-        if not isinstance(tdt_loss, torch.nn.Module):
-            self.skipTest("Hub kernels are disabled (USE_HUB_KERNELS)")
-        tester = ParakeetForTDTModelTester(self)
-        config, input_features, attention_mask = tester.prepare_config_and_inputs()
-        model = ParakeetForTDT(config).to(torch_device).eval()
-
-        labels = ids_tensor([tester.batch_size, 6], tester.blank_token_id)  # no blank in the labels
-        labels[labels == tester.pad_token_id] = tester.pad_token_id + 1  # nor padding
-        blank = torch.full((tester.batch_size, 1), tester.blank_token_id, device=labels.device)
-        inputs = {
-            "input_features": input_features,
-            "attention_mask": attention_mask,
-            "decoder_input_ids": torch.cat([blank, labels], dim=1),
-            "labels": labels,
-        }
-        with torch.no_grad():
-            expected = model(**inputs).loss
-
-        model.set_use_kernels(True)
-        self.assertIn("forward", vars(tdt_loss), "`tdt_loss` was not kernelized")
-        with torch.no_grad():
-            loss = model(**inputs).loss
-        torch.testing.assert_close(loss, expected, rtol=1e-4, atol=1e-4)
-
-        # Training mode also uses the kernel, which has a backward
-        reset_parakeet_kernels()
-        model.train()
-        model.set_use_kernels(True)
-        self.assertIn("forward", vars(tdt_loss), "`tdt_loss` was not kernelized in training mode")
-        model(**inputs).loss.backward()
-        self.assertTrue(any(p.grad is not None for p in model.parameters()), "No gradients after backward")
-
-
-@require_torch
 @require_torchaudio
 class RNNTLossTest(unittest.TestCase):
     """Test rnnt_loss against reference values generated from HF's own rnnt_loss on synthetic logits.
@@ -710,6 +665,45 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @require_torch_gpu
+    @require_kernels
+    def test_use_kernels(self):
+        """`use_kernels=True` swaps `tdt_loss` for the `kernels-community/tdt-loss` kernel, with the same loss."""
+        if not isinstance(tdt_loss, torch.nn.Module):
+            self.skipTest("Hub kernels are disabled (USE_HUB_KERNELS)")
+        tester = self.model_tester
+        config, input_features, attention_mask = tester.prepare_config_and_inputs()
+        model = ParakeetForTDT(config).to(torch_device).eval()
+
+        labels = ids_tensor([tester.batch_size, 6], tester.blank_token_id)  # no blank in the labels
+        labels[labels == tester.pad_token_id] = tester.pad_token_id + 1  # nor padding
+        blank = torch.full((tester.batch_size, 1), tester.blank_token_id, device=labels.device)
+        inputs = {
+            "input_features": input_features,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": torch.cat([blank, labels], dim=1),
+            "labels": labels,
+        }
+        try:
+            with torch.no_grad():
+                expected = model(**inputs).loss
+
+            model.set_use_kernels(True)
+            self.assertIn("forward", vars(tdt_loss), "`tdt_loss` was not kernelized")
+            with torch.no_grad():
+                loss = model(**inputs).loss
+            torch.testing.assert_close(loss, expected, rtol=1e-4, atol=1e-4)
+
+            # Training mode also uses the kernel, which has a backward
+            reset_parakeet_kernels()
+            model.train()
+            model.set_use_kernels(True)
+            self.assertIn("forward", vars(tdt_loss), "`tdt_loss` was not kernelized in training mode")
+            model(**inputs).loss.backward()
+            self.assertTrue(any(p.grad is not None for p in model.parameters()), "No gradients after backward")
+        finally:
+            reset_parakeet_kernels()
 
     @unittest.skip(reason="ParakeetForTDT does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
