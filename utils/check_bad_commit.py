@@ -25,13 +25,7 @@ import git
 from github_utils import get_github_json
 
 
-# Temporary workaround for https://github.com/huggingface/transformers-ci/pull/184:
-# On bucket cache runners, large model weights are served via Xet FUSE, which exhausts
-# the cgroup RAM limit and kills the process with exit code 137. Guillaume mounted
-# /mnt/efs_cache (EFS/NFS) on those runners and pre-warmed it with the affected weights.
-# Setting HF_HOME here (before any subprocess is spawned) propagates to all child
-# processes (target_script.py, git bisect → pytest) via inherited environment.
-# Remove once the Xet FUSE prefetch OOM is fixed upstream.
+# Temporary workaround similar to https://github.com/huggingface/transformers-ci/pull/184 to avoid CPU OOM.
 if os.path.isdir("/mnt/efs_cache"):
     os.environ["HF_HOME"] = "/mnt/efs_cache"
     print("Using EFS cache: HF_HOME=/mnt/efs_cache")
