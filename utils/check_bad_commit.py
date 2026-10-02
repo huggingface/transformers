@@ -18,7 +18,9 @@ import copy
 import json
 import os
 import re
+import signal
 import subprocess
+import sys
 from collections import defaultdict
 
 import git
@@ -29,6 +31,14 @@ from github_utils import get_github_json
 if os.path.isdir("/mnt/efs_cache"):
     os.environ["HF_HOME"] = "/mnt/efs_cache"
     print("Using EFS cache: HF_HOME=/mnt/efs_cache")
+
+
+def _sigterm_handler(signum, frame):
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)  # prevent re-entry
+    os.killpg(os.getpgrp(), signal.SIGTERM)
+
+
+signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
 def create_script(target_test, flake_runs=4):
@@ -96,31 +106,38 @@ def is_bad_commit(target_test, commit, flake_runs=4):
 
     create_script(target_test=target_test, flake_runs=flake_runs)
 
-    result = subprocess.run(
+    proc = subprocess.Popen(
         ["python3", "target_script.py"],
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
     )
+    stdout_lines = []
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        stdout_lines.append(line)
+    proc.wait()
+    stdout = "".join(stdout_lines)
 
     # Restore to original commit
     repo.git.checkout(original_head)
 
     n_passed = 0
-    o = re.findall(r"====.* (\d+) passed", result.stdout)
+    o = re.findall(r"====.* (\d+) passed", stdout)
     if len(o) > 0:
         n_passed = int(o[0])
 
     n_failed = 0
-    o = re.findall(r"====.* (\d+) failed", result.stdout)
+    o = re.findall(r"====.* (\d+) failed", stdout)
     if len(o) > 0:
         n_failed = int(o[0])
 
     error_message = ""
     if n_failed > 0:
-        match = re.search(r"^(FAILED .+ - .+)$", result.stdout, re.MULTILINE)
+        match = re.search(r"^(FAILED .+ - .+)$", stdout, re.MULTILINE)
         error_message = match.group(1).strip() if match else "Cannot retrieve error message."
 
-    return result.returncode != 0, n_failed, n_passed, error_message
+    return proc.returncode != 0, n_failed, n_passed, error_message
 
 
 def find_bad_commit(target_test, start_commit, end_commit):
@@ -241,23 +258,33 @@ git bisect run python3 target_script.py
     with open("run_git_bisect.sh", "w", encoding="utf-8") as fp:
         fp.write(bash.strip())
 
-    bash_result = subprocess.run(
+    proc = subprocess.Popen(
         ["bash", "run_git_bisect.sh"],
-        check=False,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
     )
-    print(bash_result.stdout)
+    stdout_lines = []
+    stderr_lines = []
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        stdout_lines.append(line)
+    for line in proc.stderr:
+        print(line, end="", flush=True, file=sys.stderr)
+        stderr_lines.append(line)
+    proc.wait()
+    bash_stdout = "".join(stdout_lines)
+    bash_stderr = "".join(stderr_lines)
 
     # This happens if running the script gives exit code < 0  or other issues
-    if "error: bisect run failed" in bash_result.stderr:
-        error_msg = f"Error when running git bisect:\nbash error: {bash_result.stderr}\nbash output:\n{bash_result.stdout}\nset `bad_commit` to `None`."
+    if "error: bisect run failed" in bash_stderr:
+        error_msg = f"Error when running git bisect:\nbash error: {bash_stderr}\nbash output:\n{bash_stdout}\nset `bad_commit` to `None`."
         print(error_msg)
         result["status"] = "git bisect failed"
         return result
 
     pattern = r"(.+) is the first bad commit"
-    commits = re.findall(pattern, bash_result.stdout)
+    commits = re.findall(pattern, bash_stdout)
 
     bad_commit = None
     failure_at_bad_commit = ""
