@@ -1021,6 +1021,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("minicpmv4_6", {"torchvision": "MiniCPMV4_6VideoProcessor"}),
         ("minimax_m3_vl", {"torchvision": "MiniMaxM3VLVideoProcessor"}),
         ("muse_glimmer", {"torchvision": "MuseGlimmerVideoProcessor"}),
+        ("nemotron_h_omni", {"torchvision": "NemotronH_Omni_Reasoning_V3VideoProcessor"}),
         ("pe_video", {"torchvision": "PeVideoVideoProcessor"}),
         ("perception_lm", {"torchvision": "PerceptionLMVideoProcessor"}),
         ("qwen2_vl", {"torchvision": "Qwen2VLVideoProcessor"}),
