@@ -203,14 +203,15 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
     its own features alone. Both updates are residual, so the two directions share this class and
     differ only in which node set receives messages and whether the receiver contributes to them.
 
-    Larger graphs are chunked in fp32 inference using the configured chunk sizes. Training,
-    autocast and other dtypes retain the unchunked path.
+    Larger graphs are chunked in inference using the configured chunk sizes. Training and autocast
+    retain the unchunked path.
     """
 
     def __init__(self, config: WeatherNext2Config, grid_to_mesh: bool):
         super().__init__()
         self.grid_to_mesh = grid_to_mesh
         self.chunk_size_graph = config.chunk_size_grid_to_mesh if grid_to_mesh else config.chunk_size_mesh_to_grid
+        self._receiver_layout = None
         # Only the grid-to-mesh direction rescales its aggregate, and only for the checkpoints that
         # set it: the number of grid points per mesh node varies with the grid resolution.
         self.aggregate_normalization = config.aggregate_normalization if grid_to_mesh else None
@@ -243,14 +244,10 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             and num_items > self.chunk_size_graph
             and not self.training
             and not torch.is_grad_enabled()
-            and grid_states.dtype == torch.float32
             and not torch.is_autocast_enabled(grid_states.device.type)
         )
         if chunked and not self.grid_to_mesh:
-            chunked = senders.numel() == 3 * num_points and torch.equal(
-                receivers,
-                torch.arange(num_points, device=receivers.device, dtype=receivers.dtype).repeat_interleave(3),
-            )
+            chunked = senders.numel() == 3 * num_points and self._has_grouped_receivers(receivers, num_points)
         if chunked:
             forward_chunk = self.grid_to_mesh_chunk if self.grid_to_mesh else self.mesh_to_grid_chunk
             return forward_chunk(grid_states, mesh_states, edge_features, senders, receivers, conditioning)
@@ -279,6 +276,25 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             mesh_states = mesh_states + self.mesh_node_update(mesh_states, conditioning)
             grid_states = grid_states + self.grid_node_update(updated_receiver, conditioning)
         return grid_states, mesh_states
+
+    def _has_grouped_receivers(self, receivers, num_points):
+        """Validate unchanged graph geometry once, without synchronizing subsequent forecasts."""
+        try:
+            version = receivers._version
+        except RuntimeError:
+            # Inference tensors do not track mutations, so their layout cannot be safely cached.
+            version = None
+        cached = self._receiver_layout
+        if version is not None and cached is not None:
+            source, cached_version, cached_points, grouped = cached
+            if source is receivers and cached_version == version and cached_points == num_points:
+                return grouped
+        grouped = torch.equal(
+            receivers,
+            torch.arange(num_points, device=receivers.device, dtype=receivers.dtype).repeat_interleave(3),
+        )
+        self._receiver_layout = (receivers, version, num_points, grouped) if version is not None else None
+        return grouped
 
     def grid_to_mesh_chunk(self, grid_states, mesh_states, edge_features, senders, receivers, conditioning):
         projected_grid = self.edge_update.sender_proj(grid_states)

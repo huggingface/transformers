@@ -331,22 +331,52 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
     @require_kernels
-    def test_hub_kernels_map_attention_with_its_mask(self):
-        """The kernel attention reads the mask the kernel mask layer prepares, so one is never swapped alone."""
+    def test_hub_kernels_mapping(self):
+        """All four inference replacements come from the same kernel version."""
+        from kernels import Mode
+
         from transformers.integrations import hub_kernels
 
-        model = WeatherNext2Model(self.model_tester.get_config())
+        model = WeatherNext2ForWeatherForecasting(self.model_tester.get_config())
         layer_names = {getattr(module, "kernel_layer_name", None) for module in model.modules()}
         kernel_mapping = hub_kernels._build_kernel_mapping()
-        self.assertIn("WeatherNext2AttentionMask", layer_names)
         attention = kernel_mapping["WeatherNext2Attention"]
-        mask = kernel_mapping["WeatherNext2AttentionMask"]
-        self.assertEqual(attention.keys(), mask.keys())
-        for device in attention:
-            self.assertEqual(attention[device].keys(), mask[device].keys())
-            for mode, repo in attention[device].items():
-                self.assertEqual(repo._repo_id, mask[device][mode]._repo_id)
-                self.assertEqual(repo._version, mask[device][mode]._version)
+        for name in (
+            "WeatherNext2Attention",
+            "WeatherNext2AttentionMask",
+            "WeatherNext2GridEncoder",
+            "WeatherNext2ForecastHead",
+        ):
+            self.assertIn(name, layer_names)
+            mapping = kernel_mapping[name]
+            self.assertEqual(attention.keys(), mapping.keys())
+            for device, modes in mapping.items():
+                self.assertEqual(set(modes), {Mode.INFERENCE})
+                repo = modes[Mode.INFERENCE]
+                self.assertEqual(repo._repo_id, attention[device][Mode.INFERENCE]._repo_id)
+                self.assertEqual(repo._version, attention[device][Mode.INFERENCE]._version)
+
+    def test_mesh_transformer_shares_prepared_mask(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WeatherNext2Model(config).to(torch_device).eval()
+        processor = model.mesh_transformer
+        prepared_masks = []
+        layer_masks = []
+        hooks = [
+            processor.mask_preparer.register_forward_hook(lambda module, args, output: prepared_masks.append(output))
+        ]
+        for layer in processor.layers:
+            hooks.append(layer.register_forward_pre_hook(lambda module, args: layer_masks.append(args[1])))
+        try:
+            with torch.inference_mode():
+                model(**inputs)
+        finally:
+            for hook in hooks:
+                hook.remove()
+        self.assertEqual(len(prepared_masks), 1)
+        self.assertEqual(len(layer_masks), config.num_hidden_layers)
+        for mask in layer_masks:
+            self.assertIs(mask, prepared_masks[0])
 
     def test_noise_drives_the_ensemble(self):
         """Two members that share inputs but not noise must differ; two that share both must not."""
@@ -500,9 +530,12 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     @parameterized.expand([("grid_to_mesh", True, 16), ("mesh_to_grid", False, 8)])
     def test_graph_chunking(self, name, grid_to_mesh, chunk_size):
         config = self.model_tester.get_config()
+        # A chunked bf16 matmul rounds differently from a whole-graph one, by up to a few bf16 ulps.
+        tolerances = {torch.float32: {}, torch.bfloat16: {"atol": 1e-1, "rtol": 1e-2}}
         for device in dict.fromkeys(("cpu", torch_device)):
             for dtype in (torch.float32, torch.bfloat16):
                 with self.subTest(device=device, dtype=dtype):
+                    torch.manual_seed(0)
                     layer = (
                         WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh).to(device=device, dtype=dtype).eval()
                     )
@@ -528,9 +561,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                         actual = layer(*args)
                     hook.remove()
                     expected_sizes = [16, 16, 16, 9] if grid_to_mesh else [24, 24, 9]
-                    self.assertEqual(sizes, expected_sizes if dtype == torch.float32 else [57])
+                    self.assertEqual(sizes, expected_sizes)
                     for result, target in zip(actual, expected):
-                        torch.testing.assert_close(result, target)
+                        torch.testing.assert_close(result, target, **tolerances[dtype])
 
     @parameterized.expand(
         [
@@ -579,6 +612,36 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                     torch.testing.assert_close(replacement.grad, original.grad)
         hook.remove()
         self.assertEqual(sizes, [57])
+
+    def test_receiver_layout_cache(self):
+        for device in dict.fromkeys(("cpu", torch_device)):
+            with self.subTest(device=device):
+                layer = WeatherNext2BipartiteGraphNetwork(self.model_tester.get_config(), grid_to_mesh=False)
+                receivers = torch.arange(19, device=device).repeat_interleave(3)
+                with patch("torch.equal", wraps=torch.equal) as equal, torch.inference_mode():
+                    self.assertTrue(layer._has_grouped_receivers(receivers, 19))
+                    self.assertTrue(layer._has_grouped_receivers(receivers, 19))
+                    self.assertEqual(equal.call_count, 1)
+                    receivers.zero_()
+                    self.assertFalse(layer._has_grouped_receivers(receivers, 19))
+                    self.assertFalse(layer._has_grouped_receivers(receivers, 19))
+                    self.assertEqual(equal.call_count, 2)
+                replacement = torch.arange(19, device=device).repeat_interleave(3)
+                with patch("torch.equal", wraps=torch.equal) as equal, torch.inference_mode():
+                    self.assertTrue(layer._has_grouped_receivers(replacement, 19))
+                    self.assertTrue(layer._has_grouped_receivers(replacement, 19))
+                    self.assertEqual(equal.call_count, 1)
+                    self.assertFalse(layer._has_grouped_receivers(replacement, 20))
+                    self.assertEqual(equal.call_count, 2)
+
+    def test_receiver_layout_inference_tensor_mutation(self):
+        layer = WeatherNext2BipartiteGraphNetwork(self.model_tester.get_config(), grid_to_mesh=False)
+        with torch.inference_mode():
+            receivers = torch.arange(19, device=torch_device).repeat_interleave(3)
+            self.assertTrue(layer._has_grouped_receivers(receivers, 19))
+            receivers.zero_()
+            self.assertFalse(layer._has_grouped_receivers(receivers, 19))
+        self.assertIsNone(layer._receiver_layout)
 
     def test_graph_chunk_sizes_validation(self):
         for name in ("chunk_size_grid_to_mesh", "chunk_size_mesh_to_grid"):
@@ -897,8 +960,8 @@ class WeatherNext2ModelIntegrationTest(unittest.TestCase):
         """Pins the forward pass, so that a change to it has to be a deliberate one.
 
         The inputs are drawn from a fixed seed in the model's normalized space, so this needs no data
-        file, and the numbers came out the same on CPU and on an H100 to four decimals. Agreement with
-        the original JAX implementation was checked separately, on a real forecast.
+        file. Full forecasts accumulate FP32 reduction differences through the graph networks and
+        transformer layers, so the absolute tolerance allows the measured milliscale drift.
         """
         model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
         config = model.config
@@ -919,8 +982,8 @@ class WeatherNext2ModelIntegrationTest(unittest.TestCase):
 
         expected_pole = torch.tensor([-0.0312, -5.3831, -3.9925, -7.2537, -4.8488], device=torch_device)
         expected_equator = torch.tensor([-5.7967, -4.5518, -2.5775, -2.2516, -4.0098], device=torch_device)
-        torch.testing.assert_close(prediction[0, 0, 0, :5].float(), expected_pole, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(prediction[0, 0, 0, :5].float(), expected_pole, rtol=1e-3, atol=3e-3)
         torch.testing.assert_close(
-            prediction[0, 0, config.grid_latitudes // 2, :5].float(), expected_equator, rtol=1e-3, atol=1e-3
+            prediction[0, 0, config.grid_latitudes // 2, :5].float(), expected_equator, rtol=1e-3, atol=3e-3
         )
         self.assertAlmostEqual(prediction.float().mean().item(), 0.3225, delta=1e-3)

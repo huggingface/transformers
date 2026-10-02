@@ -354,7 +354,7 @@ class WeatherNext2Geometry:
 
 def _sort_by_receiver(senders: np.ndarray, receivers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Upstream sorts edges by receiver so the scatter-add can use a sorted segment sum."""
-    order = np.argsort(receivers, kind="stable")
+    order = np.argsort(receivers)
     return senders[order], receivers[order]
 
 
@@ -383,6 +383,8 @@ def build_geometry(
     faces = inverse_permutation[faces]
 
     mesh_lat, mesh_lon = cartesian_to_lat_lon(vertices)
+    # Upstream constructs connectivity from the mesh's lat/lon coordinates, not the original vertices.
+    mesh_xyz = lat_lon_to_cartesian(mesh_lat, mesh_lon)
     num_mesh_nodes = vertices.shape[0]
 
     attention_mask = get_khop_adjacency(faces, num_mesh_nodes, attention_k_hop)
@@ -396,12 +398,12 @@ def build_geometry(
         flat_lon = np.repeat(grid_lon, len(grid_lat))
     grid_xyz = lat_lon_to_cartesian(flat_lat, flat_lon)
 
-    radius = ball_query_radius_fraction * max_mesh_edge_length(vertices, faces)
-    g2m_senders, g2m_receivers = ball_query_edges(grid_xyz, vertices, radius)
+    radius = ball_query_radius_fraction * max_mesh_edge_length(mesh_xyz, faces)
+    g2m_senders, g2m_receivers = ball_query_edges(grid_xyz, mesh_xyz, radius)
     g2m_senders, g2m_receivers = _sort_by_receiver(g2m_senders, g2m_receivers)
     g2m_edge_features = get_edge_features(flat_lat, flat_lon, mesh_lat, mesh_lon, g2m_senders, g2m_receivers)
 
-    m2g_grid_indices, m2g_mesh_indices = in_triangle_edges(grid_xyz, vertices, faces)
+    m2g_grid_indices, m2g_mesh_indices = in_triangle_edges(grid_xyz, mesh_xyz, faces)
     m2g_senders, m2g_receivers = _sort_by_receiver(m2g_mesh_indices, m2g_grid_indices)
     m2g_edge_features = get_edge_features(mesh_lat, mesh_lon, flat_lat, flat_lon, m2g_senders, m2g_receivers)
 
@@ -710,7 +712,9 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
     return state_dict
 
 
-def geometry_state_dict(config: WeatherNext2Config) -> dict[str, torch.Tensor]:
+def geometry_state_dict(
+    config: WeatherNext2Config, grid_lat: np.ndarray | None = None, grid_lon: np.ndarray | None = None
+) -> dict[str, torch.Tensor]:
     """Builds the mesh and both bipartite graphs, and records the two sizes that follow from them.
 
     This is the only place the geometry is ever derived. It needs scipy and trimesh, takes about two
@@ -719,8 +723,10 @@ def geometry_state_dict(config: WeatherNext2Config) -> dict[str, torch.Tensor]:
     """
     geometry = build_geometry(
         mesh_splits=config.mesh_splits,
-        grid_lat=np.linspace(-90.0, 90.0, config.grid_latitudes),
-        grid_lon=np.arange(config.grid_longitudes) * (360.0 / config.grid_longitudes),
+        grid_lat=np.linspace(-90.0, 90.0, config.grid_latitudes, dtype=np.float32) if grid_lat is None else grid_lat,
+        grid_lon=np.arange(config.grid_longitudes, dtype=np.float32) * (360.0 / config.grid_longitudes)
+        if grid_lon is None
+        else grid_lon,
         attention_k_hop=config.attention_k_hop,
         ball_query_radius_fraction=config.ball_query_radius_fraction,
     )
@@ -750,6 +756,7 @@ def main():
         "--grid_latitudes", type=int, default=None, help="Defaults to 181 for the 1 degree mini model."
     )
     parser.add_argument("--grid_longitudes", type=int, default=None)
+    parser.add_argument("--dataset_path", help="Weather input NetCDF file whose lat/lon coordinates define the grid.")
     parser.add_argument("--push_to_hub", default=None, help="Optional Hub repository id.")
     args = parser.parse_args()
 
@@ -762,11 +769,21 @@ def main():
     is_mini = fiddle["predictor_kwargs"]["noisy_function_kwargs"]["mesh_num_splits"] < 6
     grid_latitudes = args.grid_latitudes or (181 if is_mini else 721)
     grid_longitudes = args.grid_longitudes or (360 if is_mini else 1440)
+    grid_lat = grid_lon = None
+    if args.dataset_path:
+        import xarray as xr
+
+        with xr.open_dataset(args.dataset_path) as dataset:
+            grid_lat = dataset.lat.values.copy()
+            grid_lon = dataset.lon.values.copy()
+        if grid_lat.ndim != 1 or grid_lon.ndim != 1:
+            raise ValueError("The input dataset must have one-dimensional lat/lon coordinates.")
+        grid_latitudes, grid_longitudes = len(grid_lat), len(grid_lon)
 
     config = config_from_fiddle(fiddle, grid_latitudes, grid_longitudes)
     state_dict = convert_state_dict(params, config)
     # Sets `num_grid_to_mesh_edges` and `attention_bandwidth`, so build it before the model.
-    state_dict.update(geometry_state_dict(config))
+    state_dict.update(geometry_state_dict(config, grid_lat, grid_lon))
 
     model = WeatherNext2ForWeatherForecasting(config)
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
