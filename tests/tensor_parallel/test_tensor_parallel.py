@@ -207,6 +207,7 @@ class TestTensorParallelLayer(TestCasePlus):
         op.device_mesh = mesh
         op.placements = (placement,)
         op.param_ndim = len(param_shape)
+        op.source_dim_mapping = {}
         op._axis0_offset = 0
         op._axis0_local_size = local_shape[0]
         return op

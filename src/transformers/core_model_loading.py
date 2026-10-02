@@ -93,6 +93,17 @@ class ConversionOps(ABC):
     ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
+    def get_source_dim_mapping(
+        self, source_shape: tuple[int, ...], target_shape: tuple[int, ...]
+    ) -> dict[int, int] | None:
+        """Return target-to-source dimension mappings for shard-on-read.
+
+        DTensor placements describe target dimensions, but shard-on-read slices the checkpoint before conversion.
+        For example, "Transpose" ops overrides this method so target shard dimensions can be translated to the corresponding
+        checkpoint dimensions. "None" means the source and target dimension indices are identical.
+        """
+        return None
+
     @property
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError
@@ -332,7 +343,8 @@ class Transpose(ConversionOps):
         # In this case, check the shapes before transposing
         else:
             # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
-            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            expected_param = kwargs["model"].get_parameter(kwargs["full_layer_name"])
+            expected_shape = expected_param.to_local().shape if is_dtensor(expected_param) else expected_param.shape
             # The shapes are the same: do NOT transpose
             if tensor.shape == expected_shape:
                 return {target_pattern: tensor}
@@ -353,6 +365,28 @@ class Transpose(ConversionOps):
         # Here it's the only operation, or the last operation in a chain, so we return the target
         else:
             return target_patterns[0]
+
+    def get_source_dim_mapping(
+        self, source_shape: tuple[int, ...], target_shape: tuple[int, ...]
+    ) -> dict[int, int] | None:
+        """Map target model dimensions to source checkpoint dimensions for shard-on-read.
+
+        DTensor placements describe the target parameter, but the loader slices the raw checkpoint before this
+        transpose runs, avoiding full tensor materialization. Qwen3-VL-MoE uses this for its expert weights:
+        packed-colwise `gate_up_proj` shards target dim 1 in `[E, 2I, H]`, stored at checkpoint dim 2 in `[E, H, 2I]`.
+        This method swaps those axes otherwise we end up sharding the wrong dimensions. When `check_dims` finds matching shapes,
+        conversion skips both transpose and remapping.
+        """
+        if self.check_dims and source_shape == target_shape:
+            return None
+
+        ndim = len(target_shape)
+        if not (-ndim <= self.dim0 < ndim and -ndim <= self.dim1 < ndim):
+            raise IndexError(f"Dimension out of range for a {ndim}D tensor: {(self.dim0, self.dim1)}")
+
+        dim0 = self.dim0 % ndim
+        dim1 = self.dim1 % ndim
+        return {dim0: dim1, dim1: dim0}
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -1172,6 +1206,17 @@ class WeightConverter(WeightTransform):
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
+    def get_source_dim_mapping(self, tensor: Any, target_param: torch.Tensor) -> dict[int, int] | None:
+        if len(self.source_patterns) != 1 or len(self.target_patterns) != 1 or len(self.operations) != 1:
+            return None
+
+        operation = self.operations[0]
+        if not isinstance(operation, Transpose):
+            return None
+
+        source_shape = tuple(tensor.shape) if isinstance(tensor, torch.Tensor) else tuple(tensor.get_shape())
+        return operation.get_source_dim_mapping(source_shape, tuple(target_param.shape))
+
     def convert(
         self,
         layer_name: str,
@@ -1717,7 +1762,12 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
+                source_dim_mapping = (
+                    mapping.get_source_dim_mapping(tensor, empty_param)
+                    if isinstance(mapping, WeightConverter)
+                    else None
+                )
+                sharding_op = DtensorShardOperation(empty_param, source_dim_mapping=source_dim_mapping)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
