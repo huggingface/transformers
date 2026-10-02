@@ -156,7 +156,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 local_kwargs["_json_truncation"] = tok_from_file.truncation
             if tok_from_file.padding is not None:
                 local_kwargs["_json_padding"] = tok_from_file.padding
-            
+
             # Pass the decoder and pre_tokenizer types to detect mismatches with the Python class
             if tokenizer_json.get("decoder") is not None:
                 local_kwargs["_json_decoder_type"] = tokenizer_json["decoder"].get("type")
