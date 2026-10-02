@@ -64,6 +64,21 @@ def is_local_dist_rank_0() -> bool:
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
 
+DISTRIBUTED_BACKEND_MAP = {
+    "cuda": "nccl",
+    "cpu": "gloo",
+    "xpu": "xccl",
+    "hpu": "hccl",
+    "neuron": "neuron",
+    "tpu": "tpu_dist",
+}
+
+
+def get_distributed_backend(device_type: str) -> str | None:
+    """Return the `torch.distributed` backend for `device_type`, or `None` if it has no dedicated one."""
+    return DISTRIBUTED_BACKEND_MAP.get(device_type)
+
+
 def _ensure_torch_distributed(device_type: str | None = None):
     """Initialize torch.distributed if not already initialized.
 
@@ -82,15 +97,7 @@ def _ensure_torch_distributed(device_type: str | None = None):
             local_rank = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            backend_map = {
-                "cuda": "nccl",
-                "cpu": "gloo",
-                "xpu": "xccl",
-                "hpu": "hccl",
-                "neuron": "neuron",
-                "tpu": "tpu_dist",
-            }
-            backend = backend_map.get(device_type)
+            backend = get_distributed_backend(device_type)
 
             # Bind the accelerator before init so the process group is created with a
             # device_id, otherwise collectives like barrier() warn (and may spin up an
