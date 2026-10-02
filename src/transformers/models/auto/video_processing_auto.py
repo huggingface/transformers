@@ -85,26 +85,26 @@ VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR
 
 
 def video_processor_class_from_name(class_name: str):
+    # 1. Custom classes registered at runtime via AutoVideoProcessor.register
     for video_processors_dict in VIDEO_PROCESSOR_MAPPING._extra_content.values():
         if video_processors_dict is None:
             continue
-        for extractor_class in video_processors_dict.values():
-            if isinstance(extractor_class, type) and getattr(extractor_class, "__name__", None) == class_name:
-                return extractor_class
+        for cls in video_processors_dict.values():
+            if isinstance(cls, type) and cls.__name__ == class_name:
+                return cls
 
+    # 2. Built-in classes: compare classes which is how LazyMapping stores data
     for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING.items():
         if extractors_dict is None:
             continue
-        if class_name in extractors_dict.values():
-            module_name = model_type_to_module_name(model_type)
-            module = importlib.import_module(f".{module_name}", "transformers.models")
+        if class_name in video_processors_dict.values():
+            module = importlib.import_module(f".{model_type_to_module_name(model_type)}", "transformers.models")
             try:
                 return getattr(module, class_name)
             except AttributeError:
                 continue
 
-    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
-    # init and we return the proper dummy to get an appropriate error message.
+    # 3. Dummy object fallback for missing deps
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
         return getattr(main_module, class_name)
