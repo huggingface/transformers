@@ -193,7 +193,7 @@ class SentencePieceExtractor:
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
         ]
         charsmap = getattr(self.proto.normalizer_spec, "precompiled_charsmap", None)
-        kwargs["_spm_precompiled_charsmap"] = charsmap if charsmap else None
+        kwargs["_spm_precompiled_charsmap"] = charsmap or None
         return kwargs
 
 

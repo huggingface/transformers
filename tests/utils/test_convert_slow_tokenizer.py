@@ -39,13 +39,12 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
         )
 
     def test_spm_extractor_empty_precompiled_charsmap(self):
-        from transformers.convert_slow_tokenizer import SentencePieceExtractor
         from tokenizers.models import Unigram
+
+        from transformers.convert_slow_tokenizer import SentencePieceExtractor
+
         spm_model_file = get_tests_dir("fixtures/test_sentencepiece.model")
         extractor = SentencePieceExtractor(spm_model_file)
         extractor.proto.normalizer_spec.precompiled_charsmap = b""
         kwargs = extractor.extract(model_type=Unigram)
         self.assertIsNone(kwargs.get("_spm_precompiled_charsmap"))
-
-
-

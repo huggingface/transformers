@@ -36,5 +36,3 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_empty_precompiled_charsmap(self):
         tokenizer = self.get_tokenizer(_spm_precompiled_charsmap=b"")
         self.assertIsNotNone(tokenizer)
-
-
