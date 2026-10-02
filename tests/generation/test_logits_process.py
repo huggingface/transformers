@@ -311,6 +311,20 @@ class LogitsProcessorTest(unittest.TestCase):
         # The cached source IDs remain in their original, unexpanded shape.
         self.assertEqual(rep_penalty_proc.encoder_input_ids.shape, encoder_input_ids.shape)
 
+    def test_encoder_repetition_penalty_dist_process_reuses_expansion_cache(self):
+        encoder_input_ids = torch.tensor([[0, 1], [5, 6]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=4, length=8)
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
+            penalty=2.0, encoder_input_ids=encoder_input_ids
+        )
+
+        rep_penalty_proc(torch.zeros((4, 1), device=torch_device, dtype=torch.long), scores)
+        cached_ids = rep_penalty_proc._expanded_encoder_input_ids
+        rep_penalty_proc(torch.zeros((4, 1), device=torch_device, dtype=torch.long), scores)
+
+        self.assertIs(rep_penalty_proc._expanded_encoder_input_ids, cached_ids)
+        self.assertEqual(cached_ids.shape[0], 4)
+
     def test_encoder_repetition_penalty_dist_process_empty_encoder_batch(self):
         encoder_input_ids = torch.empty((0, 2), device=torch_device, dtype=torch.long)
         scores = self._get_uniform_logits(batch_size=1, length=8)
