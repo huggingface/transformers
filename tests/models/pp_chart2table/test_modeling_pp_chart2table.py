@@ -54,7 +54,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
             truncation=True,
             return_dict=True,
             return_tensors="pt",
-        ).to(self.model.device)
+        ).to(self.model.device, dtype=self.model.dtype)
 
         generated_ids = self.model.generate(**inputs, do_sample=False, max_new_tokens=32)
         generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
@@ -73,7 +73,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
             truncation=True,
             return_dict=True,
             return_tensors="pt",
-        ).to(self.model.device)
+        ).to(self.model.device, dtype=self.model.dtype)
 
         generated_ids = self.model.generate(**inputs, do_sample=False, max_new_tokens=6)
         generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]

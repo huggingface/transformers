@@ -352,6 +352,11 @@ class Trainer:
           overridden by subclassing `TrainingArguments` and overriding the `place_model_on_device` property.
         - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
           in `train`)
+        - **loss_is_scaled_for_ga** -- Whether the loss returned by `compute_loss` is already scaled for gradient
+          accumulation. `True`: `training_step` uses it as is. `False`: `training_step` divides it by the number of
+          gradient accumulation steps. `None` (default): the loss counts as scaled when it was normalized by
+          `num_items_in_batch`, i.e. when the model accepts loss kwargs or a `compute_loss_func` is passed. Subclasses
+          that compute their own loss should set it.
 
     """
 
@@ -365,6 +370,10 @@ class Trainer:
         save_metrics,
         save_state,
     )
+
+    # Whether the loss returned by `compute_loss` is already scaled for gradient accumulation. `None` decides from
+    # `model_accepts_loss_kwargs` and `compute_loss_func`, see the class docstring.
+    loss_is_scaled_for_ga: bool | None = None
 
     # ---- Initialization & Validation ----
 
@@ -1613,6 +1622,8 @@ class Trainer:
         start_time = time.time()
         # needed to calculate tokens/s
         self._initial_num_input_tokens_seen = self.state.num_input_tokens_seen
+        # needed to report loss and throughput for this `train()` call only when resuming from a checkpoint
+        self._initial_global_step = self.state.global_step
         # Logging state: _tr_loss accumulates on-device between logging steps (avoiding costly .item() syncs
         # on TPUs), then gets drained into _total_loss_scalar at each logging step.
         self._tr_loss = torch.tensor(0.0, device=args.device)
@@ -1958,14 +1969,15 @@ class Trainer:
 
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
-        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
-        train_loss = self._total_loss_scalar / effective_global_step
+        num_steps_trained = self.state.global_step - self._initial_global_step
+        train_loss = self._total_loss_scalar / max(num_steps_trained, 0.001)  # Avoid ZeroDivisionError
 
         metrics = speed_metrics(
             "train",
             start_time,
-            num_samples=num_train_samples,
-            num_steps=self.state.max_steps,
+            # `num_train_samples` covers the whole schedule: only count the share of the steps run in this call
+            num_samples=num_train_samples * num_steps_trained / max(self.state.max_steps, 1),
+            num_steps=num_steps_trained,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
@@ -2061,8 +2073,14 @@ class Trainer:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+            if self.loss_is_scaled_for_ga is not None:
+                loss_is_scaled_for_ga = self.loss_is_scaled_for_ga
+            else:
+                # The loss is scaled when it was normalized by `num_items_in_batch`, by the model or by `compute_loss_func`
+                loss_is_scaled_for_ga = (
+                    self.model_accepts_loss_kwargs and num_items_in_batch is not None
+                ) or self.compute_loss_func is not None
+            if not loss_is_scaled_for_ga:
                 loss = loss / self.current_gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
@@ -2098,8 +2116,10 @@ class Trainer:
         Returns:
             The loss of the model along with its output if return_outputs was set to True
 
-        Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculation might be slightly inaccurate when performing gradient accumulation.
+        Subclass and override for custom behavior. If you compute your own loss, set `loss_is_scaled_for_ga` to say
+        whether it is already scaled for gradient accumulation: `False` if it is a per-batch mean (the Trainer then
+        divides it by the number of gradient accumulation steps), `True` if you already normalized it over the whole
+        accumulated batch.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
