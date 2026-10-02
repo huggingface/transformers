@@ -17,7 +17,6 @@ import collections
 import json
 import os
 import re
-import sys
 
 import numpy as np
 
@@ -233,20 +232,14 @@ class SubWordJapaneseTokenizer:
         # The original version of this regex displays catastrophic backtracking behaviour. We avoid this using
         # possessive quantifiers in Py >= 3.11. In versions below this, we avoid the vulnerability using a slightly
         # different regex that should generally have the same behaviour in most non-pathological cases.
-        if sys.version_info >= (3, 11):
-            self.content_repatter6 = re.compile(
-                r"(?:\d,\d{3}|[\d億])*+"
-                r"(?:\d,\d{3}|[\d万])*+"
-                r"(?:\d,\d{3}|[\d千])*+"
-                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
-                r"(?:\(税込\)|\(税抜\)|\+tax)*"
-            )
-        else:
-            self.content_repatter6 = re.compile(
-                r"(?:\d,\d{3}|[\d億万千])*"
-                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
-                r"(?:\(税込\)|\(税抜\)|\+tax)*"
-            )
+        self.content_repatter6 = re.compile(
+            r"(?:\d,\d{3}|[\d億])*+"
+            r"(?:\d,\d{3}|[\d万])*+"
+            r"(?:\d,\d{3}|[\d千])*+"
+            r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
+            r"(?:\(税込\)|\(税抜\)|\+tax)*"
+        )
+
         keisen = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿"
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
         self.content_trans1 = str.maketrans(dict.fromkeys(keisen + blocks, "<BLOCK>"))

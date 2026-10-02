@@ -84,7 +84,7 @@ Explore the [Hub](https://huggingface.co/) today to find a model and use Transfo
 
 ## Installation
 
-Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.5+.
+Transformers works with Python 3.11+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.5+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
