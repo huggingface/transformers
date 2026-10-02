@@ -65,14 +65,14 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str]) -> None:
     `HF_SHARD_PREFETCH=<read threads per rank>`.
 
     The per-tensor read pattern of sharded loading reads a network filesystem at well under 1 GiB/s
-    while large sequential reads sustain many times that; warming the page cache first makes the
-    actual load run at memory speed. Local ranks split the shard list between them (every node needs
-    the full checkpoint cached, since every rank slices tensors from all shards).
+    while large sequential reads sustain many times that. The reads run in background threads, ahead of
+    the loading pass, which starts right away and finds more and more of the checkpoint in the page
+    cache. Local ranks split the shard list between them (every node needs the full checkpoint cached,
+    since every rank slices tensors from all shards).
     """
     prefetch_threads = int(os.environ.get("HF_SHARD_PREFETCH", "0"))
     if not checkpoint_files or not prefetch_threads:
         return
-    import time
     from concurrent.futures import ThreadPoolExecutor
 
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
@@ -83,11 +83,10 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str]) -> None:
             while f.read(bufsize):
                 pass
 
-    prefetch_start = time.time()
-    with ThreadPoolExecutor(max_workers=prefetch_threads) as pool:
-        list(pool.map(_warm, checkpoint_files[local_rank::local_world]))
-    _distributed_barrier()
-    logger.warning_once(f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s")
+    pool = ThreadPoolExecutor(max_workers=prefetch_threads)
+    for path in checkpoint_files[local_rank::local_world]:
+        pool.submit(_warm, path)
+    pool.shutdown(wait=False)
 
 
 def is_local_dist_rank_0() -> bool:
