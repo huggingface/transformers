@@ -106,7 +106,6 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = False
     test_inputs_embeds = False
-    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = TimesFm2_5ModelTester(self)

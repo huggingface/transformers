@@ -156,7 +156,6 @@ class PI0ModelTester:
 class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PI0ForConditionalGeneration,) if is_torch_available() else ()
     test_resize_embeddings = False
-    test_all_params_have_gradient = False
     has_attentions = True
     _is_composite = True
     additional_model_inputs = ["input_ids", "attention_mask", "state", "actions", "timestep"]

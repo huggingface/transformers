@@ -55,7 +55,6 @@ class DeepseekV2ModelTester(CausalLMModelTester):
 
 @require_torch
 class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = DeepseekV2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
