@@ -64,6 +64,21 @@ def held_scale(model, full_layer_name, key):
     return module, getattr(module, param_name, None)
 
 
+def finegrained_experts(model, full_layer_name):
+    """The ``FineGrainedExperts`` a converter output fills, else ``None`` (a mixed checkpoint keeps some
+    layers' experts unquantized). Saving names the key past the module (``experts.*.gate_proj.weight``),
+    so the deepest module the name resolves to is the one."""
+    name = full_layer_name or ""
+    while model is not None and name:
+        name = name.rpartition(".")[0]
+        try:
+            module = model.get_submodule(name)
+        except AttributeError:
+            continue
+        return module if isinstance(module, FineGrainedExperts) else None
+    return None
+
+
 def as_container(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     """The same bytes under a same-width dtype (uint8 <-> e8m0), an exact numeric cast otherwise."""
     return scale.view(dtype) if scale.element_size() == dtype.itemsize else scale.to(dtype)
@@ -92,9 +107,9 @@ class FineGrainedInterleaveGateUp(_FineGrainedOp):
     core ``Interleave`` along dim 1, over the weight, scale grid and bias alike. Runs on load and
     save wherever the checkpoint's row order differs from the one the experts hold."""
 
-    def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
+    def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         input_dict = keyed_by_target(input_dict, target_patterns)
-        experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None) if model else None
+        experts = finegrained_experts(model, full_layer_name)
         if experts is None or not (experts.is_concatenated and experts.holds_interleaved_gate_up):
             return input_dict
         interleave = Interleave(dim=1, inverse=not self.inverse)  # inverse=True is stacked -> interleaved
@@ -299,11 +314,11 @@ class FineGrainedInputScalesSplit(_FineGrainedOp):
     are gone and each projection is written the value that covers it. A collapsed global
     re-expands per expert, the shape the checkpoint holds."""
 
-    def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
+    def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         value = next(iter(input_dict.values()))
         value = value[0] if isinstance(value, list) else value
-        if value.numel() == 1 and model is not None:
-            experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None)
+        if value.numel() == 1:
+            experts = finegrained_experts(model, full_layer_name)
             if experts is not None:
                 value = value.reshape(1).expand(experts.num_experts).contiguous()
         # one tensor per key: a save refuses keys that share storage

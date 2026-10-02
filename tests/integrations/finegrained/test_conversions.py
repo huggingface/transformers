@@ -559,15 +559,41 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         stacked = torch.arange(2 * 6 * 4, dtype=torch.float32).reshape(2, 6, 4)  # rows [g0,g1,g2,u0,u1,u2]
         op = FineGrainedInterleaveGateUp(hf_quantizer=None)
         model, experts = self._experts("mxfp8")
-        out = op.convert({"mlp.experts.gate_up_proj": stacked}, model=model)["mlp.experts.gate_up_proj"]
+        key = "experts.gate_up_proj"
+        out = op.convert({key: stacked}, model=model, full_layer_name=key)[key]
         torch.testing.assert_close(out, stacked[:, [0, 3, 1, 4, 2, 5]])
-        back = op.reverse_op.convert({"mlp.experts.gate_up_proj": out}, model=model)["mlp.experts.gate_up_proj"]
+        back = op.reverse_op.convert({key: out}, model=model, full_layer_name=key)[key]
         torch.testing.assert_close(back, stacked)
         experts.is_concatenated = False
-        self.assertIs(op.convert({"x": stacked}, model=model)["x"], stacked)
+        self.assertIs(op.convert({key: stacked}, model=model, full_layer_name=key)[key], stacked)
         experts.is_concatenated = True
         experts.holds_interleaved_gate_up = False
-        self.assertIs(op.convert({"x": stacked}, model=model)["x"], stacked)
+        self.assertIs(op.convert({key: stacked}, model=model, full_layer_name=key)[key], stacked)
+
+    def test_interleave_op_follows_the_layer_it_fills(self):
+        """A mixed checkpoint keeps some layers' experts in full precision: their rows stay stacked
+        while a quantized layer's interleave, on load (model key) and on save (the checkpoint's
+        per-expert key)."""
+        from transformers.integrations.finegrained.conversions import FineGrainedInterleaveGateUp
+
+        stacked = torch.arange(2 * 6 * 4, dtype=torch.float32).reshape(2, 6, 4)  # rows [g0,g1,g2,u0,u1,u2]
+        interleaved = stacked[:, [0, 3, 1, 4, 2, 5]]
+        full_precision = torch.nn.Module()
+        full_precision.gate_up_proj = torch.nn.Parameter(torch.empty(2, 6, 4))
+        full_precision.down_proj = torch.nn.Parameter(torch.empty(2, 4, 3))
+        model = torch.nn.Module()
+        model.layers = torch.nn.ModuleList([torch.nn.Module(), torch.nn.Module()])
+        model.layers[0].experts = full_precision
+        model.layers[1].experts = self._experts("mxfp8")[1]
+        op = FineGrainedInterleaveGateUp(hf_quantizer=None)
+
+        for layer, expected in ((0, stacked), (1, interleaved)):
+            key = f"layers.{layer}.experts.gate_up_proj"
+            out = op.convert({key: stacked}, model=model, full_layer_name=key)[key]
+            torch.testing.assert_close(out, expected)
+            saved_key = f"layers.{layer}.experts.*.gate_proj.weight"
+            back = op.reverse_op.convert({saved_key: out}, model=model, full_layer_name=saved_key)[saved_key]
+            torch.testing.assert_close(back, stacked)
 
 
 @require_torch
