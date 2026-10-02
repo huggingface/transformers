@@ -57,7 +57,6 @@ from ...utils import (
     is_torchdynamo_exporting,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -82,8 +81,7 @@ class Qwen3_5MoeVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen3_5MoeVisionConfig, device=None):
+    def __init__(self, config: Qwen3_5MoeVisionConfig):
         super().__init__()
         self.config = config
 
@@ -91,13 +89,12 @@ class Qwen3_5MoeVisionRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_axial_rope_parameters
         if self.rope_type != "axial":
             raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_axial_rope_parameters(
         config: Qwen3_5MoeVisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -142,7 +139,6 @@ class Qwen3_5MoeVisionRotaryEmbedding(nn.Module):
 
 
 class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3_5MoeTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -154,14 +150,13 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen3_5MoeTextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -1776,6 +1771,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
 

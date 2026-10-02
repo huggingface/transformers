@@ -87,6 +87,7 @@ if is_kernels_available():
         LayerRepository,
         LocalLayerRepository,
         Mode,
+        ROCMProperties,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_mapping,
@@ -166,6 +167,17 @@ if is_kernels_available():
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
                     revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
+                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                    trust_remote_code=True,
+                ),
+                # AMD Strix Halo (gfx1151, capability 11.5), ROCm build of the same layer
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): LayerRepository(
+                    repo_id="Atlas-Inference/gdn",
+                    layer_name="Qwen3_5GatedDeltaNet",
+                    revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -271,12 +283,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "xpu": {
@@ -297,12 +309,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "xpu": {
@@ -323,12 +335,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "xpu": {
@@ -349,12 +361,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "xpu": {
@@ -375,12 +387,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "xpu": {
