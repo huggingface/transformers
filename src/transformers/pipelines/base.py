@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Union
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
@@ -68,6 +69,14 @@ else:
 
 
 logger = logging.get_logger(__name__)
+
+# Standard `GenerationConfig` fields, i.e. the `generate()` kwargs that can be folded into a generation config
+_GENERATION_PARAMS = frozenset(key for key in GenerationConfig().__dict__ if not key.startswith("_"))
+# Flags only used when sampling, with the values `generate()` treats as neutral
+_SAMPLING_ONLY_PARAMS = {
+    key: GenerationConfig._get_default_generation_params().get(key)
+    for key in ("temperature", "top_k", "top_p", "min_p", "top_h", "typical_p", "epsilon_cutoff", "eta_cutoff")
+}
 
 
 def no_collate_fn(items):
@@ -896,10 +905,20 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                         defaults_only=True,
                         allow_custom_entries=True,
                     )
+                unset_lengths = [
+                    key
+                    for key in ("max_length", "min_length")
+                    if getattr(base_config, key) is None and key not in kwargs
+                ]
                 prepared_generation_config, kwargs = self.model._prepare_generation_config(
                     generation_config=base_config, **kwargs
                 )
                 self.generation_config = prepared_generation_config
+                # `_prepare_generation_config` fills in the global length defaults, but `generate()` treats any
+                # non-`None` length as user-set and warns when it clashes with `max_new_tokens`/`min_new_tokens`.
+                # Leave unset lengths unset: `generate()` applies the same global defaults when they are needed.
+                for key in unset_lengths:
+                    setattr(self.generation_config, key, None)
                 # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
                 # value: let's honor `max_length`. E.g. we want Whisper's default `max_length=448` take precedence
                 # over over the pipeline's length default.
@@ -1082,6 +1101,36 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             `dict[str, torch.Tensor]`: The same as `inputs` but on the proper device.
         """
         return self._ensure_tensor_on_device(inputs, self.device)
+
+    def _merge_generation_config(self, generate_kwargs: dict) -> dict:
+        """
+        Folds the generation parameters in `generate_kwargs` into a copy of the generation config (the one passed in
+        `generate_kwargs` if any, `self.generation_config` otherwise), as `generate()` deprecates (and warns about)
+        receiving a `generation_config` together with loose generation parameters.
+
+        Returns the kwargs to pass to `generate()`: the merged `generation_config` plus the non-generation kwargs.
+        """
+        generate_kwargs = dict(generate_kwargs)
+        generation_config = copy.deepcopy(generate_kwargs.pop("generation_config", self.generation_config))
+        # Only fold the standard generation parameters: model-specific `generate()` arguments (e.g. Whisper's
+        # `return_timestamps`) must still be passed explicitly.
+        generation_params = {
+            key: generate_kwargs.pop(key) for key in list(generate_kwargs) if key in _GENERATION_PARAMS
+        }
+        # A length passed in this call takes precedence over a configured length of the other kind
+        for length, new_tokens in (("max_length", "max_new_tokens"), ("min_length", "min_new_tokens")):
+            if length in generation_params and new_tokens not in generation_params:
+                setattr(generation_config, new_tokens, None)
+            elif new_tokens in generation_params and length not in generation_params:
+                setattr(generation_config, length, None)
+        generation_config.update(**generation_params)
+        # Greedy decoding requested in this call: sampling flags set elsewhere (e.g. the pipeline's default
+        # `temperature`) don't apply. `generate()` can't tell they weren't set by the caller, and would warn about them.
+        if generation_params.get("do_sample") is False:
+            for key, value in _SAMPLING_ONLY_PARAMS.items():
+                if key not in generation_params:
+                    setattr(generation_config, key, value)
+        return {"generation_config": generation_config, **generate_kwargs}
 
     def _ensure_tensor_on_device(self, inputs, device):
         if isinstance(inputs, ModelOutput):
