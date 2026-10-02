@@ -19,6 +19,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+import pytest
 from parameterized import parameterized
 
 from transformers.testing_utils import cleanup, is_torch_available, require_torch, torch_device
@@ -26,6 +27,7 @@ from transformers.testing_utils import cleanup, is_torch_available, require_torc
 
 if is_torch_available():
     import torch
+    from torch._dynamo.testing import CompileCounter
 
     from tests.heterogeneity.model_fixtures import MODEL_FIXTURES
     from tests.heterogeneity.testing_utils import (
@@ -503,6 +505,42 @@ class TestHeterogeneousCache(unittest.TestCase):
 
         torch.testing.assert_close(actual.sequences, expected.sequences)
         torch.testing.assert_close(actual.logits, expected.logits)
+
+    @parameterized.expand(
+        [
+            ("no_skips", {1: {"intermediate_size": 96}}),
+            ("skip_attention", {1: {"skip": ["attention"]}}),
+        ]
+    )
+    @pytest.mark.torch_compile_test
+    def test_static_cache_decoding_compiles_fullgraph(self, _name, per_layer_config):
+        config = tiny_llama_config(num_hidden_layers=3, per_layer_config=per_layer_config)
+        # sdpa never skips the mask when decoding with a static cache, so the masks are always built
+        config._attn_implementation = "sdpa"
+        model = build_model(config, LlamaForCausalLM)
+        input_ids = torch.tensor([[1, 3, 4, 5]])
+        cache = StaticCache(config=config, max_cache_len=input_ids.shape[1])
+        # Unlike with `generate`, compiling the model itself also builds the masks inside the graph
+        compile_counter = CompileCounter()
+        compiled_model = torch.compile(model, backend=compile_counter, fullgraph=True)
+
+        with torch.no_grad():
+            expected_logits = model(input_ids, use_cache=False).logits[:, -2:]
+            # Prefill without compiling, like `generate` does, so the compiled steps see an initialized cache
+            model(input_ids[:, :-2], past_key_values=cache, use_cache=True)
+            torch.compiler.reset()
+            with torch._dynamo.config.patch(error_on_recompile=True):
+                actual_logits = torch.cat(
+                    [
+                        compiled_model(input_ids[:, [position]], past_key_values=cache, use_cache=True).logits
+                        for position in (2, 3)
+                    ],
+                    dim=1,
+                )
+
+        # Both decoding steps ran through one compiled graph
+        self.assertEqual(compile_counter.frame_count, 1)
+        torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
     def test_assisted_generation_attention_outputs_with_skipped_attention(self):
         config = tiny_llama_config(
