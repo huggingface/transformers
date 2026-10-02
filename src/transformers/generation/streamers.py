@@ -302,7 +302,7 @@ class AsyncTextIteratorStreamer(TextStreamer):
                     value = await self.text_queue.get()
             else:
                 value = await asyncio.wait_for(self.text_queue.get(), timeout=self.timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise TimeoutError()
         else:
             if value == self.stop_signal:
