@@ -31,7 +31,7 @@ import json
 import os
 import re
 import shutil
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -541,7 +541,6 @@ def prefers_deepgemm_linear(
     input_global_scale: torch.Tensor | None,
     activation_format: str | None,
     allow_deepgemm: bool,
-    adapters: Sequence[tuple[torch.Tensor, torch.Tensor, float]] = (),
 ) -> bool:
     """Whether a dense fine-grained linear should go to DeepGEMM rather than Triton.
 
@@ -555,15 +554,16 @@ def prefers_deepgemm_linear(
         # False when the model spans devices: DeepGEMM's kernels are bound to one CUDA context and
         # corrupt across them, and the Triton fallback is context-free.
         and allow_deepgemm
+        # DeepGEMM has no backward pass; a call that needs a gradient takes Triton, which has one
         and not (torch.is_grad_enabled() and input.requires_grad)
         # A pre-swizzled (SWIZZLE_32_4_4) scale is not readable as row-major — DeepGEMM would
         # consume the permuted buffer as affine and return garbage. Correctness gate, any arch.
         and weight_scale_inv.ndim <= 2
+        and activation_scale is None
+        # DeepGEMM serves neither the NVFP4 two-level globals nor an explicit activation format
         and weight_global_scale is None
         and input_global_scale is None
         and activation_format is None
-        and activation_scale is None
-        and not adapters
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
         # last: an environment probe (arch, `CUDA_HOME/bin/nvcc`, nvcc version) rather than a
