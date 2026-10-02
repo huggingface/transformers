@@ -1408,6 +1408,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             )
             in_channels = config.d_model
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
+
         # decoder
         self.decoder = RTDetrV2Decoder(config)
 
