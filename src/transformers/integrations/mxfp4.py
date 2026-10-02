@@ -571,7 +571,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
-            if model.config.generic_modeling_applied:
+            if model.config.generic_heterogeneous_modeling_applied:
                 # Support generic heterogeneous modeling: build each layer's experts from that layer's config
                 module_path_parts = module_name.split(".")
                 try:

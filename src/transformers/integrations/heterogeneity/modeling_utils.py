@@ -44,6 +44,7 @@ class _LayerInitContext:
     layer_idx_resolver: LayerIdxResolver
     skip_descriptors: dict[str, SkipDescriptor]
     model_layer_configs: dict[int, PreTrainedConfig]
+    cache_receivers_skipped_layers: set[int]
 
 
 _layer_init_contexts: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
@@ -69,7 +70,7 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     if not model.config.is_heterogeneous:
         return
 
-    if model.config.generic_modeling_applied:
+    if model.config.generic_heterogeneous_modeling_applied:
         raise ValueError(
             f"This {type(model.config).__name__}, or the config it was copied from, was already used to construct a "
             "model with generic heterogeneous modeling. Its `per_layer_config` returns the layer configs resolved "
@@ -86,16 +87,19 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 
     layer_init_contexts = _layer_init_contexts.get()
-    model_layer_configs = next(
-        (context.model_layer_configs for context in layer_init_contexts if context.model.config is model.config),
-        {},
+    same_config_context = next(
+        (context for context in layer_init_contexts if context.model.config is model.config),
+        None,
     )
     context = _LayerInitContext(
         model=model,
         layer_cls=heterogeneous_modeling_spec.layer_cls,
         layer_idx_resolver=heterogeneous_modeling_spec.layer_idx_resolver,
         skip_descriptors=skip_descriptors,
-        model_layer_configs=model_layer_configs,
+        model_layer_configs=same_config_context.model_layer_configs if same_config_context else {},
+        cache_receivers_skipped_layers=(
+            same_config_context.cache_receivers_skipped_layers if same_config_context else set()
+        ),
     )
     _layer_init_contexts.set((*layer_init_contexts, context))
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
@@ -142,9 +146,12 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
             # Validate all contexts before publishing any, so that a failed initialization publishes nothing
             for context in layer_init_contexts:
                 _validate_layer_configs_collected(context)
-            # The root model completed initialization, so now we can set the models' layer configs on their configs
+            # The root model completed initialization, so now we can set what was collected for the models on their
+            # configs
             for context in layer_init_contexts:
-                context.model.config._heterogeneity_spec.model_layer_configs = context.model_layer_configs
+                heterogeneity_spec = context.model.config._heterogeneity_spec
+                heterogeneity_spec.model_layer_configs = context.model_layer_configs
+                heterogeneity_spec.cache_receivers_skipped_layers = frozenset(context.cache_receivers_skipped_layers)
         finally:
             _layer_init_contexts.reset(layer_init_contexts_token)
         return result

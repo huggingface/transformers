@@ -52,6 +52,7 @@ class _HeterogeneitySpec:
     explicit_per_layer_attributes: set[str]
 
     model_layer_configs: dict[int, PreTrainedConfig] | None = None
+    cache_receivers_skipped_layers: frozenset[int] = frozenset()
 
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:
@@ -319,7 +320,7 @@ class HeterogeneousConfigMixin:
         super().__setattr__(key, value)
 
         # After a model is built with generic heterogeneous modeling, pass global changes on to its layer configs.
-        if key == "skip" or not self.generic_modeling_applied:
+        if key == "skip" or not self.generic_heterogeneous_modeling_applied:
             return
 
         # Only update layers that still have the old global value; layers with a value of their own keep it.
@@ -355,9 +356,17 @@ class HeterogeneousConfigMixin:
         return hasattr(self, "_heterogeneity_spec")
 
     @property
-    def generic_modeling_applied(self) -> bool:
+    def generic_heterogeneous_modeling_applied(self) -> bool:
         """Whether generic heterogeneous modeling has been applied successfully during model initialization."""
         return self.is_heterogeneous and self._heterogeneity_spec.model_layer_configs is not None
+
+    @property
+    def cache_receivers_skipped_layers(self) -> frozenset[int] | None:
+        """Generic heterogeneous modeling fills this in when building the model, with the indices of the layers in
+        which skips replaced every module that receives the cache."""
+        if not self.generic_heterogeneous_modeling_applied:
+            return None
+        return self._heterogeneity_spec.cache_receivers_skipped_layers
 
     @property
     def per_layer_config(self) -> Sequence[PreTrainedConfig]:

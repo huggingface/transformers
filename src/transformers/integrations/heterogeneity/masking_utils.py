@@ -15,12 +15,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from functools import partial, wraps
 from inspect import signature, unwrap
 from typing import TYPE_CHECKING, Any
 
-from transformers.utils import is_torch_tensor
+from transformers.utils import is_torch_available, is_torch_tensor
 
 
 if TYPE_CHECKING:
@@ -34,6 +34,23 @@ _COMMON_MASK_AFFECTING_ATTRIBUTES = {"is_causal": True, "_attn_implementation": 
 
 class AttentionMasksByLayerIdx(dict[int, Any]):
     """Attention masks selected by layer index."""
+
+
+if is_torch_available():
+    import torch.utils._pytree as torch_pytree
+
+    def _unflatten_attention_masks(values: Iterable[Any], context: Any) -> AttentionMasksByLayerIdx:
+        return AttentionMasksByLayerIdx(torch_pytree._dict_unflatten(values, context))
+
+    # With a compileable cache, `generate` builds the masks in advance and passes them to the model's forward, so
+    # `torch.export` must accept this container as an input, and `torch.export.load` must be able to rebuild it
+    torch_pytree.register_pytree_node(
+        AttentionMasksByLayerIdx,
+        torch_pytree._dict_flatten,
+        _unflatten_attention_masks,
+        serialized_type_name=f"{AttentionMasksByLayerIdx.__module__}.{AttentionMasksByLayerIdx.__name__}",
+        flatten_with_keys_fn=torch_pytree._dict_flatten_with_keys,
+    )
 
 
 def _unwrap_mask_function(fn: Callable) -> Callable:
@@ -75,45 +92,19 @@ def _get_mask_layer_indices(config: PreTrainedConfig, create_mask_fn: Callable) 
     return [idx for idx, pattern in enumerate(layer_patterns) if pattern in matching_patterns]
 
 
-def _get_cache_geometry(
-    *,
-    past_key_values: Any,
-    query_length: Any,
-    layer_idx: int,
-    assume_layers_have_same_query_offset_when_tensor: bool,
-) -> tuple[int, ...] | None:
+def _get_cache_geometry(*, past_key_values: Any, query_length: Any, layer_idx: int) -> tuple[Any, ...]:
     if past_key_values is None:
         return ()
 
     query_offset = past_key_values.get_query_offset(layer_idx)
     key_value_length, key_value_offset = past_key_values.get_mask_sizes(query_length, layer_idx)
-    if not is_torch_tensor(query_offset):
-        return query_offset, key_value_length, key_value_offset
+    if is_torch_tensor(query_offset):
+        # An initialized `StaticLayer` returns its query offset as a device tensor. Comparing tensor values would force a
+        # device sync, or a graph break under `torch.compile`, so, like upstream mask creation, assume these layers are
+        # all at the same position and leave the query offset out.
+        return key_value_length, key_value_offset
 
-    # An initialized `StaticLayer` returns its query offset as a device tensor. Comparing tensor values would force a
-    # device sync, or a graph break under `torch.compile`, so, like upstream mask creation, assume these layers are all
-    # at the same position and leave the query offset out.
-    return (key_value_length, key_value_offset) if assume_layers_have_same_query_offset_when_tensor else None
-
-
-def _get_mask_reuse_key(
-    *,
-    mask_settings: tuple[Any, ...],
-    past_key_values: Any,
-    query_length: Any,
-    layer_idx: int,
-    assume_layers_have_same_query_offset_when_tensor: bool,
-) -> tuple[Any, ...] | None:
-    cache_geometry = _get_cache_geometry(
-        past_key_values=past_key_values,
-        query_length=query_length,
-        layer_idx=layer_idx,
-        assume_layers_have_same_query_offset_when_tensor=assume_layers_have_same_query_offset_when_tensor,
-    )
-    if cache_geometry is None:
-        return None
-
-    return mask_settings, cache_geometry
+    return query_offset, key_value_length, key_value_offset
 
 
 def _create_attention_masks_by_layer_idx(
@@ -133,8 +124,6 @@ def _create_attention_masks_by_layer_idx(
         getattr(config, name, default) for name, default in _COMMON_MASK_AFFECTING_ATTRIBUTES.items()
     )
     layer_configs = config._heterogeneity_spec.model_layer_configs
-    # A layer that skips a module may never write to its cache, so its static position can fall behind the others'
-    any_layer_skips = any(layer_config.skip for layer_config in layer_configs.values())
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
         layer_config = layer_configs[layer_idx]
@@ -152,26 +141,19 @@ def _create_attention_masks_by_layer_idx(
 
         layer_kwargs = {**kwargs, "layer_idx": layer_idx}
 
-        reuse_key = _get_mask_reuse_key(
-            mask_settings=mask_settings,
+        cache_geometry = _get_cache_geometry(
             past_key_values=past_key_values,
             query_length=layer_kwargs["inputs_embeds"].shape[1],
             layer_idx=layer_idx,
-            assume_layers_have_same_query_offset_when_tensor=not any_layer_skips,
         )
-
-        if reuse_key is not None:
-            reused_layer_idx = next(
-                (idx for key, idx in reuse_keys_and_layer_indices if key == reuse_key),
-                None,
-            )
-            if reused_layer_idx is not None:
-                attention_masks[layer_idx] = attention_masks[reused_layer_idx]
-                continue
+        reuse_key = (mask_settings, cache_geometry)
+        reused_layer_idx = next((idx for key, idx in reuse_keys_and_layer_indices if key == reuse_key), None)
+        if reused_layer_idx is not None:
+            attention_masks[layer_idx] = attention_masks[reused_layer_idx]
+            continue
 
         attention_masks[layer_idx] = create_mask_fn(config=layer_config, **layer_kwargs)
-        if reuse_key is not None:
-            reuse_keys_and_layer_indices.append((reuse_key, layer_idx))
+        reuse_keys_and_layer_indices.append((reuse_key, layer_idx))
 
     return attention_masks
 
