@@ -250,21 +250,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         predicted_counts = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertEqual(predicted_counts, actual_counts)
 
-    def test_all_empty_media_treated_as_no_media(self):
-        """Uniform collators may emit empty media collections for text-only batches; these must be accepted."""
-        processor = self.get_processor()
-        for kwargs in (
-            {"images": [[], []]},
-            {"audio": [[], []]},
-            {"images": [], "audio": []},
-            {"images": [[], []], "audio": [[], []]},
-        ):
-            with self.subTest(kwargs=list(kwargs)):
-                out = processor(text=["plain text", "more text"], **kwargs)
-                self.assertIn("input_ids", out)
-                self.assertNotIn("pixel_values", out)
-                self.assertNotIn("input_features", out)
-
     @require_torch
     def test_audio_masks_and_placeholders_match_clip_lengths(self):
         """Masks and placeholders track valid samples across padding modes and tensor formats."""

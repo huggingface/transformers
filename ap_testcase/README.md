@@ -100,7 +100,7 @@ setup or case failures produce a nonzero exit code.
 | Script | What it tests | Loads the 8B model? |
 |---|---|---|
 | `01_processor_single_inputs.py` | Processor on single (non-batched) inputs: text-only, +image, +audio, +both; URL fetching | no (fast) |
-| `02_processor_batched_inputs.py` | Batched processing: flat + nested media, uneven counts, empty samples, strict errors | no (fast) |
+| `02_processor_batched_inputs.py` | Batched processing: flat + nested media, uneven counts, text-only samples and batches, strict errors | no (fast) |
 | `03_image_tokenization.py` | Image tokenization from processor output vs. fully manual preprocessing | yes |
 | `04_audio_tokenization.py` | Audio tokenization from processor output vs. fully manual preprocessing | yes |
 | `05_generation_chat_messages.py` | Full generation from chat messages (text-only + multimodal, incl. media auto-loading), thinking activation via `enable_thinking`, seeded sampling parameters | yes |
