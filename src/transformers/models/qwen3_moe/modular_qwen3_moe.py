@@ -22,7 +22,6 @@ from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -85,11 +84,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
 
 
 class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
-    _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, index=0),
-        "hidden_states": Qwen3MoeDecoderLayer,
-        "attentions": Qwen3MoeAttention,
-    }
+    pass
 
 
 class Qwen3MoeModel(MixtralModel):

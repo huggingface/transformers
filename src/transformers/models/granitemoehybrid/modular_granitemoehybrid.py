@@ -94,8 +94,7 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
 
 
 class GraniteMoeHybridMambaLayer(BambaMixer):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int, initialize_mixer_weights: bool = True):
-        super().__init__(config, layer_idx, initialize_mixer_weights)
+    pass
 
 
 class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):
