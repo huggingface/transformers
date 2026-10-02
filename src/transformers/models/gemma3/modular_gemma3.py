@@ -262,8 +262,7 @@ class Gemma3MLP(Gemma2MLP):
 
 
 class Gemma3RMSNorm(Gemma2RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__(dim=dim, eps=eps)
+    pass
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
