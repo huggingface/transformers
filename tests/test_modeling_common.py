@@ -1060,7 +1060,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
             config.gradient_checkpointing = True
             model = model_class(copy.deepcopy(config))
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     def test_gradient_checkpointing_enable_disable(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1071,7 +1071,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # at init model should have gradient checkpointing disabled
             model = model_class(copy.deepcopy(config))
-            self.assertFalse(model.is_gradient_checkpointing)
+            self.assertFalse(model.is_activation_checkpointing)
 
             # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
             # an implementation issue. Note we exclude clvp for now since they are still not using
@@ -1080,8 +1080,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
 
             # check enable works
-            model.gradient_checkpointing_enable()
-            self.assertTrue(model.is_gradient_checkpointing)
+            model.activation_checkpointing_enable()
+            self.assertTrue(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
             for n, m in model.named_modules():
@@ -1091,8 +1091,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
 
             # check disable works
-            model.gradient_checkpointing_disable()
-            self.assertFalse(model.is_gradient_checkpointing)
+            model.activation_checkpointing_disable()
+            self.assertFalse(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
             for n, m in model.named_modules():
@@ -1110,16 +1110,16 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # at init model should have gradient checkpointing disabled
             model = model_class(copy.deepcopy(config))
-            self.assertFalse(model.is_gradient_checkpointing)
+            self.assertFalse(model.is_activation_checkpointing)
 
             # check enable works
             model._hf_peft_config_loaded = True
             try:
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
             except NotImplementedError:
                 continue
 
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
             for n, m in model.named_modules():
@@ -1129,8 +1129,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
 
             # check disable works
-            model.gradient_checkpointing_disable()
-            self.assertFalse(model.is_gradient_checkpointing)
+            model.activation_checkpointing_disable()
+            self.assertFalse(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
             for n, m in model.named_modules():
@@ -1209,7 +1209,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             model.zero_grad(set_to_none=True)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
             model.enable_input_require_grads()
 
             set_seed(42)
@@ -1721,7 +1721,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 optimizer.zero_grad()
 
                 # now enable gradient checkpointing and compare the gradients
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
 

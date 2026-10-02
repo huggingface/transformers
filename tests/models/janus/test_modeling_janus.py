@@ -289,7 +289,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                 model = model_class(config)
 
                 model.to(torch_device)
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
                 model.train()
 
                 # unfreeze additional layers

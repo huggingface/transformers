@@ -320,7 +320,7 @@ class GPTNeoModelTester:
     ):
         model = GPTNeoForCausalLM(config)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         model.to(torch_device)
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -484,9 +484,9 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
         for checkpointing in [True, False]:
             model = self.model
             if checkpointing:
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
             else:
-                model.gradient_checkpointing_disable()
+                model.activation_checkpointing_disable()
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             # The dog-eared copy of the book, which is a collection of essays by the late author,
             expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # fmt: skip

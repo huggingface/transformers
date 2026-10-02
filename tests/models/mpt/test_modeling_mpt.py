@@ -297,7 +297,7 @@ class MptModelTester:
         model = MptForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())

@@ -2,6 +2,7 @@ import dataclasses
 import os
 import tempfile
 import unittest
+import warnings
 from unittest.mock import patch
 
 import torch
@@ -112,6 +113,35 @@ class TestTrainingArguments(unittest.TestCase):
             report_to=None,
         )
         self.assertTrue(args.do_eval)
+
+    def test_gradient_checkpointing_is_a_deprecated_alias(self):
+        with self.assertWarns(FutureWarning):
+            args = TrainingArguments(
+                output_dir="tmp",
+                gradient_checkpointing=True,
+                gradient_checkpointing_kwargs={"use_reentrant": False},
+                report_to=None,
+            )
+        self.assertTrue(args.activation_checkpointing)
+        self.assertEqual(args.activation_checkpointing_kwargs, {"use_reentrant": False})
+        # The old names mirror the new ones, so code that reads them keeps working
+        self.assertTrue(args.gradient_checkpointing)
+        self.assertEqual(args.gradient_checkpointing_kwargs, {"use_reentrant": False})
+
+    def test_activation_checkpointing_round_trip_does_not_warn(self):
+        args = TrainingArguments(output_dir="tmp", activation_checkpointing=True, report_to=None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            TrainingArguments(**{f.name: getattr(args, f.name) for f in dataclasses.fields(args) if f.init})
+
+    def test_gradient_checkpointing_conflicts_with_activation_checkpointing(self):
+        with self.assertRaises(ValueError):
+            TrainingArguments(
+                output_dir="tmp",
+                activation_checkpointing_kwargs={"use_reentrant": True},
+                gradient_checkpointing_kwargs={"use_reentrant": False},
+                report_to=None,
+            )
 
     def test_eval_steps_fallback_to_logging_steps(self):
         """Test that eval_steps falls back to logging_steps when not specified."""

@@ -390,9 +390,9 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         else:
-            model.gradient_checkpointing_disable()
+            model.activation_checkpointing_disable()
         model.to(torch_device)
 
         # The dog
