@@ -472,12 +472,17 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        score = torch.gather(scores, 1, self.encoder_input_ids)
+        encoder_input_ids = self.encoder_input_ids
+        if scores.shape[0] > encoder_input_ids.shape[0]:
+            encoder_input_ids = encoder_input_ids.repeat_interleave(
+                scores.shape[0] // encoder_input_ids.shape[0], dim=0
+            )
+        score = torch.gather(scores, 1, encoder_input_ids)
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
-        scores_processed = scores.scatter(1, self.encoder_input_ids, score)
+        scores_processed = scores.scatter(1, encoder_input_ids, score)
         return scores_processed
 
 
