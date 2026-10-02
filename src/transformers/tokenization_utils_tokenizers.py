@@ -157,6 +157,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if tok_from_file.padding is not None:
                 local_kwargs["_json_padding"] = tok_from_file.padding
 
+            # Pass the decoder and pre_tokenizer types to detect mismatches with the Python class
+            if tokenizer_json.get("decoder") is not None:
+                local_kwargs["_json_decoder_type"] = tokenizer_json["decoder"].get("type")
+
             # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
             # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
             normalizer_config = tokenizer_json.get("normalizer")
@@ -368,6 +372,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
         _json_truncation = kwargs.pop("_json_truncation", None)
         _json_padding = kwargs.pop("_json_padding", None)
+        _json_decoder_type = kwargs.pop("_json_decoder_type", None)
         # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
@@ -426,6 +431,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
+
+        if _json_decoder_type is not None and self._tokenizer.decoder is not None:
+            decoder_repr = str(self._tokenizer.decoder)
+            built_decoder = decoder_repr.split("(")[0]
+            if _json_decoder_type == "ByteLevel" and "ByteLevel" not in decoder_repr:
+                logger.warning(
+                    f"The tokenizer class you loaded from this checkpoint ({self.__class__.__name__}) is a "
+                    f"'{built_decoder}' tokenizer. "
+                    f"However, the `tokenizer.json` file found in this checkpoint contains a '{_json_decoder_type}' decoder. "
+                    f"This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set. "
+                    f"If you experience decoding issues, consider changing the `tokenizer_class` to a ByteLevel-compatible "
+                    f"class (e.g. `Qwen2TokenizerFast` for Qwen2 models) in `tokenizer_config.json`."
+                )
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
