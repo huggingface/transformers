@@ -684,7 +684,7 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         # Transformers model/processor/... corresponding to the config)
         # This is because remote/native is indistinguisable from the config class only in such cases, as they both use the same class - then
         # `from_pretrained`/`from_config` are responsible to grab the correct class depending on whether `trust_remote_code` is True/False
-        if getattr(key, "__module__", "").startswith("transformers."):
+        if not exist_ok and getattr(key, "__module__", "").startswith("transformers."):
             return
 
         # Register the new mapping (this will always take precedence in __getattr__ and __contains__ compared to base mapping)
