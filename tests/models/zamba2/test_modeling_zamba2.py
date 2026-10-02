@@ -147,7 +147,6 @@ class Zamba2ModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             layers_block_type=self.layers_block_type,
             num_mem_blocks=self.num_mem_blocks,
             use_mem_rope=self.use_mem_rope,
