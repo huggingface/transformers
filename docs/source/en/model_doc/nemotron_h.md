@@ -64,6 +64,8 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## NemotronHConfig
 
 [[autodoc]] NemotronHConfig

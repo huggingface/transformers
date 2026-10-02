@@ -91,7 +91,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 - The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different. This makes the difference greater at smaller precisions.
 
-- Hidden states that correspond to padding tokens is shutdown in 2 places and is mostly tested with left-padding. Right-padding propagates noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
+- Padding tokens are masked in two places, and that path is tested with left padding. Right padding feeds those positions into the cache and is not reliable. For batched generation, set `padding_side` to `"left"`. See [Padding side](../llm_tutorial#padding-side).
 
 - The example below demonstrates how to fine-tune Mamba 2 with [PEFT](https://huggingface.co/docs/peft).
 
