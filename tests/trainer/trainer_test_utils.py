@@ -459,7 +459,7 @@ if is_torch_available():
         **kwargs,
     ):
         label_names = kwargs.get("label_names")
-        gradient_checkpointing = kwargs.get("gradient_checkpointing", False)
+        gradient_checkpointing = kwargs.get("activation_checkpointing", False)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
 
