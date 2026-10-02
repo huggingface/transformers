@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 
 # Paged attention
 
-This page documents the paged attention forward function used in [continuous batching](./continuous_batching). It wraps two versions of the flash attention kernel to handle different batch configurations efficiently.
+This page documents the paged attention forward function used in [continuous batching](./continuous_batching).
 
 ## Varlen path
 

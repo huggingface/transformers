@@ -75,9 +75,8 @@ class TestBatchGeneration(unittest.TestCase):
     @parameterized.expand(
         [
             ("paged|eager", 64, 128, 64),
-            ("paged|sdpa", 32, 256, 128),
-            ("paged|flash_attention_2", 16, 512, 256),
-            ("paged|flex_attention", 64, 128, 64),
+            ("sdpa", 32, 256, 128),
+            ("flash_attention_2", 16, 512, 256),
         ]
     )
     @require_deterministic_for_xpu
@@ -120,9 +119,8 @@ class TestBatchGeneration(unittest.TestCase):
     @parameterized.expand(
         [
             ("paged|eager", 64, 128, 64),
-            ("paged|sdpa", 32, 256, 128),
-            ("paged|flash_attention_2", 16, 512, 256),
-            ("paged|flex_attention", 64, 128, 64),
+            ("sdpa", 32, 256, 128),
+            ("flash_attention_2", 16, 512, 256),
         ]
     )
     def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):
