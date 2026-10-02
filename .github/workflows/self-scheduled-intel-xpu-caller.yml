@@ -107,7 +107,7 @@ jobs:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#intel-xpu-hf-ci"
       runner_group: hfc-intel-b60
-      docker: huggingface/transformers-pytorch-deepspeed-xpu
+      docker: huggingface/xpu_ci
       ci_event: Scheduled CI (Intel) - XPU
       report_repo_id: optimum-intel-internal-testing/transformers_xpu_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
