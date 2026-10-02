@@ -38,7 +38,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_dbrx import DbrxConfig
 
 
@@ -448,9 +448,11 @@ class DbrxPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _can_record_outputs = {
+        "router_logits": OutputRecorder(DbrxRouter, index=0),
         "hidden_states": DbrxBlock,
         "attentions": DbrxAttention,
     }
+    _input_embed_layer = "wte"
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -485,12 +487,6 @@ class DbrxModel(DbrxPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Embedding:
-        return self.wte
-
-    def set_input_embeddings(self, value: nn.Embedding):
-        self.wte = value
 
     @merge_with_config_defaults
     @capture_outputs
@@ -636,24 +632,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         self.num_experts = config.ffn_config.moe_num_experts
         self.num_experts_per_tok = config.ffn_config.moe_top_k
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Embedding:
-        return self.transformer.get_input_embeddings()
-
-    def set_input_embeddings(self, value: nn.Embedding):
-        self.transformer.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Linear:
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings: nn.Linear):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder: DbrxModel):
-        self.transformer = decoder
-
-    def get_decoder(self) -> DbrxModel:
-        return self.transformer
 
     @can_return_tuple
     @auto_docstring
