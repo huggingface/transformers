@@ -92,7 +92,7 @@ class VideoPrismTokenizer(TokenizersBackend):
             )
         )
 
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:
             self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
