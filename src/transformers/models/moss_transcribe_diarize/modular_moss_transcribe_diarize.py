@@ -551,6 +551,7 @@ class MossTranscribeDiarizePreTrainedModel(AudioFlamingo3PreTrainedModel):
 class MossTranscribeDiarizeEncoder(Qwen2AudioEncoder):
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features,
@@ -558,13 +559,12 @@ class MossTranscribeDiarizeEncoder(Qwen2AudioEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
-                [`~MossTranscribeDiarizeFeatureExtractor.__call__`].
-            attention_mask (`torch.Tensor`)`, *optional*):
-                MossTranscribeDiarize does not support masking of the `input_features`, this argument is preserved for
-                compatibility, but it is not used.
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
+            [`~MossTranscribeDiarizeFeatureExtractor.__call__`].
+        attention_mask (`torch.Tensor`, *optional*):
+            MossTranscribeDiarize does not support masking of the `input_features`, this argument is preserved for
+            compatibility, but it is not used.
         """
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:

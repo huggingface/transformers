@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import dataclasses
 import gc
 import json
 import logging
@@ -28,6 +29,7 @@ from transformers import (
     AutoProcessor,
     GenerationConfig,
     MossTranscribeDiarizeConfig,
+    MossTranscribeDiarizeEncoderConfig,
     MossTranscribeDiarizeForConditionalGeneration,
     MossTranscribeDiarizeProcessor,
 )
@@ -186,6 +188,22 @@ def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
     return new_state_dict
 
 
+def convert_config(original_config_dict: dict[str, Any]) -> MossTranscribeDiarizeConfig:
+    config_dict = dict(original_config_dict)
+    # `adaptor_input_dim` is derived.
+    config_dict.pop("adaptor_input_dim", None)
+
+    # The original `audio_config` is a full `WhisperConfig`, keep only the encoder fields
+    attribute_map = MossTranscribeDiarizeEncoderConfig.attribute_map
+    encoder_fields = {field.name for field in dataclasses.fields(MossTranscribeDiarizeEncoderConfig)}
+    audio_config = {attribute_map.get(key, key): value for key, value in config_dict["audio_config"].items()}
+    audio_config = {key: value for key, value in audio_config.items() if key in encoder_fields}
+    audio_config["model_type"] = MossTranscribeDiarizeEncoderConfig.model_type
+    config_dict["audio_config"] = audio_config
+
+    return MossTranscribeDiarizeConfig.from_dict(config_dict)
+
+
 def load_original_state_dict(checkpoint_dir: Path) -> dict[str, Any]:
     index_path = checkpoint_dir / "model.safetensors.index.json"
     if index_path.exists():
@@ -205,18 +223,11 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
     dtype = torch.bfloat16 if bfloat16 else torch.float32
     checkpoint_dir = Path(checkpoint_dir)
 
-    # `adaptor_input_dim` is derived.
-    config_path = checkpoint_dir / "config.json"
-    with open(config_path, "r", encoding="utf-8") as f:
-        raw_config_dict = json.load(f)
-    raw_config_dict.pop("adaptor_input_dim", None)
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(raw_config_dict, f, indent=2)
-
     # 1) Load original state dict, config, generation config and processor.
     logger.info(f"Loading checkpoint from {checkpoint_dir}")
     original_state_dict = load_original_state_dict(checkpoint_dir)
-    config = MossTranscribeDiarizeConfig.from_pretrained(checkpoint_dir)
+    with open(checkpoint_dir / "config.json", "r", encoding="utf-8") as f:
+        config = convert_config(json.load(f))
     processor = MossTranscribeDiarizeProcessor.from_pretrained(checkpoint_dir)
     processor.chat_template = CHAT_TEMPLATE
 
