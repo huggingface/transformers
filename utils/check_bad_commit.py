@@ -27,6 +27,8 @@ import git
 from github_utils import get_github_json
 
 
+sys.stdout.reconfigure(line_buffering=True)
+
 # Temporary workaround similar to https://github.com/huggingface/transformers-ci/pull/184 to avoid CPU OOM.
 if os.path.isdir("/mnt/efs_cache"):
     os.environ["HF_HOME"] = "/mnt/efs_cache"
