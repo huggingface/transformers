@@ -61,6 +61,7 @@ from ..ernie4_5.modeling_ernie4_5 import (
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAttention,
 )
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLCausalLMOutputWithPast,
@@ -68,7 +69,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLRotaryEmbedding,
-    VisionRotaryEmbedding,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -273,6 +273,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     hidden_size: int = 1152
     intermediate_size: int = 4304
@@ -281,6 +282,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     image_size: int = 384
     patch_size: int = 14
     spatial_merge_size: int = 2
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -353,7 +355,7 @@ class PaddleOCRProjector(nn.Module):
         return torch.cat(processed_features, dim=0)
 
 
-class PaddleOCRVisionRotaryEmbedding(VisionRotaryEmbedding):
+class PaddleOCRVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -409,9 +411,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PaddleOCRVisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, PaddleOCRVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
@@ -545,10 +544,7 @@ class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
-        embed_dim = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = embed_dim // num_heads
-        self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(config)
 
     @can_return_tuple
     @auto_docstring
@@ -580,9 +576,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        rotary_embeddings = self.rotary_pos_emb(position_ids)
-        rotary_embeddings = rotary_embeddings.repeat(1, 2)
-        position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -755,16 +749,24 @@ class PaddleOCRVLModel(Qwen2VLModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -835,7 +837,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo.jpg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png",
                     },
                     {"type": "text", "text": "OCR:"},
                 ],

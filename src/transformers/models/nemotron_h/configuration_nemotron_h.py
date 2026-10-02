@@ -32,7 +32,7 @@ class NemotronHConfig(PreTrainedConfig):
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
     use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Flag indicating whether or not to use the fast mamba kernels.
+        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
     ssm_state_size (`int`, *optional*, defaults to 128):
         The dimension of the mamba state space latents.
     mamba_hidden_act (`str`, *optional*, defaults to `"silu"`):
@@ -163,9 +163,6 @@ class NemotronHConfig(PreTrainedConfig):
         elif self.layer_types is None:
             # Default layers_block_type if not provided
             self.layer_types = ["linear_attention", "moe", "full_attention", "mlp"]
-        else:
-            # Migrate legacy names from configs stored on the Hub.
-            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         # Note: num_hidden_layers is deprecated and ignored if layers_block_type is explicitly provided
         # It's only kept for backward compatibility when loading old configs

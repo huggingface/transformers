@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5Attention,
@@ -182,20 +182,20 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if (i + 1) % interval_pattern else "qwen_sparse_attention"
+                "linear_attention" if (i + 1) % interval_pattern else "indexed_attention"
                 for i in range(self.num_hidden_layers)
             ]
         # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
         elif "full_attention" in self.layer_types:
             self.layer_types = [
-                "qwen_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+                "indexed_attention" if layer == "full_attention" else layer for layer in self.layer_types
             ]
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "qwen_sparse_attention"})
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "indexed_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -295,6 +295,7 @@ class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
+@no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
     def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
         super().__init__(dim, eps=eps)
@@ -699,8 +700,12 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
         ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
-        # We need explicit device placement here, as the embedding may be skipped from device_map completely
-        return self.ngram_embedding(ngram_ids.to(self.ngram_embedding.weight.device)).to(ngram_ids.device).flatten(-2)
+        # We need explicit device placement here, as the embedding may be skipped from device_map completely (we just need to be
+        # careful in the case of offloading to disk)
+        execution_device = (
+            self.ngram_embedding.weight.device if self.ngram_embedding.weight.device.type != "meta" else None
+        )
+        return self.ngram_embedding(ngram_ids.to(execution_device)).to(ngram_ids.device).flatten(-2)
 
 
 class Qwen4ExpTextPLELayer(nn.Module):
@@ -864,9 +869,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Qwen4ExpTextSparseMoeBlock):
             init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
-        elif module.__class__.__name__ == "Qwen4ExpVisionRotaryEmbedding":
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
         if isinstance(module, Qwen4ExpTextNGramEmbedding):
             init.copy_(
                 module.layer_multipliers,
@@ -996,7 +998,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "allow_is_causal_skip": False,
             }
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+                "indexed_attention": create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
@@ -1015,7 +1017,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping["full_attention"],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 conv_mask=conv_mask,
                 past_key_values=past_key_values,
                 ple_input_ids=ple_input_ids,
@@ -1032,32 +1034,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
     config: Qwen4ExpTextConfig
-
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None,
-        **kwargs,
-    ) -> dict:
-        # We need to overwrite to add the `allow_is_causal_skip=False` condition
-        mask_kwargs = {
-            "config": config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-            # we may have to recreate it in each layer if it gets skipped
-            "allow_is_causal_skip": False,
-        }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
-        return causal_mask_mapping
 
 
 @auto_docstring
@@ -1079,10 +1055,16 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen4ExpModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1095,23 +1077,30 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
                 input_ids if input_ids is not None else self.language_model.reverse_embedding(inputs_embeds)
             )
 
-        if pixel_values is not None:
-            image_outputs: BaseModelOutputWithPooling = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
-            image_embeds = image_outputs.pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_outputs: BaseModelOutputWithPooling = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
             )
-            video_embeds = video_outputs.pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1146,31 +1135,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
 
 @auto_docstring
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None,
-        **kwargs,
-    ) -> dict:
-        # We need to overwrite to add the `allow_is_causal_skip=False` condition
-        mask_kwargs = {
-            "config": config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-            # we may have to recreate it in each layer if it gets skipped
-            "allow_is_causal_skip": False,
-        }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
-        return causal_mask_mapping
+    pass
 
 
 __all__ = [

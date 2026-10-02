@@ -39,6 +39,8 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
 
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -53,6 +55,7 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
     num_key_value_heads: int = 8
 
 

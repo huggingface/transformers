@@ -26,7 +26,6 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import is_kernels_available
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
@@ -177,7 +176,6 @@ def _alloc_expert_proj(
     return weight, sf
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def finegrained_fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -185,7 +183,6 @@ def finegrained_fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
-    output_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """Triton FP8/FP4 linear: fused act-quant + matmul, then optional bias add.
 
@@ -208,7 +205,6 @@ def finegrained_fp8_linear(
     return output
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -216,7 +212,6 @@ def fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
-    output_dtype: torch.dtype | None = None,
     allow_deepgemm: bool = True,
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FP8Linear` and the eager `FP8Experts` loop.
@@ -346,6 +341,30 @@ class FP8Linear(nn.Linear):
         )
 
 
+class FP8Embedding(nn.Embedding):
+    """`nn.Embedding` whose table is stored in FP8 with a single per-tensor `weight_scale`.
+
+    Qwen4-Exp's hashed n-gram table is ~48 GiB in FP8, too big to dequantize at load time, so the
+    rescale runs on the rows a lookup gathers instead. Build it on the `meta` device: like
+    `FP8Linear`, `__init__` lets `nn.Embedding` allocate a full-precision table first.
+    """
+
+    def __init__(
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        padding_idx: int | None = None,
+    ):
+        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False)
+        # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with.
+        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        rows = super().forward(input)
+        return rows.to(self.weight_scale.dtype) * self.weight_scale
+
+
 class FP8GroupedLinear(FP8Linear):
     """FP8 drop-in for block-diagonal grouped linears.
 
@@ -444,7 +463,7 @@ def fp8_batched_mm_experts_forward(
     # EP sentinel handling: leave `expert_ids` unclamped — the batched kernel early-returns on
     # `expert_id >= NUM_EXPERTS`, leaving sentinel output rows uninitialized. The post-mask below
     # zeroes them before the per-token reduction so `uninit * 0 = NaN` can't poison the sum.
-    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1)
+    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
     weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
@@ -482,7 +501,8 @@ def fp8_batched_mm_experts_forward(
 
     # Post-mask sentinel rows: kernel left them uninitialized, so zero them out
     # before the reduction below (uninit may be NaN; NaN * 0 = NaN).
-    weighted_out.masked_fill_(sentinel_mask, 0.0)
+    if sentinel_mask is not None:
+        weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -532,7 +552,7 @@ def fp8_grouped_mm_experts_forward(
     # valid rows, so sentinel-tail `proj_out` rows are uninit; without the post-mask below,
     # `proj_out[sentinel] * 0 = NaN * 0 = NaN` would poison the per-token reduction. FP8
     # quantized weights are inference-only, so no bwd pre-mask is needed.
-    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
+    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
     weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
@@ -571,7 +591,8 @@ def fp8_grouped_mm_experts_forward(
     weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Post-mask (fwd path).
-    weighted_out.masked_fill_(sentinel_mask, 0.0)
+    if sentinel_mask is not None:
+        weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
@@ -792,6 +813,22 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
         "single CUDA context and corrupt across devices). Run tensor/expert parallel (one device per "
         "process) to use the faster DeepGEMM path."
     )
+
+
+def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_convert: list[str] | None = None):
+    """Swap every `nn.Embedding` whose name ends with one of `patterns` for `FP8Embedding`.
+
+    Also runs under `dequantize=True`: a table worth quantizing is one we cannot afford to expand.
+    """
+    for name, module in list(model.named_modules()):
+        if type(module) is nn.Embedding and any(name.endswith(p) for p in patterns):
+            if not should_convert_module(name, modules_to_not_convert):
+                continue
+            with torch.device("meta"):
+                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
+            new_module._hf_quantized_needs_local_tp = True
+            model.set_submodule(name, new_module)
+    return model
 
 
 def replace_with_fp8_linear(

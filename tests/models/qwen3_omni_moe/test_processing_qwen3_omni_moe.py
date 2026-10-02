@@ -19,20 +19,18 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import (
-    Qwen3OmniMoeProcessor,
-)
+from transformers import Qwen3OmniMoeProcessor
 from transformers.testing_utils import (
-    require_av,
     require_librosa,
     require_torch,
     require_torchaudio,
+    require_torchcodec,
     require_torchvision,
     require_vision,
 )
 from transformers.utils import is_torch_available
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -47,6 +45,11 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3OmniMoeProcessor
     # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2.5-Omni-7B"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_omni_moe"
+
+    videos_unstructured_max_length = 785
+    videos_text_kwargs_max_length = 785
+    videos_text_kwargs_override_max_length = 785
+    audio_unstructured_max_length = 150
 
     @classmethod
     def _setup_image_processor(cls):
@@ -69,10 +72,70 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # (batch, 128, 30000) to (batch, 128, 3000), cutting peak memory per audio test.
         return feature_extractor_class.from_pretrained(cls.tiny_model_id, chunk_length=30)
 
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 1440},
+            {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 2160},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 4320},
+        ]
+
     def prepare_audio_inputs(self, batch_size: int = 3):
         """This function prepares a list of numpy audios."""
         audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
         return audio_inputs
+
+    @parameterized.expand(
+        [
+            ("text",),
+            ("images",),
+            ("videos",),
+            ("audio",),
+        ]
+    )
+    def test_subprocessor_defaults(self, modality):
+        """
+        Tests that sub-processor is called correctly when passing each modality input to the processor.
+        This test verifies that processor(single_modality_data) produces the same output as subprocessor(single_modality_data).
+        """
+        # override to pop processor-only keys from `merged_kwargs`
+        attributes = self.processor_class.get_attributes()
+        component_key = self.get_subprocessor_name(modality, attributes)
+
+        parameterized_config = MODALITY_TEST_SPECS[modality]
+        subprocessor = self.get_component(component_key)
+
+        # Get all other required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        modality_input = self._prepare_modality_input(modality)
+
+        # merge processor defaults when calling a subprocessor
+        kwargs = parameterized_config["call_time_kwargs"]
+        kwargs["return_tensors"] = "pt"
+        merged_kwargs = processor._merge_kwargs(
+            processor.valid_processor_kwargs,
+            tokenizer_init_kwargs=processor.tokenizer.init_kwargs if hasattr(processor, "tokenizer") else {},
+            **kwargs,
+        )
+        kwargs = merged_kwargs[f"{modality}_kwargs"]
+        kwargs.pop("seconds_per_chunk", None)  # pop, used only in `processor.__call__`
+        kwargs.pop("use_audio_in_video", None)
+        kwargs.pop("position_id_per_seconds", None)
+
+        input_subproc = subprocessor(modality_input, **kwargs)
+        try:
+            input_processor = processor(**{modality: modality_input, **kwargs})
+        except Exception:
+            input_processor = {}
+
+        # Verify outputs match
+        for key in input_subproc:
+            if input_processor and key in processor.model_input_names:
+                torch.testing.assert_close(input_subproc[key], input_processor[key])
 
     def test_post_process_multimodal_output_batched_audio(self):
         # Batched generation returns one waveform per sample, each trimmed to its own length.
@@ -101,230 +164,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(audio_outputs), 1)
         self.assertTrue(np.array_equal(audio_outputs[0], np.arange(6, dtype=np.float32)))
 
-    @require_torch
-    def _test_apply_chat_template(
-        self,
-        modality: str,
-        batch_size: int,
-        return_tensors: str,
-        input_name: str,
-        processor_name: str,
-        input_data: list[str],
-    ):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        if processor_name not in self.processor_class.get_attributes():
-            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
-
-        batch_messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": "Describe this."}],
-                },
-            ]
-        ] * batch_size
-
-        # Test that jinja can be applied
-        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), batch_size)
-
-        # Test that tokenizing with template and directly with `self.tokenizer` gives same output
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
-        )
-        add_special_tokens = True
-        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
-            add_special_tokens = False
-        tok_output = processor.tokenizer(
-            formatted_prompt, return_tensors=return_tensors, add_special_tokens=add_special_tokens
-        )
-        expected_output = tok_output.input_ids
-        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
-
-        # Test that kwargs passed to processor's `__call__` are actually used
-        tokenized_prompt_100 = processor.apply_chat_template(
-            batch_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            padding="max_length",
-            truncation=True,
-            return_tensors=return_tensors,
-            max_length=100,
-        )
-        self.assertEqual(len(tokenized_prompt_100[0]), 100)
-
-        # Test that `return_dict=True` returns text related inputs in the dict
-        out_dict_text = processor.apply_chat_template(
-            batch_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors=return_tensors,
-        )
-        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
-        self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
-        self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
-
-        # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
-        for idx, url in enumerate(input_data[:batch_size]):
-            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
-
-        out_dict = processor.apply_chat_template(
-            batch_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors=return_tensors,
-            num_frames=2,  # by default no more than 2 frames, otherwise too slow
-        )
-        input_name = getattr(self, input_name)
-        self.assertTrue(input_name in out_dict)
-        self.assertEqual(len(out_dict["input_ids"]), batch_size)
-        self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-
-        if modality == "video":
-            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
-            expected_video_token_count = 0
-            for thw in out_dict["video_grid_thw"]:
-                expected_video_token_count += thw[0] * thw[1] * thw[2]
-            mm_len = expected_video_token_count
-        elif modality == "audio":
-            mm_len = batch_size
-        else:
-            mm_len = batch_size * 1200
-        self.assertEqual(len(out_dict[input_name]), mm_len)
-
-        return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
-        for k in out_dict:
-            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
-
-    @parameterized.expand([(1, "pt"), (2, "pt")])
-    @unittest.skip("Skipping but this one is important, should be fixed ASAP")
-    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
-        pass
-
-    @require_av
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest("Processor doesn't accept videos at input")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)
-
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
-
-        # Add video URL for return dict and load with `num_frames` arg
-        messages[0][0]["content"].append(
-            {
-                "type": "video",
-                "url": url_to_local_path(
-                    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                ),
-            }
-        )
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1440)
-
-        # Load with `fps` arg
-        fps = 1
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1440)
-
-        # Load with `fps` and `num_frames` args, should raise an error
-        with self.assertRaises(ValueError):
-            out_dict_with_video = processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                fps=fps,
-                num_frames=num_frames,
-            )
-
-        # Load without any arg should load the whole video
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4320)
-
-        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
-        # because we assume they come from one video
-        messages[0][0]["content"][-1] = {
-            "type": "video",
-            "url": [
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-            ],
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 7600)
-
-        # When the inputs are frame URLs/paths we expect that those are already
-        # sampled and will raise an error is asked to sample again.
-        with self.assertRaises(ValueError):
-            out_dict_with_video = processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                do_sample_frames=True,
-                num_frames=num_frames,
-            )
-
     @require_librosa
-    @require_av
+    @require_torchcodec
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:

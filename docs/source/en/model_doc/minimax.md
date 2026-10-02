@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 # MiniMax
 
-> [MiniMax-M2](https://huggingface.co/docs/transformers/en/model_doc/minimax_m2) was released on 2025‑10‑27. We recommend using MiniMax‑M2 for most use cases due to better overall performance.
+> [MiniMax-M2](./minimax_m2) was released on 2025‑10‑27. We recommend using MiniMax‑M2 for most use cases due to better overall performance.
 
 ## Overview
 
@@ -81,7 +81,7 @@ As can be seen, the instruction-tuned model requires a [chat template](../chat_t
 
 ## Speeding up MiniMax by using Flash Attention
 
-The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../attention_interface#set-an-attention-backend), which is a faster implementation of the attention mechanism used inside the model.
+The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../kernel_doc/loading_kernels#attention-kernels), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 

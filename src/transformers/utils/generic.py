@@ -332,10 +332,14 @@ def get_max_seqlen(
 
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
     """
-    Split the optional `paged|` prefix from an attention implementation string.
-
-    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    Deprecated because the "paged|" prefix is no longer needed for flash or SDPA. This used to split the optional
+    `paged|` prefix from an attention implementation string.
     """
+    warnings.warn(
+        "split_attention_implementation is deprecated as the 'paged|' prefix is no longer needed for flash or SDPA.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if implementation is None:
         return False, None
 
@@ -887,13 +891,13 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
 
     # pretrained_model_path is a file
     if is_file and pretrained_model_path.endswith(".json"):
-        with open(pretrained_model_path) as f:
+        with open(pretrained_model_path, encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
     # pretrained_model_path is a directory with a config.json
     if is_dir and os.path.exists(os.path.join(pretrained_model_path, "config.json")):
-        with open(os.path.join(pretrained_model_path, "config.json")) as f:
+        with open(os.path.join(pretrained_model_path, "config.json"), encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 

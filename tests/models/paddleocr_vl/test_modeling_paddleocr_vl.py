@@ -294,10 +294,6 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 
-    @unittest.skip(reason="PaddleOCRVL does not support.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip(reason="PaddleOCRVL does not support beam search.")
     def test_beam_sample_generate(self):
@@ -360,7 +356,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
                         ),
                     },
                     {"type": "text", "text": "OCR:"},
@@ -390,32 +386,32 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        expected_input_ids_length = 211
-        assert expected_input_ids_length == len(inputs.input_ids[0])
+        expected_input_ids_length = 1389
+        self.assertEqual(expected_input_ids_length, len(inputs.input_ids[0]))
 
         expected_input_ids = [100273, 2969, 93963, 93919, 101305, 100295, 100295, 100295, 100295, 100295]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
 
         expected_pixel_slice = torch.tensor(
             [
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-                [0.9922, 0.9922, 0.9922],
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
             ],
             dtype=torch.float32,
             device="cpu",
         )
 
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
+        torch.testing.assert_close(inputs.pixel_values[:5, :, 0, 0], expected_pixel_slice, atol=3e-3, rtol=1e-5)
 
         # verify generation
         inputs = inputs.to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
 
-        EXPECTED_DECODED_TEXT = "生甘草"
+        EXPECTED_DECODED_TEXT = "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n"
 
         self.assertEqual(
             result,
@@ -446,7 +442,10 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
+        EXPECTED_DECODED_TEXT = [
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+        ]
 
         self.assertEqual(
             result,
@@ -457,6 +456,11 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_flashatt2(self):
+        # EXPECTED_DECODED_TEXT mirrors test_small_model_integration_test: same model,
+        # image, prompt, generation args and decode path -- only attn_implementation
+        # differs, and the two held identical expectations before the asset swap.
+        # @require_flash_attn keeps this out of run_models_gpu, so no CI round can
+        # measure it; confirm with a local flash-attn run.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"
@@ -473,31 +477,31 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        expected_input_ids_length = 211
-        assert expected_input_ids_length == len(inputs.input_ids[0])
+        expected_input_ids_length = 1389
+        self.assertEqual(expected_input_ids_length, len(inputs.input_ids[0]))
 
         expected_input_ids = [100273, 2969, 93963, 93919, 101305, 100295, 100295, 100295, 100295, 100295]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
 
         expected_pixel_slice = torch.tensor(
             [
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-                [0.9922, 0.9922, 0.9922],
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
             ],
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
+        torch.testing.assert_close(inputs.pixel_values[:5, :, 0, 0], expected_pixel_slice, atol=3e-3, rtol=1e-5)
 
         # verify generation
         inputs = inputs.to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
 
-        EXPECTED_DECODED_TEXT = "生甘草"
+        EXPECTED_DECODED_TEXT = "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n"
 
         self.assertEqual(
             result,
@@ -533,7 +537,10 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
+        EXPECTED_DECODED_TEXT = [
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+        ]
 
         self.assertEqual(
             result,

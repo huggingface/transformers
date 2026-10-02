@@ -279,7 +279,7 @@ conversation = [
             },
             {
                 "type": "audio",
-                "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"
             },
             {
                 "type": "text",
@@ -287,7 +287,7 @@ conversation = [
             },
             {
                 "type": "audio",
-                "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac"
             },
         ]
     },

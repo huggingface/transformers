@@ -115,7 +115,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
             cuda_home = stack.enter_context(tempfile.TemporaryDirectory())
             if nvcc_present:
                 os.makedirs(os.path.join(cuda_home, "bin"), exist_ok=True)
-                open(os.path.join(cuda_home, "bin", "nvcc"), "w").close()
+                open(os.path.join(cuda_home, "bin", "nvcc"), "w", encoding="utf-8").close()
         stack.enter_context(mock.patch.object(dg, "is_kernels_available", return_value=kernels_available))
         # Fake a "CUDA + `capability`" environment for the loader *only* (scoped to its call stack): the
         # loader's availability/arch gate passes, while torch.compile / inductor still see the real
@@ -452,21 +452,6 @@ class DeepGemmForwardTest(unittest.TestCase):
             with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
         self.assertEqual(captured, {})  # raised before the kernel ran
-
-    def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
-        weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
-        weight_scale = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
-        bias = torch.randn(16, dtype=torch.bfloat16, device=torch_device)
-        with self._bundle(is_sm100=False):
-            with self.assertWarnsRegex(FutureWarning, "output_dtype"):
-                out = deepgemm_fp8_fp4_linear(
-                    input, weight, weight_scale, bias=bias, block_size=(128, 128), output_dtype=torch.float32
-                )
-        # output_dtype is deprecated and ignored: output follows input.dtype, not the requested float32.
-        self.assertEqual(out.dtype, torch.bfloat16)
-        # The fake matmul zeros the output buffer, so the result is exactly the broadcast bias.
-        self.assertTrue(torch.equal(out, bias.expand(4, 16)))
 
     # ── deepgemm_bf16_experts_forward ──────────────────────────────────────────
 

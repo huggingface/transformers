@@ -376,7 +376,7 @@ def main():
             # Clone repo locally
             repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
 
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+", encoding="utf-8") as gitignore:
                 if "step_*" not in gitignore:
                     gitignore.write("step_*\n")
                 if "epoch_*" not in gitignore:
@@ -907,7 +907,7 @@ def main():
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
-            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            with open(os.path.join(args.output_dir, "all_results.json"), "w", encoding="utf-8") as f:
                 json.dump({"perplexity": perplexity}, f)
 
     accelerator.wait_for_everyone()

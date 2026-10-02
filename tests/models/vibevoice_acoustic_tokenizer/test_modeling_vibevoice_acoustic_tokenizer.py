@@ -107,8 +107,6 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VibeVoiceAcousticTokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_pruning = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
@@ -314,7 +312,7 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
         RESULTS_PATH = (
             Path(__file__).parent.parent.parent / "fixtures/vibevoice_acoustic_tokenizer/expected_results.json"
         )
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             expected_results = json.load(f)
 
         # Get device-specific expected results
@@ -325,8 +323,8 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         audio_paths = [
-            "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
-            "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Carter_man.wav",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Frank_man.wav",
         ]
         audio_arrays = [load_audio_librosa(path, sampling_rate=self.sampling_rate) for path in audio_paths]
         feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_checkpoint)

@@ -34,11 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.generic import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
@@ -58,6 +54,7 @@ from ..sam2.modeling_sam2 import (
     eager_attention_forward,
 )
 from ..sam2.processing_sam2 import Sam2Processor
+from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -117,8 +114,6 @@ class Sam2VideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
@@ -184,6 +179,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam2_video"
+    default_rope_type = "axial"
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam2VideoPromptEncoderConfig,
@@ -213,11 +209,12 @@ class Sam2VideoConfig(PreTrainedConfig):
     memory_attention_feed_forward_hidden_size: int = 2048
     memory_attention_feed_forward_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: int = 10000
     memory_attention_rope_feat_sizes: list[int] | None = None
     memory_attention_rope_dropout: float | int = 0.1
     memory_encoder_hidden_size: int = 256
     memory_encoder_output_channels: int = 64
+    rope_parameters: dict | None = None
+
     mask_downsampler_embed_dim: int = 256
     mask_downsampler_kernel_size: int = 3
     mask_downsampler_stride: int = 2
@@ -254,6 +251,22 @@ class Sam2VideoConfig(PreTrainedConfig):
             self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
 
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 class Sam2VideoInferenceCache:
@@ -937,54 +950,36 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
                 init.zeros_(module.scale)
-        elif isinstance(module, Sam2VideoVisionRotaryEmbedding):
-            inv_freq = module.create_inv_freq()
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
         elif isinstance(module, Sam2VideoPositionalEmbedding):
             init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam2VideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
 
 
-class Sam2VideoVisionRotaryEmbedding(nn.Module):
-    """
-    Vision Rotary Position Embedding for SAM2, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
-    """
+class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
+    def __init__(self, config: Sam2VideoConfig, device=None):
+        super().__init__(config, device=device)
 
-    def __init__(self, config: Sam2VideoConfig):
-        super().__init__()
-        self.dim = config.memory_attention_hidden_size // (
+    def compute_axial_rope_parameters(config: Sam2VideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
-        # Ensure even dimension for proper axial splitting
-        if self.dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes
-        self.memory_attention_rope_theta = config.memory_attention_rope_theta
+        spatial_dim = dim // 2
 
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        inv_freq = self.create_inv_freq()
-        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
-        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
-
-    @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
-
-    def create_inv_freq(self):
-        freqs = 1.0 / (
-            self.memory_attention_rope_theta ** (torch.arange(0, self.dim, 4)[: (self.dim // 4)].float() / self.dim)
-        )
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(self.end_x * self.end_y, dtype=torch.long)
-        x_positions = flattened_indices % self.end_x
-        y_positions = torch.div(flattened_indices, self.end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        return inv_freq
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
 
 def rotate_pairwise(x):
@@ -1180,11 +1175,25 @@ class Sam2VideoMemoryAttentionLayer(nn.Module):
 class Sam2VideoMemoryAttention(nn.Module):
     def __init__(self, config: Sam2VideoConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [Sam2VideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = Sam2VideoVisionRotaryEmbedding(config=config)
+
+        position_ids = self.precompute_positions(config)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam2VideoConfig):
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(config.memory_attention_rope_feat_sizes[1]),
+            torch.arange(config.memory_attention_rope_feat_sizes[0]),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -1215,7 +1224,7 @@ class Sam2VideoMemoryAttention(nn.Module):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-        rope_position_embeddings = self.rotary_emb()
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
