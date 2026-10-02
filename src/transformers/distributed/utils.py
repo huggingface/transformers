@@ -18,7 +18,12 @@ import warnings
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
+from ..utils import (
+    is_torch_available,
+    is_torch_distributed_available,
+    is_torch_greater_or_equal,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +37,14 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+
+
+def _check_distributed_checkpointing_available(raise_if_not: bool = True) -> bool:
+    if not is_torch_distributed_available() or not is_torch_greater_or_equal("2.7"):
+        if raise_if_not:
+            raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        return False
+    return True
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -276,8 +289,7 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+    _check_distributed_checkpointing_available()
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -288,39 +300,6 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     if _get_torch_distributed_rank() == 0:
         return full_state_dict
     return {}
-
-
-def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
-    """Save model parameters as standard HF-format sharded safetensors using
-    DCP + HuggingFaceStorageWriter with consolidation enabled.
-
-    Every rank first writes its own shard in parallel under
-    `<checkpoint_dir>/sharded/`, then a consolidation pass reads those shards
-    and emits HF-compatible `model-*-of-N.safetensors` (+ index) at
-    `<checkpoint_dir>/`. The result is a directory `from_pretrained` reads
-    through its normal path — no special flag needed at load time.
-    """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
-
-    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
-    # being emitted if the function is not used
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
-    from torch.distributed.checkpoint.state_dict import get_model_state_dict
-
-    state_dict = get_model_state_dict(model)
-    dcp.save(
-        state_dict,
-        storage_writer=HuggingFaceStorageWriter(
-            path=checkpoint_dir,
-            save_distributed=True,
-            enable_consolidation=True,
-        ),
-    )
-    # Wait for rank 0 to finish writing the HF safetensors so other
-    # ranks don't return (and hit `from_pretrained`) before the files exist.
-    _distributed_barrier()
 
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:

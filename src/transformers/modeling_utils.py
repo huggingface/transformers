@@ -55,10 +55,12 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.checkpoint import is_sharded_checkpoint, load_model_checkpoint_distributed
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
 from .distributed.utils import (
+    _check_distributed_checkpointing_available,
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
     is_local_dist_rank_0,
@@ -3297,10 +3299,12 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
-                to CPU first. Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
-                When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
-                Native FSDP requires `torch>=2.7`.
+                When saving an FSDP- or TP-sharded model, write safetensors with distributed checkpointing (DCP) instead of
+                gathering weights to CPU first. Every rank must call this method.
+                When `False`, weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
+                It is only intended to save and resume training, set it to `False` if you want full `save_pretrained`
+                features. Not compatible with `push_to_hub=True`.
+                Requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -3324,6 +3328,12 @@ class PreTrainedModel(
         if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
             raise ImportError(
                 "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
+            )
+
+        if distributed_checkpoint and push_to_hub:
+            raise ValueError(
+                "`push_to_hub=True` is not supported with `distributed_checkpoint=True`: distributed checkpoints can "
+                "only be loaded from a local directory."
             )
 
         if os.path.isfile(save_directory):
@@ -3399,21 +3409,11 @@ class PreTrainedModel(
                 current_peft_config.save_pretrained(save_directory)
 
         if distributed_checkpoint:
-            hub_kwargs = {}
-            if push_to_hub:
-                hub_kwargs = {
-                    "repo_id": repo_id,
-                    "files_timestamps": files_timestamps,
-                    "commit_message": commit_message,
-                    "create_pr": create_pr,
-                }
             self.save_distributed_checkpoint(
                 model_to_save,
                 save_directory,
-                push_to_hub=push_to_hub,
-                save_on_this_rank=save_on_this_rank,
-                token=token,
-                **hub_kwargs,
+                # Native DCP checkpoints remain sharded, use `distributed_checkpoint=False` for an interoperable checkpoint.
+                consolidate=False,
             )
             return
 
@@ -3856,7 +3856,10 @@ class PreTrainedModel(
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
-                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`. Directories saved with
+                      `save_pretrained(..., distributed_checkpoint=True)` are detected and loaded with distributed
+                      checkpointing (DCP), preserving the model's current mesh and placements. This requires
+                      `torch>=2.7` and loads strictly: every model key must be present in the checkpoint.
                     - `None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments `config` and `state_dict`).
             model_args (sequence of positional arguments, *optional*):
@@ -4237,17 +4240,38 @@ class PreTrainedModel(
             )
             use_kernels = True
 
-        checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
-            variant=variant,
-            gguf_file=gguf_file,
-            use_safetensors=use_safetensors,
-            download_kwargs=download_kwargs,
-            user_agent=user_agent,
-            is_remote_code=cls.is_remote_code(),
-            transformers_explicit_filename=getattr(config, "transformers_weights", None),
-            tqdm_class=tqdm_class,
-        )
+        # Local checkpoints saved with `save_pretrained(..., distributed_checkpoint=True)` hold rank-local shards
+        # that are loaded with DCP instead of the regular loading path.
+        distributed_checkpoint_dir = None
+        if pretrained_model_name_or_path is not None and gguf_file is None and state_dict is None:
+            candidate_dir = os.path.join(str(pretrained_model_name_or_path), subfolder)
+            if is_sharded_checkpoint(candidate_dir):
+                distributed_checkpoint_dir = candidate_dir
+
+        if distributed_checkpoint_dir is not None:
+            if not _check_distributed_checkpointing_available(raise_if_not=False):
+                raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
+            if hf_quantizer is not None:
+                raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
+            # Only used to infer `dtype="auto"` when the config does not define it.
+            checkpoint_files = sorted(
+                os.path.join(distributed_checkpoint_dir, name)
+                for name in os.listdir(distributed_checkpoint_dir)
+                if name.endswith(".safetensors")
+            )
+            sharded_metadata = None
+        else:
+            checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+                pretrained_model_name_or_path=pretrained_model_name_or_path,
+                variant=variant,
+                gguf_file=gguf_file,
+                use_safetensors=use_safetensors,
+                download_kwargs=download_kwargs,
+                user_agent=user_agent,
+                is_remote_code=cls.is_remote_code(),
+                transformers_explicit_filename=getattr(config, "transformers_weights", None),
+                tqdm_class=tqdm_class,
+            )
 
         is_quantized = hf_quantizer is not None
 
@@ -4333,8 +4357,30 @@ class PreTrainedModel(
             download_kwargs=download_kwargs,
             disable_mmap=disable_mmap,
         )
-        loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
-        loading_info = cls._finalize_model_loading(model, load_config, loading_info)
+        if distributed_checkpoint_dir is not None:
+            # DCP loads in place, so every parameter and buffer has to be materialized first.
+            model._move_missing_keys_from_meta_to_device(set(model.state_dict()), device_map, device_mesh, None)
+            model.tie_weights(recompute_mapping=False)
+            load_model_checkpoint_distributed(model, distributed_checkpoint_dir)
+            # Everything in the state dict was loaded: only initialize what DCP cannot provide (non-persistent buffers).
+            for tensor in model.state_dict(keep_vars=True).values():
+                tensor._is_hf_initialized = True
+            model.initialize_weights()
+            # DCP loads strictly: a missing key raises, so there is nothing to report.
+            loading_info = LoadStateDictInfo(
+                missing_keys=set(),
+                unexpected_keys=set(),
+                mismatched_keys=set(),
+                error_msgs=[],
+                conversion_errors={},
+                skipped_pp_keys=set(),
+            )
+            disk_offload_index = None
+        else:
+            loading_info, disk_offload_index = cls._load_pretrained_model(
+                model, state_dict, checkpoint_files, load_config
+            )
+            loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
