@@ -19,15 +19,20 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import numpy as np
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
     Apertus1p5Config,
+    Apertus1p5ImageProcessor,
+    Apertus1p5Processor,
     AutoTokenizer,
+    WavTokenizerFeatureExtractor,
     is_torch_available,
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torchvision,
     slow,
     torch_device,
 )
@@ -38,6 +43,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from .test_processing_apertus1p5 import APERTUS1P5_EXTRA_SPECIAL_TOKENS
 
 
 if is_torch_available():
@@ -523,6 +529,51 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     **generate_kwargs,
                 )
                 self.assertLess(int(generated[:, prompt.shape[1] :].max()), 3)
+
+
+@require_torch
+@require_torchvision
+class Apertus1p5ModelIntegrationTest(unittest.TestCase):
+    def test_processor_to_tiny_model_forward(self):
+        """End-to-end: processor outputs feed a tiny Apertus1p5 model whose tokenizer sub-configs are aligned
+        with the processor components (VQ factor == spatial_factor, codec hop == feature-extractor hop)."""
+        tokenizer = AutoTokenizer.from_pretrained(
+            "openai-community/gpt2", extra_special_tokens=APERTUS1P5_EXTRA_SPECIAL_TOKENS
+        )
+        tokenizer.pad_token_id = 0
+        tester = Apertus1p5ModelTester(
+            self,
+            image_size=32,
+            num_hidden_layers=1,
+            vq_num_res_blocks=1,
+            image_token_id=tokenizer.image_token_id,
+            audio_token_id=tokenizer.audio_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+        tester.image_token_offset = len(tokenizer)
+        tester.audio_token_offset = tester.image_token_offset + tester.codebook_size
+        tester.vocab_size = tester.audio_token_offset + tester.audio_codebook_size
+        config = tester.get_config()
+
+        processor = Apertus1p5Processor(
+            image_processor=Apertus1p5ImageProcessor(size={"min_pixels": 32**2, "max_pixels": 64**2}),
+            feature_extractor=WavTokenizerFeatureExtractor(hop_length=config.audio_config.hop_length),
+            tokenizer=tokenizer,
+        )
+        model = Apertus1p5ForConditionalGeneration(config).eval()
+
+        inputs = processor(
+            text="<|image|>hello<|audio|>",
+            images=[np.random.default_rng(0).integers(0, 256, (32, 32, 3), dtype=np.uint8)],
+            audio=[np.random.default_rng(0).standard_normal(10).astype(np.float32)],
+            images_kwargs={"spatial_factor": config.vision_config.spatial_scale_factor},
+            return_tensors="pt",
+        )
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        self.assertEqual(logits.shape[0], 1)
+        self.assertEqual(logits.shape[-1], model.lm_head.out_features)
+        self.assertTrue(bool(torch.isfinite(logits).all()))
 
 
 class Apertus1p5TextModelTester(CausalLMModelTester):

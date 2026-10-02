@@ -314,49 +314,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertEqual(num_placeholders, -(-valid_samples // hop))
                 self.assertEqual(out["input_features"].shape[-1], hop)
 
-    @require_torch
-    def test_processor_to_tiny_model_forward(self):
-        """End-to-end: processor outputs feed a tiny Apertus1p5 model whose tokenizer sub-configs are aligned
-        with the processor components (VQ factor == spatial_factor, codec hop == feature-extractor hop)."""
-        from transformers import Apertus1p5ForConditionalGeneration, WavTokenizerFeatureExtractor
-
-        from .test_modeling_apertus1p5 import Apertus1p5ModelTester
-
-        base_processor = self.get_processor()
-        tester = Apertus1p5ModelTester(
-            self,
-            image_size=32,
-            num_hidden_layers=1,
-            vq_num_res_blocks=1,
-            image_token_id=base_processor.image_token_id,
-            audio_token_id=base_processor.audio_token_id,
-            pad_token_id=base_processor.tokenizer.pad_token_id,
-        )
-        tester.image_token_offset = len(base_processor.tokenizer)
-        tester.audio_token_offset = tester.image_token_offset + tester.codebook_size
-        tester.vocab_size = tester.audio_token_offset + tester.audio_codebook_size
-        config = tester.get_config()
-
-        processor = self.processor_class(
-            image_processor=base_processor.image_processor,
-            feature_extractor=WavTokenizerFeatureExtractor(hop_length=config.audio_config.hop_length),
-            tokenizer=base_processor.tokenizer,
-        )
-        model = Apertus1p5ForConditionalGeneration(config).eval()
-
-        inputs = processor(
-            text="<|image|>hello<|audio|>",
-            images=[self._image(32, 32)],
-            audio=[self._clip(10)],
-            images_kwargs={"spatial_factor": config.vision_config.spatial_scale_factor},
-            return_tensors="pt",
-        )
-        with torch.no_grad():
-            logits = model(**inputs).logits
-        self.assertEqual(logits.shape[0], 1)
-        self.assertEqual(logits.shape[-1], model.lm_head.out_features)
-        self.assertTrue(bool(torch.isfinite(logits).all()))
-
 
 @slow
 @require_torchvision
