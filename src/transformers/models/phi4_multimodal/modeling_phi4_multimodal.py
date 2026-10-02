@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -136,7 +136,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Phi4MultimodalVisionEncoderLayer(GradientCheckpointingLayer):
+class Phi4MultimodalVisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -211,7 +211,7 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
     _supports_flash_attn = True
@@ -845,7 +845,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalAudioConfig
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1284,7 +1284,7 @@ class Phi4MultimodalAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
+class Phi4MultimodalDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Phi4MultimodalConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1389,7 +1389,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Phi4MultimodalDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

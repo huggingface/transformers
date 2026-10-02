@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...generation import CompileConfig, GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -344,7 +344,7 @@ class LasrEncoderFeedForward(nn.Module):
         return hidden_states
 
 
-class LasrEncoderBlock(GradientCheckpointingLayer):
+class LasrEncoderBlock(ActivationCheckpointingLayer):
     def __init__(self, config: LasrEncoderConfig, layer_idx: int):
         super().__init__()
         self.gradient_checkpointing = False
@@ -405,7 +405,7 @@ class LasrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["LasrEncoderBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True

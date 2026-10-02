@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -238,7 +238,7 @@ class MoonshineStreamingEncoderAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MoonshineStreamingEncoderLayer(GradientCheckpointingLayer):
+class MoonshineStreamingEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MoonshineStreamingConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -319,7 +319,7 @@ class MoonshineStreamingPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MoonshineStreamingEncoderLayer", "MoonshineStreamingDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -690,7 +690,7 @@ class MoonshineStreamingAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MoonshineStreamingDecoderLayer(GradientCheckpointingLayer):
+class MoonshineStreamingDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MoonshineStreamingConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size

@@ -29,9 +29,9 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -305,7 +305,7 @@ class PersimmonAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PersimmonDecoderLayer(GradientCheckpointingLayer):
+class PersimmonDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: PersimmonConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -356,7 +356,7 @@ class PersimmonDecoderLayer(GradientCheckpointingLayer):
 class PersimmonPreTrainedModel(PreTrainedModel):
     config: PersimmonConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PersimmonDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = True

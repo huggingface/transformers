@@ -21,7 +21,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -192,7 +192,7 @@ class Lfm2ShortConv(nn.Module):
         return y
 
 
-class Lfm2DecoderLayer(GradientCheckpointingLayer):
+class Lfm2DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Lfm2Config, layer_idx: int):
         super().__init__()
         self.is_attention_layer = config.layer_types[layer_idx] == "full_attention"

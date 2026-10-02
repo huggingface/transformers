@@ -31,7 +31,7 @@ from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -439,7 +439,7 @@ class T5Gemma2MergedAttention(nn.Module):
         return attn_output, self_attn_weights, cross_attn_weights
 
 
-class T5Gemma2EncoderLayer(GradientCheckpointingLayer):
+class T5Gemma2EncoderLayer(ActivationCheckpointingLayer):
     """Encoder sub-layer."""
 
     def __init__(self, config, layer_idx: int):
@@ -491,7 +491,7 @@ class T5Gemma2EncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
+class T5Gemma2DecoderLayer(ActivationCheckpointingLayer):
     """Decoder sub-layer: merged attention instead of vanilla self-attention."""
 
     def __init__(self, config, layer_idx: int):
@@ -639,7 +639,7 @@ class T5Gemma2TextScaledWordEmbedding(nn.Embedding):
 class T5Gemma2PreTrainedModel(PreTrainedModel):
     config: T5Gemma2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     _no_split_modules = [
         "T5Gemma2EncoderLayer",

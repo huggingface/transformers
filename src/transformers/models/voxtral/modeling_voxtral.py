@@ -29,7 +29,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -157,7 +157,7 @@ class VoxtralAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class VoxtralEncoderLayer(GradientCheckpointingLayer):
+class VoxtralEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: VoxtralConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -218,7 +218,7 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     config: VoxtralConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = None
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

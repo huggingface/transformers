@@ -27,7 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 class Kosmos2PreTrainedModel(PreTrainedModel):
     config: Kosmos2Config
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
     _supports_attention_backend = True
     _supports_flash_attn = False  # cuda device errors
@@ -418,7 +418,7 @@ class Kosmos2VisionMLP(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->Kosmos2VisionConfig,AltCLIP->Kosmos2Vision
-class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
+class Kosmos2VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -794,7 +794,7 @@ class Kosmos2TextFFN(nn.Module):
         return hidden_states
 
 
-class Kosmos2TextBlock(GradientCheckpointingLayer):
+class Kosmos2TextBlock(ActivationCheckpointingLayer):
     def __init__(self, config: Kosmos2TextConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.embed_dim

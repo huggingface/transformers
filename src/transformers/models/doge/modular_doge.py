@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import AttentionInterface, PreTrainedModel
@@ -378,7 +378,7 @@ class DogeCDMoE(nn.Module):
         return hidden_states, router_logits
 
 
-class DogeDecoderLayer(GradientCheckpointingLayer):
+class DogeDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DogeConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config

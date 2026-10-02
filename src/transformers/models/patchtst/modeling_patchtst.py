@@ -549,7 +549,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "past_values"
     input_modalities = ("time",)
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

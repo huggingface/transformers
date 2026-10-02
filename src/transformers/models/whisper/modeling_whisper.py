@@ -30,7 +30,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -359,7 +359,7 @@ class WhisperAttention(nn.Module):
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
-class WhisperEncoderLayer(GradientCheckpointingLayer):
+class WhisperEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -415,7 +415,7 @@ class WhisperEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class WhisperDecoderLayer(GradientCheckpointingLayer):
+class WhisperDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: WhisperConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -513,7 +513,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True

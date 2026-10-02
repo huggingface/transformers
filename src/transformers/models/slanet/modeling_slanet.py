@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import filter_output_hidden_states, load_backbone
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -44,7 +44,7 @@ class SLANetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keep_in_fp32_modules_strict = []
 
     @torch.no_grad()
@@ -220,7 +220,7 @@ class SLANetConvLayer(nn.Module):
         return hidden_states
 
 
-class SLANetDepthwiseSeparableConvLayer(GradientCheckpointingLayer):
+class SLANetDepthwiseSeparableConvLayer(ActivationCheckpointingLayer):
     """
     Depthwise Separable Convolution Layer: Depthwise Conv -> Pointwise Conv
     Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces

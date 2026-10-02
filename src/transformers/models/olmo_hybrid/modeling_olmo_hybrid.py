@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -765,7 +765,7 @@ class OlmoHybridMLP(nn.Module):
         return down_proj
 
 
-class OlmoHybridAttentionDecoderLayer(GradientCheckpointingLayer):
+class OlmoHybridAttentionDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -806,7 +806,7 @@ class OlmoHybridAttentionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
+class OlmoHybridLinearAttentionDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -848,7 +848,7 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
 class OlmoHybridPreTrainedModel(PreTrainedModel):
     config: OlmoHybridConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearAttentionDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

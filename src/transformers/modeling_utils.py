@@ -1137,7 +1137,7 @@ class PreTrainedModel(
     _supports_context_parallel: bool = True
 
     # Advanced functionalities support
-    supports_gradient_checkpointing: bool = False
+    supports_activation_checkpointing: bool = False
     _can_compile_fullgraph: bool = False
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
@@ -1219,6 +1219,15 @@ class PreTrainedModel(
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
+        # `supports_gradient_checkpointing` is a deprecated alias of `supports_activation_checkpointing`, will be
+        # removed in v6. Subclasses that still set the old name (e.g. remote code models) keep working, and the old
+        # name stays readable.
+        if (
+            "supports_gradient_checkpointing" in cls.__dict__
+            and "supports_activation_checkpointing" not in cls.__dict__
+        ):
+            cls.supports_activation_checkpointing = cls.__dict__["supports_gradient_checkpointing"]
+        cls.supports_gradient_checkpointing = cls.supports_activation_checkpointing
         # For BC we keep the original `config_class` definition in case
         # there is a `config_class` attribute (e.g. remote code models),
         # otherwise we derive it from the annotated `config` attribute.
@@ -1354,7 +1363,7 @@ class PreTrainedModel(
         return hf_quantizer.dequantize(self, dtype=dtype)
 
     def _backward_compatibility_gradient_checkpointing(self):
-        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
+        if self.supports_activation_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.activation_checkpointing_enable()
             # Remove the attribute now that is has been consumed, so it's no saved in the config.
             delattr(self.config, "gradient_checkpointing")
@@ -3129,7 +3138,7 @@ class PreTrainedModel(
             activation_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
-        if not self.supports_gradient_checkpointing:
+        if not self.supports_activation_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support activation checkpointing.")
 
         if activation_checkpointing_kwargs is None:
@@ -3193,7 +3202,7 @@ class PreTrainedModel(
         every_n_layers: int = 1,
     ):
         # Imported here rather than at module scope: `modeling_layers` imports from this module.
-        from .modeling_layers import GradientCheckpointingLayer
+        from .modeling_layers import ActivationCheckpointingLayer
 
         is_gradient_checkpointing_set = False
         layer_index = 0
@@ -3210,7 +3219,7 @@ class PreTrainedModel(
                 setattr(module, "_gradient_checkpointing_func", gradient_checkpointing_func)
                 # Only the repeated per-layer blocks are counted, so `every_n_layers` means what it says even when
                 # other modules also carry a `gradient_checkpointing` flag.
-                if enable and isinstance(module, GradientCheckpointingLayer):
+                if enable and isinstance(module, ActivationCheckpointingLayer):
                     setattr(module, "gradient_checkpointing", layer_index % every_n_layers == 0)
                     layer_index += 1
                 else:
@@ -3227,7 +3236,7 @@ class PreTrainedModel(
         """
         Deactivates activation checkpointing for the current model.
         """
-        if self.supports_gradient_checkpointing:
+        if self.supports_activation_checkpointing:
             # For old GC format (transformers < 4.35.0) for models that live on the Hub
             # we will fall back to the overwritten `_set_gradient_checkpointing` method
             _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters

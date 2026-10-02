@@ -38,10 +38,10 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -863,7 +863,7 @@ class Qwen3NextSparseMoeBlock(nn.Module):
         return expert_output
 
 
-class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
+class Qwen3NextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -934,7 +934,7 @@ class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
 class Qwen3NextPreTrainedModel(PreTrainedModel):
     config: Qwen3NextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Qwen3NextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

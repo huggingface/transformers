@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -281,7 +281,7 @@ class ModernBertDecoderAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class ModernBertDecoderLayer(GradientCheckpointingLayer):
+class ModernBertDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: ModernBertDecoderConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config

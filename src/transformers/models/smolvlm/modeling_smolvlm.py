@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -51,7 +51,7 @@ class SmolVLMPreTrainedModel(PreTrainedModel):
     config: SmolVLMConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["SmolVLMVisionAttention"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -233,7 +233,7 @@ class SmolVLMVisionMLP(nn.Module):
         return hidden_states
 
 
-class SmolVLMEncoderLayer(GradientCheckpointingLayer):
+class SmolVLMEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SmolVLMVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size

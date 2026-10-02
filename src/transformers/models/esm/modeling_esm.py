@@ -24,7 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -460,7 +460,7 @@ class EsmOutput(nn.Module):
         return hidden_states
 
 
-class EsmLayer(GradientCheckpointingLayer):
+class EsmLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -572,7 +572,7 @@ class EsmPooler(nn.Module):
 class EsmPreTrainedModel(PreTrainedModel):
     config: EsmConfig
     base_model_prefix = "esm"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     accepts_loss_kwargs = False
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings.weight"]

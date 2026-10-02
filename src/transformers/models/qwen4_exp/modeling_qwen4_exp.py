@@ -39,7 +39,7 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1251,7 +1251,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         return output
 
 
-class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
+class Qwen4ExpTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx]
@@ -1310,7 +1310,7 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
 class Qwen4ExpPreTrainedModel(PreTrainedModel):
     config: Qwen4ExpConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = None  # will be set on text and vision separately
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
@@ -1895,7 +1895,7 @@ class Qwen4ExpVisionAttention(nn.Module):
         return attn_output
 
 
-class Qwen4ExpVisionBlock(GradientCheckpointingLayer):
+class Qwen4ExpVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)

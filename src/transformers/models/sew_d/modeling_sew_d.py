@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
@@ -240,7 +240,7 @@ def get_mask(input, local_context):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SEWD
-class SEWDNoLayerNormConvLayer(GradientCheckpointingLayer):
+class SEWDNoLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -262,7 +262,7 @@ class SEWDNoLayerNormConvLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SEWD
-class SEWDLayerNormConvLayer(GradientCheckpointingLayer):
+class SEWDLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -290,7 +290,7 @@ class SEWDLayerNormConvLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SEWD
-class SEWDGroupNormConvLayer(GradientCheckpointingLayer):
+class SEWDGroupNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -899,7 +899,7 @@ class SEWDOutput(nn.Module):
         return hidden_states
 
 
-class SEWDLayer(GradientCheckpointingLayer):
+class SEWDLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = SEWDAttention(config)
@@ -1131,7 +1131,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sew_d"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = {
         "hidden_states": SEWDLayer,
         "attentions": OutputRecorder(DisentangledSelfAttention, index=1, layer_name="encoder"),

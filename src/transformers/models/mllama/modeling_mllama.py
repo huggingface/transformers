@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache, StaticLayer
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
@@ -593,7 +593,7 @@ class MllamaTextMLP(nn.Module):
 
 
 # Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
-class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
+class MllamaSelfAttentionDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MllamaTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -662,7 +662,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
+class MllamaCrossAttentionDecoderLayer(ActivationCheckpointingLayer):
     """Cross-attention transformer block with tanh-gated attention and feedforward."""
 
     def __init__(self, config: MllamaTextConfig, layer_idx: int) -> None:
@@ -771,7 +771,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "MllamaVisionEncoderLayer",
         "MllamaCrossAttentionDecoderLayer",

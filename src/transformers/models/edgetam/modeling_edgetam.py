@@ -30,7 +30,7 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -187,7 +187,7 @@ class EdgeTamAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EdgeTamTwoWayAttentionBlock(GradientCheckpointingLayer):
+class EdgeTamTwoWayAttentionBlock(ActivationCheckpointingLayer):
     def __init__(self, config: EdgeTamMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:

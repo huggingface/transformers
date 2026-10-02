@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_mamba2 import Mamba2Config
@@ -615,7 +615,7 @@ class Mamba2RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class Mamba2Block(GradientCheckpointingLayer):
+class Mamba2Block(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
@@ -646,7 +646,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     config: Mamba2Config
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_compile_fullgraph = True
     _is_stateful = True
 

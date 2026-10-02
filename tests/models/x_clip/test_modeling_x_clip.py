@@ -246,7 +246,7 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if not model_class.supports_gradient_checkpointing:
+            if not model_class.supports_activation_checkpointing:
                 continue
 
             print("Model class:", model_class)

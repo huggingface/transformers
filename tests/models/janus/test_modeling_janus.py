@@ -277,10 +277,10 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                         *get_values(MODEL_MAPPING_NAMES),
                         *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                     ]
-                    or not model_class.supports_gradient_checkpointing
+                    or not model_class.supports_activation_checkpointing
                 ):
                     # TODO (ydshieh): use `skipTest` once pytest-dev/pytest-subtests/pull/169 is merged
-                    # self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    # self.skipTest(reason=f"`supports_activation_checkpointing` is False for {model_class.__name__}.")
                     continue
 
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

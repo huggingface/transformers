@@ -27,7 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -268,7 +268,7 @@ class SegformerDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class SegformerLayer(GradientCheckpointingLayer):
+class SegformerLayer(ActivationCheckpointingLayer):
     """Transformer block with DropPath on both branches and a MixFFN instead of a plain MLP."""
 
     def __init__(self, config, hidden_size, num_attention_heads, drop_path, sequence_reduction_ratio, mlp_ratio):
@@ -357,7 +357,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "segformer"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["SegformerStage"]
     _supports_sdpa = True
     _supports_flash_attn = True

@@ -2791,8 +2791,8 @@ class ClassAttrs:
     base_model_prefix = r"""
     A string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
     """
-    supports_gradient_checkpointing = r"""
-    Whether the model supports gradient checkpointing or not. Gradient checkpointing is a memory-saving technique that trades compute for memory, by storing only a subset of activations (checkpoints) and recomputing the activations that are not stored during the backward pass.
+    supports_activation_checkpointing = r"""
+    Whether the model supports activation checkpointing or not. Activation checkpointing is a memory-saving technique that trades compute for memory, by storing only a subset of activations (checkpoints) and recomputing the activations that are not stored during the backward pass.
     """
     _no_split_modules = r"""
     Layers of modules that should not be split across devices should be added to `_no_split_modules`. This can be useful for modules that contains skip connections or other operations that are not compatible with splitting the module across devices. Setting this attribute will enable the use of `device_map="auto"` in the `from_pretrained` method.

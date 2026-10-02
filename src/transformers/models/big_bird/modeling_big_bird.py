@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -1175,7 +1175,7 @@ class BigBirdOutput(nn.Module):
         return hidden_states
 
 
-class BigBirdLayer(GradientCheckpointingLayer):
+class BigBirdLayer(ActivationCheckpointingLayer):
     def __init__(self, config, seed=None):
         super().__init__()
         self.config = config
@@ -1395,7 +1395,7 @@ class BigBirdPreTrainingHeads(nn.Module):
 class BigBirdPreTrainedModel(PreTrainedModel):
     config: BigBirdConfig
     base_model_prefix = "bert"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = {
         "hidden_states": BigBirdLayer,
         "attentions": [

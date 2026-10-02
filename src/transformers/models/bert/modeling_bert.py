@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -351,7 +351,7 @@ class BertOutput(nn.Module):
         return hidden_states
 
 
-class BertLayer(GradientCheckpointingLayer):
+class BertLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -532,7 +532,7 @@ class BertPreTrainingHeads(nn.Module):
 class BertPreTrainedModel(PreTrainedModel):
     config_class = BertConfig
     base_model_prefix = "bert"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

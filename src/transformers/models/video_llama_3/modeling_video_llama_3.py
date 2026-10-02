@@ -27,7 +27,7 @@ from torch.nn import LayerNorm
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -310,7 +310,7 @@ class VideoLlama3VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class VideoLlama3VisionEncoderLayer(GradientCheckpointingLayer):
+class VideoLlama3VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -399,7 +399,7 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
     config: VideoLlama3Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

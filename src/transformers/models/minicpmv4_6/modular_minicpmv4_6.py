@@ -354,7 +354,7 @@ class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_6VisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
 
@@ -531,7 +531,7 @@ class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_6Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _no_split_modules = [

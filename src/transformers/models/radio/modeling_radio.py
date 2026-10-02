@@ -27,7 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -341,7 +341,7 @@ class RadioDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class RadioLayer(GradientCheckpointingLayer):
+class RadioLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: RadioConfig) -> None:
@@ -381,7 +381,7 @@ class RadioPreTrainedModel(PreTrainedModel):
     config_class = RadioConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["RadioLayer"]
     _keys_to_ignore_on_load_missing = [r"layer_scale\d+\.lambda1"]
     _supports_sdpa = True

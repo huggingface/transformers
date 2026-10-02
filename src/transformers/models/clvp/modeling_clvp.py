@@ -762,7 +762,7 @@ class ClvpConditioningEncoder(nn.Module):
 class ClvpPreTrainedModel(PreTrainedModel):
     config: ClvpConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
         "hidden_states": [ClvpEncoderLayer, ClvpDecoderLayer],

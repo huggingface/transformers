@@ -31,9 +31,9 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -63,7 +63,7 @@ class Glm4MLP(nn.Module):
         return self.down_proj(up_states)
 
 
-class Glm4DecoderLayer(GradientCheckpointingLayer):
+class Glm4DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Glm4Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -340,7 +340,7 @@ class Glm4RMSNorm(nn.Module):
 class Glm4PreTrainedModel(PreTrainedModel):
     config: Glm4Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Glm4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

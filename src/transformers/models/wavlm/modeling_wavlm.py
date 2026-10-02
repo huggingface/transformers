@@ -18,7 +18,7 @@ from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -298,7 +298,7 @@ class WavLMFeedForward(nn.Module):
         return hidden_states
 
 
-class WavLMEncoderLayer(GradientCheckpointingLayer):
+class WavLMEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -341,7 +341,7 @@ class WavLMEncoderLayer(GradientCheckpointingLayer):
         return hidden_states, position_bias
 
 
-class WavLMEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
+class WavLMEncoderLayerStableLayerNorm(ActivationCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -557,7 +557,7 @@ class WavLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "wavlm"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
@@ -635,7 +635,7 @@ class WavLMPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-class WavLMNoLayerNormConvLayer(GradientCheckpointingLayer):
+class WavLMNoLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -656,7 +656,7 @@ class WavLMNoLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class WavLMLayerNormConvLayer(GradientCheckpointingLayer):
+class WavLMLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -683,7 +683,7 @@ class WavLMLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class WavLMGroupNormConvLayer(GradientCheckpointingLayer):
+class WavLMGroupNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1

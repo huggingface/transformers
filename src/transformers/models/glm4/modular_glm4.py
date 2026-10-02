@@ -17,7 +17,7 @@ import torch
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
@@ -36,7 +36,7 @@ class Glm4MLP(Phi3MLP):
     pass
 
 
-class Glm4DecoderLayer(GradientCheckpointingLayer):
+class Glm4DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Glm4Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

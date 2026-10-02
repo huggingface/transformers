@@ -21,7 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_xlstm_available
@@ -36,7 +36,7 @@ if is_xlstm_available():
 
     external_xlstm = True
 
-    class xLSTMBlock(GradientCheckpointingLayer, mLSTMBlock):
+    class xLSTMBlock(ActivationCheckpointingLayer, mLSTMBlock):
         pass
 
 else:
@@ -1171,7 +1171,7 @@ else:
             y = self.out_proj(h_out)
             return y, state
 
-    class xLSTMBlock(GradientCheckpointingLayer):
+    class xLSTMBlock(ActivationCheckpointingLayer):
         def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config
@@ -1237,7 +1237,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     config_class = xLSTMConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["xLSTMBlock"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _is_stateful = True
     _can_record_outputs = {
         "hidden_states": xLSTMBlock,

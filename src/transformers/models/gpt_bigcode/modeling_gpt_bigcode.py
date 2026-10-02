@@ -24,7 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -259,7 +259,7 @@ class GPTBigCodeMLP(nn.Module):
         return hidden_states
 
 
-class GPTBigCodeBlock(GradientCheckpointingLayer):
+class GPTBigCodeBlock(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -335,7 +335,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
 class GPTBigCodePreTrainedModel(PreTrainedModel):
     config: GPTBigCodeConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GPTBigCodeBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -485,7 +485,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             hidden_states = block(
                 hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
-                layer_past=past_key_values,  # as keyword argument so it can be removed by GradientCheckpointingLayer
+                layer_past=past_key_values,  # as keyword argument so it can be removed by ActivationCheckpointingLayer
                 attention_mask=causal_mask,
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,

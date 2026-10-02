@@ -31,7 +31,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -254,7 +254,7 @@ def _sample_negative_indices(features_shape: tuple, num_negatives: int, mask_tim
     return sampled_negative_indices
 
 
-class Wav2Vec2NoLayerNormConvLayer(GradientCheckpointingLayer):
+class Wav2Vec2NoLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -275,7 +275,7 @@ class Wav2Vec2NoLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Wav2Vec2LayerNormConvLayer(GradientCheckpointingLayer):
+class Wav2Vec2LayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -302,7 +302,7 @@ class Wav2Vec2LayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Wav2Vec2GroupNormConvLayer(GradientCheckpointingLayer):
+class Wav2Vec2GroupNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -575,7 +575,7 @@ class Wav2Vec2FeedForward(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2EncoderLayer(GradientCheckpointingLayer):
+class Wav2Vec2EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = Wav2Vec2Attention(
@@ -609,7 +609,7 @@ class Wav2Vec2EncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Wav2Vec2EncoderLayerStableLayerNorm(GradientCheckpointingLayer):
+class Wav2Vec2EncoderLayerStableLayerNorm(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = Wav2Vec2Attention(
@@ -900,7 +900,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

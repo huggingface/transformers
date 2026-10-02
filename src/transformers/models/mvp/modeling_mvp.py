@@ -24,7 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -234,7 +234,7 @@ class MvpAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class MvpEncoderLayer(GradientCheckpointingLayer):
+class MvpEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MvpConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -295,7 +295,7 @@ class MvpEncoderLayer(GradientCheckpointingLayer):
         return hidden_states, attn_weights
 
 
-class MvpDecoderLayer(GradientCheckpointingLayer):
+class MvpDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MvpConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -457,7 +457,7 @@ class MvpPrompt(nn.Module):
 class MvpPreTrainedModel(PreTrainedModel):
     config: MvpConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

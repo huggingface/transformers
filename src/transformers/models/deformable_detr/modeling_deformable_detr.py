@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -663,7 +663,7 @@ class DeformableDetrMLP(nn.Module):
         return hidden_states
 
 
-class DeformableDetrEncoderLayer(GradientCheckpointingLayer):
+class DeformableDetrEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__()
         self.hidden_size = config.d_model
@@ -733,7 +733,7 @@ class DeformableDetrEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class DeformableDetrDecoderLayer(GradientCheckpointingLayer):
+class DeformableDetrDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__()
         self.hidden_size = config.d_model
@@ -834,7 +834,7 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         r"DeformableDetrConvEncoder",
         r"DeformableDetrEncoderLayer",

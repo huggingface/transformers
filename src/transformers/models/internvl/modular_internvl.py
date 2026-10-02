@@ -23,7 +23,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -280,7 +280,7 @@ class InternVLVisionMLP(CLIPMLP):
 NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternVLVisionRMSNorm}
 
 
-class InternVLVisionLayer(GradientCheckpointingLayer):
+class InternVLVisionLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: InternVLVisionConfig) -> None:
@@ -351,7 +351,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

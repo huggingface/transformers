@@ -33,7 +33,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
@@ -62,7 +62,7 @@ class PPFormulaNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keep_in_fp32_modules_strict = []
     # Note this goes for the decoder only, the encoder will inherently always use eager attention
     _supports_sdpa = True
@@ -263,7 +263,7 @@ class PPFormulaNetMLPBlock(nn.Module):
         return hidden_states
 
 
-class PPFormulaNetVisionLayer(GradientCheckpointingLayer):
+class PPFormulaNetVisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -674,7 +674,7 @@ class PPFormulaNetAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PPFormulaNetDecoderLayer(GradientCheckpointingLayer):
+class PPFormulaNetDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: PPFormulaNetConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model

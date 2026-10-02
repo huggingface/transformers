@@ -29,7 +29,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -393,7 +393,7 @@ class AfmoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class AfmoeDecoderLayer(GradientCheckpointingLayer):
+class AfmoeDecoderLayer(ActivationCheckpointingLayer):
     """
     AFMoE decoder layer with dual normalization.
 
@@ -489,7 +489,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

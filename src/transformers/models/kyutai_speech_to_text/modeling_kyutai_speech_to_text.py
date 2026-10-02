@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -88,7 +88,7 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
     config: KyutaiSpeechToTextConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["KyutaiSpeechToTextDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -502,7 +502,7 @@ class KyutaiSpeechToTextAttention(nn.Module):
 
 # NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->KyutaiSpeechToText
 # TODO cyril: modular
-class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
+class KyutaiSpeechToTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: KyutaiSpeechToTextConfig, layer_idx: int, use_flexible_linear: bool, use_rope=True):
         super().__init__()
         self.hidden_size = config.hidden_size

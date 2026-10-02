@@ -29,7 +29,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -481,7 +481,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SeamlessM4Tv2ConformerEncoderLayer(GradientCheckpointingLayer):
+class SeamlessM4Tv2ConformerEncoderLayer(ActivationCheckpointingLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4Tv2, attention_dropout->speech_encoder_dropout, torch.nn->nn
@@ -1006,7 +1006,7 @@ class SeamlessM4Tv2FeedForwardNetwork(nn.Module):
 
 
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TEncoderLayer with SeamlessM4T->SeamlessM4Tv2
-class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
+class SeamlessM4Tv2EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, encoder_ffn_dim=None, encoder_attention_heads=None):
         super().__init__()
         encoder_ffn_dim = config.encoder_ffn_dim if encoder_ffn_dim is None else encoder_ffn_dim
@@ -1066,7 +1066,7 @@ class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TDecoderLayer with SeamlessM4T->SeamlessM4Tv2
-class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
+class SeamlessM4Tv2DecoderLayer(ActivationCheckpointingLayer):
     def __init__(
         self, config: SeamlessM4Tv2Config, decoder_ffn_dim=None, decoder_attention_heads=None, layer_idx=None
     ):
@@ -1172,7 +1172,7 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SeamlessM4Tv2TextToUnitDecoderLayer(GradientCheckpointingLayer):
+class SeamlessM4Tv2TextToUnitDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SeamlessM4Tv2Config, decoder_ffn_dim=None, decoder_attention_heads=None):
         super().__init__()
         decoder_ffn_dim = config.decoder_ffn_dim if decoder_ffn_dim is None else decoder_ffn_dim
@@ -1255,7 +1255,7 @@ class SeamlessM4Tv2TextToUnitDecoderLayer(GradientCheckpointingLayer):
 class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     config: SeamlessM4Tv2Config
     base_model_prefix = "seamless_m4t_v2"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = [

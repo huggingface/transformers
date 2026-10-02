@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1270,7 +1270,7 @@ class Gemma3nTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
+class Gemma3nTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -1350,7 +1350,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
 class Gemma3nPreTrainedModel(PreTrainedModel):
     config: Gemma3nConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = True

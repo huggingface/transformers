@@ -24,7 +24,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -67,7 +67,7 @@ class PPLCNetConvLayer(nn.Module):
         return hidden_states
 
 
-class PPLCNetDepthwiseSeparableConvLayer(GradientCheckpointingLayer):
+class PPLCNetDepthwiseSeparableConvLayer(ActivationCheckpointingLayer):
     """
     Depthwise Separable Convolution Layer: Depthwise Conv -> SE Module (optional) -> Pointwise Conv
     Core component of lightweight models (e.g., MobileNet, PP-LCNet) that significantly reduces
@@ -201,7 +201,7 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PPLCNetDepthwiseSeparableConvLayer"]
     _can_record_outputs = {
         "hidden_states": PPLCNetBlock,

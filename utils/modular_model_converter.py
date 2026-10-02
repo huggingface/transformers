@@ -253,7 +253,7 @@ class ReplaceParentClassCallTransformer(cst.CSTTransformer):
             # Replace only if it's a base, or a few special rules
             if (
                 full_parent_class_name in self.new_bases
-                or (full_parent_class_name == "nn.Module" and "GradientCheckpointingLayer" in self.new_bases)
+                or (full_parent_class_name == "nn.Module" and "ActivationCheckpointingLayer" in self.new_bases)
                 or (
                     full_parent_class_name == "PreTrainedModel"
                     and any("PreTrainedModel" in base for base in self.new_bases)
@@ -1034,9 +1034,9 @@ def replace_class_node(
     new_class_bases.extend(
         [all_new_bases[added_base] for added_base in additional_bases if added_base not in original_bases]
     )
-    # If we have both `nn.Module` and `GradientCheckpointingLayer`, remove `nn.Module`
+    # If we have both `nn.Module` and `ActivationCheckpointingLayer`, remove `nn.Module`
     new_class_bases_names = {get_full_attribute_name(k.value) for k in new_class_bases}
-    if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
+    if "nn.Module" in new_class_bases_names and "ActivationCheckpointingLayer" in new_class_bases_names:
         new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
     # Keep decorators according to the modular/original merge priority

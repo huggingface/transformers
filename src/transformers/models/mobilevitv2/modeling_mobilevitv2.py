@@ -21,7 +21,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -347,7 +347,7 @@ class MobileViTV2Transformer(nn.Module):
         return hidden_states
 
 
-class MobileViTV2Layer(GradientCheckpointingLayer):
+class MobileViTV2Layer(ActivationCheckpointingLayer):
     """
     MobileViTV2 layer: https://huggingface.co/papers/2206.02680
     """
@@ -569,7 +569,7 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MobileViTV2Layer"]
 
     @torch.no_grad()

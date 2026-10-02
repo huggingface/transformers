@@ -32,9 +32,9 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -511,7 +511,7 @@ class Mistral4Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Mistral4DecoderLayer(GradientCheckpointingLayer):
+class Mistral4DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Mistral4Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -561,7 +561,7 @@ class Mistral4DecoderLayer(GradientCheckpointingLayer):
 class Mistral4PreTrainedModel(PreTrainedModel):
     config: Mistral4Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Mistral4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

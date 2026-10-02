@@ -37,7 +37,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -429,7 +429,7 @@ class SegformerDropPath(SwinDropPath):
     pass
 
 
-class SegformerLayer(GradientCheckpointingLayer):
+class SegformerLayer(ActivationCheckpointingLayer):
     """Transformer block with DropPath on both branches and a MixFFN instead of a plain MLP."""
 
     def __init__(self, config, hidden_size, num_attention_heads, drop_path, sequence_reduction_ratio, mlp_ratio):

@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -239,7 +239,7 @@ class DecisionTransformerGPT2MLP(nn.Module):
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->DecisionTransformerGPT2
-class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
+class DecisionTransformerGPT2Block(ActivationCheckpointingLayer):
     # Ignore copy
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -312,7 +312,7 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     config: DecisionTransformerConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "hidden_states": DecisionTransformerGPT2Block,
@@ -490,7 +490,7 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     config: DecisionTransformerConfig
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
 
 
 @auto_docstring(

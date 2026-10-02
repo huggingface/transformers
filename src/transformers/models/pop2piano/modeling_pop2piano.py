@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -435,7 +435,7 @@ class Pop2PianoLayerCrossAttention(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Pop2Piano,t5->pop2piano
-class Pop2PianoBlock(GradientCheckpointingLayer):
+class Pop2PianoBlock(ActivationCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -519,7 +519,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     config: Pop2PianoConfig
     base_model_prefix = "transformer"
     output_modalities = ("audio",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     _can_compile_fullgraph = False
     _no_split_modules = ["Pop2PianoBlock"]

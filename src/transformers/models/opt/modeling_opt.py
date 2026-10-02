@@ -24,7 +24,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -181,7 +181,7 @@ class OPTAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class OPTDecoderLayer(GradientCheckpointingLayer):
+class OPTDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: OPTConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -257,7 +257,7 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
 class OPTPreTrainedModel(PreTrainedModel):
     config: OPTConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
     _supports_attention_backend = True
     _supports_flash_attn = True

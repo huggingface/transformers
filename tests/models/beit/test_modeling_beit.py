@@ -359,7 +359,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     *MODEL_FOR_BACKBONE_MAPPING_NAMES.values(),
                     "BeitForMaskedImageModeling",
                 ]
-                or not model_class.supports_gradient_checkpointing
+                or not model_class.supports_activation_checkpointing
             ):
                 continue
 

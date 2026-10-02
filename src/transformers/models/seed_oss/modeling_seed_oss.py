@@ -29,10 +29,10 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -224,7 +224,7 @@ class SeedOssAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SeedOssDecoderLayer(GradientCheckpointingLayer):
+class SeedOssDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SeedOssConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -271,7 +271,7 @@ class SeedOssDecoderLayer(GradientCheckpointingLayer):
 class SeedOssPreTrainedModel(PreTrainedModel):
     config: SeedOssConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["SeedOssDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

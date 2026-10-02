@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -868,7 +868,7 @@ class LEDDecoderAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_values
 
 
-class LEDEncoderLayer(GradientCheckpointingLayer):
+class LEDEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: LEDConfig, layer_id: int):
         super().__init__()
         self.embed_dim = config.d_model
@@ -924,7 +924,7 @@ class LEDEncoderLayer(GradientCheckpointingLayer):
         return (hidden_states,) + attn_outputs[1:]
 
 
-class LEDDecoderLayer(GradientCheckpointingLayer):
+class LEDDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: LEDConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1055,7 +1055,7 @@ class LEDClassificationHead(nn.Module):
 class LEDPreTrainedModel(PreTrainedModel):
     config: LEDConfig
     base_model_prefix = "led"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @property
     def dummy_inputs(self):

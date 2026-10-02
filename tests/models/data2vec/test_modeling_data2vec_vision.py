@@ -265,7 +265,10 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                or not model_class.supports_activation_checkpointing
+            ):
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py

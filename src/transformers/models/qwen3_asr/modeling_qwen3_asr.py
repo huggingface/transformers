@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForTokenClassification
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -47,7 +47,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     config: Qwen3ASRConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -193,7 +193,7 @@ class Qwen3ASRAudioAttention(nn.Module):
         return attn_output
 
 
-class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
+class Qwen3ASRAudioEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model

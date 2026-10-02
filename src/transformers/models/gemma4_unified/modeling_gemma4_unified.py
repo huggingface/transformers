@@ -39,7 +39,7 @@ from ...masking_utils import (
     sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -471,7 +471,7 @@ class Gemma4UnifiedTextMLP(nn.Module):
         return down_proj
 
 
-class Gemma4UnifiedTextDecoderLayer(GradientCheckpointingLayer):
+class Gemma4UnifiedTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Gemma4UnifiedTextConfig | Gemma4UnifiedVisionConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -540,7 +540,7 @@ class Gemma4UnifiedTextScaledWordEmbedding(nn.Embedding):
 class Gemma4UnifiedPreTrainedModel(PreTrainedModel):
     config: Gemma4UnifiedConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Gemma4UnifiedTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = True

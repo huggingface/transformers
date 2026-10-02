@@ -37,7 +37,7 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -937,7 +937,7 @@ class GraniteMoeHybridRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
+class GraniteMoeHybridDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1009,7 +1009,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
 class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     config: GraniteMoeHybridConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

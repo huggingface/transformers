@@ -27,7 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1065,7 +1065,7 @@ class LongT5LayerCrossAttention(nn.Module):
         return layer_output, position_bias, attn_weights
 
 
-class LongT5Block(GradientCheckpointingLayer):
+class LongT5Block(ActivationCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -1156,7 +1156,7 @@ class LongT5Block(GradientCheckpointingLayer):
 class LongT5PreTrainedModel(PreTrainedModel):
     config: LongT5Config
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["LongT5Block"]
 
     _can_compile_fullgraph = False  # TODO: @raushan more involved due to local/global attn

@@ -23,7 +23,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -292,7 +292,7 @@ class BertGenerationOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->BertGeneration
-class BertGenerationLayer(GradientCheckpointingLayer):
+class BertGenerationLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -429,7 +429,7 @@ class BertGenerationEmbeddings(nn.Module):
 class BertGenerationPreTrainedModel(PreTrainedModel):
     config_class = BertGenerationConfig
     base_model_prefix = "bert"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

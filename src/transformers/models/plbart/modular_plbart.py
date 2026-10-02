@@ -52,7 +52,7 @@ class PLBartScaledWordEmbedding(BartScaledWordEmbedding):
 class PLBartPreTrainedModel(PreTrainedModel):
     config: PLBartConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PLBartDecoderLayer", "PLBartEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True

@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -373,7 +373,7 @@ class HYV3MoE(nn.Module):
         return hidden_states.reshape(batch_size, seq_len, hidden_dim)
 
 
-class HYV3DecoderLayer(GradientCheckpointingLayer):
+class HYV3DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: HYV3Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -418,7 +418,7 @@ class HYV3DecoderLayer(GradientCheckpointingLayer):
 class HYV3PreTrainedModel(PreTrainedModel):
     config: HYV3Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["HYV3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

@@ -27,7 +27,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     MoEModelOutput,
@@ -510,7 +510,7 @@ class NllbMoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class NllbMoeEncoderLayer(GradientCheckpointingLayer):
+class NllbMoeEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: int = 0):
         super().__init__()
         self.embed_dim = config.d_model
@@ -554,7 +554,7 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class NllbMoeDecoderLayer(GradientCheckpointingLayer):
+class NllbMoeDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -646,7 +646,7 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
 class NllbMoePreTrainedModel(PreTrainedModel):
     config: NllbMoeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["NllbMoeEncoderLayer", "NllbMoeDecoderLayer"]
     # TODO: If anyone is up to it to make sure tests pass etc
     # Flash attention has problems due to not preparing masks the same way as eager/sdpa

@@ -25,7 +25,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -2588,7 +2588,7 @@ class OneFormerTextMLP(nn.Module):
         return hidden_states
 
 
-class OneFormerTextTransformerLayer(GradientCheckpointingLayer):
+class OneFormerTextTransformerLayer(ActivationCheckpointingLayer):
     def __init__(self, width: int, heads: int, attn_mask: torch.Tensor, layer_norm_eps=1e-05):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(width, heads)

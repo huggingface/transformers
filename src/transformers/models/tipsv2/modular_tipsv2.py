@@ -581,7 +581,7 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "text_model"
     main_input_name = "input_ids"
     input_modalities = ["text"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keys_to_ignore_on_load_unexpected = {"vision_encoder"}
     _no_split_modules = ["Tipsv2TextEmbeddings", "Tipsv2TextEncoderLayer"]
     _supports_sdpa = True
@@ -695,7 +695,7 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
     config: Tipsv2Config
     base_model_prefix = "model"
     input_modalities = ["image", "text"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "Tipsv2TextEmbeddings",
         "Tipsv2TextEncoderLayer",

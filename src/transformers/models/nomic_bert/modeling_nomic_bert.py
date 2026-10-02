@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MaskedLMOutput,
@@ -269,7 +269,7 @@ class NomicBertMLP(nn.Module):
         return down_proj
 
 
-class NomicBertLayer(GradientCheckpointingLayer):
+class NomicBertLayer(ActivationCheckpointingLayer):
     def __init__(self, config: NomicBertConfig):
         super().__init__()
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -324,7 +324,7 @@ class NomicBertLMPredictionHead(nn.Module):
 class NomicBertPreTrainedModel(PreTrainedModel):
     config_class = NomicBertConfig
     base_model_prefix = "nomic_bert"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

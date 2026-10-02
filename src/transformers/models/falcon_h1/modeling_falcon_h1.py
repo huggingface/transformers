@@ -37,7 +37,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -868,7 +868,7 @@ class FalconH1RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class FalconH1DecoderLayer(GradientCheckpointingLayer):
+class FalconH1DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: FalconH1Config, layer_idx: int):
         super().__init__()
         self.feed_forward = FalconH1MLP(config)
@@ -992,7 +992,7 @@ def compute_mup_vector(config):
 class FalconH1PreTrainedModel(PreTrainedModel):
     config: FalconH1Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["FalconH1DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

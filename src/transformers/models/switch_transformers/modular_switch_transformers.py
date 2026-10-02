@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -268,7 +268,7 @@ class SwitchTransformersLayerCrossAttention(T5LayerCrossAttention):
     pass
 
 
-class SwitchTransformersBlock(GradientCheckpointingLayer):
+class SwitchTransformersBlock(ActivationCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -351,7 +351,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
     config: SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 

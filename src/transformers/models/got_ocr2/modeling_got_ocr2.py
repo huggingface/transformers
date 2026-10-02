@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -204,7 +204,7 @@ class GotOcr2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GotOcr2VisionLayer(GradientCheckpointingLayer):
+class GotOcr2VisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -293,7 +293,7 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     config: GotOcr2Config
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
     _supports_sdpa = False

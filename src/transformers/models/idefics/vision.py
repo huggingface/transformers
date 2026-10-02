@@ -21,7 +21,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -269,7 +269,7 @@ class IdeficsVisionMLP(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->IdeficsVisionConfig,AltCLIP->IdeficsVision
-class IdeficsVisionEncoderLayer(GradientCheckpointingLayer):
+class IdeficsVisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size

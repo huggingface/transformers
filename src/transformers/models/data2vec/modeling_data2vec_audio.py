@@ -34,7 +34,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -51,7 +51,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
-class Data2VecAudioConvLayer(GradientCheckpointingLayer):
+class Data2VecAudioConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -312,7 +312,7 @@ class Data2VecAudioFeedForward(nn.Module):
         return hidden_states
 
 
-class Data2VecAudioEncoderLayer(GradientCheckpointingLayer):
+class Data2VecAudioEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = Data2VecAudioAttention(
@@ -447,7 +447,7 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -399,7 +399,7 @@ class DbrxNormAttentionNorm(nn.Module):
         return residual_states, hidden_states
 
 
-class DbrxBlock(GradientCheckpointingLayer):
+class DbrxBlock(ActivationCheckpointingLayer):
     def __init__(self, config: DbrxConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.d_model
@@ -436,7 +436,7 @@ class DbrxBlock(GradientCheckpointingLayer):
 class DbrxPreTrainedModel(PreTrainedModel):
     config: DbrxConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flex_attn = True

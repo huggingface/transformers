@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -405,7 +405,7 @@ class HunYuanVLVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class HunYuanVLVisionBlock(GradientCheckpointingLayer):
+class HunYuanVLVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config: HunYuanVLVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -570,7 +570,7 @@ class HunYuanVLMLP(nn.Module):
         return down_proj
 
 
-class HunYuanVLDenseV1DecoderLayer(GradientCheckpointingLayer):
+class HunYuanVLDenseV1DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: HunYuanVLTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -617,7 +617,7 @@ class HunYuanVLDenseV1DecoderLayer(GradientCheckpointingLayer):
 class HunYuanVLPreTrainedModel(PreTrainedModel):
     config: HunYuanVLConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["HunYuanVLDenseV1DecoderLayer", "HunYuanVLVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

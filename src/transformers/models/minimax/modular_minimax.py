@@ -25,7 +25,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
@@ -366,7 +366,7 @@ class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
     pass
 
 
-class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
+class MiniMaxDecoderLayer(MixtralDecoderLayer, ActivationCheckpointingLayer):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 

@@ -27,7 +27,7 @@ from ...activations import ACT2FN, get_activation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -243,7 +243,7 @@ class GPT2MLP(nn.Module):
         return hidden_states
 
 
-class GPT2Block(GradientCheckpointingLayer):
+class GPT2Block(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -413,7 +413,7 @@ class GPT2SequenceSummary(nn.Module):
 class GPT2PreTrainedModel(PreTrainedModel):
     config: GPT2Config
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GPT2Block"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

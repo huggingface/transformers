@@ -516,11 +516,11 @@ class AcmeTriangleAttention(nn.Module):
 
 ### TRF034
 
-In modeling_*.py and modular_*.py, flags a locally-defined `*Layer`/`*Block` class instantiated in an `nn.ModuleList(...)` that does not reach `GradientCheckpointingLayer` through its base chain; modular files follow relative imports into sibling models, and unresolved chains are inconclusive. Out of scope: a model that never sets `supports_gradient_checkpointing = True`, which raises from `gradient_checkpointing_enable()` instead of skipping a layer; a layer holding `nn.BatchNorm*`/`nn.InstanceNorm*`, whose statistics would be recomputed twice; and a stack that is not the model's token mixer, shown by an attention, modulation, mixer or SSM module assigned as `self.x = Y(...)`. `gradient_checkpointing_enable()` wraps a layer only if it is a GradientCheckpointingLayer. A plain nn.Module on the trunk is skipped silently, so training looks checkpointed while still allocating full activations, and the OOM surfaces far from the cause. Elsewhere -- a conv backbone, a decode head -- the trade is the author's call, so the rule stays out.
+In modeling_*.py and modular_*.py, flags a locally-defined `*Layer`/`*Block` class instantiated in an `nn.ModuleList(...)` that does not reach `ActivationCheckpointingLayer` through its base chain; modular files follow relative imports into sibling models, and unresolved chains are inconclusive. Out of scope: a model that never sets `supports_activation_checkpointing = True`, which raises from `gradient_checkpointing_enable()` instead of skipping a layer; a layer holding `nn.BatchNorm*`/`nn.InstanceNorm*`, whose statistics would be recomputed twice; and a stack that is not the model's token mixer, shown by an attention, modulation, mixer or SSM module assigned as `self.x = Y(...)`. `gradient_checkpointing_enable()` wraps a layer only if it is a ActivationCheckpointingLayer. A plain nn.Module on the trunk is skipped silently, so training looks checkpointed while still allocating full activations, and the OOM surfaces far from the cause. Elsewhere -- a conv backbone, a decode head -- the trade is the author's call, so the rule stays out.
 
 ```diff
 -class AcmeDecoderLayer(nn.Module):
-+class AcmeDecoderLayer(GradientCheckpointingLayer):
++class AcmeDecoderLayer(ActivationCheckpointingLayer):
      def __init__(self, config, layer_idx):
          super().__init__()
 ```

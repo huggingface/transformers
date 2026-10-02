@@ -23,7 +23,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -222,7 +222,7 @@ class CodeGenMLP(nn.Module):
 
 
 # Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
-class CodeGenBlock(GradientCheckpointingLayer):
+class CodeGenBlock(ActivationCheckpointingLayer):
     # Ignore copy
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -261,7 +261,7 @@ class CodeGenBlock(GradientCheckpointingLayer):
 class CodeGenPreTrainedModel(PreTrainedModel):
     config: CodeGenConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["CodeGenBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = True

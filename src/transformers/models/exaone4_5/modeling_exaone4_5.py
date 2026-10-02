@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -334,7 +334,7 @@ class Exaone4_5_MLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
-class Exaone4_5_VisionBlock(GradientCheckpointingLayer):
+class Exaone4_5_VisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Exaone4_5_RMSNorm(config.hidden_size, eps=1e-6)
@@ -464,7 +464,7 @@ class Exaone4_5_Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Exaone4_5_DecoderLayer(GradientCheckpointingLayer):
+class Exaone4_5_DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Exaone4_5_Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -509,7 +509,7 @@ class Exaone4_5_DecoderLayer(GradientCheckpointingLayer):
 class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config: Exaone4_5_Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

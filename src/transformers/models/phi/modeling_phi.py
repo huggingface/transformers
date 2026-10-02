@@ -15,9 +15,9 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -257,7 +257,7 @@ class PhiMLP(nn.Module):
         return hidden_states
 
 
-class PhiDecoderLayer(GradientCheckpointingLayer):
+class PhiDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: PhiConfig, layer_idx: int):
         super().__init__()
         self.self_attn = PhiAttention(config, layer_idx=layer_idx)
@@ -300,7 +300,7 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
 class PhiPreTrainedModel(PreTrainedModel):
     config: PhiConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PhiDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

@@ -33,7 +33,7 @@ from tqdm import tqdm
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -79,7 +79,7 @@ class EdgeTamVideoLayerNorm(nn.LayerNorm):
 
 
 # Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
-class EdgeTamVideoMemoryFuserCXBlock(GradientCheckpointingLayer):
+class EdgeTamVideoMemoryFuserCXBlock(ActivationCheckpointingLayer):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         self.depthwise_conv = nn.Conv2d(
@@ -551,7 +551,7 @@ class EdgeTamVideoRoPECrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EdgeTamVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
+class EdgeTamVideoTwoWayAttentionBlock(ActivationCheckpointingLayer):
     def __init__(self, config: EdgeTamVideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:

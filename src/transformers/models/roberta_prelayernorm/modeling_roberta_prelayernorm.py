@@ -25,7 +25,7 @@ from ...activations import ACT2FN, gelu
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -400,7 +400,7 @@ class RobertaPreLayerNormOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RobertaPreLayerNorm
-class RobertaPreLayerNormLayer(GradientCheckpointingLayer):
+class RobertaPreLayerNormLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -520,7 +520,7 @@ class RobertaPreLayerNormPooler(nn.Module):
 class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
     config_class = RobertaPreLayerNormConfig
     base_model_prefix = "roberta_prelayernorm"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "RobertaPreLayerNormEmbeddings",
         "RobertaPreLayerNormSelfAttention",

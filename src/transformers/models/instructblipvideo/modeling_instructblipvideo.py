@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -183,7 +183,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config: InstructBlipVideoConfig
     base_model_prefix = "blip"
     input_modalities = ("video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -327,7 +327,7 @@ class InstructBlipVideoMLP(nn.Module):
         return hidden_states
 
 
-class InstructBlipVideoEncoderLayer(GradientCheckpointingLayer):
+class InstructBlipVideoEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: InstructBlipVideoConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -585,7 +585,7 @@ class InstructBlipVideoQFormerOutput(nn.Module):
         return hidden_states
 
 
-class InstructBlipVideoQFormerLayer(GradientCheckpointingLayer):
+class InstructBlipVideoQFormerLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward

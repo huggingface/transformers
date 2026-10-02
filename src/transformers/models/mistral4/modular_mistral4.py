@@ -185,7 +185,7 @@ class Mistral4DecoderLayer(DeepseekV3DecoderLayer):
 class Mistral4PreTrainedModel(PreTrainedModel):
     config: Mistral4Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Mistral4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

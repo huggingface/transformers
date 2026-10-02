@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -646,7 +646,7 @@ class DabDetrDecoderLayerFFN(nn.Module):
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrEncoderLayer with DetrEncoderLayer->DabDetrEncoderLayer,DetrConfig->DabDetrConfig
-class DabDetrEncoderLayer(GradientCheckpointingLayer):
+class DabDetrEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DabDetrConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -708,7 +708,7 @@ class DabDetrEncoderLayer(GradientCheckpointingLayer):
 
 
 # Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderLayer with ConditionalDetr->DabDetr
-class DabDetrDecoderLayer(GradientCheckpointingLayer):
+class DabDetrDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DabDetrConfig, is_first: bool = False):
         super().__init__()
         self.self_attn = DabDetrDecoderLayerSelfAttention(config)

@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -269,7 +269,7 @@ class PvtV2BlockLayer(nn.Module):
         return outputs
 
 
-class PvtV2EncoderLayer(GradientCheckpointingLayer):
+class PvtV2EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: PvtV2Config, layer_idx: int):
         super().__init__()
         self.patch_embedding = PvtV2OverlapPatchEmbeddings(
@@ -360,7 +360,7 @@ class PvtV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "pvt_v2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:

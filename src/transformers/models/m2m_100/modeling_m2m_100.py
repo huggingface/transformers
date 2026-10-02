@@ -28,7 +28,7 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -327,7 +327,7 @@ class M2M100Attention(nn.Module):
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->M2M100, MBART->M2M100
-class M2M100EncoderLayer(GradientCheckpointingLayer):
+class M2M100EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: M2M100Config):
         super().__init__()
         self.embed_dim = config.d_model
@@ -384,7 +384,7 @@ class M2M100EncoderLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->M2M100, MBART->M2M100
-class M2M100DecoderLayer(GradientCheckpointingLayer):
+class M2M100DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: M2M100Config, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -481,7 +481,7 @@ class M2M100DecoderLayer(GradientCheckpointingLayer):
 class M2M100PreTrainedModel(PreTrainedModel):
     config: M2M100Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["M2M100EncoderLayer", "M2M100DecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True

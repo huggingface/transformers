@@ -32,7 +32,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
@@ -639,7 +639,7 @@ class IdeficsAttention(nn.Module):
 
 
 # this was adapted from LlamaDecoderLayer
-class IdeficsDecoderLayer(GradientCheckpointingLayer):
+class IdeficsDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: IdeficsConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -693,7 +693,7 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
+class IdeficsGatedCrossAttentionLayer(ActivationCheckpointingLayer):
     def __init__(self, config: IdeficsConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -825,7 +825,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     config: IdeficsConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer", "IdeficsVisionEncoderLayer"]
     _supports_sdpa = True
 

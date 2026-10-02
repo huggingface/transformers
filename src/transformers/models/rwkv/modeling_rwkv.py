@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -322,7 +322,7 @@ class RwkvFeedForward(nn.Module):
         return receptance * value, state
 
 
-class RwkvBlock(GradientCheckpointingLayer):
+class RwkvBlock(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id):
         super().__init__()
         self.config = config
@@ -362,7 +362,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     base_model_prefix = "rwkv"
     _no_split_modules = ["RwkvBlock"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _is_stateful = True
 
     @torch.no_grad()

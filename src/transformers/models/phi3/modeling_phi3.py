@@ -31,9 +31,9 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -281,7 +281,7 @@ class Phi3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Phi3DecoderLayer(GradientCheckpointingLayer):
+class Phi3DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Phi3Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -328,7 +328,7 @@ class Phi3DecoderLayer(GradientCheckpointingLayer):
 class Phi3PreTrainedModel(PreTrainedModel):
     config: Phi3Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Phi3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

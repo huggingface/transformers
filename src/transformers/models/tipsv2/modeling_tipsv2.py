@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -343,7 +343,7 @@ class Tipsv2VisionDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class Tipsv2VisionLayer(GradientCheckpointingLayer):
+class Tipsv2VisionLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: Tipsv2VisionConfig) -> None:
@@ -384,7 +384,7 @@ class Tipsv2VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Tipsv2VisionEmbeddings", "Tipsv2VisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -750,7 +750,7 @@ class Tipsv2MLP(nn.Module):
         return hidden_states
 
 
-class Tipsv2TextEncoderLayer(GradientCheckpointingLayer):
+class Tipsv2TextEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Tipsv2TextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -823,7 +823,7 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "text_model"
     main_input_name = "input_ids"
     input_modalities = ["text"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keys_to_ignore_on_load_unexpected = {"vision_encoder"}
     _no_split_modules = ["Tipsv2TextEmbeddings", "Tipsv2TextEncoderLayer"]
     _supports_sdpa = True
@@ -937,7 +937,7 @@ class Tipsv2PreTrainedModel(PreTrainedModel):
     config: Tipsv2Config
     base_model_prefix = "model"
     input_modalities = ["image", "text"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "Tipsv2TextEmbeddings",
         "Tipsv2TextEncoderLayer",

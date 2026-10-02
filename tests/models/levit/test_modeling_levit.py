@@ -306,7 +306,10 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                or not model_class.supports_activation_checkpointing
+            ):
                 continue
             # LevitForImageClassificationWithTeacher supports inference-only
             if model_class.__name__ == "LevitForImageClassificationWithTeacher":

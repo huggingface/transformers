@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -672,7 +672,7 @@ class HYV4HyperHead(nn.Module):
         return out.to(x.dtype)
 
 
-class HYV4DecoderLayer(GradientCheckpointingLayer):
+class HYV4DecoderLayer(ActivationCheckpointingLayer):
     """Similar to DSv4 but with a different Hyper Connection and mixed MLP/MoE patterns"""
 
     def __init__(self, config: HYV4Config, layer_idx: int):
@@ -729,7 +729,7 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
 class HYV4PreTrainedModel(PreTrainedModel):
     config: HYV4Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["HYV4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     # Combination of sinks and DSA disable anything but eager atm

@@ -28,7 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -427,7 +427,7 @@ class ChineseCLIPVisionMLP(nn.Module):
         return hidden_states
 
 
-class ChineseCLIPTextLayer(GradientCheckpointingLayer):
+class ChineseCLIPTextLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -460,7 +460,7 @@ class ChineseCLIPTextLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-class ChineseCLIPVisionLayer(GradientCheckpointingLayer):
+class ChineseCLIPVisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config: ChineseCLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -520,7 +520,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
         "ChineseCLIPVisionLayer",
     ]
 
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -546,7 +546,7 @@ class Swin2SRLayer(nn.Module):
         return layer_outputs
 
 
-class Swin2SRStage(GradientCheckpointingLayer):
+class Swin2SRStage(ActivationCheckpointingLayer):
     """
     This corresponds to the Residual Swin Transformer Block (RSTB) in the original implementation.
     """
@@ -683,7 +683,7 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):

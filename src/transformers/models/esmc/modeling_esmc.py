@@ -29,7 +29,7 @@ from torch.nn import functional as F
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, packed_sequence_mask_function
-from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForTokenClassification
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -253,7 +253,7 @@ class EsmcAttention(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class EsmcLayer(GradientCheckpointingLayer):
+class EsmcLayer(ActivationCheckpointingLayer):
     """Single transformer block: pre-norm attention + pre-norm FFN with residual scaling."""
 
     def __init__(self, config: EsmcConfig, layer_idx: int | None = None):
@@ -294,7 +294,7 @@ class EsmcLayer(GradientCheckpointingLayer):
 class EsmcPreTrainedModel(PreTrainedModel):
     config_class = EsmcConfig
     base_model_prefix = "esmc"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -506,7 +506,7 @@ class JetMoeAttention(nn.Module):
         return attn_output, attn_weights, router_logits
 
 
-class JetMoeDecoderLayer(GradientCheckpointingLayer):
+class JetMoeDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: JetMoeConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -551,7 +551,7 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
 class JetMoePreTrainedModel(PreTrainedModel):
     config: JetMoeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

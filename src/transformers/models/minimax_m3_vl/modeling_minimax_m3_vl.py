@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -637,7 +637,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
 
 
-class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
+class MiniMaxM3VLDecoderLayer(ActivationCheckpointingLayer):
     """M3 decoder layer: per-layer dense/MoE MLP and dense/sparse attention."""
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -683,7 +683,7 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
 class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     config: MiniMaxM3VLConfig | MiniMaxM3VLTextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MiniMaxM3VLDecoderLayer", "MiniMaxM3VLVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -1136,7 +1136,7 @@ class MiniMaxM3VLVisionMLP(nn.Module):
         return hidden_states
 
 
-class MiniMaxM3VLVisionEncoderLayer(GradientCheckpointingLayer):
+class MiniMaxM3VLVisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size

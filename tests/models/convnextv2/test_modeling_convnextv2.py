@@ -216,7 +216,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             if (
                 model_class.__name__
                 in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
-                or not model_class.supports_gradient_checkpointing
+                or not model_class.supports_activation_checkpointing
             ):
                 continue
 

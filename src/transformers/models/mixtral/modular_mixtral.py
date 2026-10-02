@@ -27,7 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -208,7 +208,7 @@ class MixtralAttention(MistralAttention):
     pass
 
 
-class MixtralDecoderLayer(GradientCheckpointingLayer):
+class MixtralDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

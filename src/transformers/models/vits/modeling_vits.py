@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging, torch_compilable_check
@@ -1039,7 +1039,7 @@ class VitsFeedForward(nn.Module):
         return hidden_states
 
 
-class VitsEncoderLayer(GradientCheckpointingLayer):
+class VitsEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.attention = VitsAttention(config)
@@ -1202,7 +1202,7 @@ class VitsPreTrainedModel(PreTrainedModel):
     config: VitsConfig
     base_model_prefix = "vits"
     main_input_name = "input_ids"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):

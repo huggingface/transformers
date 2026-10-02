@@ -211,7 +211,7 @@ class DepthAnythingPreTrainedModel(PreTrainedModel):
     base_model_prefix = "depth_anything"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
 
 class DepthAnythingNeck(nn.Module):

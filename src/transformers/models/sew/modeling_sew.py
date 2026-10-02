@@ -33,7 +33,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
@@ -46,7 +46,7 @@ from .configuration_sew import SEWConfig
 logger = logging.get_logger(__name__)
 
 
-class SEWNoLayerNormConvLayer(GradientCheckpointingLayer):
+class SEWNoLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -67,7 +67,7 @@ class SEWNoLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SEWLayerNormConvLayer(GradientCheckpointingLayer):
+class SEWLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -94,7 +94,7 @@ class SEWLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SEWGroupNormConvLayer(GradientCheckpointingLayer):
+class SEWGroupNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -369,7 +369,7 @@ class SEWFeedForward(nn.Module):
         return hidden_states
 
 
-class SEWEncoderLayer(GradientCheckpointingLayer):
+class SEWEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = SEWAttention(
@@ -479,7 +479,7 @@ class SEWPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sew"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

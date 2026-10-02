@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput, SampleTSPredictionOutput, Seq2SeqTSPredictionOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -591,7 +591,7 @@ class AutoformerAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class AutoformerEncoderLayer(GradientCheckpointingLayer):
+class AutoformerEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: AutoformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -651,7 +651,7 @@ class AutoformerEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class AutoformerDecoderLayer(GradientCheckpointingLayer):
+class AutoformerDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: AutoformerConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -778,7 +778,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("time",)
     main_input_name = "past_values"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = {
         "hidden_states": [AutoformerEncoderLayer, AutoformerDecoderLayer],
         "attentions": AutoformerAttention,

@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -542,7 +542,7 @@ class TableTransformerEncoderLayer(nn.Module):
         return outputs
 
 
-class TableTransformerDecoderLayer(GradientCheckpointingLayer):
+class TableTransformerDecoderLayer(ActivationCheckpointingLayer):
     # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__()

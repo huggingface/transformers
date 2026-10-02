@@ -223,7 +223,7 @@ class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     config: DeepseekVLHybridConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True

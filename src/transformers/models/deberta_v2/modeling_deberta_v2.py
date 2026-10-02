@@ -21,7 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -413,7 +413,7 @@ class DebertaV2Output(nn.Module):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->DebertaV2
-class DebertaV2Layer(GradientCheckpointingLayer):
+class DebertaV2Layer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = DebertaV2Attention(config)
@@ -685,7 +685,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     config: DebertaV2Config
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):

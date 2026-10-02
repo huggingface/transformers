@@ -35,7 +35,7 @@ from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -440,7 +440,7 @@ class Granite4VisionTextMLP(nn.Module):
         return down_proj
 
 
-class Granite4VisionTextDecoderLayer(GradientCheckpointingLayer):
+class Granite4VisionTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Granite4VisionTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -509,7 +509,7 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     config: Granite4VisionConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True

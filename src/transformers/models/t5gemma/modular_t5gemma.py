@@ -31,7 +31,7 @@ from ...masking_utils import (
     create_sliding_window_causal_mask,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -247,7 +247,7 @@ class T5GemmaCrossAttention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-class T5GemmaEncoderLayer(GradientCheckpointingLayer):
+class T5GemmaEncoderLayer(ActivationCheckpointingLayer):
     """Encoder sub-layer."""
 
     def __init__(self, config, layer_idx: int):
@@ -299,7 +299,7 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class T5GemmaDecoderLayer(GradientCheckpointingLayer):
+class T5GemmaDecoderLayer(ActivationCheckpointingLayer):
     """Decoder sub-layer: an extra cross-attention layer."""
 
     def __init__(self, config, layer_idx: int):
@@ -402,7 +402,7 @@ class T5GemmaLMHead(nn.Module):
 class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     config: T5GemmaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["T5GemmaEncoderLayer", "T5GemmaDecoderLayer"]
     # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
     _can_record_outputs = None

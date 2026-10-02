@@ -35,9 +35,9 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -852,7 +852,7 @@ class Qwen3_5RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
+class Qwen3_5DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3_5TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -911,7 +911,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
 class Qwen3_5PreTrainedModel(PreTrainedModel):
     config: Qwen3_5Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -1085,7 +1085,7 @@ class Qwen3_5VisionAttention(nn.Module):
         return attn_output
 
 
-class Qwen3_5VisionBlock(GradientCheckpointingLayer):
+class Qwen3_5VisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)

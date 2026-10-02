@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -323,7 +323,7 @@ class VideoMAEOutput(nn.Module):
 
 
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
-class VideoMAELayer(GradientCheckpointingLayer):
+class VideoMAELayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: VideoMAEConfig):
@@ -382,7 +382,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     input_modalities = "video"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["VideoMAEEmbeddings", "VideoMAELayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

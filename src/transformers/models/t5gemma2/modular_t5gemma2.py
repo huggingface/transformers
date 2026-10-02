@@ -455,7 +455,7 @@ class T5Gemma2TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
     config: T5Gemma2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     # Mask creation is incompatible
     # FA due to non-default creation / SWA

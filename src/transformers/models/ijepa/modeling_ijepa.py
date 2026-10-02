@@ -12,7 +12,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -231,7 +231,7 @@ class IJepaMLP(nn.Module):
         return hidden_states
 
 
-class IJepaLayer(GradientCheckpointingLayer):
+class IJepaLayer(ActivationCheckpointingLayer):
     def __init__(self, config: IJepaConfig):
         super().__init__()
         self.attention = IJepaAttention(config)
@@ -269,7 +269,7 @@ class IJepaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "ijepa"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["IJepaEmbeddings", "IJepaLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

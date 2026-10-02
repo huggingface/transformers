@@ -34,7 +34,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     config: FuyuConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
     _supports_sdpa = True

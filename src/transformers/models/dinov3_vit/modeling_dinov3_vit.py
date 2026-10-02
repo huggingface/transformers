@@ -29,7 +29,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -408,7 +408,7 @@ class Dinov3ViTDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class DINOv3ViTLayer(GradientCheckpointingLayer):
+class DINOv3ViTLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: DINOv3ViTConfig):
@@ -462,7 +462,7 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["DINOv3ViTEmbeddings", "DINOv3ViTLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

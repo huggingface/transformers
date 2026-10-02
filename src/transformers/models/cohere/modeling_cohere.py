@@ -36,7 +36,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -289,7 +289,7 @@ class CohereAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class CohereDecoderLayer(GradientCheckpointingLayer):
+class CohereDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: CohereConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -346,7 +346,7 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
 class CoherePreTrainedModel(PreTrainedModel):
     config: CohereConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["CohereDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

@@ -24,7 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -269,7 +269,7 @@ class BlipTextOutput(nn.Module):
         return hidden_states
 
 
-class BlipTextLayer(GradientCheckpointingLayer):
+class BlipTextLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_num):
         super().__init__()
         self.config = config

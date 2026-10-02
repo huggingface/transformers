@@ -28,7 +28,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -132,7 +132,7 @@ class PPOCRV5MobileRecMLP(nn.Module):
         return hidden_state
 
 
-class PPOCRV5MobileRecBlock(GradientCheckpointingLayer):
+class PPOCRV5MobileRecBlock(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -225,7 +225,7 @@ class PPOCRV5MobileRecConvLayer(nn.Module):
 class PPOCRV5MobileRecPreTrainedModel(PreTrainedModel):
     config: PPOCRV5MobileRecConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PPOCRV5MobileRecBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
