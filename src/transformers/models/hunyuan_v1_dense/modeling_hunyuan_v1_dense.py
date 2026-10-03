@@ -31,7 +31,7 @@ from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -222,7 +222,7 @@ class HunYuanDenseV1Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class HunYuanDenseV1DecoderLayer(GradientCheckpointingLayer):
+class HunYuanDenseV1DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -270,7 +270,7 @@ class HunYuanDenseV1DecoderLayer(GradientCheckpointingLayer):
 class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
     config: HunYuanDenseV1Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["HunYuanDenseV1DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

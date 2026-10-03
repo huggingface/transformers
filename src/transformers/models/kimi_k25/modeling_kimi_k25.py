@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -394,7 +394,7 @@ class Kimi_K25VisionAttention(nn.Module):
         return attn_output
 
 
-class Kimi_K25VisionEncoderLayer(GradientCheckpointingLayer):
+class Kimi_K25VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
@@ -424,7 +424,7 @@ class Kimi_K25PreTrainedModel(PreTrainedModel):
     config: Kimi_K25Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Kimi_K25VisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -237,7 +237,7 @@ class Step3p7VisionAttention(nn.Module):
         return self.out_proj(attn_output), attn_weights
 
 
-class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
+class Step3p7VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
@@ -339,7 +339,7 @@ class Step3p7VisionEmbeddings(nn.Module):
 class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Step3p7VisionEncoderLayer", "Step3p7DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -749,7 +749,7 @@ class Step3p7Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Step3p7DecoderLayer(GradientCheckpointingLayer):
+class Step3p7DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size

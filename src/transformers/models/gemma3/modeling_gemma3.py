@@ -39,7 +39,7 @@ from ...masking_utils import (
     maybe_pad_block_sequence_ids,
     sliding_window_overlay,
 )
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -380,7 +380,7 @@ class Gemma3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma3DecoderLayer(GradientCheckpointingLayer):
+class Gemma3DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -430,7 +430,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
 class Gemma3PreTrainedModel(PreTrainedModel):
     config: Gemma3Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Gemma3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

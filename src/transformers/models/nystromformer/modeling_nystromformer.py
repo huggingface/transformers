@@ -22,7 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     MaskedLMOutput,
@@ -279,7 +279,7 @@ class NystromformerOutput(nn.Module):
         return hidden_states
 
 
-class NystromformerLayer(GradientCheckpointingLayer):
+class NystromformerLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -398,7 +398,7 @@ class NystromformerOnlyMLMHead(nn.Module):
 class NystromformerPreTrainedModel(PreTrainedModel):
     config: NystromformerConfig
     base_model_prefix = "nystromformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

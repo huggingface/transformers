@@ -33,9 +33,9 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -666,7 +666,7 @@ class AXK2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class AXK2DecoderLayer(GradientCheckpointingLayer):
+class AXK2DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -716,7 +716,7 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
 class AXK2PreTrainedModel(PreTrainedModel):
     config: AXK2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["AXK2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!

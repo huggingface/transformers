@@ -23,7 +23,7 @@ from torch.nn import functional as F
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -341,7 +341,7 @@ class BloomMLP(nn.Module):
         return output
 
 
-class BloomBlock(GradientCheckpointingLayer):
+class BloomBlock(ActivationCheckpointingLayer):
     def __init__(self, config: BloomConfig, layer_idx: int | None = None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -406,7 +406,7 @@ class BloomBlock(GradientCheckpointingLayer):
 class BloomPreTrainedModel(PreTrainedModel):
     config: BloomConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["BloomBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = True

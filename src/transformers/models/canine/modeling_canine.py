@@ -24,7 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     ModelOutput,
@@ -527,7 +527,7 @@ class CanineOutput(nn.Module):
         return hidden_states
 
 
-class CanineLayer(GradientCheckpointingLayer):
+class CanineLayer(ActivationCheckpointingLayer):
     def __init__(
         self,
         config,
@@ -715,7 +715,7 @@ class CanineOnlyMLMHead(nn.Module):
 class CaninePreTrainedModel(PreTrainedModel):
     config: CanineConfig
     base_model_prefix = "canine"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

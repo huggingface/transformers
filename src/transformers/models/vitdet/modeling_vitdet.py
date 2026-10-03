@@ -22,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -425,7 +425,7 @@ class VitDetDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class VitDetLayer(GradientCheckpointingLayer):
+class VitDetLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(
@@ -567,7 +567,7 @@ class VitDetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vitdet"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = []
 
     @torch.no_grad()

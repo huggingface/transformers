@@ -39,7 +39,7 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -779,7 +779,7 @@ class KimiLinearMoE(nn.Module):
         return hidden_states
 
 
-class KimiLinearDecoderLayer(GradientCheckpointingLayer):
+class KimiLinearDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -838,7 +838,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
 class KimiLinearPreTrainedModel(PreTrainedModel):
     config: KimiLinearConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["KimiLinearDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

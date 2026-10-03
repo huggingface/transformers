@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -506,7 +506,7 @@ class Glm4MoeLiteMoE(nn.Module):
         return hidden_states
 
 
-class Glm4MoeLiteDecoderLayer(GradientCheckpointingLayer):
+class Glm4MoeLiteDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Glm4MoeLiteConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -553,7 +553,7 @@ class Glm4MoeLiteDecoderLayer(GradientCheckpointingLayer):
 class Glm4MoeLitePreTrainedModel(PreTrainedModel):
     config: Glm4MoeLiteConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Glm4MoeLiteDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

@@ -23,7 +23,7 @@ from torch.nn.functional import normalize
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -360,7 +360,7 @@ class BlipMLP(nn.Module):
         return hidden_states
 
 
-class BlipEncoderLayer(GradientCheckpointingLayer):
+class BlipEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BlipConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -397,7 +397,7 @@ class BlipPreTrainedModel(PreTrainedModel):
     config: BlipConfig
     base_model_prefix = "blip"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
     _skip_keys_device_placement = ["past_key_values"]
 

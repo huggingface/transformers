@@ -45,7 +45,7 @@ from ...masking_utils import (
     sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -967,7 +967,7 @@ class Gemma4VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma4VisionEncoderLayer(GradientCheckpointingLayer):
+class Gemma4VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -1347,7 +1347,7 @@ class Gemma4TextRouter(nn.Module):
         return router_probabilities, top_k_weights, top_k_index
 
 
-class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
+class Gemma4TextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Gemma4TextConfig | Gemma4VisionConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -1454,7 +1454,7 @@ class Gemma4TextScaledWordEmbedding(nn.Embedding):
 class Gemma4PreTrainedModel(PreTrainedModel):
     config: Gemma4Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "Gemma4TextDecoderLayer",
         "Gemma4VisionEncoderLayer",

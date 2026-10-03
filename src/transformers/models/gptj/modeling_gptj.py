@@ -25,7 +25,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -379,7 +379,7 @@ class GPTJMLP(nn.Module):
         return hidden_states
 
 
-class GPTJBlock(GradientCheckpointingLayer):
+class GPTJBlock(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
@@ -417,7 +417,7 @@ class GPTJBlock(GradientCheckpointingLayer):
 class GPTJPreTrainedModel(PreTrainedModel):
     config: GPTJConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

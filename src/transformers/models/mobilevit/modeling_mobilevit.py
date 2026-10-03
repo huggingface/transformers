@@ -23,7 +23,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -322,7 +322,7 @@ class MobileViTTransformer(nn.Module):
         return hidden_states
 
 
-class MobileViTLayer(GradientCheckpointingLayer):
+class MobileViTLayer(ActivationCheckpointingLayer):
     """
     MobileViT block: https://huggingface.co/papers/2110.02178
     """
@@ -592,7 +592,7 @@ class MobileViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MobileViTLayer"]
 
     @torch.no_grad()

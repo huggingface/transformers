@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MaskedLMOutput,
@@ -270,7 +270,7 @@ class JinaEmbeddingsV3MLP(nn.Module):
         return hidden_states
 
 
-class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
+class JinaEmbeddingsV3Layer(ActivationCheckpointingLayer):
     def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__()
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -324,7 +324,7 @@ class JinaEmbeddingsV3Pooler(nn.Module):
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
     config_class = JinaEmbeddingsV3Config
     base_model_prefix = "roberta"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

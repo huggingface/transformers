@@ -20,7 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -290,7 +290,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         return x
 
 
-class SwiftFormerStage(GradientCheckpointingLayer):
+class SwiftFormerStage(ActivationCheckpointingLayer):
     """
     A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
     `SwiftFormerEncoderBlock`.
@@ -380,7 +380,7 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["SwiftFormerEncoderBlock"]
 
     @torch.no_grad()

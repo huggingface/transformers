@@ -34,7 +34,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -125,7 +125,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     config: DeepseekOcr2Config
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
@@ -359,7 +359,7 @@ DEEPSEEK_OCR2_SAM_VISION_ATTENTION_CLASSES = {
 }
 
 
-class DeepseekOcr2SamVisionLayer(GradientCheckpointingLayer):
+class DeepseekOcr2SamVisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -837,7 +837,7 @@ class DeepseekOcr2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekOcr2VisionEncoderLayer(GradientCheckpointingLayer):
+class DeepseekOcr2VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DeepseekOcr2VisionConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1240,7 +1240,7 @@ class DeepseekOcr2TextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class DeepseekOcr2TextDecoderLayer(GradientCheckpointingLayer):
+class DeepseekOcr2TextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1290,7 +1290,7 @@ class DeepseekOcr2TextDecoderLayer(GradientCheckpointingLayer):
 class DeepseekOcr2TextPreTrainedModel(PreTrainedModel):
     config: DeepseekOcr2TextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["DeepseekOcr2TextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

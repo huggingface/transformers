@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -256,7 +256,7 @@ class GitOutput(nn.Module):
         return hidden_states
 
 
-class GitLayer(GradientCheckpointingLayer):
+class GitLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -324,7 +324,7 @@ class GitPreTrainedModel(PreTrainedModel):
     config: GitConfig
     base_model_prefix = "git"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -520,7 +520,7 @@ class GitVisionAttention(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->GitVisionConfig,AltCLIP->GitVision
-class GitVisionEncoderLayer(GradientCheckpointingLayer):
+class GitVisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GitVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size

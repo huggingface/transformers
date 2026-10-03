@@ -30,7 +30,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -429,7 +429,7 @@ class VideoPrismMLP(nn.Module):
         return hidden_states
 
 
-class VideoPrismLayer(GradientCheckpointingLayer):
+class VideoPrismLayer(ActivationCheckpointingLayer):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__()
         self.attention = VideoPrismAttention(config)
@@ -467,7 +467,7 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values_videos"
     input_modalities = ("video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "VideoPrismSpatialEmbeddings",
         "VideoPrismTemporalEmbeddings",

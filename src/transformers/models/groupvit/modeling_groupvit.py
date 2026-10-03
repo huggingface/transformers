@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -677,7 +677,7 @@ class GroupViTAttention(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GroupViT
-class GroupViTEncoderLayer(GradientCheckpointingLayer):
+class GroupViTEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -715,7 +715,7 @@ class GroupViTPreTrainedModel(PreTrainedModel):
     config: GroupViTConfig
     base_model_prefix = "groupvit"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = {
         "hidden_states": GroupViTEncoderLayer,
         "attentions": GroupViTAttention,

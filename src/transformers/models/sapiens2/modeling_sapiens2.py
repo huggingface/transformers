@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -567,7 +567,7 @@ class Sapiens2DropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class Sapiens2Layer(GradientCheckpointingLayer):
+class Sapiens2Layer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: Sapiens2Config, layer_idx: int):
@@ -800,7 +800,7 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Sapiens2Embeddings", "Sapiens2Layer"]
     _supports_sdpa = True
     _supports_flash_attn = True

@@ -29,7 +29,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -53,7 +53,7 @@ logger = logging.get_logger(__name__)
 class DiaPreTrainedModel(PreTrainedModel):
     config: DiaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -399,7 +399,7 @@ class DiaCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class DiaEncoderLayer(GradientCheckpointingLayer):
+class DiaEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DiaEncoderConfig, layer_idx: int):
         super().__init__()
         self.pre_sa_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
@@ -488,7 +488,7 @@ class DiaEncoder(DiaPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class DiaDecoderLayer(GradientCheckpointingLayer):
+class DiaDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DiaDecoderConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.hidden_size

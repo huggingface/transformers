@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import DFlashCache
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -232,7 +232,7 @@ class MuseGlimmerAssistantMLP(nn.Module):
         return down_proj
 
 
-class MuseGlimmerAssistantDecoderLayer(GradientCheckpointingLayer):
+class MuseGlimmerAssistantDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MuseGlimmerAssistantConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -274,7 +274,7 @@ class MuseGlimmerAssistantDecoderLayer(GradientCheckpointingLayer):
 class MuseGlimmerAssistantPreTrainedModel(PreTrainedModel):
     config: MuseGlimmerAssistantConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MuseGlimmerAssistantDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

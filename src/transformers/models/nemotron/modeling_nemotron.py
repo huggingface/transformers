@@ -26,10 +26,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -295,7 +295,7 @@ class NemotronAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class NemotronDecoderLayer(GradientCheckpointingLayer):
+class NemotronDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: NemotronConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -345,7 +345,7 @@ class NemotronDecoderLayer(GradientCheckpointingLayer):
 class NemotronPreTrainedModel(PreTrainedModel):
     config: NemotronConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["NemotronDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

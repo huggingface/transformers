@@ -23,7 +23,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
@@ -705,7 +705,7 @@ class Swinv2Layer(nn.Module):
         return layer_outputs
 
 
-class Swinv2Stage(GradientCheckpointingLayer):
+class Swinv2Stage(ActivationCheckpointingLayer):
     def __init__(
         self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, pretrained_window_size=0
     ):
@@ -867,7 +867,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "swinv2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Swinv2Stage"]
 
     @torch.no_grad()

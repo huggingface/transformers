@@ -21,7 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -267,7 +267,7 @@ class LayoutLMOutput(nn.Module):
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextLayer with AlignText->LayoutLM
-class LayoutLMLayer(GradientCheckpointingLayer):
+class LayoutLMLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -392,7 +392,7 @@ class LayoutLMOnlyMLMHead(nn.Module):
 class LayoutLMPreTrainedModel(PreTrainedModel):
     config: LayoutLMConfig
     base_model_prefix = "layoutlm"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = {
         "hidden_states": LayoutLMLayer,
         "attentions": LayoutLMSelfAttention,

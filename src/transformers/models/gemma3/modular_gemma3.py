@@ -31,7 +31,7 @@ from ...masking_utils import (
     maybe_pad_block_sequence_ids,
     sliding_window_overlay,
 )
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
@@ -391,7 +391,7 @@ class Gemma3Attention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-class Gemma3DecoderLayer(GradientCheckpointingLayer):
+class Gemma3DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
         self.config = config

@@ -460,7 +460,7 @@ else:
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["model_debugging_utils"] = ["model_addition_debugger_context"]
     _import_structure["modeling_flash_attention_utils"] = []
-    _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
+    _import_structure["modeling_layers"] = ["ActivationCheckpointingLayer", "GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "RopeParameters", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["AttentionInterface", "PreTrainedModel"]
@@ -645,6 +645,7 @@ if TYPE_CHECKING:
     from .integrations.hub_kernels import kernelize as kernelize
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
+    from .modeling_layers import ActivationCheckpointingLayer as ActivationCheckpointingLayer
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import RopeParameters as RopeParameters

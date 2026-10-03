@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithCrossAttentions,
@@ -590,7 +590,7 @@ class DetrMLP(nn.Module):
         return hidden_states
 
 
-class DetrEncoderLayer(GradientCheckpointingLayer):
+class DetrEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DetrConfig):
         super().__init__()
         self.hidden_size = config.d_model
@@ -647,7 +647,7 @@ class DetrEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class DetrDecoderLayer(GradientCheckpointingLayer):
+class DetrDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DetrConfig):
         super().__init__()
         self.hidden_size = config.d_model
@@ -899,7 +899,7 @@ class DetrPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"DetrConvEncoder", r"DetrEncoderLayer", r"DetrDecoderLayer"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True

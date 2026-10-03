@@ -29,7 +29,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN, gelu_pytorch_tanh
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -234,7 +234,7 @@ class MiniCPMV4_6VisionAttention(nn.Module):
         return attn_output, None
 
 
-class MiniCPMV4_6VisionEncoderLayer(GradientCheckpointingLayer):
+class MiniCPMV4_6VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MiniCPMV4_6VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -400,7 +400,7 @@ class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_6VisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
 
@@ -577,7 +577,7 @@ class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_6Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _no_split_modules = [

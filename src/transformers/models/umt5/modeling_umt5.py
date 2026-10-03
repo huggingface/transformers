@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -430,7 +430,7 @@ class UMT5LayerCrossAttention(nn.Module):
         return outputs
 
 
-class UMT5Block(GradientCheckpointingLayer):
+class UMT5Block(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -514,7 +514,7 @@ class UMT5ClassificationHead(nn.Module):
 class UMT5PreTrainedModel(PreTrainedModel):
     config: UMT5Config
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]

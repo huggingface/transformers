@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -67,7 +67,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
 
     config_class = Kosmos2_5Config
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
     _supports_flash_attn = True
     _supports_cache_class = True
@@ -530,7 +530,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Kosmos2_5VisionLayer(GradientCheckpointingLayer):
+class Kosmos2_5VisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
         self.config = config
@@ -828,7 +828,7 @@ class Kosmos2_5TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Kosmos2_5TextBlock(GradientCheckpointingLayer):
+class Kosmos2_5TextBlock(ActivationCheckpointingLayer):
     def __init__(self, config: Kosmos2_5TextConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.embed_dim

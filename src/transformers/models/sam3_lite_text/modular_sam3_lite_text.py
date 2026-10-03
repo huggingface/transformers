@@ -350,7 +350,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
     config_class = Sam3LiteTextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):

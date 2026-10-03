@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask, sliding_window_bidirectional_overlay
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -272,7 +272,7 @@ class EsmFold2AtomAttention(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class EsmFold2AtomLayer(GradientCheckpointingLayer):
+class EsmFold2AtomLayer(ActivationCheckpointingLayer):
     """adaLN-Zero + SWA attention + SwiGLU FFN, modulated by ``adaln_linear(silu(atom_conditioning))``."""
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
@@ -578,7 +578,7 @@ class EsmFold2DiffusionAttention(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class EsmFold2DiffusionLayer(GradientCheckpointingLayer):
+class EsmFold2DiffusionLayer(ActivationCheckpointingLayer):
     """adaLN-Zero conditioned pair-bias attention and SwiGLU FFN, each gated on the single stream.
 
     Everything that conditions the two halves lives here -- the adaLN pre-norms, the two residual
@@ -1037,7 +1037,7 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         return mixed * output_gate
 
 
-class EsmFold2PairUpdateLayer(GradientCheckpointingLayer):
+class EsmFold2PairUpdateLayer(ActivationCheckpointingLayer):
     """tri_mul_out, tri_mul_in, pair_transition."""
 
     def __init__(self, config: EsmFold2Config) -> None:
@@ -1787,7 +1787,7 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "EsmFold2AtomDecoder",
         "EsmFold2DiffusionTransformer",
     ]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keep_in_fp32_modules_strict = [
         "fourier",
         "norm.weight",

@@ -29,7 +29,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -619,7 +619,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
         return hidden_states
 
 
-class SeamlessM4TConformerEncoderLayer(GradientCheckpointingLayer):
+class SeamlessM4TConformerEncoderLayer(ActivationCheckpointingLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4T, attention_dropout->speech_encoder_dropout, torch.nn->nn
@@ -1125,7 +1125,7 @@ class SeamlessM4TFeedForwardNetwork(nn.Module):
         return hidden_states
 
 
-class SeamlessM4TEncoderLayer(GradientCheckpointingLayer):
+class SeamlessM4TEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SeamlessM4TConfig, encoder_ffn_dim=None, encoder_attention_heads=None):
         super().__init__()
         encoder_ffn_dim = config.encoder_ffn_dim if encoder_ffn_dim is None else encoder_ffn_dim
@@ -1184,7 +1184,7 @@ class SeamlessM4TEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
+class SeamlessM4TDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SeamlessM4TConfig, decoder_ffn_dim=None, decoder_attention_heads=None, layer_idx=None):
         super().__init__()
         decoder_ffn_dim = config.decoder_ffn_dim if decoder_ffn_dim is None else decoder_ffn_dim
@@ -1295,7 +1295,7 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
 class SeamlessM4TPreTrainedModel(PreTrainedModel):
     config: SeamlessM4TConfig
     base_model_prefix = "seamless_m4t"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer", "SeamlessM4TConformerEncoderLayer"]

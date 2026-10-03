@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import CompileConfig, GenerationMixin, GenerationMode
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -270,7 +270,7 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
         return hidden_states
 
 
-class ParakeetEncoderBlock(GradientCheckpointingLayer):
+class ParakeetEncoderBlock(ActivationCheckpointingLayer):
     def __init__(self, config: ParakeetEncoderConfig, layer_idx: int | None = None):
         super().__init__()
         self.gradient_checkpointing = False
@@ -323,7 +323,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["ParakeetEncoderBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True

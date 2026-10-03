@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -337,7 +337,7 @@ class TimesFm2_5Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class TimesFm2_5DecoderLayer(GradientCheckpointingLayer):
+class TimesFm2_5DecoderLayer(ActivationCheckpointingLayer):
     """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization and no KV cache."""
 
     def __init__(self, config: TimesFm2_5Config, layer_idx: int):

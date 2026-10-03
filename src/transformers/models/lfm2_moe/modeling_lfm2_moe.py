@@ -36,7 +36,7 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -471,7 +471,7 @@ class Lfm2MoeShortConv(nn.Module):
         return y
 
 
-class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
+class Lfm2MoeDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Lfm2MoeConfig, layer_idx: int):
         super().__init__()
         self.is_attention_layer = config.layer_types[layer_idx] == "full_attention"
@@ -524,7 +524,7 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
 class Lfm2MoePreTrainedModel(PreTrainedModel):
     config: Lfm2MoeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Lfm2MoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

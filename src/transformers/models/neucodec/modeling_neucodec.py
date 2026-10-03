@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -277,7 +277,7 @@ class NeuCodecRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class NeuCodecDecoderLayer(GradientCheckpointingLayer):
+class NeuCodecDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: NeuCodecConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -606,7 +606,7 @@ class NeuCodecPreTrainedModel(PreTrainedModel):
     config: NeuCodecConfig
     base_model_prefix = "neucodec"
     input_modalities = ("audio",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = None
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

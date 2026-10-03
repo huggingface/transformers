@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -233,7 +233,7 @@ class GlmAsrMLP(nn.Module):
         return hidden_states
 
 
-class GlmAsrEncoderLayer(GradientCheckpointingLayer):
+class GlmAsrEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -273,7 +273,7 @@ class GlmAsrPreTrainedModel(PreTrainedModel):
     config: GlmAsrConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GlmAsrAttention"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

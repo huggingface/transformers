@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -413,7 +413,7 @@ class MiMoV2FlashAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
+class MiMoV2FlashDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -460,7 +460,7 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
 class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     config: MiMoV2FlashConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MiMoV2FlashDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True  # not compatible because of asymmetric qk/v head dims and/or sinks (for most FAs)

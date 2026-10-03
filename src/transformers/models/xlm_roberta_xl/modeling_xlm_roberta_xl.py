@@ -35,7 +35,7 @@ from ...activations import ACT2FN, gelu
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -399,7 +399,7 @@ class XLMRobertaXLIntermediate(nn.Module):
         return hidden_states
 
 
-class XLMRobertaXLLayer(GradientCheckpointingLayer):
+class XLMRobertaXLLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -506,7 +506,7 @@ class XLMRobertaXLEncoder(nn.Module):
 class XLMRobertaXLPreTrainedModel(PreTrainedModel):
     config_class = XLMRobertaXLConfig
     base_model_prefix = "roberta"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

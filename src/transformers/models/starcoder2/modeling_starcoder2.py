@@ -35,9 +35,9 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -201,7 +201,7 @@ class Starcoder2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Starcoder2DecoderLayer(GradientCheckpointingLayer):
+class Starcoder2DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -246,7 +246,7 @@ class Starcoder2DecoderLayer(GradientCheckpointingLayer):
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config: Starcoder2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Starcoder2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

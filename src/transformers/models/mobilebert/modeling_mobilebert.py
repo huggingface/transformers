@@ -30,7 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -390,7 +390,7 @@ class FFNLayer(nn.Module):
         return layer_outputs
 
 
-class MobileBertLayer(GradientCheckpointingLayer):
+class MobileBertLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.use_bottleneck = config.use_bottleneck
@@ -533,7 +533,7 @@ class MobileBertPreTrainingHeads(nn.Module):
 class MobileBertPreTrainedModel(PreTrainedModel):
     config: MobileBertConfig
     base_model_prefix = "mobilebert"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

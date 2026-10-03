@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -247,7 +247,7 @@ class LwDetrViTMlp(VitDetMlp):
     pass
 
 
-class LwDetrViTLayer(GradientCheckpointingLayer):
+class LwDetrViTLayer(ActivationCheckpointingLayer):
     def __init__(
         self,
         config: LwDetrViTConfig,
@@ -305,7 +305,7 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
     config: LwDetrViTConfig
     base_model_prefix = "lw_detr_vit"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -681,7 +681,7 @@ class LwDetrMLP(nn.Module):
         return hidden_states
 
 
-class LwDetrDecoderLayer(GradientCheckpointingLayer):
+class LwDetrDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         nn.Module.__init__(self)
 

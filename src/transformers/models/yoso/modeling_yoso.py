@@ -21,7 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     MaskedLMOutput,
@@ -480,7 +480,7 @@ class YosoOutput(nn.Module):
         return hidden_states
 
 
-class YosoLayer(GradientCheckpointingLayer):
+class YosoLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -599,7 +599,7 @@ class YosoOnlyMLMHead(nn.Module):
 class YosoPreTrainedModel(PreTrainedModel):
     config: YosoConfig
     base_model_prefix = "yoso"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):

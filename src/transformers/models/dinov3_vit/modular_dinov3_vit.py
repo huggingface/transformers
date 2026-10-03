@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -319,7 +319,7 @@ class Dinov3ViTDropPath(SwinDropPath):
     pass
 
 
-class DINOv3ViTLayer(GradientCheckpointingLayer):
+class DINOv3ViTLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: DINOv3ViTConfig):

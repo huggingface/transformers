@@ -28,7 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -379,7 +379,7 @@ class NeoMMEMLP(nn.Module):
         return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
-class NeoMMEEncoderLayer(GradientCheckpointingLayer):
+class NeoMMEEncoderLayer(ActivationCheckpointingLayer):
     """Pre-norm encoder layer with initial-state mixing and muP depth scaling."""
 
     def __init__(self, config: NeoMMEConfig, layer_idx: int):
@@ -421,7 +421,7 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
 class NeoMMEPreTrainedModel(PreTrainedModel):
     config: NeoMMEConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["NeoMMEEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

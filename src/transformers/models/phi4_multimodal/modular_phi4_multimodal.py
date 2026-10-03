@@ -331,7 +331,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
     _supports_flash_attn = True
@@ -920,7 +920,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalAudioConfig
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True

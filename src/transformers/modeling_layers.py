@@ -50,10 +50,10 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class GradientCheckpointingLayer(nn.Module):
-    """Base class for layers with gradient checkpointing.
+class ActivationCheckpointingLayer(nn.Module):
+    """Base class for layers with activation checkpointing.
 
-    This class enables gradient checkpointing functionality for a layer. By default, gradient checkpointing is disabled
+    This class enables activation checkpointing functionality for a layer. By default, activation checkpointing is disabled
     (`gradient_checkpointing = False`). When `model.set_gradient_checkpointing()` is called, gradient checkpointing is
     enabled by setting `gradient_checkpointing = True` and assigning a checkpointing function to `_gradient_checkpointing_func`.
 
@@ -108,6 +108,10 @@ class GradientCheckpointingLayer(nn.Module):
 
             return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
         return super().__call__(*args, **kwargs)
+
+
+# Deprecated alias of `ActivationCheckpointingLayer`, will be removed in v6.
+GradientCheckpointingLayer = ActivationCheckpointingLayer
 
 
 @auto_docstring

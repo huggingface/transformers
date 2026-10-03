@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -253,7 +253,7 @@ class GlmOcrTextMLP(nn.Module):
         return self.down_proj(up_states)
 
 
-class GlmOcrTextDecoderLayer(GradientCheckpointingLayer):
+class GlmOcrTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GlmOcrTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -308,7 +308,7 @@ class GlmOcrPreTrainedModel(PreTrainedModel):
     config: GlmOcrConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GlmOcrTextDecoderLayer", "GlmOcrVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -440,7 +440,7 @@ class GlmOcrVisionAttention(nn.Module):
         return attn_output
 
 
-class GlmOcrVisionBlock(GradientCheckpointingLayer):
+class GlmOcrVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

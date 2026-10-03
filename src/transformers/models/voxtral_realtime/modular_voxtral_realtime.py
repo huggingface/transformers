@@ -24,7 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.llama.modeling_llama import LlamaRotaryEmbedding
@@ -222,7 +222,7 @@ class VoxtralRealtimeEmbedder(nn.Module):
         return inputs_embeds
 
 
-class VoxtralRealtimeEncoderLayer(GradientCheckpointingLayer):
+class VoxtralRealtimeEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.self_attn = VoxtralRealtimeAttention(config, layer_idx)

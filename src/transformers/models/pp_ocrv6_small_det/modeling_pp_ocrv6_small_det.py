@@ -24,7 +24,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -155,7 +155,7 @@ class PPOCRV6SmallDetSqueezeExcitationModule(nn.Module):
         return residual * hidden_states
 
 
-class PPOCRV6SmallDetDepthwiseSeparableConvLayer(GradientCheckpointingLayer):
+class PPOCRV6SmallDetDepthwiseSeparableConvLayer(ActivationCheckpointingLayer):
     """
     The differences from PPLCNetDepthwiseSeparableConvLayer are:
     1. Uses standard 2D convolutions instead of the original custom convolution layer.

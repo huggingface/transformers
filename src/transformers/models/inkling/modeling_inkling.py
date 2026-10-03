@@ -39,7 +39,7 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -542,7 +542,7 @@ class InklingShortConvolution(nn.Module):
         return hidden_states
 
 
-class InklingDecoderLayer(GradientCheckpointingLayer):
+class InklingDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: InklingTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -604,7 +604,7 @@ class InklingNormedEmbedding(nn.Embedding):
 class InklingPreTrainedModel(PreTrainedModel):
     config_class = InklingConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["InklingDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     # The relative position bias flows through the attention interface as a `position_bias` (duh)

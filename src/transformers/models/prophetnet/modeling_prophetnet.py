@@ -24,7 +24,7 @@ from torch.nn import LayerNorm
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_compilable_check
@@ -314,7 +314,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
 class ProphetNetPreTrainedModel(PreTrainedModel):
     config: ProphetNetConfig
     base_model_prefix = "prophetnet"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -827,7 +827,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         return predict_relative_pos_embeddings
 
 
-class ProphetNetEncoderLayer(GradientCheckpointingLayer):
+class ProphetNetEncoderLayer(ActivationCheckpointingLayer):
     """
     Encoder block for Prophetnet
     """
@@ -868,7 +868,7 @@ class ProphetNetEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class ProphetNetDecoderLayer(GradientCheckpointingLayer):
+class ProphetNetDecoderLayer(ActivationCheckpointingLayer):
     """
     Decoder block for Prophetnet
     """

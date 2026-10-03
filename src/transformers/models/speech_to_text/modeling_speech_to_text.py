@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -312,7 +312,7 @@ class Speech2TextAttention(nn.Module):
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT
-class Speech2TextEncoderLayer(GradientCheckpointingLayer):
+class Speech2TextEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -370,7 +370,7 @@ class Speech2TextEncoderLayer(GradientCheckpointingLayer):
 
 # copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT
 # TODO: change copy when applying cache class
-class Speech2TextDecoderLayer(GradientCheckpointingLayer):
+class Speech2TextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Speech2TextConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -470,7 +470,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = ("text", "audio")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     # TODO: tests would need a rewrite to check for correct implementation
     # Current tests always assume certain inputs to be passed
     _supports_flash_attn = False
