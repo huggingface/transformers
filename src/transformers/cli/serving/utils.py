@@ -26,6 +26,7 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Queue
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
@@ -54,6 +55,24 @@ logger = logging.get_logger(__name__)
 
 
 X_REQUEST_ID = "x-request-id"
+
+
+def _validate_media_url(url: str, allowed_media_domains: frozenset[str]) -> None:
+    """Reject server-side media fetches unless the destination was explicitly allowed."""
+    if url.startswith("data:"):
+        return
+
+    parsed = urlsplit(url)
+    hostname = parsed.hostname.rstrip(".").lower() if parsed.hostname else None
+    if parsed.scheme not in ("http", "https") or hostname not in allowed_media_domains:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Remote media URL is not allowed. Use a data URL or configure --allowed-media-domain for its host."
+            ),
+        )
 
 
 def split_model_id(model_id: str) -> tuple[str, str | None]:
@@ -1093,10 +1112,12 @@ class BaseHandler:
         model_manager: "ModelManager",
         generation_state: GenerationState,
         chat_template_kwargs: dict | None = None,
+        allowed_media_domains: list[str] | None = None,
     ):
         self.model_manager = model_manager
         self.generation_state = generation_state
         self.chat_template_kwargs = chat_template_kwargs or {}
+        self.allowed_media_domains = frozenset(domain.rstrip(".").lower() for domain in (allowed_media_domains or []))
 
     def _validate_request(self, body: dict) -> None:
         """Validate request fields against the handler's params class and unused fields."""
@@ -1194,7 +1215,11 @@ class BaseHandler:
         return generation_config
 
     @staticmethod
-    def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
+    def get_processor_inputs_from_messages(
+        messages: list[dict],
+        modality: Modality,
+        allowed_media_domains: frozenset[str] | None = None,
+    ) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
         All modalities extract text. VLM additionally handles ``image_url`` and ``video_url``.
@@ -1243,6 +1268,8 @@ class BaseHandler:
                     url = content["image_url"]
                     if isinstance(url, dict):
                         url = url["url"]
+                    if allowed_media_domains is not None:
+                        _validate_media_url(url, allowed_media_domains)
                     parsed["content"].append({"type": "image", "url": url})
                 # Audio: OpenAI's input_audio is {"data": <base64>, "format": "wav"|"mp3"}, enabling URI for load_audio
                 # If format is missing, we can just hand over raw base64 and let load_audio sniff the format from the bytes.
@@ -1257,9 +1284,15 @@ class BaseHandler:
                     parsed["content"].append({"type": "audio", "url": url})
                 # Extensions (not part of the OpenAI API standard)
                 elif content_type == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
-                    parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
+                    url = content["video_url"]["url"]
+                    if allowed_media_domains is not None:
+                        _validate_media_url(url, allowed_media_domains)
+                    parsed["content"].append({"type": "video", "url": url})
                 elif content_type == "audio_url" and modality == Modality.MULTIMODAL:
-                    parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
+                    url = content["audio_url"]["url"]
+                    if allowed_media_domains is not None:
+                        _validate_media_url(url, allowed_media_domains)
+                    parsed["content"].append({"type": "audio", "url": url})
 
             # LLMs expect plain text, not a list of content parts
             if modality == Modality.LLM:
