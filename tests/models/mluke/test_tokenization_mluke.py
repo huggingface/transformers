@@ -26,8 +26,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
-# TODO: (Ita / Arthur) FIXME
-@unittest.skip("Skip for now as this fails after #40936")
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "studio-ousia/mluke-base"
     tokenizer_class = MLukeTokenizer
@@ -36,10 +34,8 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.from_pretrained_id = "studio-ousia/mluke-base"
-        cls.tokenizer_class = MLukeTokenizer
 
-        cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
+        cls.special_tokens_map = {"entity_1_token": "<ent>", "entity_2_token": "<ent2>"}
 
     @classmethod
     def get_tokenizer(cls, pretrained_name=None, task=None, **kwargs):
@@ -109,6 +105,47 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # test with a sentence with no entity
         encoding = tokenizer([sentence, sentence], entity_spans=[[], [span, span]], padding=True)
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
+
+    def test_entity_classification_markers_ignore_extra_special_token_order(self):
+        # Regression for #48225: with non-entity specials first, positional ids would emit <s> not <ent>.
+        tokenizer = self.tokenizer_class.from_pretrained(
+            self.tmpdirname,
+            task="entity_classification",
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
+        )
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
+
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
+        expected_tokens = ["<s>", "<ent>", "▁Beyonce", "<ent>", "▁lives", "▁in", "▁Los", "▁Angeles", ".", "</s>"]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
+
+    def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
+        tokenizer = self.tokenizer_class.from_pretrained(
+            self.tmpdirname,
+            task="entity_pair_classification",
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
+        )
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_2_token_id)
+
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
+        expected_tokens = [
+            "<s>",
+            "<ent>",
+            "▁Beyonce",
+            "<ent>",
+            "▁lives",
+            "▁in",
+            "<ent2>",
+            "▁Los",
+            "▁Angel",
+            "e",
+            "<ent2>",
+            "▁s",
+            ".",
+            "</s>",
+        ]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
     # def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
     #     tokenizer = self.get_tokenizer()
@@ -571,7 +608,7 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s> Japanese is an East Asian language spoken by about 128 million people, primarily in Japan.</s>",
+            "<s> Japanese is an East Asian language spoken by about 128 million people, primarily in Japan .</s>",
         )
 
         mask_id = tokenizer.entity_vocab["[MASK]"]

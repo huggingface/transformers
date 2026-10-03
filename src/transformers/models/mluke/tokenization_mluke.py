@@ -182,10 +182,10 @@ class MLukeTokenizer(TokenizersBackend):
             The maximum length of `entity_ids`.
         max_mention_length (`int`, *optional*, defaults to 30):
             The maximum number of tokens inside an entity span.
-        entity_token_1 (`str`, *optional*, defaults to `<ent>`):
+        entity_1_token (`str`, *optional*, defaults to `<ent>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_classification"` or `"entity_pair_classification"`.
-        entity_token_2 (`str`, *optional*, defaults to `<ent2>`):
+        entity_2_token (`str`, *optional*, defaults to `<ent2>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_pair_classification"`.
         additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
@@ -226,8 +226,8 @@ class MLukeTokenizer(TokenizersBackend):
         task=None,
         max_entity_length=32,
         max_mention_length=30,
-        entity_token_1="<ent>",
-        entity_token_2="<ent2>",
+        entity_1_token="<ent>",
+        entity_2_token="<ent2>",
         entity_unk_token="[UNK]",
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
@@ -236,19 +236,22 @@ class MLukeTokenizer(TokenizersBackend):
         entity_vocab: str | dict | list | None = None,
         **kwargs,
     ) -> None:
+        entity_1_token = kwargs.pop("entity_token_1", entity_1_token)
+        entity_2_token = kwargs.pop("entity_token_2", entity_2_token)
+
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         # we add 2 special tokens for downstream tasks
-        entity_token_1 = (
-            AddedToken(entity_token_1, lstrip=False, rstrip=False)
-            if isinstance(entity_token_1, str)
-            else entity_token_1
+        entity_1_token = (
+            AddedToken(entity_1_token, lstrip=False, rstrip=False)
+            if isinstance(entity_1_token, str)
+            else entity_1_token
         )
-        entity_token_2 = (
-            AddedToken(entity_token_2, lstrip=False, rstrip=False)
-            if isinstance(entity_token_2, str)
-            else entity_token_2
+        entity_2_token = (
+            AddedToken(entity_2_token, lstrip=False, rstrip=False)
+            if isinstance(entity_2_token, str)
+            else entity_2_token
         )
 
         # Handle entity vocab file for backward compatibility
@@ -352,7 +355,7 @@ class MLukeTokenizer(TokenizersBackend):
 
         # Ensure MLuke entity tokens are present exactly once.
         seen = {str(token) for token in extra_tokens}
-        for token in (entity_token_1, entity_token_2):
+        for token in (entity_1_token, entity_2_token):
             token_str = str(token)
             if token_str not in seen:
                 extra_tokens.append(token)
@@ -366,6 +369,8 @@ class MLukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
+        kwargs.setdefault("clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output", True)
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -377,8 +382,8 @@ class MLukeTokenizer(TokenizersBackend):
             task=task,
             max_entity_length=max_entity_length,
             max_mention_length=max_mention_length,
-            entity_token_1=str(entity_token_1),
-            entity_token_2=str(entity_token_2),
+            entity_1_token=str(entity_1_token),
+            entity_2_token=str(entity_2_token),
             entity_unk_token=entity_unk_token,
             entity_pad_token=entity_pad_token,
             entity_mask_token=entity_mask_token,
@@ -445,6 +450,40 @@ class MLukeTokenizer(TokenizersBackend):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
+
+    def _decode(
+        self,
+        token_ids: int | list[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool | None = None,
+        spaces_between_special_tokens: bool = True,
+        **kwargs,
+    ) -> str:
+        # Entity marker tokens are special, however they require being joined with spaces like normal
+        # vocab tokens despite not having a `_` prefix.
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        entity_markers = {str(self.entity_1_token), str(self.entity_2_token)}
+
+        sub_texts = []
+        current_sub_text = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_tokens:
+                continue
+            if token in entity_markers:
+                if current_sub_text:
+                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+                    current_sub_text = []
+                sub_texts.append(token)
+            else:
+                current_sub_text.append(token)
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        text = " ".join(sub_texts) if spaces_between_special_tokens else "".join(sub_texts)
+
+        return text
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
@@ -1012,12 +1051,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
-            first_ids = (
-                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
-            )
-            first_ids = (
-                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
-            )
+            first_ids = first_ids[:entity_token_end] + [self.entity_1_token_id] + first_ids[entity_token_end:]
+            first_ids = first_ids[:entity_token_start] + [self.entity_1_token_id] + first_ids[entity_token_start:]
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
@@ -1038,8 +1073,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.extra_special_tokens_ids[0]),
-                (tail_token_span, self.extra_special_tokens_ids[1]),
+                (head_token_span, self.entity_1_token_id),
+                (tail_token_span, self.entity_2_token_id),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
