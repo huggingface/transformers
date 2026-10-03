@@ -1296,7 +1296,7 @@ class SamModel(SamPreTrainedModel):
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
             raise ValueError(
-                "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
+                "The input_boxes must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
                 f" got {input_boxes.shape}.",
             )
         if input_points is not None and input_boxes is not None:
