@@ -19,9 +19,10 @@ import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import timedelta
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 import torch.distributed as dist
@@ -46,6 +47,10 @@ from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, stream_context
+
+
+if TYPE_CHECKING:
+    from ..._typing import GenerativePreTrainedModel
 
 
 """
@@ -80,7 +85,9 @@ class ProtoPretrainedModel(nn.Module):
         pass
 
     @abstractmethod
-    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
+    def _get_logits_processor(
+        self, generation_config: GenerationConfig, input_ids_seq_length: int | None = None
+    ) -> LogitsProcessorList:
         pass
 
 
@@ -718,7 +725,9 @@ class ContinuousBatchingManager:
 
         # Turn the classic logits processors into a CB-friendly version
         self.logit_processor = ContinuousBatchingLogitsProcessorList(
-            logits_processor=self.model._get_logits_processor(generation_config),
+            # Request lengths are not known yet. Construct processors with a placeholder so unsupported
+            # prompt-length-dependent processors can reach the filtering step.
+            logits_processor=self.model._get_logits_processor(generation_config, input_ids_seq_length=0),
             per_request_processors=continuous_batching_config.per_request_processors,
             drop_unsupported_processors=continuous_batching_config.drop_unsupported_processors,
         )
@@ -1285,6 +1294,8 @@ class ContinuousMixin:
         gen_config = generation_config if generation_config is not None else self.generation_config
         if gen_config is None:
             raise ValueError("A GenerationConfig must be provided or set in the model.")
+        gen_config = deepcopy(gen_config)
+        cast("GenerativePreTrainedModel", self)._prepare_special_tokens(gen_config, device=self.device)
         # Warn about EOS
         if gen_config.eos_token_id is None:
             logger.warning("`eos_token_id` not set in GenerationConfig. Setting to -1 (disabled).")
