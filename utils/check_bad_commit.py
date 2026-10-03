@@ -43,7 +43,7 @@ def _sigterm_handler(signum, frame):
 signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
-def create_script(target_test, flake_runs=4):
+def create_script(target_test, flake_runs=10):
     """Create a python script to be run by `git bisect run` to determine if `target_test` passes or fails.
     If a test is not found in a commit, the script with exit code `0` (i.e. `Success`).
 
@@ -97,7 +97,7 @@ exit(0)
         fp.write(script.strip())
 
 
-def is_bad_commit(target_test, commit, flake_runs=4):
+def is_bad_commit(target_test, commit, flake_runs=10):
     repo = git.Repo(".")  # or specify path to your repo
 
     # Save the current HEAD reference
@@ -162,7 +162,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     }
 
     is_pr_ci = os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"]
-    flake_runs = 1 if is_pr_ci else 4
+    flake_runs = 1 if is_pr_ci else 10
 
     # For PR comment CI, we "assume" all tests at `end_commit` passed, so any failing test during a PR CI run is
     # "a new failing test", and we can perform more detailed checks with this script.
