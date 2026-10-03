@@ -137,25 +137,27 @@ def _start_cancellation_watcher():
                     _do_terminate(reason=f"run API: status={run_status!r}, conclusion={run_conclusion!r}")
                     return
 
-                # Check individual job status — GitHub may mark a running job as
-                # cancelled while the step is still executing
+                # Check all jobs in the run: when a workflow is cancelled, GitHub
+                # immediately marks queued dependent jobs as "cancelled" in the API,
+                # even before our running step is killed. Detecting any cancelled job
+                # is more reliable than waiting for the run-level status to update.
                 req2 = urllib.request.Request(jobs_url, headers=headers)
                 with urllib.request.urlopen(req2, timeout=10) as resp2:
                     jobs_data = json.loads(resp2.read())
+                any_job_cancelled = False
                 for job in jobs_data.get("jobs", []):
                     j_name = job.get("name", "")
                     j_status = job.get("status", "?")
                     j_conclusion = job.get("conclusion")
-                    # Only log jobs matching our job name (or all if job_name unknown)
-                    if job_name and job_name not in j_name:
-                        continue
                     print(
                         f"[DEBUG] Poll #{poll_count}: job={j_name!r} status={j_status!r}, conclusion={j_conclusion!r}",
                         flush=True,
                     )
                     if j_conclusion == "cancelled":
-                        _do_terminate(reason=f"job API: job={j_name!r} conclusion=cancelled")
-                        return
+                        any_job_cancelled = True
+                if any_job_cancelled:
+                    _do_terminate(reason="job API: at least one job has conclusion=cancelled (workflow was cancelled)")
+                    return
 
             except Exception as _e:
                 print(f"[DEBUG] Poll #{poll_count} error: {type(_e).__name__}: {_e}", flush=True)
