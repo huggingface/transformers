@@ -71,6 +71,10 @@ content = tokenizer.decode(output_ids, skip_special_tokens=True)
 print("content:", content)
 ```
 
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## Qwen3NextConfig
 
 [[autodoc]] Qwen3NextConfig
