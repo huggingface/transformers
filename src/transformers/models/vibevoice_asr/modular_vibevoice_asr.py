@@ -459,7 +459,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         padding_mask = kwargs.pop("padding_mask", None)
         acoustic_tokenizer_chunk_size = kwargs.pop("acoustic_tokenizer_chunk_size", None)
 
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = super().prepare_inputs_for_generation(*args, is_first_iteration=is_first_iteration, **kwargs)
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             if input_values is not None:
