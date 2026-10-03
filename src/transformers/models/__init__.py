@@ -335,6 +335,7 @@ if TYPE_CHECKING:
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
     from .nemotron_h_omni import *
+    from .nemotron_speech_encoder import *
     from .neomme import *
     from .neucodec import *
     from .nllb import *

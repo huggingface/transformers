@@ -33,13 +33,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nemotron3_diarization import (
@@ -311,7 +305,9 @@ class Nemotron3DiarizationRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: Nemotron3DiarizationConfig, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(
+        config: Nemotron3DiarizationConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -322,12 +318,14 @@ class Nemotron3DiarizationRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -427,6 +425,9 @@ class Nemotron3DiarizationAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        # CODEPATH: the Nemotron-3.5-Transcribe ASR encoder normalizes queries and keys, Nemotron-3-Diarization does not.
+        self.q_norm = nn.LayerNorm(self.head_dim) if config.use_qk_norm else nn.Identity()
+        self.k_norm = nn.LayerNorm(self.head_dim) if config.use_qk_norm else nn.Identity()
 
     def forward(
         self,
@@ -438,8 +439,8 @@ class Nemotron3DiarizationAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -580,6 +581,8 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
             raise ValueError("Provide exactly one of `input_features` and `inputs_embeds`.")
 
         if inputs_embeds is None:
+            if attention_mask is not None:
+                input_features = input_features.masked_fill(~attention_mask[..., None].bool(), 0.0)
             inputs_embeds = self.embedder(input_features)
             # if inputs_embeds is provided, we expect attention_mask already downsampled
             if attention_mask is not None:

@@ -381,6 +381,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
+        ("nemotron_speech_encoder", "NemotronSpeechEncoder"),
         ("neomme", "NeoMMEModel"),
         ("neucodec", "NeuCodecModel"),
         ("nllb-moe", "NllbMoeModel"),
