@@ -126,17 +126,17 @@ class Mistral4IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    @slow
-    def test_mistral_small_4_logits_2(self):
-        self.test_mistral_small_4_logits()
+    # @slow
+    # def test_mistral_small_4_logits_2(self):
+    #     self.test_mistral_small_4_logits()
 
-    @slow
-    def test_mistral_small_4_logits_3(self):
-        self.test_mistral_small_4_logits()
+    # @slow
+    # def test_mistral_small_4_logits_3(self):
+    #     self.test_mistral_small_4_logits()
 
-    @slow
-    def test_mistral_small_4_logits_4(self):
-        self.test_mistral_small_4_logits()
+    # @slow
+    # def test_mistral_small_4_logits_4(self):
+    #     self.test_mistral_small_4_logits()
 
     @slow
     @require_deterministic_for_xpu
@@ -166,17 +166,17 @@ class Mistral4IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    @slow
-    @require_deterministic_for_xpu
-    def test_mistral_small_4_generation_2(self):
-        self.test_mistral_small_4_generation()
+    # @slow
+    # @require_deterministic_for_xpu
+    # def test_mistral_small_4_generation_2(self):
+    #     self.test_mistral_small_4_generation()
 
-    @slow
-    @require_deterministic_for_xpu
-    def test_mistral_small_4_generation_3(self):
-        self.test_mistral_small_4_generation()
+    # @slow
+    # @require_deterministic_for_xpu
+    # def test_mistral_small_4_generation_3(self):
+    #     self.test_mistral_small_4_generation()
 
-    @slow
-    @require_deterministic_for_xpu
-    def test_mistral_small_4_generation_4(self):
-        self.test_mistral_small_4_generation()
+    # @slow
+    # @require_deterministic_for_xpu
+    # def test_mistral_small_4_generation_4(self):
+    #     self.test_mistral_small_4_generation()
