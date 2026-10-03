@@ -1800,6 +1800,46 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
+def convert_state_dict(
+    model: PreTrainedModel,
+    state_dict: dict[str, torch.Tensor],
+    weight_mapping: list[WeightConverter | WeightRenaming] | None = None,
+) -> dict[str, torch.Tensor]:
+    """
+    Apply the weight conversions (renamings and merging/splitting operations) to a state dict without loading it
+    into `model`: the inverse of `revert_weight_conversion`, which `save_pretrained` uses. A checkpoint it wrote
+    comes back in the format `model` holds, ready for `load_state_dict`. Keys the model does not have are kept, so
+    `load_state_dict` still reports them as unexpected.
+
+    With `weight_mapping=None`, uses the mapping the model was loaded with, or the default one for its architecture.
+    """
+    if weight_mapping is None:
+        from .conversion_mapping import get_model_conversion_mapping
+
+        weight_mapping = getattr(model, "_weight_conversions", None) or get_model_conversion_mapping(model)
+    renamings = [transform for transform in weight_mapping if isinstance(transform, WeightRenaming)]
+    converters = [transform for transform in weight_mapping if isinstance(transform, WeightConverter)]
+    pattern_to_converter = {pattern: converter for converter in converters for pattern in converter.source_patterns}
+    # `rename_source_key` only checks key membership in the model's state dict
+    model_state_dict = model.state_dict()
+
+    new_state_dict, pending = {}, {}
+    # sorted so that the tensors of one converter arrive in a consistent order (matters for MoE experts)
+    for key, tensor in sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0])):
+        renamed_key, source_pattern = rename_source_key(
+            key, renamings, converters, base_model_prefix=model.base_model_prefix, meta_state_dict=model_state_dict
+        )
+        if source_pattern is None or renamed_key not in model_state_dict:
+            new_state_dict[renamed_key] = tensor
+        else:
+            converter = pending.setdefault(renamed_key, deepcopy(pattern_to_converter[source_pattern]))
+            converter.add_tensor(renamed_key, key, source_pattern, tensor)
+    for renamed_key, converter in pending.items():
+        for target_key, value in converter.convert(renamed_key, model=model, config=model.config).items():
+            new_state_dict[target_key] = value[0] if isinstance(value, list) else value
+    return new_state_dict
+
+
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
