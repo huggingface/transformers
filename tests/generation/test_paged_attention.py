@@ -87,6 +87,7 @@ class TestBatchGeneration(unittest.TestCase):
             num_blocks=num_blocks,
             page_size=block_size,
             max_batch_tokens=max_batch_tokens,
+            auto_switch_to_flash=False,
         )
         generation_config = GenerationConfig(
             max_new_tokens=30,
@@ -131,6 +132,7 @@ class TestBatchGeneration(unittest.TestCase):
             num_blocks=num_blocks,
             page_size=block_size,
             max_batch_tokens=max_batch_tokens,
+            auto_switch_to_flash=False,
         )
         generation_config = GenerationConfig(
             max_new_tokens=30,
