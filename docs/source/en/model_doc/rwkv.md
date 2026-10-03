@@ -74,6 +74,10 @@ class RwkvStoppingCriteria(StoppingCriteria):
 output = model.generate(inputs["input_ids"], max_new_tokens=64, stopping_criteria = [RwkvStoppingCriteria()])
 ```
 
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## RwkvConfig
 
 [[autodoc]] RwkvConfig

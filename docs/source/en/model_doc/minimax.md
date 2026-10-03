@@ -164,6 +164,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - The [Alignment Handbook](https://github.com/huggingface/alignment-handbook) by Hugging Face includes scripts and recipes to perform supervised fine-tuning (SFT) and direct preference optimization with Mistral-7B. This includes scripts for full fine-tuning, QLoRa on a single GPU as well as multi-GPU fine-tuning.
 - [Causal language modeling task guide](../tasks/language_modeling)
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## MiniMaxConfig
 
 [[autodoc]] MiniMaxConfig
