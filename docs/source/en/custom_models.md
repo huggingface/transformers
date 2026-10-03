@@ -42,26 +42,40 @@ from transformers import PreTrainedConfig
 from typing import List
 
 class ResnetConfig(PreTrainedConfig):
+    # Required for AutoClass support & must be unique across all model types in Transformers
     model_type = "resnet"
 
     def __init__(
         self,
-        block_type="bottleneck",
-        layers: list[int] = [3, 4, 6, 3],
-        num_classes: int = 1000,
-        input_channels: int = 3,
-        cardinality: int = 1,
-        base_width: int = 64,
-        stem_width: int = 64,
-        stem_type: str = "",
-        avg_down: bool = False,
+        # Core architecture
+        block_type="bottleneck",  # "basic" (ResNet-18/34) or "bottleneck" (ResNet-50/101/152)
+        layers: list[int] = [3, 4, 6, 3],  # Number of blocks per stage (ResNet-50 default)
+        num_classes: int = 1000,  # ImageNet has 1000 classes
+        
+        # Input handling 
+        input_channels: int = 3,  # RGB images have 3 channels
+        
+        # ResNeXt parameters (grouped convolutions) 
+        # Set cardinality > 1 to convert ResNet -> ResNeXt (e.g., 32 for ResNeXt-32)
+        cardinality: int = 1,  # Number of groups per convolutional layer
+        base_width: int = 64,  # Channels per group (total width = base_width * cardinality)
+        
+        # Stem customization (initial convolutional layers before stage 1) 
+        stem_width: int = 64,  # Output channels of the first convolution
+        stem_type: str = "",  # Options: "" (standard 7x7), "deep" (three 3x3 layers), "deep-tiered" (varying channels)
+        avg_down: bool = False,  # If True, use avg pooling for downsampling; if False, use strided convolution
+        
+        # Required for PreTrainedConfig compatibility 
+        # Any kwargs (like hidden_size, torchscript, output_attentions) are passed to parent class
         **kwargs,
     ):
+        # Validate parameters early to catch configuration errors before model building
         if block_type not in ["basic", "bottleneck"]:
-            raise ValueError(f"`block_type` must be 'basic' or bottleneck', got {block_type}.")
+            raise ValueError(f"`block_type` must be 'basic' or 'bottleneck', got {block_type}.")
         if stem_type not in ["", "deep", "deep-tiered"]:
             raise ValueError(f"`stem_type` must be '', 'deep' or 'deep-tiered', got {stem_type}.")
 
+        # Store all configuration values as instance attributes
         self.block_type = block_type
         self.layers = layers
         self.num_classes = num_classes
@@ -71,6 +85,8 @@ class ResnetConfig(PreTrainedConfig):
         self.stem_width = stem_width
         self.stem_type = stem_type
         self.avg_down = avg_down
+        
+        # Call parent class to handle Transformers-specific fields (output_attentions, use_cache, etc.)
         super().__init__(**kwargs)
 ```
 
@@ -104,6 +120,7 @@ from transformers import PreTrainedModel
 from timm.models.resnet import BasicBlock, Bottleneck, ResNet
 from .configuration_resnet import ResnetConfig
 
+# Obtain actual block class from our mapping
 BLOCK_MAPPING = {"basic": BasicBlock, "bottleneck": Bottleneck}
 
 class ResnetModel(PreTrainedModel):
