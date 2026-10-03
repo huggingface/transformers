@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
+import tempfile
 import unittest
 
 import numpy as np
@@ -316,6 +319,45 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
+
+    def test_english_spelling_normalizer_survives_save_pretrained(self):
+        # `setUpClass` saved the hub tokenizer to `tmpdirname`, which `get_tokenizer` reloads.
+        tokenizer = self.get_tokenizer()
+
+        self.assertEqual(tokenizer.english_spelling_normalizer, self.tokenizers[0].english_spelling_normalizer)
+        self.assertEqual(tokenizer.normalize("colour"), "color")
+        encoded_input = tokenizer.encode("colour")
+        self.assertEqual(tokenizer.decode(encoded_input, normalize=True, skip_special_tokens=True), "color")
+
+    def test_save_english_spelling_normalizer_with_filename_prefix(self):
+        tokenizer = self.get_tokenizer()
+
+        for save_method in ("save_pretrained", "save_vocabulary"):
+            with self.subTest(save_method=save_method), tempfile.TemporaryDirectory() as tmpdir:
+                saved_files = getattr(tokenizer, save_method)(tmpdir, filename_prefix="test")
+                normalizer_file = os.path.join(tmpdir, "test-normalizer.json")
+
+                self.assertIsInstance(saved_files, tuple)
+                self.assertIn(normalizer_file, saved_files)
+                self.assertTrue(os.path.isfile(normalizer_file))
+                self.assertFalse(os.path.exists(os.path.join(tmpdir, "normalizer.json")))
+                with open(normalizer_file, encoding="utf-8") as f:
+                    self.assertEqual(json.load(f), tokenizer.english_spelling_normalizer)
+
+    def test_save_english_spelling_normalizer_when_none(self):
+        tokenizer = self.get_tokenizer()
+        tokenizer.english_spelling_normalizer = None
+
+        for save_method, expected_names in (
+            ("save_pretrained", ("tokenizer_config.json", "tokenizer.json")),
+            ("save_vocabulary", ("vocab.json", "merges.txt")),
+        ):
+            with self.subTest(save_method=save_method), tempfile.TemporaryDirectory() as tmpdir:
+                saved_files = getattr(tokenizer, save_method)(tmpdir)
+
+                self.assertTupleEqual(saved_files, tuple(os.path.join(tmpdir, name) for name in expected_names))
+                self.assertTrue(all(os.path.isfile(path) for path in saved_files))
+                self.assertFalse(os.path.exists(os.path.join(tmpdir, "normalizer.json")))
 
     def test_decode_asr_with_word_level_timestamps(self):
         # fmt: off
