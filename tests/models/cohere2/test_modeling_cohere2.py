@@ -145,7 +145,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
         EXPECTED_TEXTS = [
-            "Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have",
+            "Hello I am doing a project for my school and I need to create a website for a fictional company. I have the",
             "Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
         ]
 
