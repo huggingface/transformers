@@ -361,7 +361,7 @@ class MoeCausalLMOutputWithPast(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 
-        aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` and the model trains its router with a load-balancing loss):
+        aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`, and the model trains its router with a load-balancing loss):
             Load-balancing auxiliary loss for the sparse modules. Models that balance their experts with a router bias
             instead (DeepSeek-V3 and the architectures derived from it) return `None` here while still returning
             `router_logits`.
