@@ -176,10 +176,11 @@ responses = tokenizer.batch_decode(out[:,-28:], skip_special_tokens=True)
 
 ## Quantized cache
 
-The [`QuantizedCache`] reduces memory requirements by quantizing the KV values to a lower precision. [`QuantizedCache`] currently supports two quantization backends:
+The [`QuantizedCache`] reduces memory requirements by quantizing the KV values to a lower precision. [`QuantizedCache`] currently supports three quantization backends:
 
 - `hqq` supports int2, int4, and int8 datatypes.
 - `quanto` supports int2 and int4 datatypes. This is the default quantization backend.
+- `fp8` stores the KV values in 8-bit floating point (`float8_e4m3fn`). It requires no extra dependency, and quantizes per-tensor rather than per-group, so `nbits`, `axis_key`, `axis_value`, `q_group_size` and `residual_length` do not apply to it.
 
 > [!WARNING]
 > Quantizing the cache can harm latency if the context length is short and there is enough GPU memory available for generation without enabling cache quantization. Try to find a balance between memory efficiency and latency.
@@ -216,6 +217,21 @@ inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.de
 out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
 print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
+```
+
+The `fp8` backend does not take any additional parameter.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B-Instruct-2507")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-4B-Instruct-2507", dtype=torch.float16, device_map="auto")
+inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
+
+out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"backend": "fp8"})
+print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
+I like rock music because it is powerful and emotional. I also like classical music because it is elegant and sophisticated. I enjoy
 ```
 
 ## Encoder-decoder cache

@@ -240,6 +240,10 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - update
     - lazy_initialization
 
+[[autodoc]] Fp8QuantizedLayer
+    - update
+    - lazy_initialization
+
 [[autodoc]] Cache
     - update
     - early_initialization
