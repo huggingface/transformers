@@ -38,9 +38,12 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import math
 import operator
 import re
+import threading
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -67,7 +70,8 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
-    from ..cache_utils import EncoderDecoderCache, StaticCache
+    from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache, get_layer_types_and_kwargs
+    from ..generation.configuration_utils import GenerationConfig
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -96,7 +100,7 @@ if is_executorch_available():
 
     # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
     # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
-    # CPU-only builds; `prepare_for_cuda` raises a clear error if the `cuda` backend is requested when
+    # CPU-only builds; `_prepare_for_cuda` raises a clear error if the `cuda` backend is requested when
     # it isn't available.
     if torch.cuda.is_available():
         from executorch.backends.cuda.cuda_backend import CudaBackend
@@ -123,6 +127,67 @@ class ExecutorchExporter(DynamoExporter):
     required_packages = ["torch", "executorch"]
     tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
 
+    def export_for_generation(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: MutableMapping[str, Any],
+        config: ExecutorchConfig | dict[str, ExecutorchConfig],
+        generation_config: GenerationConfig | None = None,
+        multi_token_decode: bool = False,
+    ) -> dict[str, ExecutorchProgramManager]:
+        """Export generation components, optionally using ExecuTorch's off-graph cache."""
+        configs = list(config.values()) if isinstance(config, dict) else [config]
+        if any(
+            getattr(component_config, "cache_implementation", None) == "executorch_off_graph_cache"
+            for component_config in configs
+        ):
+            if any(
+                not isinstance(component_config, ExecutorchConfig)
+                or component_config.cache_implementation != "executorch_off_graph_cache"
+                for component_config in configs
+            ):
+                raise ValueError(
+                    "executorch_off_graph_cache requires the same cache implementation for prefill and decode."
+                )
+
+            capture_config = copy.deepcopy(
+                generation_config if generation_config is not None else model.generation_config
+            )
+            capture_config.update(**model.generation_config.to_dict(), defaults_only=True)
+            capture_config.update(**GenerationConfig._get_default_generation_params(), defaults_only=True)
+            capture_config.update(**sample_inputs)
+            _validate_executorch_off_graph_cache_generation(model, sample_inputs, capture_config)
+
+            from .utils import decompose_for_generation
+
+            components = decompose_for_generation(
+                model, sample_inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
+            )
+            if isinstance(config, dict):
+                missing = set(components) - set(config)
+                if missing:
+                    raise ValueError(f"Per-component `config` dict is missing entries for: {sorted(missing)}.")
+            else:
+                config = dict.fromkeys(components, config)
+            exported = {}
+            for name, (submodel, subinputs) in components.items():
+                # The original request is unpadded. Off-graph attention derives full/SWA masks
+                # from positions and geometry, so HF-generated masks are capture-only.
+                subinputs = dict(subinputs)
+                subinputs.pop("attention_mask", None)
+                try:
+                    exported[name] = self.export(submodel, subinputs, config=config[name])
+                except Exception as error:
+                    raise RuntimeError(
+                        f"{type(self).__name__}.export failed on component '{name}' "
+                        f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
+                    ) from error
+            return exported
+
+        return super().export_for_generation(
+            model, sample_inputs, config, generation_config=generation_config, multi_token_decode=multi_token_decode
+        )
+
     def export(
         self,
         model: PreTrainedModel,
@@ -135,27 +200,325 @@ class ExecutorchExporter(DynamoExporter):
         elif type(config) is not ExecutorchConfig:
             raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
 
+        _validate_executorch_off_graph_cache_backend(config)
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        off_graph_cache = config.cache_implementation == "executorch_off_graph_cache"
+        off_graph_cache_context = contextlib.nullcontext(sample_inputs)
+        if off_graph_cache:
+            off_graph_cache_context = _executorch_off_graph_cache_export(model, sample_inputs)
 
-        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
-            apply_fx_program_fixes("executorch", exported_program)
-            apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=partitioner,
-                compile_config=_get_edge_compile_config(config.backend),
-                transform_passes=_get_transform_passes(config.backend),
-            )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
-            )
+        with off_graph_cache_context as sample_inputs:
+            model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+            with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
+                exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+                apply_fx_program_fixes("executorch", exported_program)
+                apply_fx_node_fixes("executorch", exported_program.graph_module)
+                constant_methods = dict(config.constant_methods or {})
+                if off_graph_cache:
+                    geometry = _get_executorch_off_graph_cache_geometry(exported_program, model.config)
+                    conflicts = constant_methods.keys() & geometry.keys()
+                    if conflicts:
+                        raise ValueError(
+                            "constant_methods cannot override off-graph cache geometry: "
+                            + ", ".join(sorted(conflicts))
+                        )
+                    constant_methods.update(geometry)
+                edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                    exported_program,
+                    partitioner=partitioner,
+                    compile_config=_get_edge_compile_config(config.backend),
+                    transform_passes=_get_transform_passes(config.backend),
+                    constant_methods=constant_methods or None,
+                )
+                executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
+                    config=_get_backend_config(config)
+                )
 
         return executorch_programs_manager
+
+
+# -- Off-graph cache adapter ---------------------------------------------------
+_OFF_GRAPH_CACHE_BACKENDS = frozenset({"mlx"})
+# HF's attention registry is process-global.
+_EXECUTORCH_OFF_GRAPH_CACHE_EXPORT_LOCK = threading.RLock()
+_EXECUTORCH_OFF_GRAPH_CACHE_ATTENTION_NAME = "executorch_off_graph_cache"
+
+
+def _validate_executorch_off_graph_cache_backend(config):
+    if config.cache_implementation == "executorch_off_graph_cache" and config.backend not in _OFF_GRAPH_CACHE_BACKENDS:
+        raise ValueError(
+            f"executorch_off_graph_cache is not supported by the ExecuTorch {config.backend.upper()} backend. "
+            f"Supported backends: {', '.join(sorted(_OFF_GRAPH_CACHE_BACKENDS))}."
+        )
+
+
+def _validate_executorch_off_graph_cache_model_scope(model):
+    from .utils import is_multimodal
+
+    if model.config.is_encoder_decoder or is_multimodal(model):
+        raise ValueError("executorch_off_graph_cache currently supports decoder-only text models.")
+    if not model._supports_attention_backend or not model._supports_sdpa:
+        raise ValueError("executorch_off_graph_cache requires the standard attention interface and SDPA support.")
+    config = model.config.get_text_config(decoder=True)
+    if getattr(config, "is_causal", True) is not True:
+        raise ValueError("executorch_off_graph_cache requires a causal model configuration.")
+    if not model._supports_default_dynamic_cache():
+        raise ValueError("executorch_off_graph_cache requires standard attention caches.")
+    n_shared = getattr(config, "num_kv_shared_layers", 0) or 0
+    if not isinstance(n_shared, int) or not 0 <= n_shared < config.num_hidden_layers:
+        raise ValueError("executorch_off_graph_cache requires a nonempty prefix of KV-producing layers.")
+    layer_types, layer_kwargs = get_layer_types_and_kwargs(config)
+    all_layer_types = getattr(config, "layer_types", None) or layer_types
+    if not set(all_layer_types) <= {"full_attention", "sliding_attention"}:
+        raise ValueError("executorch_off_graph_cache supports only full or sliding attention.")
+    if n_shared and not set(all_layer_types[len(layer_types) :]) <= set(layer_types):
+        raise ValueError("executorch_off_graph_cache requires a KV producer for each shared attention type.")
+    if "sliding_attention" in layer_types:
+        window = layer_kwargs["sliding_window"]
+        if not isinstance(window, int) or window <= 0:
+            raise ValueError("executorch_off_graph_cache requires a positive integer sliding_window.")
+    if model.training:
+        raise ValueError("executorch_off_graph_cache requires model.eval().")
+
+
+def _validate_executorch_off_graph_cache_model(model):
+    _validate_executorch_off_graph_cache_model_scope(model)
+    try:
+        from executorch.extension.llm.cache.update_and_attend import update_and_attend  # noqa: F401
+        from executorch.extension.llm.export.model_metadata import write_cache_geometry  # noqa: F401
+    except ImportError as error:
+        raise ImportError(
+            "executorch_off_graph_cache requires an ExecuTorch build providing "
+            "extension.llm.cache.update_and_attend and extension.llm.export.model_metadata.write_cache_geometry."
+        ) from error
+
+
+def _validate_executorch_off_graph_cache_generation(model, sample_inputs, generation_config):
+    """Check the original model scope and generation request before component capture."""
+    _validate_executorch_off_graph_cache_model_scope(model)
+    tokens = _get_executorch_off_graph_cache_tokens(sample_inputs)
+    _prepare_executorch_off_graph_cache_positions(sample_inputs.get("position_ids"), tokens)
+    mask = sample_inputs.get("attention_mask")
+    if mask is None:
+        model._prepare_special_tokens(generation_config, kwargs_has_attention_mask=False, device=tokens.device)
+        mask = model._prepare_attention_mask_for_generation(tokens, generation_config, sample_inputs)
+    _validate_executorch_off_graph_cache_mask(mask, tokens.shape[1])
+    if generation_config.output_attentions:
+        raise ValueError("executorch_off_graph_cache does not return attention weights.")
+    if generation_config.num_beams != 1 or generation_config.num_return_sequences != 1:
+        raise ValueError("executorch_off_graph_cache currently supports one sequence without beam expansion.")
+    if generation_config.get_generation_mode() not in ("greedy_search", "sample") or generation_config.is_assistant:
+        raise ValueError(
+            "executorch_off_graph_cache supports only greedy decoding and sampling without speculative generation."
+        )
+    if generation_config.use_cache is False:
+        raise ValueError("executorch_off_graph_cache requires use_cache=True during generation capture.")
+    if sample_inputs.get("past_key_values") is not None or sample_inputs.get("assistant_model") is not None:
+        raise ValueError(
+            "executorch_off_graph_cache does not accept an existing cache or assistant model during capture."
+        )
+
+
+def _executorch_off_graph_cache_attention_forward(
+    module,
+    query,
+    key,
+    value,
+    attention_mask,
+    position_ids=None,
+    scaling=None,
+    dropout=0.0,
+    softcap=None,
+    head_mask=None,
+    s_aux=None,
+    position_bias=None,
+    is_causal=None,
+    use_cache=False,
+    output_attentions=False,
+    **kwargs,
+):
+    if dropout or softcap is not None or head_mask is not None:
+        raise ValueError("executorch_off_graph_cache does not support dropout, softcap, or head masks.")
+    if s_aux is not None or position_bias is not None:
+        raise ValueError("executorch_off_graph_cache does not support attention sinks or position_bias.")
+    if use_cache or output_attentions:
+        raise ValueError("executorch_off_graph_cache does not support HF cache updates or attention-weight outputs.")
+    # These output-collection flags do not affect attention; windows are checked against the cache policy below.
+    unexpected = kwargs.keys() - {"sliding_window", "output_hidden_states", "output_router_logits"}
+    if unexpected:
+        raise ValueError(f"Unsupported off-graph attention arguments: {', '.join(sorted(unexpected))}.")
+    if (
+        attention_mask is not None
+        or not getattr(module, "is_causal", False)
+        or getattr(module.config, "is_causal", True) is not True
+        or (is_causal is not None and is_causal is not True)
+    ):
+        raise ValueError(
+            "executorch_off_graph_cache supports only unpadded causal self-attention without custom masks."
+        )
+    if position_ids is None or position_ids.ndim != 2 or position_ids.shape[0] != 1:
+        raise ValueError("executorch_off_graph_cache requires explicit single-sequence position_ids.")
+    if scaling is None or getattr(module, "layer_idx", None) is None:
+        raise ValueError("executorch_off_graph_cache requires an attention scale and layer index.")
+    if query.shape[0] != 1 or key.shape != value.shape or key.shape[-1] != query.shape[-1]:
+        raise ValueError(
+            "executorch_off_graph_cache requires batch size one and equal query/key/value head dimensions."
+        )
+    if key.shape[-2] != query.shape[-2] or position_ids.shape[-1] != query.shape[-2]:
+        raise ValueError("executorch_off_graph_cache expects only this step's K/V and one position per query token.")
+    config = module.config
+    cache_layer_id = module.layer_idx
+    producer_types, layer_kwargs = get_layer_types_and_kwargs(config)
+    if getattr(module, "is_kv_shared_layer", False):
+        if cache_layer_id < len(producer_types) or getattr(module, "layer_type", None) not in producer_types:
+            raise ValueError("executorch_off_graph_cache requires shared layers to reuse a preceding KV producer.")
+        # Gemma4's shared suffix reuses the last producer of the same attention type.
+        # Rewriting its K/V at the same positions does not advance the off-graph cache twice.
+        cache_layer_id = len(producer_types) - 1 - producer_types[::-1].index(module.layer_type)
+    if "sliding_window" in kwargs:
+        expected_window = (
+            layer_kwargs["sliding_window"] if producer_types[cache_layer_id] == "sliding_attention" else None
+        )
+        if kwargs["sliding_window"] != expected_window:
+            raise ValueError("executorch_off_graph_cache requires sliding_window to match the cache layer policy.")
+    layer_config = config.per_layer_config[cache_layer_id]
+    n_heads = getattr(layer_config, "num_key_value_heads", None) or layer_config.num_attention_heads
+    head_dim = getattr(layer_config, "head_dim", None) or layer_config.hidden_size // layer_config.num_attention_heads
+    if key.shape[1] != n_heads or key.shape[-1] != head_dim:
+        raise ValueError("executorch_off_graph_cache requires KV geometry matching the cache layer config.")
+
+    output = torch.ops.kvcache.update_and_attend(
+        query, key, value, position_ids[0].reshape(-1, 1), cache_layer_id, scaling, query.dtype
+    )
+    return output.transpose(1, 2).contiguous(), None
+
+
+def _validate_executorch_off_graph_cache_mask(mask, kv_length):
+    """Only an absent mask or an all-valid 2-D mask can be discarded from caller inputs."""
+    if mask is None:
+        return
+    if isinstance(mask, torch.Tensor) and mask.shape == (1, kv_length) and bool((mask == 1).all()):
+        return
+    raise ValueError(
+        "executorch_off_graph_cache does not support padding or custom attention masks. "
+        "Pass no attention_mask or an all-ones 2-D mask; use export_for_generation for HF-generated masks."
+    )
+
+
+def _get_executorch_off_graph_cache_tokens(inputs):
+    if "inputs" in inputs:
+        raise ValueError("executorch_off_graph_cache requires input_ids or inputs_embeds, not the inputs alias.")
+    tokens = inputs.get("input_ids")
+    rank = 2
+    if tokens is None:
+        tokens = inputs.get("inputs_embeds")
+        rank = 3
+    if not isinstance(tokens, torch.Tensor) or tokens.ndim != rank or tokens.shape[0] != 1:
+        raise ValueError("executorch_off_graph_cache requires a single input sequence via input_ids or inputs_embeds.")
+    return tokens
+
+
+def _prepare_executorch_off_graph_cache_positions(positions, tokens, past_length=0):
+    expected_positions = (torch.arange(tokens.shape[1], device=tokens.device) + past_length).unsqueeze(0)
+    if positions is None:
+        return expected_positions
+    if (
+        not isinstance(positions, torch.Tensor)
+        or positions.dtype not in (torch.int32, torch.int64)
+        or positions.shape != expected_positions.shape
+        or not torch.equal(positions, expected_positions)
+    ):
+        raise ValueError(
+            "executorch_off_graph_cache requires contiguous position_ids matching the captured cache length."
+        )
+    return positions
+
+
+def _prepare_executorch_off_graph_cache_inputs(inputs):
+    """Remove the captured HF cache before tracing, keeping positions as explicit tensor inputs."""
+    inputs = dict(inputs)
+    cache = inputs.pop("past_key_values", None)
+    if cache is not None and type(cache) not in (DynamicCache, StaticCache):
+        raise ValueError("executorch_off_graph_cache export requires an ordinary DynamicCache or StaticCache capture.")
+    tokens = _get_executorch_off_graph_cache_tokens(inputs)
+    past_length = int(cache.get_seq_length()) if cache is not None else 0
+    inputs["position_ids"] = _prepare_executorch_off_graph_cache_positions(
+        inputs.get("position_ids"), tokens, past_length
+    )
+    _validate_executorch_off_graph_cache_mask(inputs.pop("attention_mask", None), past_length + tokens.shape[1])
+    if inputs.get("output_attentions"):
+        raise ValueError("executorch_off_graph_cache does not return attention weights.")
+    inputs["use_cache"] = False
+    return inputs
+
+
+@contextlib.contextmanager
+def _executorch_off_graph_cache_export(model, sample_inputs):
+    """Install off-graph attention only for tracing/lowering; generation capture stays unchanged."""
+    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+    from .utils import patch_attribute
+
+    _validate_executorch_off_graph_cache_model(model)
+    inputs = _prepare_executorch_off_graph_cache_inputs(sample_inputs)
+    with _EXECUTORCH_OFF_GRAPH_CACHE_EXPORT_LOCK, contextlib.ExitStack() as stack:
+        stack.enter_context(
+            patch_attribute(
+                ALL_ATTENTION_FUNCTIONS,
+                "_global_mapping",
+                lambda original: {
+                    **original,
+                    _EXECUTORCH_OFF_GRAPH_CACHE_ATTENTION_NAME: _executorch_off_graph_cache_attention_forward,
+                },
+            )
+        )
+        configs = {id(m.config): m.config for m in model.modules() if hasattr(m, "config")}
+        for subconfig in configs.values():
+            stack.enter_context(
+                patch_attribute(
+                    subconfig, "_attn_implementation", lambda original: _EXECUTORCH_OFF_GRAPH_CACHE_ATTENTION_NAME
+                )
+            )
+        yield inputs
+
+
+def _get_executorch_off_graph_cache_geometry(exported_program, model_config):
+    """Combine graph cache slots with model-config window policies, never allocation limits."""
+    from executorch.extension.llm.export.model_metadata import write_cache_geometry
+
+    geometry = {}
+    for node in exported_program.graph.nodes:
+        if node.target != torch.ops.kvcache.update_and_attend.default:
+            continue
+        key = node.args[1].meta["val"]
+        layer_id = node.args[4]
+        shape = (int(key.shape[1]), int(key.shape[-1]))
+        if layer_id in geometry and geometry[layer_id] != shape:
+            raise ValueError("executorch_off_graph_cache requires matching KV geometry for a shared cache layer.")
+        geometry[layer_id] = shape
+    if not geometry or sorted(geometry) != list(range(len(geometry))):
+        raise ValueError("executorch_off_graph_cache requires contiguous cache layer IDs starting at zero.")
+    layer_types, layer_kwargs = get_layer_types_and_kwargs(model_config.get_text_config(decoder=True))
+    if len(layer_types) != len(geometry):
+        raise ValueError("executorch_off_graph_cache requires matching model and graph cache layer counts.")
+    windows = []
+    for layer_type in layer_types:
+        if layer_type == "full_attention":
+            windows.append(0)
+        elif layer_type == "sliding_attention":
+            window = layer_kwargs["sliding_window"]
+            if not isinstance(window, int) or window <= 0:
+                raise ValueError("executorch_off_graph_cache requires a positive integer sliding_window.")
+            windows.append(window)
+        else:
+            raise ValueError("executorch_off_graph_cache geometry supports only full or sliding attention layers.")
+    return write_cache_geometry(
+        [geometry[i][0] for i in range(len(geometry))],
+        [geometry[i][1] for i in range(len(geometry))],
+        windows,
+    )
 
 
 def _get_transform_passes(backend: str):
@@ -216,7 +579,7 @@ def _get_backend_config(config):
 
 
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
-# Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
+# Each _prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
 # and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
 # - Move the model to the target device.
 # - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
@@ -236,7 +599,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def _prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -244,7 +607,6 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     create in-``forward`` tensors (``arange``/``zeros``/sinusoids) without ``device=``, which
     default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
     ``prepare_for_export`` then casts the inputs to CPU during the trace."""
-
     model.requires_grad_(False)
     model = model.to(device="cpu")
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
@@ -254,7 +616,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def _prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -273,7 +635,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def _prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
     for value in sample_inputs.values():
         caches = [value]
@@ -297,9 +659,9 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
 
 _BACKEND_PREPARE = {
-    "xnnpack": prepare_for_xnnpack,
-    "cuda": prepare_for_cuda,
-    "mlx": prepare_for_mlx,
+    "xnnpack": _prepare_for_xnnpack,
+    "cuda": _prepare_for_cuda,
+    "mlx": _prepare_for_mlx,
 }
 
 

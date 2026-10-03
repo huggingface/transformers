@@ -164,6 +164,17 @@ class ExecutorchConfig(DynamoConfig):
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
             - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
+        cache_implementation (`str`, *optional*):
+            Cache implementation in the exported program. `None` preserves the HF cache export
+            behavior. `"executorch_off_graph_cache"` replaces it before tracing with ExecuTorch's
+            off-graph cache (initially supported only with `backend="mlx"`). This does not change
+            `GenerationConfig.cache_implementation`, which controls the HF cache used during generation
+            capture. Off-graph cache capacity and allocation are configured by the runtime caller.
+        constant_methods (`dict[str, Any]`, *optional*):
+            Mapping from method names to constant values, passed to ExecuTorch lowering. Each entry
+            becomes a zero-argument method in the exported program. Values must be supported by
+            ExecuTorch (for example, scalars or tensors) and consistent with the exported graph.
+            Off-graph cache geometry is added automatically; overlapping names raise an error.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
@@ -184,6 +195,12 @@ class ExecutorchConfig(DynamoConfig):
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True
+    cache_implementation: str | None = None
+    constant_methods: dict[str, Any] | None = None
+
+    def __post_init__(self):
+        if self.cache_implementation not in (None, "executorch_off_graph_cache"):
+            raise ValueError("ExecutorchConfig.cache_implementation must be None or 'executorch_off_graph_cache'.")
 
 
 @dataclass
