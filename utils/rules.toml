@@ -792,7 +792,7 @@ default_enabled = true
 # upstream -- TRF038 should skip a source file that defines no classes -- so this is a placeholder, not a
 # permanent exemption. The other tokenizer findings 0.1.5 surfaced (bert_legacy, convbert, dpr, fnet, qwen3_5)
 # got real test files instead, and `roberta` was fixed by deleting its dead `tokenization_roberta_old.py`.
-allowlist_models = ["bart", "bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "granite_speech5", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "mobilebert", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "squeezebert", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip", "glm5_next"]
+allowlist_models = ["bart", "bros", "cohere_asr", "dots3_note", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "granite_speech5", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "mobilebert", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "squeezebert", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip", "glm5_next"]
 
 [rules.TRF038.explanation]
 what_it_does = "Checks that every modeling_*.py, processing_*.py, image_processing_*.py, video_processing_*.py, feature_extraction_*.py and tokenization_*.py file has a matching tests/models/<model>/test_*.py (modeling_acme.py -> tests/models/acme/test_modeling_acme.py). Exempt: configuration_*.py, covered by ConfigTester in the companion test_modeling_*.py, and tokenization_utils*.py, a helper covered through its tokenizer; tokenization_<name>_fast.py maps to its slow counterpart's test file. A modular_*.py can define several families at once, so its classes are routed by name suffix -- XxxModel/XxxPreTrainedModel/XxxFor<Task> modeling, XxxImageProcessor(Fast) image processing, XxxProcessor processing, XxxVideoProcessor video processing, XxxFeatureExtractor feature extraction, XxxTokenizer(Fast) tokenization, XxxConfig skipped -- and one violation is reported per missing test file. `# trf-ignore: TRF038` is not supported; use `allowlist_models` so an exemption is visible in review."
@@ -1047,8 +1047,8 @@ default_enabled = true
 # No `cutoff_date`: 10 findings over 9 models, in two shapes that need a case-by-case call with the
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
-# axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
+# axk2, deepseek_v32, diffusion_gemma, dots3_note, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "dots3_note", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."
