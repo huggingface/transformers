@@ -1059,7 +1059,7 @@ class GroundingDinoEncoderLayer(nn.Module):
             )
         if text_position_ids is not None:
             text_position_embedding = encode_sinusoidal_position_embedding(
-                text_position_ids[..., None], num_pos_feats=self.d_model
+                text_position_ids[..., None].to(text_features.dtype), num_pos_feats=self.d_model
             )
 
         return text_position_embedding
