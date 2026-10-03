@@ -47,17 +47,23 @@ DEFAULT_SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 class ShieldGemma2ProcessorKwargs(Gemma3ProcessorKwargs, total=False):
     policies: Sequence[str] | None
     custom_policies: Mapping[str, str] | None
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "images_kwargs": {
-            "do_pan_and_scan": False,
-        },
-    }
 
 
 class ShieldGemma2Processor(Gemma3Processor):
+    valid_processor_kwargs = ShieldGemma2ProcessorKwargs
+
+    # TODO: This is a BC breaking bugfix.
+    # Because this processor incorrectly inherits from Gemma3Processor and didn't assign
+    # valid_processor_kwargs it applied defaults from Gemma3ProcessorKwargs._defaults.
+    # With the new refactoring those defaults are now empty and the class attribute defaults
+    # below are applied instead. # Q: Do we want to fix it or keep BC compat?
+    text_kwargs = {
+        "padding": True,
+    }
+    images_kwargs = {
+        "do_pan_and_scan": False,
+    }
+
     def __init__(
         self, image_processor, tokenizer, chat_template=None, image_seq_length=256, policy_definitions=None, **kwargs
     ):

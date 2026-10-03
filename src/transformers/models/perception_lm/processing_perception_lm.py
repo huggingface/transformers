@@ -20,12 +20,7 @@ from ...utils import auto_docstring
 
 
 class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
@@ -93,8 +88,7 @@ class PerceptionLMProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = PerceptionLMProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             tile_size = images_kwargs.get("tile_size", None) or self.image_processor.tile_size
             vision_input_type = images_kwargs.get("vision_input_type", None) or self.image_processor.vision_input_type
 

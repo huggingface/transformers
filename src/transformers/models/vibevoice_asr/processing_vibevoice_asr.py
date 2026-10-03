@@ -28,21 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-            "return_tensors": "pt",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-            "pad_to_multiple_of": 3200,  # tokenizer hop length
-        },
-        "common_kwargs": {
-            "return_attention_mask": True,
-        },
-    }
+    pass
 
 
 class VibeVoiceAsrProcessor(ProcessorMixin):
@@ -71,6 +57,19 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = VibeVoiceAsrProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+        "return_attention_mask": True,
+    }
+    audio_kwargs = {
+        "sampling_rate": 24000,
+        "pad_to_multiple_of": 3200,  # tokenizer hop length
+        "return_attention_mask": True,
+    }
     feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"
 
@@ -109,7 +108,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(VibeVoiceAsrProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":

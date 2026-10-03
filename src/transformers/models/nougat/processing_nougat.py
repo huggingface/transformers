@@ -20,22 +20,16 @@ from ...utils import auto_docstring
 
 
 class NougatProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "is_split_into_words": False,
-            "verbose": True,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class NougatProcessor(ProcessorMixin):
     valid_processor_kwargs = NougatProcessorKwargs
+
+    images_kwargs = {
+        "data_format": "channels_first",
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)

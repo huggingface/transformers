@@ -56,22 +56,6 @@ if is_torchvision_available():
 
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: OmDetTurboTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 77,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-            "task": None,
-        },
-    }
 
 
 def clip_boxes(box, box_size: tuple[int, int]):
@@ -190,6 +174,14 @@ def _post_process_boxes_for_image(
 class OmDetTurboProcessor(ProcessorMixin):
     valid_processor_kwargs = OmDetTurboProcessorKwargs
 
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 77,
+        "return_token_type_ids": False,
+        "task": None,
+    }
+
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
@@ -204,7 +196,6 @@ class OmDetTurboProcessor(ProcessorMixin):
             raise ValueError("You have to specify both `images` and `text`")
 
         output_kwargs = self._merge_kwargs(
-            OmDetTurboProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -44,15 +44,18 @@ class JanusTextKwargs(TextKwargs, total=False):
 
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: JanusTextKwargs
-    _defaults = {
-        "text_kwargs": {"padding": False, "padding_side": "left", "generation_mode": "text"},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
 
 
 @auto_docstring
 class JanusProcessor(ProcessorMixin):
     valid_processor_kwargs = JanusProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+        "generation_mode": "text",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {"return_tensors": "pt"}
 
     def __init__(
         self,
@@ -95,9 +98,7 @@ class JanusProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        output_kwargs = self._merge_kwargs(
-            JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
         generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
         if self.use_default_system_prompt and generation_mode == "text":

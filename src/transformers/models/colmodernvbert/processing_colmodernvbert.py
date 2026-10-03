@@ -38,23 +38,22 @@ if TYPE_CHECKING:
 
 
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(ProcessorMixin):
     valid_processor_kwargs = ColModernVBertProcessorKwargs
+    images_kwargs = {
+        "return_row_col_info": True,
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -126,14 +125,19 @@ class ColModernVBertProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop(
+            "return_text_replacement_offsets", output_kwargs["return_text_replacement_offsets"]
+        )
+        # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop(
+            "return_mm_token_type_ids", output_kwargs["return_mm_token_type_ids"]
+        )
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         image_inputs = text_inputs = {}
@@ -298,8 +302,7 @@ class ColModernVBertProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = ColModernVBertProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -357,7 +360,6 @@ class ColModernVBertProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -422,7 +424,6 @@ class ColModernVBertProcessor(ProcessorMixin):
               `None`).
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

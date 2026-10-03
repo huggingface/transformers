@@ -31,25 +31,26 @@ logger = logging.get_logger(__name__)
 
 
 class CohereAsrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 @requires(backends=("torch",))
 class CohereAsrProcessor(ProcessorMixin):
     valid_processor_kwargs = CohereAsrProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": "longest",
+        "return_attention_mask": True,
+        "return_tensors": "pt",
+    }
     skip_tensor_conversion = ["audio_chunk_index"]
 
     def __init__(self, feature_extractor, tokenizer):

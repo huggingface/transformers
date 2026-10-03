@@ -215,12 +215,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+    pass
 
 
 class PaddleOCRVLProcessor(ProcessorMixin):
@@ -239,6 +234,8 @@ class PaddleOCRVLProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
     valid_processor_kwargs = PaddleOCRVLProcessorKwargs
+
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token

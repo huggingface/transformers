@@ -33,22 +33,20 @@ logger = logging.get_logger(__name__)
 
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 class ColQwen2Processor(ColPaliProcessor):
     valid_processor_kwargs = ColQwen2ProcessorKwargs
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -83,7 +81,6 @@ class ColQwen2Processor(ColPaliProcessor):
             raise ValueError("Only one of text or images can be processed at a time")
 
         output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -139,8 +136,7 @@ class ColQwen2Processor(ColPaliProcessor):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = ColQwen2ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [

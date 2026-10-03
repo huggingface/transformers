@@ -32,18 +32,7 @@ if is_torch_available():
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 IMAGE_TOKEN = "<image>"
@@ -53,6 +42,15 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 @auto_docstring
 class ColPaliProcessor(ProcessorMixin):
     valid_processor_kwargs = ColPaliProcessorKwargs
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -115,7 +113,6 @@ class ColPaliProcessor(ProcessorMixin):
 
         kwargs["return_token_type_ids"] = True
         output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

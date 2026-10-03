@@ -38,17 +38,8 @@ logger = logging.get_logger(__name__)
 
 class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "return_attention_mask": True,
-            "padding": "max_length",
-        },
         "common_kwargs": {
-            "return_tensors": "pt",
-            "padding_side": "left",
+            "padding_side": "left",  # Don't move to "text_kwargs" as it will no longer override the tokenizer defaults
         },
     }
 
@@ -57,6 +48,17 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class MusicFlamingoProcessor(ProcessorMixin):
     valid_processor_kwargs = MusicFlamingoProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "return_attention_mask": True,
+        "padding": "max_length",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

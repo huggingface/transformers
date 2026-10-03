@@ -40,22 +40,20 @@ class Emu3TextKwargs(TextKwargs, total=False):
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
     images_kwargs: Emu3ImageProcessorKwargs
-    _defaults = {
-        "text_kwargs": {
-            "return_for_image_generation": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "ratio": "1:1",
-            "image_area": 518400,
-        },
-    }
 
 
 @auto_docstring
 @requires(backends=("vision",))
 class Emu3Processor(ProcessorMixin):
     valid_processor_kwargs = Emu3ProcessorKwargs
+
+    text_kwargs = {
+        "return_for_image_generation": False,
+    }
+    images_kwargs = {
+        "ratio": "1:1",
+        "image_area": 518400,
+    }
 
     def __init__(
         self,
@@ -82,7 +80,6 @@ class Emu3Processor(ProcessorMixin):
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            Emu3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

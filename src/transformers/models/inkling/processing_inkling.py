@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 
 class InklingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring

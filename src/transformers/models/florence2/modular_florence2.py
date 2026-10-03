@@ -157,19 +157,16 @@ class Florence2Config(PreTrainedConfig):
 
 
 class Florence2ProcessorKwargs(LlavaProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
     valid_processor_kwargs = Florence2ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
 
     def __init__(
         self,

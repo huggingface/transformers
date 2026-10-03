@@ -698,16 +698,14 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 
 class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 class VideoLlama3Processor(Qwen3VLProcessor):
+    text_kwargs = AttributeError()
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token

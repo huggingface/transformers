@@ -65,27 +65,20 @@ class Kosmos2TextKwargs(TextKwargs, total=False):
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Kosmos2TextKwargs
     images_kwargs: Kosmos2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "verbose": True,
-            "add_eos_token": False,
-        },
-        "images_kwargs": {
-            "num_image_tokens": 64,
-        },
-    }
 
 
 @auto_docstring
 class Kosmos2Processor(ProcessorMixin):
     valid_processor_kwargs = Kosmos2ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "return_token_type_ids": False,
+        "add_eos_token": False,
+    }
+    images_kwargs = {
+        "num_image_tokens": 64,
+    }
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         r"""
@@ -147,7 +140,6 @@ class Kosmos2Processor(ProcessorMixin):
             raise ValueError("You have to specify either images or text.")
 
         output_kwargs = self._merge_kwargs(
-            Kosmos2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -158,7 +150,7 @@ class Kosmos2Processor(ProcessorMixin):
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
 
         add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
-        padding = output_kwargs["text_kwargs"]["padding"]
+        padding = output_kwargs["text_kwargs"].get("padding", False)
         return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
 
         encoding = BatchFeature()

@@ -81,28 +81,6 @@ class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
 
 class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
     videos_kwargs: Qwen3OmniMoeVideosKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "padding_side": "left",
-        },
-        "videos_kwargs": {
-            "seconds_per_chunk": 2.0,
-            "position_id_per_seconds": 13.0,
-            "use_audio_in_video": False,
-            "size": {
-                "shortest_edge": 128 * 32 * 32,
-                "longest_edge": 768 * 32 * 32,
-            },
-        },
-        "audio_kwargs": {
-            "n_window": 50,  # should match model config
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "return_attention_mask": True,
-        },
-    }
 
 
 def _get_feat_extract_output_lengths(input_lengths, n_window=50):
@@ -118,6 +96,25 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
 @auto_docstring
 class Qwen3OmniMoeProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3OmniMoeProcessorKwargs
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    videos_kwargs = {
+        "seconds_per_chunk": 2.0,
+        "position_id_per_seconds": 13.0,
+        "use_audio_in_video": False,
+        "size": {
+            "shortest_edge": 128 * 32 * 32,
+            "longest_edge": 768 * 32 * 32,
+        },
+    }
+    audio_kwargs = {
+        "n_window": 50,  # should match model config
+        "sampling_rate": 16000,
+        "padding": True,
+        "truncation": False,
+        "return_attention_mask": True,
+    }
 
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
@@ -144,7 +141,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             raise ValueError("You need to specify either a `text` input to process.")
 
         output_kwargs = self._merge_kwargs(
-            Qwen3OmniMoeProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

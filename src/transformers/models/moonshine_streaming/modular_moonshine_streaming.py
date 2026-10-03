@@ -47,16 +47,16 @@ logger = logging.get_logger(__name__)
 
 
 class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "pad_to_multiple_of": 80,
-            "padding": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+    pass
+
+
+class MoonshineStreamingProcessor(Wav2Vec2Processor):
+    text_kwargs = {"return_tensors": "pt"}
+    audio_kwargs = {
+        "pad_to_multiple_of": 80,
+        "padding": True,
+        "return_tensors": "pt",
     }
-
-
-class MoonshineStreamingProcessor(Wav2Vec2Processor): ...
 
 
 @auto_docstring(

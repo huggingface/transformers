@@ -34,19 +34,6 @@ class UdopTextKwargs(TextKwargs, total=False):
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: UdopTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "truncation": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
 
 
 @auto_docstring
@@ -66,6 +53,12 @@ class UdopProcessor(ProcessorMixin):
     prepare labels for language modeling tasks.
     """
 
+    valid_processor_kwargs = UdopProcessorKwargs
+
+    text_kwargs = {
+        "truncation": False,
+    }
+
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
@@ -78,7 +71,6 @@ class UdopProcessor(ProcessorMixin):
     ) -> BatchFeature:
         # verify input
         output_kwargs = self._merge_kwargs(
-            UdopProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

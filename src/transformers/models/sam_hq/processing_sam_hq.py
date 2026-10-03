@@ -38,18 +38,22 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
         Ground truth segmentation maps to process alongside the input images. These maps are used for training
         or evaluation purposes and are resized and normalized to match the processed image dimensions.
     input_points (`NestedList`, *optional*):
+        Deprecated, use [`SamHQProcessorKwargs.input_points`] instead.
         Input points for prompt-based segmentation. Should be a nested list with structure
         `[image_level, object_level, point_level, [x, y]]` where each point is specified as `[x, y]` coordinates
         in the original image space. Points are normalized to the target image size before being passed to the model.
     input_labels (`NestedList`, *optional*):
+        Deprecated, use [`SamHQProcessorKwargs.input_labels`] instead.
         Labels for the input points, indicating whether each point is a foreground (1) or background (0) point.
         Should be a nested list with structure `[image_level, object_level, point_level]`. Must have the same
         structure as `input_points` (excluding the coordinate dimension).
     input_boxes (`NestedList`, *optional*):
+        Deprecated, use [`SamHQProcessorKwargs.input_boxes`] instead.
         Bounding boxes for prompt-based segmentation. Should be a nested list with structure
         `[image_level, box_level, [x1, y1, x2, y2]]` where each box is specified as `[x1, y1, x2, y2]` coordinates
         in the original image space. Boxes are normalized to the target image size before being passed to the model.
     point_pad_value (`int`, *optional*, defaults to `None`):
+        Deprecated, use [`SamHQProcessorKwargs.point_pad_value`] instead.
         The value used for padding input points when batching sequences of different lengths. This value marks
         padded positions and is preserved during coordinate normalization to distinguish real points from padding.
         If `None`, the default pad value from the processor configuration is used.
@@ -71,16 +75,38 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
 
 
 class SamHQProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    input_points (`NestedList`, *optional*):
+        Input points for prompt-based segmentation. Should be a nested list with structure
+        `[image_level, object_level, point_level, [x, y]]` where each point is specified as `[x, y]` coordinates
+        in the original image space. Points are normalized to the target image size before being passed to the model.
+    input_labels (`NestedList`, *optional*):
+        Labels for the input points, indicating whether each point is a foreground (1) or background (0) point.
+        Should be a nested list with structure `[image_level, object_level, point_level]`. Must have the same
+        structure as `input_points` (excluding the coordinate dimension).
+    input_boxes (`NestedList`, *optional*):
+        Bounding boxes for prompt-based segmentation. Should be a nested list with structure
+        `[image_level, box_level, [x1, y1, x2, y2]]` where each box is specified as `[x1, y1, x2, y2]` coordinates
+        in the original image space. Boxes are normalized to the target image size before being passed to the model.
+    point_pad_value (`int`, *optional*, defaults to `None`):
+        The value used for padding input points when batching sequences of different lengths. This value marks
+        padded positions and is preserved during coordinate normalization to distinguish real points from padding.
+    """
+
     images_kwargs: SamHQImagesKwargs
-    _defaults = {
-        "images_kwargs": {
-            "point_pad_value": None,
-        }
-    }
+
+    input_points: "NestedList | torch.Tensor | None"
+    input_labels: "NestedList | int | torch.Tensor | None"
+    input_boxes: "NestedList | torch.Tensor | None"
+    point_pad_value: int | None
 
 
 @auto_docstring
 class SamHQProcessor(ProcessorMixin):
+    valid_processor_kwargs = SamHQProcessorKwargs
+
+    point_pad_value = None
+
     def __init__(self, image_processor):
         super().__init__(image_processor)
         # Ensure image_processor is properly initialized
@@ -97,15 +123,17 @@ class SamHQProcessor(ProcessorMixin):
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            SamHQProcessorKwargs,
             tokenizer_init_kwargs={},
             **kwargs,
         )
 
-        input_points = output_kwargs["images_kwargs"].pop("input_points", None)
-        input_labels = output_kwargs["images_kwargs"].pop("input_labels", None)
-        input_boxes = output_kwargs["images_kwargs"].pop("input_boxes", None)
-        point_pad_value = output_kwargs["images_kwargs"].pop("point_pad_value", None)
+        # "images_kwargs" has priority for backwards compatibility
+        input_points = output_kwargs["images_kwargs"].pop("input_points", output_kwargs.get("input_points", None))
+        input_labels = output_kwargs["images_kwargs"].pop("input_labels", output_kwargs.get("input_labels", None))
+        input_boxes = output_kwargs["images_kwargs"].pop("input_boxes", output_kwargs.get("input_boxes", None))
+        point_pad_value = output_kwargs["images_kwargs"].pop(
+            "point_pad_value", output_kwargs.get("point_pad_value", None)
+        )
 
         encoding_image_processor = self.image_processor(
             images,

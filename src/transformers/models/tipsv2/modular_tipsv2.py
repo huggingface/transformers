@@ -145,18 +145,18 @@ class Tipsv2ImageProcessor(TorchvisionBackend):
 
 
 class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 64,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Tipsv2Processor(ProcessorMixin):
     valid_processor_kwargs = Tipsv2ProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 64,
+    }
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)

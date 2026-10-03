@@ -20,18 +20,17 @@ from ...utils import auto_docstring
 
 
 class AlignProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 64,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class AlignProcessor(ProcessorMixin):
     valid_processor_kwargs = AlignProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "max_length": 64,
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)

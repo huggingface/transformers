@@ -41,21 +41,19 @@ class ChameleonTextKwargs(TextKwargs, total=False):
 
 class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: ChameleonTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_for_text_completion": False,
-            "return_mm_token_type_ids": False,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
 
 
 @auto_docstring
 class ChameleonProcessor(ProcessorMixin):
     valid_processor_kwargs = ChameleonProcessorKwargs
+
+    text_kwargs = {
+        "return_for_text_completion": False,
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         r"""

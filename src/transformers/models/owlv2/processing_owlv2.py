@@ -48,19 +48,19 @@ class Owlv2ImagesKwargs(ImagesKwargs, total=False):
 
 class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Owlv2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-        },
-        "common_kwargs": {
-            "return_tensors": "np",
-        },
-    }
 
 
 @auto_docstring
 class Owlv2Processor(ProcessorMixin):
     valid_processor_kwargs = Owlv2ProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "return_tensors": "np",
+    }
+    images_kwargs = {
+        "return_tensors": "np",
+    }
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
@@ -84,7 +84,6 @@ class Owlv2Processor(ProcessorMixin):
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            Owlv2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

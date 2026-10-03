@@ -1083,17 +1083,6 @@ class GlmImageImagesKwargs(ImagesKwargs, total=False):
 class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
     images_kwargs: GlmImageImagesKwargs
 
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "target_h": 1152,
-            "target_w": 768,
-        },
-    }
-
 
 @requires(backends=("torch",))
 class GlmImageProcessor(ProcessorMixin):
@@ -1110,6 +1099,11 @@ class GlmImageProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = GlmImageProcessorKwargs
+
+    images_kwargs = {
+        "target_h": 1152,
+        "target_w": 768,
+    }
     model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
@@ -1155,7 +1149,6 @@ class GlmImageProcessor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            GlmImageProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

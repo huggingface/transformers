@@ -573,6 +573,10 @@ Parameters:
             text (`Union[str, list[str], list[list[str]]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If you pass a pretokenized input, set `is_split_into_words=True` to avoid ambiguity with batched inputs.
+            return_mm_token_type_ids (`bool`, *kwargs*):
+                Whether to return multimodal token type ids indicating multimodal placeholder token positions.
+            return_text_replacement_offsets (`bool`, *kwargs*):
+                Whether to return character offsets for each multimodal placeholder and its replacement.
             custom_processing_mode (`str`, *kwargs*, *optional*, defaults to `"standard"`):
                 Custom processing mode for advanced text/image processing. Can be 'standard', 'enhanced', or 'experimental'.
             enable_advanced_features (`bool`, *kwargs*, *optional*, defaults to `False`):

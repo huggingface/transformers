@@ -20,11 +20,13 @@ from ...utils import auto_docstring
 
 
 class VisionTextDualEncoderProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring
 class VisionTextDualEncoderProcessor(ProcessorMixin):
+    valid_processor_kwargs = VisionTextDualEncoderProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

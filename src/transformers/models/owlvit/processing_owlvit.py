@@ -48,18 +48,20 @@ class OwlViTImagesKwargs(ImagesKwargs, total=False):
 
 class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: OwlViTImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
 
 
 @auto_docstring
 class OwlViTProcessor(ProcessorMixin):
+    valid_processor_kwargs = OwlViTProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
@@ -81,7 +83,6 @@ class OwlViTProcessor(ProcessorMixin):
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            OwlViTProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

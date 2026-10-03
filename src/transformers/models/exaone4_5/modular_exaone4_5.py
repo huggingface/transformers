@@ -418,16 +418,15 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
 
 
 class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 class Exaone4_5_Processor(Qwen2VLProcessor):
+    valid_processor_kwargs = Exaone4_5_ProcessorKwargs
+
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
+
     @property
     def model_input_names(self):
         return super().model_input_names
