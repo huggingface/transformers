@@ -44,14 +44,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
-        name: Build and push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        name: Build, scan and push
+        uses: huggingface/wiz-image-action/build-push@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
         with:
+          image: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
           context: ./docker/transformers-all-latest-gpu
           build-args: |
             REF=main
-          push: true
-          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          enforcement: audit
 
       - name: Post to Slack
         if: always()
@@ -206,14 +208,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
-        name: Build and push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        name: Build, scan and push
+        uses: huggingface/wiz-image-action/build-push@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
         with:
+          image: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
             REF=main
-          push: true
-          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          enforcement: audit
 
       - name: Post to Slack
         if: always()

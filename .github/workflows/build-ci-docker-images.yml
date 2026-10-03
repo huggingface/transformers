@@ -29,6 +29,9 @@ jobs:
 
     if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
 
+    # `enforcement: audit` on the Wiz scan below, and on the two GPU images in
+    # build-docker-images.yml: these carry the CVEs of a base we do not choose, and the
+    # clusters only require that a scan exists, not that it passed.
     strategy:
       matrix:
         file: ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models", "examples-torch"]
@@ -62,15 +65,17 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
-        name: Build ${{ matrix.file }}.dockerfile
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        name: Build, scan and push ${{ matrix.file }}.dockerfile
+        uses: huggingface/wiz-image-action/build-push@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
         with:
+          image: ${{ env.TAG }}
           context: ./docker
           build-args: |
             REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
-          push: ${{ contains(github.event.head_commit.message, 'ci-image]') ||  github.event_name == 'schedule' }}
-          tags: ${{ env.TAG }}
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          enforcement: audit
 
   notify:
     permissions: {}
