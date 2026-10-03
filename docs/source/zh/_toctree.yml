@@ -33,6 +33,8 @@
     sections:
     - local: tasks/asr
       title: 自动语音识别
+    - local: tasks/audio_classification
+      title: 音频分类
     - local: tasks/sequence_classification
       title: 文本分类
     - local: tasks/token_classification
