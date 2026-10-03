@@ -15,10 +15,10 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -38,7 +38,28 @@ class FuyuConfig(PreTrainedConfig):
     ```"""
 
     model_type = "fuyu"
-    sub_configs = {"text_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="persimmon",
+            init_kwargs={
+                "vocab_size": 262144,
+                "max_position_embeddings": 16384,
+                "hidden_size": 4096,
+                "intermediate_size": 16384,
+                "num_hidden_layers": 36,
+                "num_attention_heads": 64,
+                "hidden_act": "relu2",
+                "initializer_range": 0.02,
+                "layer_norm_eps": 1e-5,
+                "use_cache": True,
+                "qk_layernorm": True,
+                "hidden_dropout": 0.0,
+                "attention_dropout": 0.0,
+                "eos_token_id": 2,
+            },
+        ),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 25000.0
 
@@ -67,32 +88,6 @@ class FuyuConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            text_config = {
-                "vocab_size": self.vocab_size,
-                "max_position_embeddings": self.max_position_embeddings,
-                "hidden_size": self.hidden_size,
-                "intermediate_size": self.intermediate_size,
-                "num_hidden_layers": self.num_hidden_layers,
-                "num_attention_heads": self.num_attention_heads,
-                "hidden_act": self.hidden_act,
-                "initializer_range": self.initializer_range,
-                "layer_norm_eps": self.layer_norm_eps,
-                "use_cache": self.use_cache,
-                "rope_parameters": self.rope_parameters,
-                "qk_layernorm": self.qk_layernorm,
-                "hidden_dropout": self.hidden_dropout,
-                "attention_dropout": self.attention_dropout,
-                "pad_token_id": self.pad_token_id,
-                "bos_token_id": self.bos_token_id,
-                "eos_token_id": self.eos_token_id,
-            }
-            logger.info("text_config is None. initializing the text model with default values.")
-            self.text_config = CONFIG_MAPPING["persimmon"](**text_config)
-        elif isinstance(self.text_config, dict):
-            text_model_type = self.text_config.get("model_type", "persimmon")
-            self.text_config = CONFIG_MAPPING[text_model_type](**self.text_config)
-
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
         super().__post_init__(**kwargs)
 

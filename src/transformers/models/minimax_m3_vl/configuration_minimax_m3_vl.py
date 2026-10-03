@@ -19,10 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
@@ -188,7 +187,11 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MiniMaxM3VLTextConfig),
+        "vision_config": SubConfigSpec(config_class=MiniMaxM3VLVisionConfig),
+    }
+
     attribute_map = {
         "image_token_id": "image_token_index",
         "video_token_id": "video_token_index",
@@ -202,26 +205,13 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config.pop("model_type", None)
-            self.vision_config = MiniMaxM3VLVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MiniMaxM3VLVisionConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config.pop("model_type", None)
-            self.text_config = MiniMaxM3VLTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = MiniMaxM3VLTextConfig()
-
+        super().__post_init__(**kwargs)
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         # Channel dim after grouping `spatial_merge_size**2` projected patches, consumed by the
         # patch-merge MLP inside `MiniMaxM3VLMultiModalProjector`.
         self.merged_hidden_size = self.text_config.hidden_size * (self.vision_config.spatial_merge_size**2)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["MiniMaxM3VLConfig", "MiniMaxM3VLTextConfig", "MiniMaxM3VLVisionConfig"]

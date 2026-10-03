@@ -2,9 +2,36 @@ import argparse
 import json
 import re
 import string
+from functools import cache
+
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING, model_type_to_module_name
 
 
 MAX_NUM_JOBS_TO_SUGGEST = 16
+
+
+@cache
+def _reverse_backbone_map() -> dict[str, list[str]]:
+    """
+    {backbone_model: {composite_models, ...}}, e.g. `clip` -> {`llava`}, so that a change to `clip`
+    triggers the tests of `llava`. Built once per process: the config imports are the expensive part.
+    """
+    reverse_map = {}
+    for model_type in CONFIG_MAPPING:
+        parent = model_type_to_module_name(model_type)
+        specs = getattr(CONFIG_MAPPING[model_type], "sub_configs_defaults", None) or {}
+        for spec in specs.values():
+            if getattr(spec, "model_type", None):
+                child = model_type_to_module_name(spec.model_type)
+                if child != parent:
+                    reverse_map.setdefault(child, set()).add(parent)
+
+    return {child: list(parents) for child, parents in reverse_map.items()}
+
+
+def get_composite_files(backbone_name: str) -> list[str, ...]:
+    """Composite-model files that depend on `backbone_file` (empty if none)."""
+    return _reverse_backbone_map().get(backbone_name, [])
 
 
 def get_jobs_to_run():
@@ -40,6 +67,8 @@ def get_jobs_to_run():
                 # TODO: for files in `quantizers`, the processed item above may not exist. Try using a fuzzy matching
                 if item in repo_content:
                     jobs_to_run.append(item)
+                if multimodal_parents := get_composite_files(item):
+                    jobs_to_run.extend(multimodal_parents)
                 break
     jobs_to_run = sorted(set(jobs_to_run))
 

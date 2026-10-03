@@ -15,8 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -70,7 +69,13 @@ class DeformableDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deformable_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="resnet50",
+            init_kwargs={"out_features": ["stage4"]},
+        ),
+    }
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -119,24 +124,21 @@ class DeformableDetrConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC
-        timm_default_kwargs = {
-            "num_channels": 3,
-            "features_only": True,
-            "use_pretrained_backbone": False,
-            "out_indices": [2, 3, 4] if self.num_feature_levels > 1 else [4],
-        }
-        if self.dilation:
-            timm_default_kwargs["output_stride"] = 16
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_backbone="resnet50",
-            default_config_type="resnet50",
-            default_config_kwargs={"out_features": ["stage4"]},
-            timm_default_kwargs=timm_default_kwargs,
-            **kwargs,
-        )
-
+        if (
+            self.backbone_config is None
+            and kwargs.pop("use_timm_backbone", True)
+            and not kwargs.get("backbone_kwargs")
+        ):
+            self.backbone_config = {
+                "model_type": "timm_backbone",
+                "backbone": kwargs.pop("backbone", None) or "resnet50",
+                "num_channels": 3,
+                "features_only": True,
+                "use_pretrained_backbone": False,
+                "out_indices": [2, 3, 4] if self.num_feature_levels > 1 else [4],
+            }
+            if self.dilation:
+                self.backbone_config["output_stride"] = 16
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
