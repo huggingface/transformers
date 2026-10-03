@@ -140,7 +140,7 @@ class NllbTokenizer(TokenizersBackend):
             )
         )
 
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:  # empty bytes (b"") from protobuf is falsy; skip if absent
             self._tokenizer.normalizer = normalizers.Sequence(
                 [
                     normalizers.Precompiled(_spm_precompiled_charsmap),
@@ -316,3 +316,4 @@ class NllbTokenizer(TokenizersBackend):
 
 
 __all__ = ["NllbTokenizer"]
+
