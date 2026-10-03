@@ -47,17 +47,11 @@ Released checkpoints, all sharing this architecture:
 The 0.25° releases are four separate training runs rather than one checkpoint. Each repository holds all four: run 1 at
 the root and the rest in `model2`/`model3`/`model4` subfolders, so `from_pretrained(..., subfolder="model3")` selects
 one. Combining them into a multi-model ensemble - loading each in turn and pooling its members - is left to the caller,
-as it is upstream. The examples below use the smaller Mini checkpoint. The 0.25° checkpoints require substantially
-more memory; inference chunking and the optional kernels below reduce temporary allocations. Peak memory depends
-on the checkpoint, dtype, batch size and attention backend.
+as it is upstream. The examples below use the smaller Mini checkpoint.
 
-Graph inference uses PyTorch chunking inspired by
-[Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext).
-`chunk_size_grid_to_mesh` controls the number of encoder edges per chunk and
-`chunk_size_mesh_to_grid` the number of decoder grid points. Their defaults are
-65,536 and 32,768 respectively; set either to `0` to disable that path. Chunking
-applies to inference without gradients, in fp32 and bf16 alike, not to training or autocast. Messages are always
-summed in fp32. Chunked matrix multiplications and aggregation can change floating-point rounding.
+The operations over the whole grid run in chunks of [`WeatherNext2Config.chunk_size`] rows, following
+[Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). At 0.25° and batch 1 that bounds one step at about
+17.5 GB in fp32 and 15.2 GB in bf16, against 55 GB and 28 GB unchunked. `chunk_size=None` turns it off.
 
 ## Getting initial conditions
 
@@ -327,33 +321,21 @@ those weights cannot move. This matches the original implementation, which names
 
 ## Faster inference with a fused kernel
 
-Passing `use_kernels=True` to [`~PreTrainedModel.from_pretrained`] swaps four layers for inference-only versions
-loaded from the Hub via the [`kernels`](https://github.com/huggingface/kernels) library:
-
-- `WeatherNext2AttentionMask` prepares one shared packed mask per forward, storing only active 32-key tiles
-  with one 32-bit mask word per query row. It does not expand the mask over the batch or heads.
-- `WeatherNext2Attention` uses sparse tiled Triton attention with an online softmax, consuming the packed mask
-  without unpacking it, gathering neighbouring keys and values, or storing a full score matrix. Attention stays in
-  fp32 with IEEE multiplication and fixed 64-query / 32-key tiles.
-- `WeatherNext2GridEncoder` and `WeatherNext2ForecastHead` process the grid points in blocks.
-
-Training and execution requiring gradients use the PyTorch path; grid layers also use it under autocast. CPU
-execution uses PyTorch, retaining grid chunking. Enable `use_kernels=True` only with the `kernels` package installed.
-The kernel declares CUDA, ROCm and XPU builds. Make sure the model is on an accelerator when kernelization happens
-(e.g. with `device_map`). `flex_attention` hands the attention layer a `BlockMask` it cannot read, and raises a
-`ValueError` with instructions to use SDPA.
+The mesh transformer's dominant cost is its attention over the banded mesh mask. Passing `use_kernels=True` to
+[`~PreTrainedModel.from_pretrained`] swaps it for a fused Triton kernel loaded from the Hub via the
+[`kernels`](https://github.com/huggingface/kernels) library, which visits only the tiles of the mask that hold a key. It is
+inference-only and runs on CUDA, ROCm and XPU; on CPU, under autograd, or without the kernel installed the model falls back
+to the PyTorch implementation. Make sure the model is on an accelerator when kernelization happens (e.g. with
+`device_map`), and keep the default `sdpa` attention: with `flex_attention` the layer receives a `BlockMask`, which
+the kernel cannot read, and it raises a `ValueError`.
 
 ```python
 from transformers import WeatherNext2ForWeatherForecasting
 
 model = WeatherNext2ForWeatherForecasting.from_pretrained(
-    "kashif/weathernext2", device_map="auto", use_kernels=True, attn_implementation="sdpa"
+    "kashif/weathernext2", device_map="auto", use_kernels=True
 )
 ```
-
-The kernels preserve the model's operations, but fused attention and chunking change floating-point reduction
-order. IEEE multiplication does not guarantee bitwise parity with PyTorch or JAX, and can be slower than SDPA.
-The original geometry mask remains a model buffer; packing reduces the attention representation, not that buffer.
 
 ## WeatherNext2Config
 

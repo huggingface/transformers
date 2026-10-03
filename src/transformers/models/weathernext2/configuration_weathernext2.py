@@ -147,10 +147,10 @@ class WeatherNext2Config(PreTrainedConfig):
         Epsilon of every layer normalization.
     attention_dropout (`float`, *optional*, defaults to 0.0):
         Dropout ratio of the attention probabilities.
-    chunk_size_grid_to_mesh (`int`, *optional*, defaults to 65536):
-        Number of edges per grid-to-mesh inference chunk. Set to 0 to disable chunking.
-    chunk_size_mesh_to_grid (`int`, *optional*, defaults to 32768):
-        Number of grid points per mesh-to-grid inference chunk. Set to 0 to disable chunking.
+    chunk_size (`int`, *optional*, defaults to 32768):
+        Number of rows per chunk for the memory-heavy operations over the whole grid: grid points for the
+        grid encoder, the head and the mesh-to-grid graph network, and edges for the grid-to-mesh one. `None`
+        disables chunking.
 
     ```python
     >>> from transformers import WeatherNext2Config, WeatherNext2Model
@@ -207,8 +207,7 @@ class WeatherNext2Config(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
-    chunk_size_grid_to_mesh: int = 65536
-    chunk_size_mesh_to_grid: int = 32768
+    chunk_size: int | None = 32768
 
     def __post_init__(self, **kwargs):
         if self.sigmoid_shifted_outputs is None:
@@ -221,8 +220,8 @@ class WeatherNext2Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.chunk_size_grid_to_mesh < 0 or self.chunk_size_mesh_to_grid < 0:
-            raise ValueError("Graph chunk sizes must be nonnegative; use 0 to disable chunking.")
+        if self.chunk_size is not None and self.chunk_size < 1:
+            raise ValueError(f"`chunk_size` must be positive, or None to disable chunking; got {self.chunk_size}.")
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
