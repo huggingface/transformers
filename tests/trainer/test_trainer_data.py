@@ -311,10 +311,9 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
         torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
-    def test_label_smoothing_multi_label_incompatibility(self):
-        """Test that Trainer warns and disables label smoothing for multi-label classification"""
+    def test_label_smoothing_multi_label_trainer(self):
+        """Test that Trainer supports label smoothing for multi-label classification without warning or disabling"""
 
-        # Mock model config with multi-label classification
         class MockConfig:
             problem_type = "multi_label_classification"
 
@@ -329,7 +328,6 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
 
         model = MockModel()
 
-        # Create training args with label smoothing
         training_args = TrainingArguments(
             output_dir="./test-trainer",
             label_smoothing_factor=0.1,
@@ -337,17 +335,55 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
             num_train_epochs=1,
         )
 
-        # Should warn and disable label smoothing
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             trainer = Trainer(model=model, args=training_args)
 
-            # Check warning was issued
-            self.assertEqual(len(w), 1)
-            self.assertIn("Label smoothing is not compatible with multi-label classification", str(w[0].message))
+            self.assertEqual(len(w), 0)
+            self.assertIsNotNone(trainer.label_smoother)
+            self.assertEqual(trainer.label_smoother.epsilon, 0.1)
 
-            # Check label_smoother was disabled
-            self.assertIsNone(trainer.label_smoother)
+    def test_label_smoothing_multi_label_math(self):
+        """Test mathematical properties and loss values for multi-label label smoothing"""
+        epsilon = 0.1
+        num_labels = 4
+        smoother = LabelSmoother(epsilon=epsilon)
+
+        # Batch of 3 samples with different numbers of active labels
+        logits = torch.tensor(
+            [
+                [1.5, -0.5, 0.0, 2.0],
+                [-1.0, -2.0, 3.0, -0.5],
+                [0.5, 0.5, -0.5, -0.5],
+            ]
+        )
+        labels = torch.tensor(
+            [
+                [1.0, 0.0, 0.0, 1.0],  # 2 active
+                [0.0, 0.0, 1.0, 0.0],  # 1 active
+                [0.0, 0.0, 0.0, 0.0],  # 0 active
+            ]
+        )
+
+        # Verify mass-preserving formula: y_ls = y * (1 - eps) + (eps * sum(y)) / K
+        active_counts = labels.sum(dim=-1, keepdim=True)
+        expected_smoothed_labels = labels * (1.0 - epsilon) + (epsilon * active_counts) / num_labels
+
+        # Total mass should be invariant: sum(y_ls) == sum(y)
+        torch.testing.assert_close(expected_smoothed_labels.sum(dim=-1), labels.sum(dim=-1))
+
+        # Expected BCE loss
+        expected_loss = nn.functional.binary_cross_entropy_with_logits(
+            logits, expected_smoothed_labels, reduction="mean"
+        )
+        actual_loss = smoother(SequenceClassifierOutput(logits=logits), labels)
+        torch.testing.assert_close(actual_loss, expected_loss)
+
+        # Verify masked labels with ignore_index = -100
+        labels_masked = labels.clone()
+        labels_masked[0, 1] = -100.0
+        actual_loss_masked = smoother(SequenceClassifierOutput(logits=logits), labels_masked)
+        self.assertFalse(torch.isnan(actual_loss_masked))
 
 
 # ---------------------------------------------------------------------------
