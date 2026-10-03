@@ -57,6 +57,7 @@ if is_torch_available():
         LlamaConfig,
         MixtralConfig,
         MixtralForCausalLM,
+        PreTrainedConfig,
         QuantizedCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -71,7 +72,9 @@ if is_torch_available():
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticLayer,
+        StaticSlidingWindowLayer,
     )
+    from transformers.generation.utils import GenerationMixin
     from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
     from transformers.integrations.heterogeneity.configuration_utils import (
         AmbiguousGlobalPerLayerAttributeError,
@@ -162,6 +165,16 @@ class CacheTest(unittest.TestCase):
         # before the fix this raised `AttributeError`. It reflects the attention layer's state.
         self.assertTrue(cache.is_initialized)
 
+    def test_static_cache_init_shapes_with_per_layer_attention_heads(self):
+        model = GenerationMixin()
+        model.config = PreTrainedConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            per_layer_config={1: {"num_attention_heads": 2}},
+        )
+        self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16]))
+
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
         reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
@@ -213,6 +226,44 @@ class CacheTest(unittest.TestCase):
         keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
         self.assertEqual(keys.shape[-2], 3)
         self.assertEqual(layer.get_seq_length(), 3)
+
+    def test_dynamic_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={0: {"sliding_window": 32}, 2: {"sliding_window": 16}},
+        )
+        layers = DynamicCache(config=config).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertIsInstance(layers[0], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[0].sliding_window, 32)
+        self.assertFalse(layers[1].is_sliding)
+        self.assertIsInstance(layers[2], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[2].sliding_window, 16)
+        self.assertFalse(layers[3].is_sliding)
+
+    def test_static_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={1: {"sliding_window": 24}, 3: {"sliding_window": 48}},
+        )
+        layers = StaticCache(config=config, max_cache_len=64).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertFalse(layers[0].is_sliding)
+        self.assertIsInstance(layers[1], StaticSlidingWindowLayer)
+        self.assertEqual(layers[1].max_cache_len, 24)
+        self.assertFalse(layers[2].is_sliding)
+        self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
+        self.assertEqual(layers[3].max_cache_len, 48)
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
@@ -910,7 +961,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
         """Tests caches with GPT-J model. Regression test for https://github.com/huggingface/transformers/pull/34799"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
-        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
+        # Use a dedicated safetensors repo to avoid Xet FUSE cache corruption that affects
+        # pytorch_model.bin in the original repo (wrong wte.weight bytes → wrong golden outputs)
+        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM-for-CacheHardIntegrationTest"
         pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
         _set_sliding_window(pipe.model.config, cache_implementation)
         out = pipe(

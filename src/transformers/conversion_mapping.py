@@ -312,6 +312,15 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
+        "NemotronH_Omni_Reasoning_V3": [
+            WeightRenaming(r"^mlp1\.0\.", r"multi_modal_projector\.layer_norm\."),
+            WeightRenaming(r"^mlp1\.1\.", r"multi_modal_projector\.linear_1\."),
+            WeightRenaming(r"^mlp1\.3\.", r"multi_modal_projector\.linear_2\."),
+            WeightRenaming(r"^sound_encoder\.encoder\.", r"audio_tower\."),
+            WeightRenaming(r"^sound_projection\.norm\.", r"embed_audio\.layer_norm\."),
+            WeightRenaming(r"^sound_projection\.linear1\.", r"embed_audio\.linear_1\."),
+            WeightRenaming(r"^sound_projection\.linear2\.", r"embed_audio\.linear_2\."),
+        ],
         "hrm_text": [
             WeightConverter(
                 source_patterns="mlp.gate_up_proj.weight",
@@ -1394,6 +1403,31 @@ def _build_checkpoint_conversion_mapping():
                     "self_attn.q_proj",
                     "self_attn.k_proj",
                     "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "gte": [
+            PrefixChange(prefix_to_remove="new"),
+            WeightRenaming(r"encoder.layer", r"layers"),
+            WeightRenaming(r"attention.o_proj", r"self_attn.o_proj"),
+            WeightRenaming(r"attn_ln", r"post_attention_layernorm"),
+            WeightRenaming(r"mlp_ln", r"post_mlp_layernorm"),
+            WeightRenaming(r"lm_head.norm", r"lm_head.layer_norm"),
+            WeightConverter(
+                source_patterns="attention.qkv_proj",
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.up_gate_proj",
+                target_patterns=[
+                    "mlp.up_proj",
+                    "mlp.gate_proj",
                 ],
                 operations=[Chunk(dim=0)],
             ),

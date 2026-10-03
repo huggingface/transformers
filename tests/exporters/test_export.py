@@ -14,6 +14,7 @@
 
 import copy
 import functools
+import importlib.util
 import inspect
 import itertools
 import re
@@ -47,6 +48,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_executorch_available
 
 
 # ──────────────────────────── skip lists ────────────────────────────
@@ -579,6 +581,38 @@ GENERATE_EXPORT_PARAMS = parameterized.expand(
 )
 
 
+_EXECUTORCH_BACKENDS = ("xnnpack",)
+if is_executorch_available() and importlib.util.find_spec("executorch.backends.mlx") is not None:
+    try:
+        from executorch.runtime import Runtime
+
+        if "MLXBackend" in Runtime.get().backend_registry.registered_backend_names:
+            _EXECUTORCH_BACKENDS += ("mlx",)
+    except ImportError:
+        pass  # The Python backend can be installed without the native runtime.
+
+EXECUTORCH_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES)),
+    name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}_{p.args[0]}",
+)
+EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
+    [
+        (backend, dynamic, generation_config)
+        for backend, dynamic, generation_config in itertools.product(
+            _EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS
+        )
+        if not (
+            backend == "mlx" and generation_config is not None and generation_config.cache_implementation == "static"
+        )
+    ],
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
+        + (f"_{p.args[2].cache_implementation}_cache" if p.args[2] is not None else "")
+        + f"_{p.args[0]}"
+    ),
+)
+
+
 def _needs_static_cache(generation_config) -> bool:
     """True if `generation_config` requests a cache the model must explicitly support (a static impl).
     Such variants only run on models that can (see the `_can_compile_fullgraph` gate in the tests)."""
@@ -1081,24 +1115,25 @@ class ExportTesterMixin:
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @EXECUTORCH_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export(self, dynamic):
+    def test_executorch_export(self, backend, dynamic):
         """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
+            if any(
+                self._should_skip(model_class, dynamic=dynamic, backend=scope) for scope in ("executorch", backend)
+            ):
                 continue
-
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
@@ -1282,26 +1317,28 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @GENERATE_EXPORT_PARAMS
+    @EXECUTORCH_GENERATE_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic, generation_config):
+    def test_executorch_export_generate(self, backend, dynamic, generation_config):
         """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(
-                model_class, generate=True, dynamic=dynamic, backend="executorch", generation_config=generation_config
+            if any(
+                self._should_skip(
+                    model_class, generate=True, dynamic=dynamic, backend=scope, generation_config=generation_config
+                )
+                for scope in ("executorch", backend)
             ):
                 continue
-
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 device="cpu",
