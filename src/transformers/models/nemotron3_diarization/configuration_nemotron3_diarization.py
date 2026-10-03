@@ -49,13 +49,12 @@ class Nemotron3DiarizationAudioConfig(PreTrainedConfig):
     num_mel_bins: int = 128
     base_config_key = "audio_config"
     subsampling_factor: int = 8
+    use_qk_norm: bool = False
 
     def __post_init__(self, **kwargs):
-        kwargs.setdefault("partial_rotary_factor", 1.0)
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-
-        kwargs.setdefault("partial_rotary_factor", 0.5)
+        kwargs.setdefault("partial_rotary_factor", 1.0)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
