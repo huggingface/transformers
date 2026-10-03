@@ -65,3 +65,33 @@ jobs:
       subdirs: '["mistral4"]'
     secrets: inherit
 
+  test-cancel-direct-pytest:
+    name: Test Cancel (direct pytest, no script wrapper)
+    runs-on:
+      group: aws-g5-4xlarge-cache
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      HF_HOME: /mnt/cache
+      RUN_SLOW: yes
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      CUDA_VISIBLE_DEVICES: 0,1
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        env:
+          commit_sha: ${{ github.sha }}
+        run: |
+          git fetch origin "$commit_sha"
+          git checkout "$commit_sha"
+
+      - name: Reinstall transformers
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Run mistral4 slow tests (direct pytest, no script wrapper)
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -v tests/models/mistral4/test_modeling_mistral4.py::Mistral4IntegrationTest -x
+
