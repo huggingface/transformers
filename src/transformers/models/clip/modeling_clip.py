@@ -825,6 +825,7 @@ class CLIPModel(CLIPPreTrainedModel):
 @auto_docstring
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config: CLIPTextConfig
+    base_model_prefix = "text_model"
     input_modalities = ("text",)
 
     def __init__(self, config: CLIPTextConfig):
@@ -888,6 +889,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
 @auto_docstring
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config: CLIPVisionConfig
+    base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 

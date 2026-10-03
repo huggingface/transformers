@@ -42,7 +42,7 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     """
 
     config: PPOCRV5MobileDetConfig
-    base_model_prefix = "pp_ocrv5_mobile_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
