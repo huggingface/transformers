@@ -142,22 +142,27 @@ class Nemotron3DiarizationSpeakerCache:
         silence_embeds: torch.Tensor,
         num_chunk_frames: int,
         mask: torch.Tensor | None = None,
+        num_lookback_frames: int = 0,
     ):
         """
         Pushes a processed chunk to the FIFO queue, moving its oldest frames to the speaker cache when it overflows.
 
         Args:
             chunk_input_embeds (`torch.Tensor` of shape `(batch_size, num_input_frames, hidden_size)`):
-                Encoder input of the step: the cached frames returned by `get_embeds`, the chunk and its look-ahead.
+                Encoder input of the step: the cached frames returned by `get_embeds`, the look-back frames, the chunk and
+                its look-ahead.
             chunk_logits (`torch.Tensor` of shape `(batch_size, num_input_frames * subsampling_factor, num_speakers)`):
                 Speaker logits of the step, used to score the frames when the speaker cache is compressed.
             silence_embeds (`torch.Tensor` of shape `(hidden_size,)`):
                 Learned silence embedding filling the reserved silence slots of a compressed cache.
             num_chunk_frames (`int`):
-                Number of chunk frames following the cached frames in `chunk_input_embeds`. Only those join the
-                FIFO queue: the look-ahead frames after them are fed again at the next step.
+                Number of chunk frames following the cached and look-back frames in `chunk_input_embeds`. Only those join
+                the FIFO queue: the look-ahead frames after them are fed again at the next step.
             mask (`torch.Tensor` of shape `(batch_size, num_input_frames)`, *optional*):
                 Valid frames of `chunk_input_embeds`, whose padding frames are given zero speaker probabilities.
+            num_lookback_frames (`int`, *optional*, defaults to 0):
+                Number of look-back frames between the cached frames and the chunk in `chunk_input_embeds`: frames of
+                the previous chunk fed again, already pushed with it.
         """
         if not self.is_initialized:
             self.lazy_initialization(chunk_input_embeds)
@@ -165,13 +170,20 @@ class Nemotron3DiarizationSpeakerCache:
         num_cache_frames, num_fifo_frames = self.num_cache_frames, self.num_fifo_frames
         probs = self._pool_probs(chunk_logits, mask)
 
-        chunk_start = num_cache_frames + num_fifo_frames
+        chunk_start = num_cache_frames + num_fifo_frames + num_lookback_frames
         chunk_embeds = chunk_input_embeds[:, chunk_start : chunk_start + num_chunk_frames]
         fifo_embeds = torch.cat([self.fifo[:, :num_fifo_frames], chunk_embeds], dim=1)
 
         num_popped = self._num_popped_frames(fifo_embeds.shape[1])
         if num_popped:
-            fifo_probs = probs[:, num_cache_frames : num_cache_frames + fifo_embeds.shape[1]]
+            # the look-back frames sit between the fifo frames and the chunk frames, and are skipped
+            fifo_probs = torch.cat(
+                [
+                    probs[:, num_cache_frames : num_cache_frames + num_fifo_frames],
+                    probs[:, chunk_start : chunk_start + num_chunk_frames],
+                ],
+                dim=1,
+            )
             # an uncompressed cache still holds plain chunk frames, whose probabilities this step re-estimates
             # a compressed one is out of order, so the probs stored alongside its frames are the only ones
             stored_probs = self.probs[:, :num_cache_frames] if self.is_compressed else probs[:, :num_cache_frames]
@@ -699,6 +711,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         attention_mask: torch.Tensor | None = None,
         speaker_cache: Nemotron3DiarizationSpeakerCache | None = None,
         num_lookahead_frames: int | None = None,
+        num_lookback_frames: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Nemotron3DiarizationOutput:
         r"""
@@ -709,13 +722,18 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
             to, but their logits are not returned and they do not join the FIFO queue, as they open the next chunk.
             [`Nemotron3DiarizationProcessor`] sets it for every chunk but the last one of a session.
 
-            The two arguments select the mode. Streaming mode, one chunk per forward: `num_lookahead_frames` given
-            (a first chunk creates the `speaker_cache`, later chunks receive it), or `speaker_cache` given alone (the
-            last chunk of the session, no look-ahead). The input minus its look-ahead is one chunk, whatever its
-            length, pushed as a whole to the FIFO queue sized by `config.streaming_config`. Offline mode, neither
-            given: the input is a whole recording, split by the forward into chunks of `config.chunk_length` encoder
-            frames that take up to `config.chunk_right_context` look-ahead frames from the following ones, with a
-            FIFO queue sized by `config.fifo_length`; no cache is returned.
+            These arguments and `num_lookback_frames` select the mode. Streaming mode, one chunk per forward:
+            `num_lookahead_frames` or `num_lookback_frames` given (a first chunk creates the `speaker_cache`, later
+            chunks receive it), or `speaker_cache` given alone (the last chunk of the session, no look-ahead). The input minus its look-back and look-ahead frames is one chunk,
+            whatever its length, pushed as a whole to the FIFO queue sized by `config.streaming_config`. Offline mode,
+            neither given: the input is a whole recording, split by the forward into chunks of `config.chunk_length`
+            encoder frames that take up to `config.chunk_left_context` look-back frames from the preceding ones and up to
+            `config.chunk_right_context` look-ahead frames from the following ones, with a FIFO queue sized by
+            `config.fifo_length`; no cache is returned.
+        num_lookback_frames (`int`, *optional*):
+            Streaming mode: number of leading encoder frames of the input that are look-back only, the end of the
+            previous chunk fed again ahead of this one, on top of the frames of `speaker_cache`. They are attended to,
+            but their logits are not returned and they do not join the FIFO queue again. Defaults to 0.
 
         Example:
 
@@ -736,7 +754,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         >>> probabilities = model(**inputs).logits.sigmoid()  # (1, num_frames, 8), one frame every 10 ms
         ```
         """
-        is_streaming = num_lookahead_frames is not None or speaker_cache is not None
+        is_streaming = num_lookahead_frames is not None or num_lookback_frames is not None or speaker_cache is not None
         if speaker_cache is None:
             # the cache defaults to the streaming FIFO sizes, offline mode overrides them
             offline_sizes = {}
@@ -748,17 +766,22 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
             speaker_cache = Nemotron3DiarizationSpeakerCache(self.config.streaming_config, **offline_sizes)
         if num_lookahead_frames is None:
             num_lookahead_frames = 0
+        if num_lookback_frames is None:
+            num_lookback_frames = 0
 
         batch_size, num_frames, _ = input_features.shape
         inputs_embeds = self.model.audio_tower.embedder(input_features)
         num_embeds = inputs_embeds.shape[1]
         subsampling_factor = self.config.audio_config.subsampling_factor
 
-        num_chunk_embeds = num_embeds - num_lookahead_frames
-        if not is_torchdynamo_compiling() and (num_lookahead_frames < 0 or num_chunk_embeds < 1):
+        # the chunk frames are the input frames between the look-back and the look-ahead ones
+        end_chunk_idx = num_embeds - num_lookahead_frames
+        if not is_torchdynamo_compiling() and (
+            num_lookahead_frames < 0 or num_lookback_frames < 0 or end_chunk_idx - num_lookback_frames < 1
+        ):
             raise ValueError(
-                f"`num_lookahead_frames` ({num_lookahead_frames}) must be between 0 and one less than the number of "
-                f"encoder frames of the input ({num_embeds})."
+                f"`num_lookback_frames` ({num_lookback_frames}) and `num_lookahead_frames` ({num_lookahead_frames}) must be "
+                f"non-negative and leave at least one of the {num_embeds} encoder frames of the input to score."
             )
 
         embed_mask = None
@@ -766,17 +789,21 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
             embed_mask = attention_mask[:, ::subsampling_factor].bool()
 
         if is_streaming:
-            chunk_length, chunk_right_context = num_chunk_embeds, num_lookahead_frames
+            chunk_length = end_chunk_idx - num_lookback_frames
+            chunk_left_context, chunk_right_context = num_lookback_frames, num_lookahead_frames
         else:
-            chunk_length, chunk_right_context = self.config.chunk_length, self.config.chunk_right_context
+            chunk_length = self.config.chunk_length
+            chunk_left_context, chunk_right_context = self.config.chunk_left_context, self.config.chunk_right_context
 
         logits = []
         # the encoder runs once per chunk, so its recorded outputs are concatenated in chunk order
         all_hidden_states, all_attentions = (), ()
-        for start_idx in range(0, num_chunk_embeds, chunk_length):
-            end_idx = min(start_idx + chunk_length, num_chunk_embeds)
+        for start_idx in range(num_lookback_frames, end_chunk_idx, chunk_length):
+            end_idx = min(start_idx + chunk_length, end_chunk_idx)
             num_chunk_frames = end_idx - start_idx
-            chunk_embeds = inputs_embeds[:, start_idx : min(end_idx + chunk_right_context, num_embeds)]
+            context_start_idx = max(start_idx - chunk_left_context, 0)
+            num_step_lookback_frames = start_idx - context_start_idx
+            chunk_embeds = inputs_embeds[:, context_start_idx : min(end_idx + chunk_right_context, num_embeds)]
 
             cached_embeds = speaker_cache.get_embeds(chunk_embeds)
             cached_length = cached_embeds.shape[1]
@@ -784,7 +811,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
 
             step_mask = None
             if embed_mask is not None:
-                chunk_mask = embed_mask[:, start_idx : start_idx + chunk_embeds.shape[1]]
+                chunk_mask = embed_mask[:, context_start_idx : context_start_idx + chunk_embeds.shape[1]]
                 step_mask = torch.cat([chunk_mask.new_ones(batch_size, cached_length), chunk_mask], dim=1)
 
             # positions restart at every chunk
@@ -799,15 +826,20 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
             all_attentions += outputs.attentions or ()
             chunk_logits = self.classifier(outputs.last_hidden_state)
             speaker_cache.update(
-                chunk_input_embeds, chunk_logits, self.silence_embeds, num_chunk_frames, mask=step_mask
+                chunk_input_embeds,
+                chunk_logits,
+                self.silence_embeds,
+                num_chunk_frames,
+                mask=step_mask,
+                num_lookback_frames=num_step_lookback_frames,
             )
 
-            start_logit_idx = cached_length * subsampling_factor
-            end_logit_idx = (cached_length + num_chunk_frames) * subsampling_factor
+            start_logit_idx = (cached_length + num_step_lookback_frames) * subsampling_factor
+            end_logit_idx = start_logit_idx + num_chunk_frames * subsampling_factor
             logits.append(chunk_logits[:, start_logit_idx:end_logit_idx])
 
         # with no look-ahead, the last encoder frame may be the padding added by feature stacking
-        logits = torch.cat(logits, dim=1)[:, :num_frames]
+        logits = torch.cat(logits, dim=1)[:, : num_frames - num_lookback_frames * subsampling_factor]
 
         return Nemotron3DiarizationOutput(
             logits=logits,
