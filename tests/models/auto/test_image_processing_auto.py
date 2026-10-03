@@ -45,6 +45,37 @@ class AutoImageProcessorTest(unittest.TestCase):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     @require_torchvision
+    def test_qwen3_vl_checkpoint_resolves_to_qwen2_vl_image_processor(self):
+        from transformers import Qwen2VLImageProcessor
+
+        preprocessor_dict = {
+            "image_mean": [0.5, 0.5, 0.5],
+            "image_std": [0.5, 0.5, 0.5],
+            "patch_size": 16,
+            "merge_size": 2,
+            "temporal_patch_size": 2,
+            "processor_class": "Qwen3VLProcessor",
+        }
+        for model_type, text_model_type, vision_model_type in [
+            ("qwen3_vl", "qwen3_vl_text", "qwen3_vl"),
+            ("qwen3_5", "qwen3_5_text", "qwen3_5_vision"),
+        ]:
+            config_dict = {
+                "model_type": model_type,
+                "text_config": {"model_type": text_model_type},
+                "vision_config": {"model_type": vision_model_type},
+            }
+            for image_processor_type in ["Qwen2VLImageProcessorFast", "Qwen3VLImageProcessor"]:
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    with open(Path(tmpdirname) / "preprocessor_config.json", "w") as fp:
+                        json.dump({**preprocessor_dict, "image_processor_type": image_processor_type}, fp)
+                    with open(Path(tmpdirname) / "config.json", "w") as fp:
+                        json.dump(config_dict, fp)
+
+                    image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
+                    self.assertIsInstance(image_processor, Qwen2VLImageProcessor)
+
+    @require_torchvision
     def test_image_processor_from_model_shortcut(self):
         config = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
         self.assertIsInstance(config, CLIPImageProcessor)
