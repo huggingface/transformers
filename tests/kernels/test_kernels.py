@@ -261,6 +261,16 @@ class TestHubKernels(MemoryCleanupTestCase):
 
         del model
 
+    def test_partial_rope_kernels_registration(self):
+        # Verify that models with partial RoPE (such as GPT-NeoX) register rotary_pos_emb
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/gpt-neox-20b", use_kernels=True, device_map=torch_device
+        )
+        self.assertIn("rotary_pos_emb", model.kernel_config.registered_layer_names.values())
+        self.assertTrue(any(name.endswith(".rotary_pos_emb") for name in model.kernel_config.registered_layer_names))
+        del model
+
+
     def test_kernels_mapping_no_inherit(self):
         kernel_config = KernelConfig(
             kernel_mapping={
