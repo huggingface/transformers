@@ -15,10 +15,13 @@
 # limitations under the License.
 
 # TEMPORARY: simple 2-minute loop to test whether cancel signals reach this process.
+import json
 import os
 import signal
 import sys
+import threading
 import time
+import urllib.request
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -34,6 +37,11 @@ except Exception as _e:
 
 print(f"[DEBUG] GITHUB_RUN_ID={os.environ.get('GITHUB_RUN_ID')!r}", flush=True)
 print(f"[DEBUG] GITHUB_JOB={os.environ.get('GITHUB_JOB')!r}", flush=True)
+print(f"[DEBUG] GITHUB_TOKEN present={bool(os.environ.get('GITHUB_TOKEN'))}", flush=True)
+print(f"[DEBUG] ACTIONS_RUNTIME_URL={os.environ.get('ACTIONS_RUNTIME_URL')!r}", flush=True)
+print(f"[DEBUG] ACTIONS_RUNTIME_TOKEN present={bool(os.environ.get('ACTIONS_RUNTIME_TOKEN'))}", flush=True)
+print(f"[DEBUG] RUNNER_TEMP={os.environ.get('RUNNER_TEMP')!r}", flush=True)
+print(f"[DEBUG] RUNNER_TRACKING_ID={os.environ.get('RUNNER_TRACKING_ID')!r}", flush=True)
 
 
 def _sigterm_handler(signum, frame):
@@ -55,6 +63,55 @@ signal.signal(signal.SIGTERM, _sigterm_handler)
 signal.signal(signal.SIGINT, _sigint_handler)
 signal.signal(signal.SIGHUP, _sighup_handler)
 print("[DEBUG] Signal handlers registered: SIGTERM, SIGINT, SIGHUP", flush=True)
+
+
+def _start_poll_watcher():
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    token = os.environ.get("GITHUB_TOKEN")
+    if not run_id or not token:
+        print("[DEBUG] poll_watcher: disabled (missing GITHUB_RUN_ID or GITHUB_TOKEN)", flush=True)
+        return
+
+    def _poll():
+        run_url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}"
+        jobs_url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}/jobs"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        poll_count = 0
+        while True:
+            time.sleep(5)
+            poll_count += 1
+            try:
+                req = urllib.request.Request(run_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    run_data = json.loads(resp.read())
+                print(
+                    f"[POLL #{poll_count}] run status={run_data.get('status')!r}, conclusion={run_data.get('conclusion')!r}",
+                    flush=True,
+                )
+                req2 = urllib.request.Request(jobs_url, headers=headers)
+                with urllib.request.urlopen(req2, timeout=10) as resp2:
+                    jobs_data = json.loads(resp2.read())
+                for job in jobs_data.get("jobs", []):
+                    j_status = job.get("status", "?")
+                    j_conclusion = job.get("conclusion")
+                    if j_conclusion not in (None, "success", "skipped"):
+                        print(
+                            f"[POLL #{poll_count}] job={job.get('name')!r} status={j_status!r}, conclusion={j_conclusion!r}",
+                            flush=True,
+                        )
+            except Exception as _e:
+                print(f"[POLL #{poll_count}] error: {type(_e).__name__}: {_e}", flush=True)
+
+    t = threading.Thread(target=_poll, daemon=True)
+    t.start()
+    print("[DEBUG] poll_watcher thread started (every 5 s)", flush=True)
+
+
+_start_poll_watcher()
 
 print("[DEBUG] Starting 2-minute loop (printing every 1 s) ...", flush=True)
 for i in range(120):
