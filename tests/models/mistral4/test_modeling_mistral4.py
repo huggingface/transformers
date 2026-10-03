@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch Mistral4 model."""
 
 import gc
-import logging
 import unittest
 
 import pytest
@@ -24,10 +23,6 @@ from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
     cleanup,
-    get_cgroup_memory_limit_bytes,
-    get_cpu_ram_total_gib,
-    get_physical_cpu_ram_gib,
-    is_psutil_available,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -83,22 +78,6 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Mistral4IntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        logger = logging.getLogger(__name__)
-        cgroup = get_cgroup_memory_limit_bytes()
-        cgroup_str = f"{cgroup / 1024**3:.1f} GiB" if cgroup else "none"
-        physical = get_physical_cpu_ram_gib()
-        physical_str = f"{physical:.1f} GiB" if physical is not None else "?"
-        ram_avail_str = "?"
-        if is_psutil_available():
-            import psutil
-            ram_avail_str = f"{psutil.virtual_memory().available / 1024**3:.1f} GiB"
-        logger.warning(
-            f"[SYSTEM] physical_ram={physical_str} | cgroup_limit={cgroup_str} | "
-            f"cpu_ram_total={get_cpu_ram_total_gib():.1f} GiB | ram_available={ram_avail_str}"
-        )
-
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -127,18 +106,6 @@ class Mistral4IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    def test_mistral_small_4_logits_2(self):
-        self.test_mistral_small_4_logits()
-
-    @slow
-    def test_mistral_small_4_logits_3(self):
-        self.test_mistral_small_4_logits()
-
-    @slow
-    def test_mistral_small_4_logits_4(self):
-        self.test_mistral_small_4_logits()
-
-    @slow
     @require_deterministic_for_xpu
     def test_mistral_small_4_generation(self):
         # fmt: off
@@ -165,18 +132,3 @@ class Mistral4IntegrationTest(unittest.TestCase):
         del model
         backend_empty_cache(torch_device)
         gc.collect()
-
-    @slow
-    @require_deterministic_for_xpu
-    def test_mistral_small_4_generation_2(self):
-        self.test_mistral_small_4_generation()
-
-    @slow
-    @require_deterministic_for_xpu
-    def test_mistral_small_4_generation_3(self):
-        self.test_mistral_small_4_generation()
-
-    @slow
-    @require_deterministic_for_xpu
-    def test_mistral_small_4_generation_4(self):
-        self.test_mistral_small_4_generation()

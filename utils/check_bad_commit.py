@@ -18,117 +18,14 @@ import copy
 import json
 import os
 import re
-import signal
 import subprocess
-import sys
 from collections import defaultdict
 
 import git
 from github_utils import get_github_json
 
 
-sys.stdout.reconfigure(line_buffering=True)
-
-# Temporary workaround similar to https://github.com/huggingface/transformers-ci/pull/184 to avoid CPU OOM.
-if os.path.isdir("/mnt/efs_cache"):
-    os.environ["HF_HOME"] = "/mnt/efs_cache"
-    print("Using EFS cache: HF_HOME=/mnt/efs_cache")
-
-print(f"[DEBUG] Python PID={os.getpid()}, PGID={os.getpgrp()}", flush=True)
-try:
-    _ppid = os.getppid()
-    print(f"[DEBUG] PPID={_ppid}", flush=True)
-    with open(f"/proc/{_ppid}/cmdline", "rb") as _f:
-        _parent_cmdline = _f.read().replace(b"\x00", b" ").decode(errors="replace").strip()
-    print(f"[DEBUG] parent cmdline: {_parent_cmdline!r}", flush=True)
-except Exception as _e:
-    print(f"[DEBUG] parent info unavailable: {_e}", flush=True)
-
-print(f"[DEBUG] GITHUB_RUN_ID={os.environ.get('GITHUB_RUN_ID')!r}", flush=True)
-print(f"[DEBUG] GITHUB_JOB={os.environ.get('GITHUB_JOB')!r}", flush=True)
-print(f"[DEBUG] GITHUB_TOKEN present={bool(os.environ.get('GITHUB_TOKEN'))}", flush=True)
-print(f"[DEBUG] ACTIONS_RUNTIME_URL={os.environ.get('ACTIONS_RUNTIME_URL')!r}", flush=True)
-print(f"[DEBUG] ACTIONS_RUNTIME_TOKEN present={bool(os.environ.get('ACTIONS_RUNTIME_TOKEN'))}", flush=True)
-print(f"[DEBUG] RUNNER_TEMP={os.environ.get('RUNNER_TEMP')!r}", flush=True)
-print(f"[DEBUG] RUNNER_TRACKING_ID={os.environ.get('RUNNER_TRACKING_ID')!r}", flush=True)
-
-
-def _sigterm_handler(signum, frame):
-    print(f"[SIGNAL] SIGTERM received! signum={signum}", flush=True)
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)  # prevent re-entry
-    os.killpg(os.getpgrp(), signal.SIGTERM)
-
-
-def _sigint_handler(signum, frame):
-    print(f"[SIGNAL] SIGINT received! signum={signum}", flush=True)
-    sys.exit(1)
-
-
-def _sighup_handler(signum, frame):
-    print(f"[SIGNAL] SIGHUP received! signum={signum}", flush=True)
-    sys.exit(1)
-
-
-signal.signal(signal.SIGTERM, _sigterm_handler)
-signal.signal(signal.SIGINT, _sigint_handler)
-signal.signal(signal.SIGHUP, _sighup_handler)
-print("[DEBUG] Signal handlers registered: SIGTERM, SIGINT, SIGHUP", flush=True)
-
-
-def _start_poll_watcher():
-    import threading
-    import time
-    import urllib.request
-
-    run_id = os.environ.get("GITHUB_RUN_ID")
-    token = os.environ.get("GITHUB_TOKEN")
-    if not run_id or not token:
-        print("[DEBUG] poll_watcher: disabled (missing GITHUB_RUN_ID or GITHUB_TOKEN)", flush=True)
-        return
-
-    def _poll():
-        run_url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}"
-        jobs_url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}/jobs"
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-        poll_count = 0
-        while True:
-            time.sleep(5)
-            poll_count += 1
-            try:
-                req = urllib.request.Request(run_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    run_data = json.loads(resp.read())
-                print(
-                    f"[POLL #{poll_count}] run status={run_data.get('status')!r}, conclusion={run_data.get('conclusion')!r}",
-                    flush=True,
-                )
-                req2 = urllib.request.Request(jobs_url, headers=headers)
-                with urllib.request.urlopen(req2, timeout=10) as resp2:
-                    jobs_data = json.loads(resp2.read())
-                for job in jobs_data.get("jobs", []):
-                    j_status = job.get("status", "?")
-                    j_conclusion = job.get("conclusion")
-                    if j_conclusion not in (None, "success", "skipped"):
-                        print(
-                            f"[POLL #{poll_count}] job={job.get('name')!r} status={j_status!r}, conclusion={j_conclusion!r}",
-                            flush=True,
-                        )
-            except Exception as _e:
-                print(f"[POLL #{poll_count}] error: {type(_e).__name__}: {_e}", flush=True)
-
-    t = threading.Thread(target=_poll, daemon=True)
-    t.start()
-    print("[DEBUG] poll_watcher thread started (every 5 s)", flush=True)
-
-
-_start_poll_watcher()
-
-
-def create_script(target_test, flake_runs=10):
+def create_script(target_test, flake_runs=4):
     """Create a python script to be run by `git bisect run` to determine if `target_test` passes or fails.
     If a test is not found in a commit, the script with exit code `0` (i.e. `Success`).
 
@@ -182,7 +79,7 @@ exit(0)
         fp.write(script.strip())
 
 
-def is_bad_commit(target_test, commit, flake_runs=10):
+def is_bad_commit(target_test, commit, flake_runs=4):
     repo = git.Repo(".")  # or specify path to your repo
 
     # Save the current HEAD reference
@@ -193,38 +90,31 @@ def is_bad_commit(target_test, commit, flake_runs=10):
 
     create_script(target_test=target_test, flake_runs=flake_runs)
 
-    proc = subprocess.Popen(
+    result = subprocess.run(
         ["python3", "target_script.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        capture_output=True,
         text=True,
     )
-    stdout_lines = []
-    for line in proc.stdout:
-        print(line, end="", flush=True)
-        stdout_lines.append(line)
-    proc.wait()
-    stdout = "".join(stdout_lines)
 
     # Restore to original commit
     repo.git.checkout(original_head)
 
     n_passed = 0
-    o = re.findall(r"====.* (\d+) passed", stdout)
+    o = re.findall(r"====.* (\d+) passed", result.stdout)
     if len(o) > 0:
         n_passed = int(o[0])
 
     n_failed = 0
-    o = re.findall(r"====.* (\d+) failed", stdout)
+    o = re.findall(r"====.* (\d+) failed", result.stdout)
     if len(o) > 0:
         n_failed = int(o[0])
 
     error_message = ""
     if n_failed > 0:
-        match = re.search(r"^(FAILED .+ - .+)$", stdout, re.MULTILINE)
+        match = re.search(r"^(FAILED .+ - .+)$", result.stdout, re.MULTILINE)
         error_message = match.group(1).strip() if match else "Cannot retrieve error message."
 
-    return proc.returncode != 0, n_failed, n_passed, error_message
+    return result.returncode != 0, n_failed, n_passed, error_message
 
 
 def find_bad_commit(target_test, start_commit, end_commit):
@@ -247,7 +137,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     }
 
     is_pr_ci = os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"]
-    flake_runs = 1 if is_pr_ci else 10
+    flake_runs = 1 if is_pr_ci else 4
 
     # For PR comment CI, we "assume" all tests at `end_commit` passed, so any failing test during a PR CI run is
     # "a new failing test", and we can perform more detailed checks with this script.
@@ -345,33 +235,23 @@ git bisect run python3 target_script.py
     with open("run_git_bisect.sh", "w", encoding="utf-8") as fp:
         fp.write(bash.strip())
 
-    proc = subprocess.Popen(
+    bash_result = subprocess.run(
         ["bash", "run_git_bisect.sh"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        check=False,
+        capture_output=True,
         text=True,
     )
-    stdout_lines = []
-    stderr_lines = []
-    for line in proc.stdout:
-        print(line, end="", flush=True)
-        stdout_lines.append(line)
-    for line in proc.stderr:
-        print(line, end="", flush=True, file=sys.stderr)
-        stderr_lines.append(line)
-    proc.wait()
-    bash_stdout = "".join(stdout_lines)
-    bash_stderr = "".join(stderr_lines)
+    print(bash_result.stdout)
 
     # This happens if running the script gives exit code < 0  or other issues
-    if "error: bisect run failed" in bash_stderr:
-        error_msg = f"Error when running git bisect:\nbash error: {bash_stderr}\nbash output:\n{bash_stdout}\nset `bad_commit` to `None`."
+    if "error: bisect run failed" in bash_result.stderr:
+        error_msg = f"Error when running git bisect:\nbash error: {bash_result.stderr}\nbash output:\n{bash_result.stdout}\nset `bad_commit` to `None`."
         print(error_msg)
         result["status"] = "git bisect failed"
         return result
 
     pattern = r"(.+) is the first bad commit"
-    commits = re.findall(pattern, bash_stdout)
+    commits = re.findall(pattern, bash_result.stdout)
 
     bad_commit = None
     failure_at_bad_commit = ""
