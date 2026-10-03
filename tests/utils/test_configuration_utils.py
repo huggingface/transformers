@@ -150,6 +150,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_output_attentions",
                 "_attn_implementation_internal",
                 "_experts_implementation_internal",
+                "_linear_attn_implementation_internal",
             ],
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]

@@ -365,10 +365,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # repository is now resolved once per load and passed around as `revision` (see `utils.hub.resolve_revision`).
         kwargs.pop("_commit_hash", None)
 
-        # Attention/Experts implementation to use, if relevant (it sets it recursively on sub-configs)
+        # Attention/Experts/Linear attention implementation to use, if relevant (it sets it recursively on sub-configs)
         self._output_attentions: bool | None = kwargs.pop("output_attentions", False)
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
+        self._linear_attn_implementation: str | None = kwargs.pop("linear_attn_implementation", None)
 
         # HeterogeneousConfigMixin: `per_layer_config` should be applied last, as heterogeneity needs to have all of the other kwargs set
         per_layer_config = kwargs.pop("per_layer_config", None)
@@ -376,7 +377,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # Additional attributes without default values
         for key, value in kwargs.items():
             # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
-            if key not in ("_attn_implementation_internal", "_experts_implementation_internal"):
+            if key not in (
+                "_attn_implementation_internal",
+                "_experts_implementation_internal",
+                "_linear_attn_implementation_internal",
+            ):
                 try:
                     setattr(self, key, value)
                 except AttributeError as err:
@@ -498,6 +503,28 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_moe)
                 )
                 subconfig._experts_implementation = sub_implementation
+
+    @property
+    def _linear_attn_implementation(self):
+        return self._linear_attn_implementation_internal
+
+    @_linear_attn_implementation.setter
+    def _linear_attn_implementation(self, value: str | dict | None):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        current_linear_attn = getattr(self, "_linear_attn_implementation", None)
+        linear_attn_implementation = value if not isinstance(value, dict) else value.get("", current_linear_attn)
+        self._linear_attn_implementation_internal = linear_attn_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                current_subconfig_linear_attn = getattr(subconfig, "_linear_attn_implementation", None)
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_linear_attn)
+                )
+                subconfig._linear_attn_implementation = sub_implementation
 
     @property
     def torch_dtype(self):
@@ -930,6 +957,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "num_labels",
             "attn_implementation",
             "experts_implementation",
+            "linear_attn_implementation",
             "output_attentions",
             "torch_dtype",
             "dtype",
@@ -1278,6 +1306,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "_commit_hash",
             "_attn_implementation_internal",
             "_experts_implementation_internal",
+            "_linear_attn_implementation_internal",
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
             "base_model_pp_plan",
