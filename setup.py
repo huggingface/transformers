@@ -177,9 +177,10 @@ extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["vision"] = deps_list("torchvision", "Pillow")
-extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer")
+extras["audio"] = deps_list("torchaudio", "librosa", "phonemizer")
+extras["speech-lm"] = deps_list("pyctcdecode")
 if PYTHON_MINOR_VERSION < 13:
-    extras["audio"] += deps_list("kenlm")
+    extras["speech-lm"] += deps_list("kenlm")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
@@ -248,6 +249,7 @@ extras["all"] = (
     extras["torch"]
     + extras["vision"]
     + extras["audio"]
+    + extras["speech-lm"]
     + extras["video"]
     + extras["kernels"]
     + extras["timm"]

@@ -600,10 +600,12 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
     except ImportError as error:
         logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {error}")
         if not is_kenlm_available():
-            logger.warning("Try to install `kenlm`: `pip install kenlm")
+            logger.warning("Try to install `kenlm`: `pip install kenlm`")
 
         if not is_pyctcdecode_available():
-            logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
+            logger.warning(
+                "Try to install `pyctcdecode`: `pip install pyctcdecode` or `pip install transformers[speech-lm]`"
+            )
 
 
 def _resolve_feature_extractor(
