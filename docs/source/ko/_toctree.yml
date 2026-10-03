@@ -289,6 +289,8 @@
     title: Glossary
   - local: philosophy
     title: 이념과 목표
+  - local: models_timeline
+    title: 모델 타임라인
   - local: in_translation
     title: (번역중) Notebooks with examples
   - local: community
