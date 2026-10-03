@@ -88,8 +88,10 @@ class DtensorShardOperation:
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
-        self._axis0_offset = offsets[0]
-        self._axis0_local_size = local_shape[0]
+        # a 0-dim (per-tensor) parameter is replicated whole — see `shard_tensor` — so it has no
+        # axis 0 to take an offset on
+        self._axis0_offset = offsets[0] if offsets else 0
+        self._axis0_local_size = local_shape[0] if local_shape else 1
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -109,6 +111,13 @@ class DtensorShardOperation:
         dim_placements = [
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
+
+        # A 0-dim tensor has no axis to shard, so every rank that owns it takes the whole value
+        # (`source[...]`, since a lazy safetensors slice rejects `source[()]`).
+        if not source_shape:
+            if tensor_idx is not None and not self._owns_expert(tensor_idx, dim_placements):
+                return None
+            return source[...].to(device=device, dtype=dtype)
 
         # Dense path
         if tensor_idx is None:
@@ -138,7 +147,6 @@ class DtensorShardOperation:
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
             # finally fetch from the disk only the slices
-            # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.
                 return self._slice_and_cat(source, intervals_by_dim, device, dtype)
@@ -152,15 +160,13 @@ class DtensorShardOperation:
 
         # MoE path
         # tensor_idx identifies the axis-0 piece in param space (not in source.shape).
+        # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
+        if not self._owns_expert(tensor_idx, dim_placements):
+            return None
+
         normalized_dim_placements = [
             (mesh_dim, placement, self._normalize_param_dim(placement.dim)) for mesh_dim, placement in dim_placements
         ]
-
-        # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
-        has_axis0_shard = any(param_dim == 0 for _, _, param_dim in normalized_dim_placements)
-        owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
-        if has_axis0_shard and not owns_tensor_idx:
-            return None
 
         # `param_dim` indexes the full parameter layout [N, in, out] (expert axis first).
         # In per-expert loading, leading axis is absent ([in, out]).
@@ -316,6 +322,13 @@ class DtensorShardOperation:
     def _normalize_param_dim(self, dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
+
+    def _owns_expert(self, tensor_idx: int, dim_placements: list) -> bool:
+        """Whether this rank holds expert `tensor_idx`. True when nothing shards axis 0 — the
+        experts are replicated, so every rank owns every one of them."""
+        if not any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements):
+            return True
+        return self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
 
 
 def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:

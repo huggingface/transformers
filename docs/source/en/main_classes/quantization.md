@@ -98,6 +98,10 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] SpQRConfig
 
+## FineGrainedConfig
+
+[[autodoc]] FineGrainedConfig
+
 ## FineGrainedFP8Config
 
 [[autodoc]] FineGrainedFP8Config
