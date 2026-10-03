@@ -43,6 +43,7 @@ limitations under the License.
         <a href="i18n/README_es.md">Español</a> |
         <a href="i18n/README_ja.md">日本語</a> |
         <a href="i18n/README_hd.md">हिन्दी</a> |
+        <a href="i18n/README_mr.md">मराठी</a> |
         <a href="i18n/README_ru.md">Русский</a> |
         <a href="i18n/README_pt-br.md">Português</a> |
         <a href="i18n/README_te.md">తెలుగు</a> |
