@@ -1,0 +1,655 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..llama.modeling_llama import apply_rotary_pos_emb, eager_attention_forward
+
+
+LANGUAGE_TOKEN_TYPE = 0
+VISION_TOKEN_TYPE = 1
+
+
+class CogVLM2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+
+class CogVLM2VisionConfig(PreTrainedConfig):
+    model_type = "cogvlm2_vision"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        hidden_size=1792,
+        image_size=224,
+        in_channels=3,
+        intermediate_size=15360,
+        layer_norm_eps=1e-6,
+        num_heads=16,
+        num_hidden_layers=63,
+        num_positions=257,
+        patch_size=14,
+        dropout_prob=0.0,
+        hidden_act="gelu",
+        **kwargs,
+    ):
+        self.hidden_size = hidden_size
+        self.image_size = image_size
+        self.in_channels = in_channels
+        self.intermediate_size = intermediate_size
+        self.layer_norm_eps = layer_norm_eps
+        self.num_heads = num_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.num_positions = num_positions
+        self.patch_size = patch_size
+        self.dropout_prob = dropout_prob
+        self.hidden_act = hidden_act
+        super().__init__(**kwargs)
+
+
+class CogVLM2Config(PreTrainedConfig):
+    model_type = "cogvlm2"
+    sub_configs = {"vision_config": CogVLM2VisionConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        vocab_size=128256,
+        hidden_size=4096,
+        intermediate_size=14336,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_multi_query_heads=8,
+        hidden_act="silu",
+        max_position_embeddings=2048,
+        initializer_range=0.02,
+        rms_norm_eps=1e-5,
+        template_version="base",
+        vision_config=None,
+        rope_theta=500000.0,
+        pad_token_id=128002,
+        bos_token_id=128000,
+        eos_token_id=128001,
+        tie_word_embeddings=False,
+        use_cache=True,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_multi_query_heads = num_multi_query_heads
+        self.num_key_value_heads = num_multi_query_heads
+        self.hidden_act = hidden_act
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.template_version = template_version
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
+
+        if vision_config is None:
+            self.vision_config = CogVLM2VisionConfig()
+        elif isinstance(vision_config, dict):
+            self.vision_config = CogVLM2VisionConfig(**vision_config)
+        else:
+            self.vision_config = vision_config
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+
+
+def build_position_ids(token_type_ids, attention_mask=None):
+    """Reproduce CogVLM2's compressed position scheme for visual spans."""
+    tmp = token_type_ids.clone()
+    if attention_mask is not None:
+        tmp[~attention_mask.bool()] = -1
+
+    is_boundary = torch.zeros_like(tmp, dtype=torch.bool)
+    is_boundary[:, 1:] |= (tmp[:, 1:] == VISION_TOKEN_TYPE) & (tmp[:, :-1] == LANGUAGE_TOKEN_TYPE)
+    is_boundary[:, 0] |= tmp[:, 0] == VISION_TOKEN_TYPE
+    is_boundary[:, :-1] |= (tmp[:, :-1] == VISION_TOKEN_TYPE) & (tmp[:, 1:] == LANGUAGE_TOKEN_TYPE)
+    is_boundary[:, -1] |= tmp[:, -1] == VISION_TOKEN_TYPE
+    tmp[is_boundary] = LANGUAGE_TOKEN_TYPE
+
+    position_ids = torch.zeros_like(tmp, dtype=torch.long)
+    position_ids[:, 1:] = (tmp[:, 1:] == LANGUAGE_TOKEN_TYPE) | (
+        (tmp[:, 1:] == VISION_TOKEN_TYPE) & (tmp[:, :-1] == LANGUAGE_TOKEN_TYPE)
+    )
+    return position_ids.cumsum(dim=-1)
+
+
+class CogVLM2PatchEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.proj = nn.Conv2d(
+            config.in_channels,
+            config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+        )
+        self.cls_embedding = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.position_embedding = nn.Embedding(config.num_positions, config.hidden_size)
+
+    def forward(self, pixel_values):
+        hidden_states = self.proj(pixel_values).flatten(2).transpose(1, 2)
+        cls_token = self.cls_embedding.expand(hidden_states.shape[0], -1, -1)
+        hidden_states = torch.cat((cls_token, hidden_states), dim=1)
+        return hidden_states + self.position_embedding.weight.unsqueeze(0)
+
+
+class CogVLM2VisionAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_heads = config.num_heads
+        self.head_dim = config.hidden_size // config.num_heads
+        self.query_key_value = nn.Linear(config.hidden_size, config.hidden_size * 3)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.output_dropout = nn.Dropout(config.dropout_prob)
+
+    def forward(self, hidden_states):
+        batch_size, seq_len, _ = hidden_states.shape
+        qkv = self.query_key_value(hidden_states)
+        qkv = qkv.reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+        query, key, value = qkv.permute(2, 0, 3, 1, 4).unbind(0)
+        attn_output = F.scaled_dot_product_attention(query, key, value, dropout_p=0.0, is_causal=False)
+        attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, -1)
+        return self.output_dropout(self.dense(attn_output))
+
+
+class CogVLM2VisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states):
+        return self.fc2(self.activation_fn(self.fc1(hidden_states)))
+
+
+class CogVLM2VisionEncoderLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention = CogVLM2VisionAttention(config)
+        self.mlp = CogVLM2VisionMLP(config)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = residual + self.input_layernorm(self.attention(hidden_states))
+        residual = hidden_states
+        hidden_states = residual + self.post_attention_layernorm(self.mlp(hidden_states))
+        return hidden_states
+
+
+class CogVLM2VisionTransformer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.layers = nn.ModuleList([CogVLM2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(self, hidden_states):
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+        return hidden_states
+class CogVLM2VisionProjector(nn.Module):
+    def __init__(self, config, in_features):
+        super().__init__()
+        self.linear_proj = nn.Linear(in_features, config.hidden_size, bias=False)
+        self.norm1 = nn.LayerNorm(config.hidden_size)
+        self.act1 = nn.GELU()
+        self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.dense_4h_to_h = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+
+    def forward(self, hidden_states):
+        hidden_states = self.linear_proj(hidden_states)
+        hidden_states = self.act1(self.norm1(hidden_states))
+        hidden_states = F.silu(self.gate_proj(hidden_states)) * self.dense_h_to_4h(hidden_states)
+        return self.dense_4h_to_h(hidden_states)
+
+
+class CogVLM2VisionModel(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        vision_config = config.vision_config
+        self.patch_embedding = CogVLM2PatchEmbedding(vision_config)
+        self.transformer = CogVLM2VisionTransformer(vision_config)
+        self.linear_proj = CogVLM2VisionProjector(config, vision_config.hidden_size)
+        self.conv = nn.Conv2d(
+            vision_config.hidden_size,
+            vision_config.hidden_size,
+            kernel_size=2,
+            stride=2,
+        )
+        self.boi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.eoi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+
+    def forward(self, pixel_values):
+        hidden_states = self.patch_embedding(pixel_values)
+        hidden_states = self.transformer(hidden_states)[:, 1:]
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        grid_size = math.isqrt(seq_len)
+        if grid_size * grid_size != seq_len:
+            raise ValueError(f"Vision patch sequence length {seq_len} is not square.")
+        hidden_states = hidden_states.view(batch_size, grid_size, grid_size, hidden_size).permute(0, 3, 1, 2)
+        hidden_states = self.conv(hidden_states).flatten(2).transpose(1, 2)
+        hidden_states = self.linear_proj(hidden_states)
+        boi = self.boi.expand(batch_size, -1, -1)
+        eoi = self.eoi.expand(batch_size, -1, -1)
+        return torch.cat((boi, hidden_states, eoi), dim=1)
+
+
+class CogVLM2LanguageMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+
+
+class CogVLM2VisionExpertMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.language_mlp = CogVLM2LanguageMLP(config)
+
+    def forward(self, hidden_states):
+        return self.language_mlp(hidden_states)
+
+
+class CogVLM2RotaryEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        dim = config.hidden_size // config.num_attention_heads
+        inv_freq = 1.0 / (
+            config.rope_theta
+            ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim)
+        )
+        self.register_buffer("inv_freq", inv_freq)
+
+    def forward(self, hidden_states, position_ids):
+        positions = position_ids.to(
+            device=self.inv_freq.device,
+            dtype=self.inv_freq.dtype,
+        )
+        freqs = positions.unsqueeze(-1) * self.inv_freq.view(1, 1, -1)
+        embeddings = torch.cat((freqs, freqs), dim=-1)
+        return (
+            embeddings.cos().to(hidden_states.dtype),
+            embeddings.sin().to(hidden_states.dtype),
+        )
+
+
+class CogVLM2Attention(nn.Module):
+    def __init__(self, config, layer_idx):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_multi_query_heads
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        qkv_size = (self.num_attention_heads + 2 * self.num_key_value_heads) * self.head_dim
+        self.language_expert_query_key_value = nn.Linear(self.hidden_size, qkv_size, bias=False)
+        self.language_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.rotary_emb = CogVLM2RotaryEmbedding(config)
+
+    def forward(
+        self,
+        hidden_states,
+        position_ids,
+        attention_mask=None,
+        past_key_values=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        batch_size, seq_len, _ = hidden_states.shape
+        qkv = self.language_expert_query_key_value(hidden_states)
+        query_size = self.num_attention_heads * self.head_dim
+        kv_size = self.num_key_value_heads * self.head_dim
+        query, key, value = qkv.split((query_size, kv_size, kv_size), dim=-1)
+
+        query = query.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        key = key.view(batch_size, seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value = value.view(batch_size, seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        cos, sin = self.rotary_emb(hidden_states, position_ids)
+        query, key = apply_rotary_pos_emb(query, key, cos, sin)
+
+        if past_key_values is not None:
+            key, value = past_key_values.update(key, value, self.layer_idx)
+
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            scaling=self.scaling,
+            dropout=0.0,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(batch_size, seq_len, -1).contiguous()
+        return self.language_expert_dense(attn_output), attn_weights
+
+
+class CogVLM2DecoderLayer(nn.Module):
+    def __init__(self, config, layer_idx):
+        super().__init__()
+        self.self_attn = CogVLM2Attention(config, layer_idx)
+        self.mlp = CogVLM2VisionExpertMLP(config)
+        self.input_layernorm = CogVLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = CogVLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states,
+        position_ids,
+        attention_mask=None,
+        past_key_values=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        return residual + hidden_states
+
+
+class CogVLM2PreTrainedModel(PreTrainedModel):
+    config: CogVLM2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = False
+    _no_split_modules = ["CogVLM2DecoderLayer", "CogVLM2VisionEncoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_sdpa = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "attentions": CogVLM2Attention,
+        "hidden_states": CogVLM2DecoderLayer,
+    }
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.\d+\.self_attn\.rotary_emb\.inv_freq"]
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+@auto_docstring
+class CogVLM2Model(CogVLM2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [CogVLM2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = CogVLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.vision = CogVLM2VisionModel(config)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    def get_video_features(self, pixel_values_videos):
+        return self.vision(pixel_values_videos)
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        past_key_values: Cache | None = None,
+        inputs_embeds=None,
+        pixel_values_videos=None,
+        use_cache=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        if (input_ids is None) == (inputs_embeds is None):
+            raise ValueError("Specify exactly one of input_ids or inputs_embeds.")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if token_type_ids is None:
+            token_type_ids = torch.full(
+                (inputs_embeds.shape[0], inputs_embeds.shape[1]),
+                LANGUAGE_TOKEN_TYPE,
+                dtype=torch.long,
+                device=inputs_embeds.device,
+            )
+
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if pixel_values_videos is not None and past_seen_tokens == 0:
+            video_features = self.get_video_features(pixel_values_videos)
+            video_features = video_features.reshape(-1, self.config.hidden_size)
+            vision_mask = token_type_ids[:, -inputs_embeds.shape[1] :] == VISION_TOKEN_TYPE
+            expected = int(vision_mask.sum().item())
+            if expected != video_features.shape[0]:
+                raise ValueError(
+                    "CogVLM2 visual placeholder count does not match encoded video features: "
+                    f"{expected} placeholders vs {video_features.shape[0]} features."
+                )
+            inputs_embeds = inputs_embeds.clone()
+            inputs_embeds[vision_mask] = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+            past_seen_tokens = 0
+
+        if position_ids is None:
+            if token_type_ids is not None:
+                full_position_ids = build_position_ids(token_type_ids, attention_mask)
+                position_ids = full_position_ids[:, -inputs_embeds.shape[1] :]
+            else:
+                position_ids = torch.arange(
+                    past_seen_tokens,
+                    past_seen_tokens + inputs_embeds.shape[1],
+                    device=inputs_embeds.device,
+                ).unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        for decoder_layer in self.layers:
+            hidden_states = decoder_layer(
+                hidden_states,
+                position_ids=position_ids,
+                attention_mask=causal_mask,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
+
+@auto_docstring
+class CogVLM2ForConditionalGeneration(CogVLM2PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = CogVLM2Model(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, value):
+        self.lm_head = value
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        past_key_values: Cache | None = None,
+        inputs_embeds=None,
+        pixel_values_videos=None,
+        labels=None,
+        use_cache=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        outputs = self.model(
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values_videos=pixel_values_videos,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        logits = self.lm_head(outputs.last_hidden_state)
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids=None,
+        inputs_embeds=None,
+        attention_mask=None,
+        position_ids=None,
+        token_type_ids=None,
+        pixel_values_videos=None,
+        past_key_values=None,
+        use_cache=False,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        if position_ids is None and token_type_ids is not None:
+            position_ids = build_position_ids(token_type_ids, attention_mask)
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            pixel_values_videos=pixel_values_videos,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
+
+
+__all__ = [
+    "CogVLM2VisionConfig",
+    "CogVLM2Config",
+    "CogVLM2VisionModel",
+    "CogVLM2PreTrainedModel",
+    "CogVLM2Model",
+    "CogVLM2ForConditionalGeneration",
+]
