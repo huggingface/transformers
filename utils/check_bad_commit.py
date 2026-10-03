@@ -22,6 +22,10 @@ import re
 import signal
 import subprocess
 import sys
+import threading
+import time
+import urllib.error
+import urllib.request
 from collections import defaultdict
 
 import git
@@ -33,26 +37,135 @@ sys.stdout.reconfigure(line_buffering=True)
 # Temporary workaround similar to https://github.com/huggingface/transformers-ci/pull/184 to avoid CPU OOM.
 if os.path.isdir("/mnt/efs_cache"):
     os.environ["HF_HOME"] = "/mnt/efs_cache"
-    print("Using EFS cache: HF_HOME=/mnt/efs_cache")
+    print("[DEBUG] Using EFS cache: HF_HOME=/mnt/efs_cache", flush=True)
 
-
-# GitHub Actions cancellation sends SIGINT/SIGTERM only to the shell wrapping the
-# `run:` step, not to Python directly. When the shell exits, Python is orphaned and
-# keeps running. prctl(PR_SET_PDEATHSIG) makes the kernel deliver SIGTERM to this
-# process automatically when its parent (the shell) dies, triggering the handler below.
+# --- Startup diagnostics ---
+print(f"[DEBUG] Python PID={os.getpid()}, PGID={os.getpgrp()}", flush=True)
 try:
-    ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM, 0, 0, 0)  # PR_SET_PDEATHSIG=1
-except Exception:
-    pass
+    _ppid = os.getppid()
+    print(f"[DEBUG] PPID={_ppid}", flush=True)
+    with open(f"/proc/{_ppid}/cmdline", "rb") as _f:
+        _parent_cmdline = _f.read().replace(b"\x00", b" ").decode(errors="replace").strip()
+    print(f"[DEBUG] parent cmdline: {_parent_cmdline!r}", flush=True)
+except Exception as _e:
+    print(f"[DEBUG] parent info unavailable: {_e}", flush=True)
+print(f"[DEBUG] GITHUB_ACTIONS={os.environ.get('GITHUB_ACTIONS')!r}", flush=True)
+print(f"[DEBUG] GITHUB_RUN_ID={os.environ.get('GITHUB_RUN_ID')!r}", flush=True)
+print(f"[DEBUG] GITHUB_JOB={os.environ.get('GITHUB_JOB')!r}", flush=True)
+print(f"[DEBUG] GITHUB_TOKEN present={bool(os.environ.get('GITHUB_TOKEN'))}", flush=True)
+# ---
+
+# prctl(PR_SET_PDEATHSIG=1): ask kernel to deliver SIGTERM to this process when its
+# parent (the bash shell running the `run:` step) dies. GitHub Actions runner sends
+# SIGTERM to the shell, not to Python. If the shell exits, Python normally becomes
+# an orphan and keeps running; prctl fixes this.
+try:
+    _prctl_ret = ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM, 0, 0, 0)
+    print(f"[DEBUG] prctl(PR_SET_PDEATHSIG, SIGTERM) returned={_prctl_ret} (0=success)", flush=True)
+except Exception as _e:
+    print(f"[DEBUG] prctl exception: {type(_e).__name__}: {_e}", flush=True)
 
 
-def _sigterm_handler(signum, frame):
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)  # prevent re-entry
-    os.killpg(os.getpgrp(), signal.SIGTERM)
+def _do_terminate(reason=""):
+    """Kill the entire process group and exit. Safe to call from any thread or signal handler."""
+    print(f"[CANCEL] _do_terminate: reason={reason!r}, pid={os.getpid()}, pgid={os.getpgrp()}", flush=True)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)  # prevent re-entry if we're already in handler
+    try:
+        os.killpg(os.getpgrp(), signal.SIGTERM)
+        print("[CANCEL] killpg(SIGTERM) sent to process group", flush=True)
+    except Exception as _e:
+        print(f"[CANCEL] killpg error: {_e}", flush=True)
     sys.exit(1)
 
 
+def _sigterm_handler(signum, frame):
+    print(f"[DEBUG] SIGTERM received by Python (signum={signum}), triggering termination", flush=True)
+    _do_terminate(reason="SIGTERM signal")
+
+
 signal.signal(signal.SIGTERM, _sigterm_handler)
+print(f"[DEBUG] SIGTERM handler registered: {signal.getsignal(signal.SIGTERM)}", flush=True)
+
+
+def _start_cancellation_watcher():
+    """Start a daemon thread that polls the GitHub API every 5 s to detect cancellation.
+
+    The k8s runner used for this job does NOT forward cancellation signals to container
+    processes — it simply waits for the running step to finish, then marks the job
+    cancelled. Signal-based approaches (SIGTERM, prctl) therefore cannot work. Polling
+    the GitHub API is the only reliable way to detect that the user clicked 'Cancel'.
+    """
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    token = os.environ.get("GITHUB_TOKEN")
+    job_name = os.environ.get("GITHUB_JOB", "")
+
+    print(
+        f"[DEBUG] cancellation_watcher: run_id={run_id!r}, job_name={job_name!r}, token_present={bool(token)}",
+        flush=True,
+    )
+
+    if not run_id or not token:
+        print("[DEBUG] cancellation_watcher: disabled (missing GITHUB_RUN_ID or GITHUB_TOKEN)", flush=True)
+        return
+
+    def _poll():
+        run_url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}"
+        jobs_url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}/jobs"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        poll_count = 0
+        while True:
+            time.sleep(5)
+            poll_count += 1
+            try:
+                # Check run-level status first
+                req = urllib.request.Request(run_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    run_data = json.loads(resp.read())
+                run_status = run_data.get("status", "?")
+                run_conclusion = run_data.get("conclusion")
+                print(
+                    f"[DEBUG] Poll #{poll_count}: run status={run_status!r}, conclusion={run_conclusion!r}",
+                    flush=True,
+                )
+
+                if run_status == "completed" and run_conclusion == "cancelled":
+                    _do_terminate(reason=f"run API: status={run_status!r}, conclusion={run_conclusion!r}")
+                    return
+
+                # Check individual job status — GitHub may mark a running job as
+                # cancelled while the step is still executing
+                req2 = urllib.request.Request(jobs_url, headers=headers)
+                with urllib.request.urlopen(req2, timeout=10) as resp2:
+                    jobs_data = json.loads(resp2.read())
+                for job in jobs_data.get("jobs", []):
+                    j_name = job.get("name", "")
+                    j_status = job.get("status", "?")
+                    j_conclusion = job.get("conclusion")
+                    # Only log jobs matching our job name (or all if job_name unknown)
+                    if job_name and job_name not in j_name:
+                        continue
+                    print(
+                        f"[DEBUG] Poll #{poll_count}: job={j_name!r} status={j_status!r}, conclusion={j_conclusion!r}",
+                        flush=True,
+                    )
+                    if j_conclusion == "cancelled":
+                        _do_terminate(reason=f"job API: job={j_name!r} conclusion=cancelled")
+                        return
+
+            except Exception as _e:
+                print(f"[DEBUG] Poll #{poll_count} error: {type(_e).__name__}: {_e}", flush=True)
+
+    t = threading.Thread(target=_poll, daemon=True)
+    t.start()
+    print("[DEBUG] cancellation_watcher thread started (polling every 5 s)", flush=True)
+
+
+_start_cancellation_watcher()
 
 
 def create_script(target_test, flake_runs=10):
