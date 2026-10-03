@@ -294,6 +294,8 @@ IGNORE_NON_TESTED = (
         "Ernie4_5_VL_MoeTextModel",  # BC alias
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
+        "EncodecEncoderModel",  # Tested through EncodecModel
+        "EncodecDecoderModel",  # Tested through EncodecModel
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration

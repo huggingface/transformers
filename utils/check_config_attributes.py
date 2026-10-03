@@ -106,6 +106,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
+    "EncodecEncoderConfig": ["overlap"],
+    "EncodecDecoderConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
