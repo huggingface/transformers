@@ -175,6 +175,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
         only_label_first_subword=True,
         tokenize_chinese_chars=True,
         strip_accents=None,
+        clean_up_tokenization_spaces=True,
         model_max_length=512,
         **kwargs,
     ):
@@ -215,6 +216,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             only_label_first_subword=only_label_first_subword,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             model_max_length=model_max_length,
             **kwargs,
         )
