@@ -23,6 +23,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature, SizeDict
 from ...image_transforms import (
     PaddingMode,
@@ -226,6 +227,40 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
+def convert_coco_poly_to_mask_pil(segmentations, height: int, width: int) -> np.ndarray:
+    """
+    Convert a COCO polygon annotation to a mask.
+
+    Args:
+        segmentations (`list[list[float]]`):
+            List of polygons, each polygon represented by a list of x-y coordinates.
+        height (`int`):
+            Height of the mask.
+        width (`int`):
+            Width of the mask.
+    """
+    try:
+        from pycocotools import mask as coco_mask
+    except ImportError:
+        raise ImportError("Pycocotools is not installed in your environment.")
+
+    masks = []
+    for polygons in segmentations:
+        rles = coco_mask.frPyObjects(polygons, height, width)
+        mask = coco_mask.decode(rles)
+        if len(mask.shape) < 3:
+            mask = mask[..., None]
+        mask = np.asarray(mask, dtype=np.uint8)
+        mask = np.any(mask, axis=2)
+        masks.append(mask)
+    if masks:
+        masks = np.stack(masks, axis=0)
+    else:
+        masks = np.zeros((0, height, width), dtype=np.uint8)
+
+    return masks
+
+
 def prepare_coco_detection_annotation_pil(
     image,
     target,
@@ -277,6 +312,11 @@ def prepare_coco_detection_annotation_pil(
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
         new_target["keypoints"] = keypoints
+
+    if return_segmentation_masks:
+        segmentation_masks = [obj["segmentation"] for obj in annotations]
+        masks = convert_coco_poly_to_mask_pil(segmentation_masks, image_height, image_width)
+        new_target["masks"] = masks[keep]
 
     return new_target
 
@@ -733,7 +773,12 @@ class RTDetrImageProcessorPil(PilBackend):
         return results
 
     @requires(backends=("torch",))
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
+    def post_process_semantic_segmentation(
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`RTDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -743,20 +788,30 @@ class RTDetrImageProcessorPil(PilBackend):
             target_sizes (`list[tuple[int, int]]`, *optional*):
                 A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
                 batch. If unset, predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
+
         Returns:
-            `list[torch.Tensor]`:
-                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
-                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
-                `torch.Tensor` correspond to a semantic class id.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         requires_backends(self, ["torch"])
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
         # RT-DETR classifies with a sigmoid (focal / VFL losses), so there is no null class to remove
-        masks_classes = outputs.logits.sigmoid()  # [batch_size, num_queries, num_classes]
-        masks_probs = outputs.pred_masks.sigmoid()  # [batch_size, num_queries, height, width]
+        masks_classes = class_queries_logits.sigmoid()
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-        batch_size = segmentation.shape[0]
+        batch_size = class_queries_logits.shape[0]
 
         # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
@@ -770,9 +825,23 @@ class RTDetrImageProcessorPil(PilBackend):
                 resized_logits = nn.functional.interpolate(
                     segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
-                semantic_segmentation.append(resized_logits[0].argmax(dim=0))
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={"segmentation": semantic_map, "segmentation_scores": resized_logits[0]}
+                    )
+                )
         else:
-            semantic_segmentation = list(segmentation.argmax(dim=1))
+            semantic_map = segmentation.argmax(dim=1)
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": semantic_map[i], "segmentation_scores": segmentation[i]}
+                )
+                for i in range(batch_size)
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
         return semantic_segmentation
 

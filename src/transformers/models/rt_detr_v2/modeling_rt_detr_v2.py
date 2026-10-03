@@ -447,7 +447,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, RTDetrV2ForObjectDetection):
+        if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2ForSegmentation)):
             if module.model.decoder.class_embed is not None:
                 for layer in module.model.decoder.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
@@ -490,18 +490,18 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             init.constant_(module.enc_score_head.bias, bias)
 
         elif isinstance(module, RTDetrV2MaskHeadSmallConv):
-            # The mask head uses kaiming initialization for all its Conv2d layers, as in DETR
+            # RTDetrV2MaskHeadSmallConv uses kaiming initialization for all its Conv2d layers, as in DETR
             for m in module.modules():
                 if isinstance(m, nn.Conv2d):
                     init.kaiming_uniform_(m.weight, a=1)
                     if m.bias is not None:
-                        init.zeros_(m.bias)
+                        init.constant_(m.bias, 0)
 
         elif isinstance(module, RTDetrV2MHAttentionMap):
-            init.xavier_uniform_(module.q_proj.weight)
+            init.zeros_(module.k_proj.bias)
             init.zeros_(module.q_proj.bias)
             init.xavier_uniform_(module.k_proj.weight)
-            init.zeros_(module.k_proj.bias)
+            init.xavier_uniform_(module.q_proj.weight)
 
         elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -2109,7 +2109,7 @@ class RTDetrV2MHAttentionMap(nn.Module):
 class RTDetrV2SegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -2122,7 +2122,9 @@ class RTDetrV2SegmentationOutput(ModelOutput):
         possible padding). You can use [`~RTDetrV2ImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/8, width/8)`):
-        Segmentation masks logits for all queries.
+        Segmentation masks logits for all queries. See also
+        [`~RTDetrV2ImageProcessor.post_process_semantic_segmentation`] or
+        [`~RTDetrV2ImageProcessor.post_process_instance_segmentation`]
     auxiliary_outputs (`list[Dict]`, *optional*):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -2190,17 +2192,31 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
+        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        "class_embed": "model.decoder.class_embed",
+        "bbox_embed": "model.decoder.bbox_embed",
+    }
 
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
-
-        # object detection model
-        self.rt_detr_v2 = RTDetrV2ForObjectDetection(config)
+        self.model = RTDetrV2Model(config)
+        self.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
+        self.bbox_embed = nn.ModuleList(
+            [
+                RTDetrV2MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+                for _ in range(config.decoder_layers)
+            ]
+        )
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
 
         # segmentation head
-        hidden_size = config.d_model
-        number_of_heads = config.decoder_attention_heads
-        intermediate_channel_sizes = self.rt_detr_v2.model.backbone.intermediate_channel_sizes
+        hidden_size, number_of_heads = config.d_model, config.decoder_attention_heads
+        intermediate_channel_sizes = self.model.backbone.intermediate_channel_sizes
 
         self.mask_head = RTDetrV2MaskHeadSmallConv(
             input_channels=hidden_size + number_of_heads,
@@ -2210,7 +2226,6 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
         )
 
         self.bbox_attention = RTDetrV2MHAttentionMap(hidden_size, number_of_heads, dropout=0.0)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2227,8 +2242,8 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
     ) -> tuple[torch.FloatTensor] | RTDetrV2SegmentationOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Not supported: the segmentation head needs the multi-scale backbone features, so `pixel_values` must be
-            passed instead.
+            Not supported, as segmentation requires multi-scale features from the backbone that are not available
+            when bypassing it with `inputs_embeds`. Pass `pixel_values` instead.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
             dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
@@ -2247,14 +2262,17 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=device)
 
-        backbone_features = self.rt_detr_v2.model.backbone(pixel_values, pixel_mask)
+        vision_features = self.model.backbone(pixel_values, pixel_mask)
         proj_feats = [
-            self.rt_detr_v2.model.encoder_input_proj[level](source)
-            for level, (source, mask) in enumerate(backbone_features)
+            self.model.encoder_input_proj[level](source) for level, (source, mask) in enumerate(vision_features)
         ]
 
         if encoder_outputs is None:
-            encoder_outputs = self.rt_detr_v2.model.encoder(proj_feats, **kwargs)
+            encoder_outputs = self.model.encoder(
+                proj_feats,
+                **kwargs,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
         elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -2262,65 +2280,74 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        # Equivalent to def _get_encoder_input
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/RTDetrV2_pytorch/src/zoo/RTDetrV2/RTDetrV2_decoder.py#L412
         sources = []
         for level, source in enumerate(encoder_outputs.last_hidden_state):
-            sources.append(self.rt_detr_v2.model.decoder_input_proj[level](source))
+            sources.append(self.model.decoder_input_proj[level](source))
 
         # Encoder feature maps go from highest to lowest resolution; the mask head uses the lowest one as base
         mask_features = sources[-1]
 
+        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(
-                self.rt_detr_v2.model.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1])
-            )
+            sources.append(self.model.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.rt_detr_v2.model.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
+                sources.append(self.model.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
+        # Prepare encoder inputs (by flattening)
         source_flatten = []
         spatial_shapes_list = []
         spatial_shapes = torch.empty((len(sources), 2), device=device, dtype=torch.long)
         for level, source in enumerate(sources):
-            h, w = source.shape[-2:]
-            spatial_shapes[level, 0] = h
-            spatial_shapes[level, 1] = w
-            spatial_shapes_list.append((h, w))
+            height, width = source.shape[-2:]
+            spatial_shapes[level, 0] = height
+            spatial_shapes[level, 1] = width
+            spatial_shapes_list.append((height, width))
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
         source_flatten = torch.cat(source_flatten, 1)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
+        # prepare denoising training
         if self.training and self.config.num_denoising > 0 and labels is not None:
-            (denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values) = (
-                get_contrastive_denoising_training_group(
-                    targets=labels,
-                    num_classes=self.config.num_labels,
-                    num_queries=self.config.num_queries,
-                    class_embed=self.rt_detr_v2.model.denoising_class_embed,
-                    num_denoising_queries=self.config.num_denoising,
-                    label_noise_ratio=self.config.label_noise_ratio,
-                    box_noise_scale=self.config.box_noise_scale,
-                )
+            (
+                denoising_class,
+                denoising_bbox_unact,
+                attention_mask,
+                denoising_meta_values,
+            ) = get_contrastive_denoising_training_group(
+                targets=labels,
+                num_classes=self.config.num_labels,
+                num_queries=self.config.num_queries,
+                class_embed=self.model.denoising_class_embed,
+                num_denoising_queries=self.config.num_denoising,
+                label_noise_ratio=self.config.label_noise_ratio,
+                box_noise_scale=self.config.box_noise_scale,
             )
         else:
             denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
 
         dtype = source_flatten.dtype
 
+        # prepare input for decoder
         if self.training or self.config.anchor_image_size is None:
+            # Pass spatial_shapes as tuple to make it hashable and make sure
+            # lru_cache is working for generate_anchors()
             spatial_shapes_tuple = tuple(spatial_shapes_list)
-            anchors, valid_mask = self.rt_detr_v2.model.generate_anchors(
-                spatial_shapes_tuple, device=device, dtype=dtype
-            )
+            anchors, valid_mask = self.model.generate_anchors(spatial_shapes_tuple, device=device, dtype=dtype)
         else:
-            anchors, valid_mask = self.rt_detr_v2.model.anchors, self.rt_detr_v2.model.valid_mask
+            anchors, valid_mask = self.model.anchors, self.model.valid_mask
             anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
 
+        # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
-        output_memory = self.rt_detr_v2.model.enc_output(memory)
 
-        enc_outputs_class = self.rt_detr_v2.model.enc_score_head(output_memory)
-        enc_outputs_coord_logits = self.rt_detr_v2.model.enc_bbox_head(output_memory) + anchors
+        output_memory = self.model.enc_output(memory)
+
+        enc_outputs_class = self.model.enc_score_head(output_memory)
+        enc_outputs_coord_logits = self.model.enc_bbox_head(output_memory) + anchors
 
         _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
 
@@ -2336,8 +2363,9 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
             dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
         )
 
+        # extract region features
         if self.config.learn_initial_query:
-            target = self.rt_detr_v2.model.weight_embedding.tile([batch_size, 1, 1])
+            target = self.model.weight_embedding.tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
             target = target.detach()
@@ -2347,7 +2375,8 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
 
         init_reference_points = reference_points_unact.detach()
 
-        decoder_outputs = self.rt_detr_v2.model.decoder(
+        # decoder
+        decoder_outputs = self.model.decoder(
             inputs_embeds=target,
             encoder_hidden_states=source_flatten,
             encoder_attention_mask=attention_mask,
@@ -2376,7 +2405,7 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
         min_dtype = torch.finfo(mask_features.dtype).min
         bbox_attention_mask = torch.where(
             feat_mask.unsqueeze(1).unsqueeze(1),
-            torch.tensor(0.0, device=device, dtype=mask_features.dtype),
+            torch.full((), 0.0, device=mask_features.device, dtype=mask_features.dtype),
             min_dtype,
         )
 
@@ -2389,7 +2418,7 @@ class RTDetrV2ForSegmentation(RTDetrV2PreTrainedModel):
         seg_masks = self.mask_head(
             features=mask_features,
             attention_masks=bbox_mask,
-            fpn_features=[backbone_features[2][0], backbone_features[1][0], backbone_features[0][0]],
+            fpn_features=[vision_features[2][0], vision_features[1][0], vision_features[0][0]],
         )
 
         pred_masks = seg_masks.view(batch_size, self.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])

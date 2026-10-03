@@ -493,12 +493,13 @@ def RTDetrForSegmentationLoss(
     criterion.weight_dict["loss_mask"] = config.weight_loss_mask
     criterion.weight_dict["loss_dice"] = config.weight_loss_dice
     criterion.to(device)
-    outputs_loss = {}
-    # Masks are only predicted for the detector queries, so the denoising queries are split off
-    # from the class/box predictions to keep `logits`/`pred_boxes` aligned with `pred_masks`.
     if denoising_meta_values is not None:
+        # Drop denoising queries and calculate loss only over normal queries.
+        # See https://github.com/huggingface/transformers/pull/48528
         _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
         _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
+    # Second: compute the losses, based on outputs and labels
+    outputs_loss = {}
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
     outputs_loss["pred_masks"] = pred_masks

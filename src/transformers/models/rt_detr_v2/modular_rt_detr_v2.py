@@ -475,16 +475,31 @@ class RTDetrV2MHAttentionMap(RTDetrMHAttentionMap):
 
 
 class RTDetrV2ForSegmentation(RTDetrForSegmentation, RTDetrV2PreTrainedModel):
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
+        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        "class_embed": "model.decoder.class_embed",
+        "bbox_embed": "model.decoder.bbox_embed",
+    }
+
     def __init__(self, config: RTDetrV2Config):
         RTDetrV2PreTrainedModel.__init__(self, config)
-
-        # object detection model
-        self.rt_detr_v2 = RTDetrV2ForObjectDetection(config)
+        self.model = RTDetrV2Model(config)
+        self.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
+        self.bbox_embed = nn.ModuleList(
+            [
+                RTDetrV2MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+                for _ in range(config.decoder_layers)
+            ]
+        )
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
 
         # segmentation head
-        hidden_size = config.d_model
-        number_of_heads = config.decoder_attention_heads
-        intermediate_channel_sizes = self.rt_detr_v2.model.backbone.intermediate_channel_sizes
+        hidden_size, number_of_heads = config.d_model, config.decoder_attention_heads
+        intermediate_channel_sizes = self.model.backbone.intermediate_channel_sizes
 
         self.mask_head = RTDetrV2MaskHeadSmallConv(
             input_channels=hidden_size + number_of_heads,
@@ -494,7 +509,6 @@ class RTDetrV2ForSegmentation(RTDetrForSegmentation, RTDetrV2PreTrainedModel):
         )
 
         self.bbox_attention = RTDetrV2MHAttentionMap(hidden_size, number_of_heads, dropout=0.0)
-
         # Initialize weights and apply final processing
         self.post_init()
 
