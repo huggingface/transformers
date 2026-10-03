@@ -38,6 +38,7 @@ if os.path.isdir("/mnt/efs_cache"):
 def _sigterm_handler(signum, frame):
     signal.signal(signal.SIGTERM, signal.SIG_IGN)  # prevent re-entry
     os.killpg(os.getpgrp(), signal.SIGTERM)
+    sys.exit(1)
 
 
 signal.signal(signal.SIGTERM, _sigterm_handler)
