@@ -1261,6 +1261,7 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
         "Gemma4VisionPatchEmbedder",
         "Gemma4AudioLayer",
     ]
+    _keep_in_fp32_modules = ["router.proj"]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
