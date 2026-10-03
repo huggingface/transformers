@@ -50,19 +50,14 @@ from transformers.generation.continuous_batching.cache_allocators import (
     FullAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
 )
-from transformers.generation.continuous_batching.cb_logits_processors import (
-    ContinuousBatchingLogitsProcessorList,
-)
+from transformers.generation.continuous_batching.cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from transformers.generation.continuous_batching.continuous_api import (
     BackgroundThreadStatus,
     ContinuousBatchingManager,
     OutputRouter,
 )
 from transformers.generation.continuous_batching.distributed import DistributedHelper
-from transformers.generation.continuous_batching.initialization import (
-    disable_acceleration_for_full_history_processors,
-)
-from transformers.generation.continuous_batching.input_outputs import ContinuousBatchingIOs, build_attention_mask
+from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import (
     FutureRequestState,
@@ -73,15 +68,8 @@ from transformers.generation.continuous_batching.requests import (
 )
 from transformers.generation.continuous_batching.utils import DEVICE_TYPE_TO_GRAPH_NAME
 from transformers.generation.logits_process import (
-    ForcedBOSTokenLogitsProcessor,
-    ForcedEOSTokenLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
-    NoBadWordsLogitsProcessor,
-    NoRepeatNGramLogitsProcessor,
-    RepetitionPenaltyLogitsProcessor,
-    SequenceBiasLogitsProcessor,
-    SuppressTokensAtBeginLogitsProcessor,
     TemperatureLogitsWarper,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
@@ -307,97 +295,129 @@ def _make_allocator(
     )
 
 
+class ContinuousBatchingMinLengthTest(unittest.TestCase):
+    @parameterized.expand([(None,), (0,), ([0, 9],)])
+    def test_generation_config_preparation(self, eos_token_id):
+        config = AutoConfig.for_model(
+            "qwen2",
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+        )
+        model = AutoModelForCausalLM.from_config(config, attn_implementation="eager")
+        gen_config = GenerationConfig(
+            min_length=8, min_new_tokens=2, max_new_tokens=10, eos_token_id=eos_token_id, pad_token_id=31
+        )
+        original_config = gen_config.to_dict()
+        manager = model.init_continuous_batching(
+            generation_config=gen_config,
+            continuous_batching_config=ContinuousBatchingConfig(
+                use_cuda_graph=False,
+                use_async_batching=False,
+                default_compile_level=0,
+                auto_switch_to_flash=False,
+                num_blocks=16,
+                max_batch_tokens=8,
+                max_requests_per_batch=4,
+            ),
+        )
+        try:
+            self.assertEqual(gen_config.to_dict(), original_config)
+            self.assertIsNot(manager.generation_config, gen_config)
+            processor_names = [p.__class__.__name__ for p in manager.logit_processor.logits_processor]
+            # min_new_tokens is still unsupported and must reach the filter without failing during construction.
+            expected = [] if eos_token_id is None else ["ContinuousBatchingMinLengthLogitsProcessor"]
+            self.assertEqual(processor_names, expected)
+        finally:
+            manager.destroy()
+
+    @parameterized.expand(
+        [(False, False, 0), (True, False, 0), (False, True, 0), (True, True, 0), (False, False, 1), (True, True, 1)]
+    )
+    def test_min_length_generation(self, use_cuda_graph, use_async_batching, compile_level):
+        use_accelerator = use_cuda_graph or use_async_batching or compile_level > 0
+        if use_accelerator and not torch.cuda.is_available():
+            self.skipTest("CUDA is required for graph, async and compile coverage")
+        device = "cuda" if use_accelerator else "cpu"
+        config = AutoConfig.for_model(
+            "qwen2",
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            max_position_embeddings=64,
+            pad_token_id=31,
+            eos_token_id=0,
+        )
+        model = AutoModelForCausalLM.from_config(config, attn_implementation="eager").to(device).eval()
+        # All logits tie: greedy decoding prefers EOS unless the minimum length masks it.
+        with torch.no_grad():
+            model.lm_head.weight.zero_()
+        prompts = [[2, 3, 4], [2, 3, 4, 5, 6], [2] * 9]
+        gen_config = GenerationConfig(
+            min_length=8, max_new_tokens=10, do_sample=False, pad_token_id=31, eos_token_id=0
+        )
+        expected = [
+            model.generate(torch.tensor([prompt], device=device), generation_config=gen_config)[
+                0, len(prompt) :
+            ].tolist()
+            for prompt in prompts
+        ]
+        model.set_attn_implementation("paged|eager")
+        outputs = model.generate_batch(
+            inputs=prompts,
+            generation_config=gen_config,
+            continuous_batching_config=ContinuousBatchingConfig(
+                use_cuda_graph=use_cuda_graph,
+                use_async_batching=use_async_batching,
+                default_compile_level=compile_level,
+                auto_switch_to_flash=False,
+                page_size=4,
+                num_blocks=64,
+                max_batch_tokens=8,
+                max_requests_per_batch=4,
+                q_padding_interval_size=4,
+                kv_padding_interval_size=16,
+            ),
+            progress_bar=False,
+        )
+        actual = [outputs[f"req_{i}"].generated_tokens for i in range(len(prompts))]
+        self.assertEqual(expected, [[1] * 5 + [0], [1] * 3 + [0], [0]])
+        self.assertEqual(actual, expected)
+
+
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
-    def test_full_history_logits_processors_match_independent_generation(self):
-        processor_cases = [
-            ("min_length", lambda: MinLengthLogitsProcessor(4, eos_token_id=9), [[4, 5, 4], [1, 2, 1, 2]]),
-            ("repetition_penalty", lambda: RepetitionPenaltyLogitsProcessor(1.2), [[4, 5, 4], [1, 2, 1, 2]]),
-            ("no_repeat_ngram", lambda: NoRepeatNGramLogitsProcessor(2), [[4, 5, 4], [1, 2, 1, 2]]),
-            (
-                "sequence_bias",
-                lambda: SequenceBiasLogitsProcessor([[[5, 4], 3.5], [[1, 2, 3], -2.0]]),
-                [[4, 5], [1, 2]],
-            ),
-            ("bad_words", lambda: NoBadWordsLogitsProcessor([[5, 4], [1, 2, 3]]), [[4, 5], [1, 2]]),
-            ("forced_bos", lambda: ForcedBOSTokenLogitsProcessor(7), [[4], [1, 2, 3]]),
-            ("forced_eos", lambda: ForcedEOSTokenLogitsProcessor(4, eos_token_id=9), [[4, 5, 6], [1, 2]]),
-            (
-                "suppress_at_begin",
-                lambda: SuppressTokensAtBeginLogitsProcessor([6, 7], begin_index=3),
-                [[4, 5, 6], [1, 2]],
-            ),
-        ]
-        scores = torch.arange(20, dtype=torch.float32).view(2, 10)
-
-        for name, processor_factory, history_values in processor_cases:
-            with self.subTest(name=name):
-                histories = [torch.tensor(values) for values in history_values]
-                expected_processor = processor_factory()
-                expected = torch.cat(
-                    [
-                        expected_processor(history.unsqueeze(0), row.unsqueeze(0))
-                        for history, row in zip(histories, scores)
-                    ]
-                )
-
-                processors = ContinuousBatchingLogitsProcessorList(LogitsProcessorList([processor_factory()]))
-                actual = processors.apply_with_full_history(
-                    histories, scores.clone(), logits_processor_args=torch.empty((0, 2), dtype=torch.int32)
-                )
-
-                self.assertTrue(processors.requires_full_history)
-                torch.testing.assert_close(actual, expected)
-
-    def test_full_history_processors_preserve_processor_order(self):
-        histories = [torch.tensor([4, 5, 4]), torch.tensor([1, 2, 1, 2])]
-        scores = torch.arange(20, dtype=torch.float32).view(2, 10)
-        expected_processors = LogitsProcessorList([TemperatureLogitsWarper(2.0), NoRepeatNGramLogitsProcessor(2)])
-        expected = torch.cat(
-            [expected_processors(history.unsqueeze(0), row.unsqueeze(0)) for history, row in zip(histories, scores)]
-        )
+    @parameterized.expand([(False,), (True,)])
+    def test_min_length_processor_matches_individual_requests(self, per_request_processors):
         processors = ContinuousBatchingLogitsProcessorList(
-            LogitsProcessorList([TemperatureLogitsWarper(2.0), NoRepeatNGramLogitsProcessor(2)])
+            LogitsProcessorList([MinLengthLogitsProcessor(4, [0, 9]), TemperatureLogitsWarper(2.0)]),
+            per_request_processors=per_request_processors,
         )
-
-        actual = processors.apply_with_full_history(
-            histories, scores.clone(), logits_processor_args=torch.empty((0, 2), dtype=torch.int32)
+        requests = []
+        for i, (length, has_new_token) in enumerate([(3, True), (2, False), (4, True), (5, True)]):
+            state = RequestState(request_id=str(i), initial_tokens=[1, 2])
+            # Async scheduling advances position_offset before generated_tokens is updated.
+            state.position_offset = length
+            requests.append(FutureRequestState(state, has_new_token, complete_blocks={}, query_length=1))
+        args = torch.empty((processors.tensors_required, 4), dtype=torch.int32)
+        processors.fill_defaults(args)
+        processors.prepare_tensor_args(requests, args)
+        scores = torch.arange(40, dtype=torch.float32).view(4, 10)
+        original_scores = scores.clone()
+        actual = processors(torch.ones(4, dtype=torch.long), scores, args)
+        reference = LogitsProcessorList([MinLengthLogitsProcessor(4, [0, 9]), TemperatureLogitsWarper(2.0)])
+        expected = torch.cat(
+            [reference(torch.ones((1, length), dtype=torch.long), row[None]) for length, row in zip([3, 4, 5], scores)]
         )
-
-        torch.testing.assert_close(actual, expected)
-
-    def test_token_histories_include_prompt_and_generated_tokens(self):
-        first = RequestState(request_id="first", initial_tokens=[10, 11])
-        first.generated_tokens = [12, 13]
-        skipped = RequestState(request_id="skipped", initial_tokens=[20])
-        skipped.generated_tokens = [21]
-        second = RequestState(request_id="second", initial_tokens=[30, 31, 32])
-
-        inputs_and_outputs = ContinuousBatchingIOs.__new__(ContinuousBatchingIOs)
-        inputs_and_outputs.requests_in_batch = [
-            FutureRequestState(first, has_new_token=True, complete_blocks=0, query_length=1),
-            FutureRequestState(skipped, has_new_token=False, complete_blocks=0, query_length=1),
-            FutureRequestState(second, has_new_token=True, complete_blocks=0, query_length=1),
-        ]
-
-        histories = inputs_and_outputs.get_token_histories(torch.device("cpu"))
-
-        self.assertEqual([history.tolist() for history in histories], [[10, 11, 12, 13], [30, 31, 32]])
-
-    def test_full_history_processors_disable_incompatible_execution_modes(self):
-        config = ContinuousBatchingConfig(
-            use_cuda_graph=(True, True),
-            use_async_batching=True,
-            varlen_compile_config=CompileConfig(),
-            decode_compile_config=CompileConfig(),
-        )
-
-        disable_acceleration_for_full_history_processors(config)
-
-        self.assertEqual(config.use_cuda_graph, (False, False))
-        self.assertFalse(config.use_async_batching)
-        self.assertIsNone(config.varlen_compile_config)
-        self.assertIsNone(config.decode_compile_config)
+        torch.testing.assert_close(actual[:3], expected)
+        torch.testing.assert_close(actual[3], scores[3] / 2)  # padded row uses processor defaults
+        torch.testing.assert_close(scores, original_scores)
 
     @parameterized.expand([("paged|eager", eager_paged_attention_forward)])
     def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
@@ -1331,7 +1351,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
         upcast_lm_head: bool = False,
-        generation_config_overrides: dict[str, Any] | None = None,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -1373,8 +1392,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        if generation_config_overrides is not None:
-            model.generation_config.update(**generation_config_overrides)
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
@@ -1395,8 +1412,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype, upcast_lm_head)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        if generation_config_overrides is not None:
-            model.generation_config.update(**generation_config_overrides)
 
         model.generation_config.use_cuda_graph = (
             any(continuous_batching_config.cuda_graph_booleans) and device_type in DEVICE_TYPE_TO_GRAPH_NAME
@@ -1526,27 +1541,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         manager.stop(block=True)
         self.assertEqual(model.config._attn_implementation, original_attn_impl)
 
-    @parameterized.expand(
-        [
-            ("control", 1.0, 0),
-            ("repetition_penalty", 1.1, 0),
-            ("no_repeat_ngram", 1.0, 2),
-        ]
-    )
-    @slow
-    def test_continuous_batching_history_dependent_logits_processor(
-        self, name: str, repetition_penalty: float, no_repeat_ngram_size: int
-    ) -> None:
-        self._test_continuous_batching_parity(
-            model_id="Qwen/Qwen2.5-0.5B-Instruct",
-            continuous_batching_config=ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False),
-            attn_implementation="sdpa",
-            generation_config_overrides={
-                "repetition_penalty": repetition_penalty,
-                "no_repeat_ngram_size": no_repeat_ngram_size,
-            },
-        )
-
+    # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
     @parameterized.expand(
         list(

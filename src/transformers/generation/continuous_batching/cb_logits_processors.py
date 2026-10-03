@@ -17,6 +17,7 @@ import torch
 
 from ..logits_process import (
     LogitsProcessorList,
+    MinLengthLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -73,6 +74,7 @@ class ContinuousBatchingLogitsProcessorList:
         Some base processors have a per-request version adapted for CB and will be converted to their per-request
         version when this class is instantiated. This is the default behavior unless the flag `per_request_processors`
         is set to False.
+        Minimum-length processing always uses a CB adapter to track each request's length.
     """
 
     def __init__(
@@ -84,15 +86,12 @@ class ContinuousBatchingLogitsProcessorList:
         self.logits_processor = logits_processor
         self.tensors_required = 0  # number of tensors required to store CB logits processors arguments
         # If needed, convert compatible logits processors to their per-request versions
-        if per_request_processors:
-            self._convert_to_per_request_processors()
+        self._convert_to_per_request_processors(per_request_processors)
         # Validate and optionally filter processors based on their CB support
         self._validate_processors(drop_unsupported_processors)
         self._retrieve_processors_kwargs()
         # Static boolean to know if there is any logits processing to do. Helps with torch.compile().
         self.do_processing = len(self.logits_processor) > 0
-        # Supported classic processors other than the input-independent warpers need each request's exact token history.
-        self.requires_full_history = any(self._requires_full_history(processor) for processor in self.logits_processor)
 
     def __repr__(self) -> str:
         return f"ContinuousBatchingLogitsProcessorList(logits_processor={self.logits_processor}, tensors_required={self.tensors_required})"
@@ -103,19 +102,16 @@ class ContinuousBatchingLogitsProcessorList:
         self.supported_keys = {}
         self.ignored_keys = set()
         self.do_processing = False
-        self.requires_full_history = False
 
-    @staticmethod
-    def _requires_full_history(processor) -> bool:
-        return (
-            not isinstance(processor, ContinuousBatchingLogitsProcessor)
-            and not isinstance(processor, tuple(CLASSIC_TO_CB_PROCESSORS_MAP))
-            and getattr(processor, "supports_continuous_batching", None) is True
-        )
-
-    def _convert_to_per_request_processors(self) -> None:
+    def _convert_to_per_request_processors(self, per_request_processors: bool) -> None:
         """Replaces the compatible logits processors with their per-request versions."""
         for i, processor in enumerate(self.logits_processor):
+            if isinstance(processor, MinLengthLogitsProcessor):
+                self.logits_processor[i] = ContinuousBatchingMinLengthLogitsProcessor(processor)
+                self.tensors_required += 1
+                continue
+            if not per_request_processors:
+                continue
             for regular_cls, cb_cls in CLASSIC_TO_CB_PROCESSORS_MAP.items():
                 if isinstance(processor, regular_cls):
                     self.logits_processor[i] = cb_cls(processor)
@@ -223,36 +219,34 @@ class ContinuousBatchingLogitsProcessorList:
                 scores = processor(input_ids, scores)
         return scores
 
-    def apply_with_full_history(
-        self,
-        input_ids: list[torch.LongTensor],
-        scores: torch.FloatTensor,
-        logits_processor_args: torch.Tensor,
-    ) -> torch.FloatTensor:
-        """Apply processors while preserving the exact token history of every request."""
-        if len(input_ids) != scores.size(0):
-            raise ValueError(f"Expected {scores.size(0)} token histories, but received {len(input_ids)}.")
-
-        current_arg_id = 0
-        for processor in self.logits_processor:
-            if isinstance(processor, ContinuousBatchingLogitsProcessor):
-                scores = processor(scores, logits_processor_args[current_arg_id])
-                current_arg_id += 1
-                continue
-
-            if self._requires_full_history(processor):
-                processed_scores = [
-                    processor(request_input_ids.unsqueeze(0), request_scores.unsqueeze(0))
-                    for request_input_ids, request_scores in zip(input_ids, scores)
-                ]
-                scores = torch.cat(processed_scores, dim=0)
-            else:
-                current_input_ids = torch.stack([request_input_ids[-1] for request_input_ids in input_ids])
-                scores = processor(current_input_ids, scores)
-        return scores
-
 
 # Here are all the continuous batching logits processors that are supported
+class ContinuousBatchingMinLengthLogitsProcessor(ContinuousBatchingLogitsProcessor):
+    supported_kwargs: dict[str, type] = {}
+    ignored_kwargs: tuple[str, ...] = ()
+
+    def __init__(self, processor: MinLengthLogitsProcessor) -> None:
+        self.min_length = processor.min_length
+        self.eos_token_id = processor.eos_token_id
+
+    def fill_defaults(self, int32_tensor: torch.Tensor) -> None:
+        int32_tensor.zero_()
+
+    def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
+        # position_offset includes this batch's input, even before async outputs reach the host.
+        return torch.tensor(
+            [request.state.position_offset < self.min_length for request in requests_with_new_token],
+            dtype=torch.int32,
+            device="cpu",
+        )
+
+    def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
+        vocab = torch.arange(scores.size(-1), device=scores.device)
+        eos_mask = torch.isin(vocab, self.eos_token_id.to(scores.device))
+        suppress_eos = tensor_arg[: scores.size(0)].bool().unsqueeze(-1)
+        return scores.masked_fill(suppress_eos & eos_mask, -float("inf"))
+
+
 class ContinuousBatchingTemperatureLogitsWarper(ContinuousBatchingLogitsProcessor):
     supported_kwargs: dict[str, type] = {"temperature": float}
     ignored_kwargs: tuple[str, ...] = ()
