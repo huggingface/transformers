@@ -294,7 +294,6 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
             self.model_id, dtype="auto", device_map="auto"
         )
-        model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -330,7 +329,6 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
             self.model_id, dtype="auto", device_map="auto"
         )
-        model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -382,7 +380,6 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
             self.model_id, dtype="auto", device_map="auto"
         )
-        model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
