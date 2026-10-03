@@ -10,6 +10,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import os
 import socket
 import tempfile
@@ -532,15 +533,6 @@ class TensorParallelTesterMixin(ABC):
     def _skip_if_not_supported(self, expert_parallel: bool = False):
         """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
         parallelism = "Expert" if expert_parallel else "Tensor"
-        # An EP-capable MoE (@use_experts_implementation) must ship an ep_plan; assert before any
-        # skip so a plan-less model fails even where the parallel test can't run (GPU, old torch).
-        if expert_parallel and self._get_tp_model_class()._can_set_experts_implementation():
-            self.assertTrue(
-                self._has_ep_plan(),
-                "Model supports a switchable experts implementation (@use_experts_implementation) but defines no "
-                "base_model_ep_plan; add an expert-parallel plan to its config so the EP path is covered.",
-            )
-
         if not is_torch_greater_or_equal("2.9"):
             self.skipTest(f"{parallelism} parallel tests require torch >= 2.9")
 
@@ -572,6 +564,39 @@ class TensorParallelTesterMixin(ABC):
         # config = self.model_tester.get_config()
         # if hasattr(config, "vision_config") and config.vision_config is not None:
         #     self.skipTest("VLM models are not yet supported in TP tests")
+
+    def test_moe_parallel_plans_shard_experts(self):
+        """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
+        A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
+        """
+        moe_classes = [cls for cls in self.all_model_classes if cls._can_set_experts_implementation()]
+        if not moe_classes:
+            self.skipTest("Not an MoE model")
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # a class-level `_tp_plan` (e.g. `lm_head` alone) is not a plan for the experts: only a base-model one is
+        has_tp_plan = config.base_model_tp_plan is not None or any(
+            getattr(getattr(config, key), "base_model_tp_plan", None) is not None for key in config.sub_configs
+        )
+        for model_class in moe_classes:
+            model = model_class(copy.deepcopy(config))
+            param_names = {name for name, _ in model.named_parameters()}  # a tied tensor once, under its first name
+            expert_weights = {
+                f"{name}.{param_name}"
+                for name, module in model.named_modules()
+                if hasattr(module, "_is_expert_parallel")
+                for param_name, param in module.named_parameters(recurse=False)
+                if param.ndim == 3 and f"{name}.{param_name}" in param_names
+            }
+            plans = {"TP": model._tp_plan if has_tp_plan else None, "EP": model._ep_plan}
+            plans = {kind: plan for kind, plan in plans.items() if plan}
+            self.assertTrue(plans, f"{model_class.__name__} is an MoE model without a TP or an EP plan")
+            for kind, plan in plans.items():
+                unsharded = sorted(
+                    n for n in expert_weights if _get_parameter_tp_plan(n, plan, is_weight=True) is None
+                )
+                self.assertFalse(
+                    unsharded, f"{model_class.__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
+                )
 
     @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test

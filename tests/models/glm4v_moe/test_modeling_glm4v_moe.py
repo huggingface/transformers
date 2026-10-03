@@ -24,6 +24,7 @@ from transformers import (
     Glm4vMoeModel,
     is_torch_available,
 )
+from transformers.models.glm4v_moe.configuration_glm4v_moe import Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 from transformers.testing_utils import (
     backend_device_count,
     get_cpu_ram_total_gib,
@@ -35,175 +36,116 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
 
 
-class Glm4vMoeVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=64,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=112,
-        video_start_token_id=3,
-        video_end_token_id=4,
-        image_start_token_id=5,
-        image_end_token_id=6,
-        image_token_id=7,
-        video_token_id=8,
-        is_training=True,
-        text_config={
-            "vocab_size": 99,
-            "hidden_size": 32,
-            "intermediate_size": 22,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 1,
-            "output_channels": 64,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
-            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1], "partial_rotary_factor": 0.5},
-            "rope_theta": 10000,
-            "tie_word_embeddings": True,
-            "bos_token_id": 0,
-            "eos_token_id": 0,
-            "pad_token_id": 0,
-            "n_routed_experts": 8,
-            "n_shared_experts": 1,
-            "n_group": 1,
-            "topk_group": 1,
-            "num_experts_per_tok": 8,
-        },
-        vision_config={
-            "depth": 2,
-            "hidden_act": "silu",
-            "hidden_size": 48,
-            "out_hidden_size": 32,
-            "intermediate_size": 22,
-            "patch_size": 14,
-            "spatial_merge_size": 1,
-            "temporal_patch_size": 2,
-        },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.hidden_size = text_config["hidden_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 64
-        self.seq_length = seq_length + self.num_image_tokens
-        self.n_routed_experts = text_config["n_routed_experts"]
-        self.n_shared_experts = text_config["n_shared_experts"]
-        self.num_experts_per_tok = text_config["num_experts_per_tok"]
-        self.n_group = text_config["n_group"]
-        self.topk_group = text_config["topk_group"]
+class Glm4vMoeVisionText2TextModelTester(VLMModelTester):
+    base_model_class = Glm4vMoeModel
+    config_class = Glm4vMoeConfig
+    text_config_class = Glm4vMoeTextConfig
+    vision_config_class = Glm4vMoeVisionConfig
+    conditional_generation_class = Glm4vMoeForConditionalGeneration
 
-    def get_config(self):
-        return Glm4vMoeConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            video_start_token_id=self.video_start_token_id,
-            video_end_token_id=self.video_end_token_id,
-            image_start_token_id=self.image_start_token_id,
-            image_end_token_id=self.image_end_token_id,
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("video_start_token_id", 3)
+        kwargs.setdefault("video_end_token_id", 4)
+        kwargs.setdefault("image_start_token_id", 5)
+        kwargs.setdefault("image_end_token_id", 6)
+        kwargs.setdefault("image_token_id", 7)
+        kwargs.setdefault("video_token_id", 8)
+        kwargs.setdefault("image_size", 112)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("num_image_tokens", 64)
+        kwargs.setdefault("seq_length", 128)
+        kwargs.setdefault("bos_token_id", 0)
+        kwargs.setdefault("eos_token_id", 0)
+        kwargs.setdefault("intermediate_size", 22)
+        kwargs.setdefault("num_key_value_heads", 1)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault(
+            "rope_parameters",
+            {"rope_type": "default", "mrope_section": [2, 1, 1], "partial_rotary_factor": 0.5, "rope_theta": 10000},
+        )
+        kwargs.setdefault("tie_word_embeddings", True)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("n_routed_experts", 8)
+        kwargs.setdefault("n_shared_experts", 1)
+        kwargs.setdefault("n_group", 1)
+        kwargs.setdefault("topk_group", 1)
+        kwargs.setdefault("num_experts_per_tok", 8)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("spatial_merge_size", 1)
+        kwargs.setdefault("temporal_patch_size", 2)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {
+            self.video_token_id,
+            self.image_start_token_id,
+            self.image_end_token_id,
+            self.video_start_token_id,
+            self.video_end_token_id,
+        }
+
+    def get_vision_config(self):
+        return self.vision_config_class(
+            depth=self.depth,
+            hidden_act=self.hidden_act,
+            hidden_size=self.hidden_size,
+            num_heads=self.num_attention_heads,
+            out_hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            patch_size=self.patch_size,
+            spatial_merge_size=self.spatial_merge_size,
+            temporal_patch_size=self.temporal_patch_size,
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_values = floats_tensor(
+    def create_attention_mask(self, input_ids):
+        return torch.ones_like(input_ids)
+
+    def create_pixel_values(self):
+        return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (patch_size**2),
-                self.num_channels * (patch_size**2) * temporal_patch_size,
+                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
 
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.video_start_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_start_token_id] = self.pad_token_id
-        input_ids[input_ids == self.video_end_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_end_token_id] = self.pad_token_id
-
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
         input_ids[:, 0] = self.image_start_token_id
         input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id
         input_ids[:, 1 + self.num_image_tokens] = self.image_end_token_id
-        patch_size = config.vision_config.patch_size
-        patches_per_side = self.image_size // patch_size
+        return input_ids
 
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
+        patches_per_side = self.image_size // self.patch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
-        mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
+        return {
             "image_grid_thw": torch.tensor(
                 [[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device
             ),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
             "mm_token_type_ids": mm_token_type_ids,
         }
-        return config, inputs_dict
 
 
 @require_torch
-class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
-
+class Glm4vMoeModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Glm4vMoeVisionText2TextModelTester
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
-    _is_composite = True
-
-    def setUp(self):
-        self.model_tester = Glm4vMoeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Glm4vMoeConfig, has_text_modality=False)
 
     @unittest.skip("We don't really care about this one, test is not that slow")
     def test_model_is_small(self):
         pass
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     # Glm4vMoe has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
@@ -248,6 +190,54 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     @unittest.skip(reason="No available kernels - not supported")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_mismatching_num_image_tokens(self):
+        # Override the base test because we need to slice image_grid_thw too
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)
+
+            # remove one image but leave the image token in text
+            patch_size = config.vision_config.patch_size
+            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
+                _ = model(**curr_input_dict)
+
+            model.base_model.rope_deltas = None
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
+                _ = model(
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
+                )
+
+            model.base_model.rope_deltas = None
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            mm_token_type_ids = torch.cat(
+                [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
+            )
+            _ = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

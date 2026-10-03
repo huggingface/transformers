@@ -1709,9 +1709,14 @@ def convert_and_load_state_dict_in_model(
             tensor_idx = (
                 len(mapping.collected_tensors.get(source_pattern, []))
                 if isinstance(mapping, WeightConverter)
-                and any(isinstance(op, MergeModulelist) for op in mapping.operations)
+                and any(
+                    isinstance(op, (MergeModulelist, ErnieFuseAndSplitTextVisionExperts)) for op in mapping.operations
+                )
                 else None
             )
+            if tensor_idx is not None and empty_param is not None:
+                # the index runs over every stack one converter splits into (Ernie's text, then vision experts)
+                tensor_idx %= empty_param.shape[0]
 
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)

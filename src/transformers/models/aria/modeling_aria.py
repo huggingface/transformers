@@ -250,7 +250,8 @@ class AriaTextTopKRouter(nn.Module):
     """Top-k router for the Aria MoE block.
 
     Experts are selected on the raw logits and the routing weights are the softmax over the selected
-    logits only, which is equivalent to renormalizing a softmax taken over every expert.
+    logits only, which is equivalent to renormalizing a softmax taken over every expert. Returns
+    `(router_logits, top_k_weights, top_k_index)`.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -263,7 +264,7 @@ class AriaTextTopKRouter(nn.Module):
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
         top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
-        return top_k_index, top_k_weights, router_logits
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation(is_transposed=True)
@@ -323,7 +324,7 @@ class AriaTextMoELayer(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
