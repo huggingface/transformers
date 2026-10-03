@@ -39,15 +39,15 @@ from ...utils import (
     no_inherit_decorator,
     torch_int,
 )
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
-from ..gemma3.modeling_gemma3 import Gemma3TextModel
 from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
     LagunaAttention,
     LagunaDecoderLayer,
+    LagunaModel,
     LagunaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -185,7 +185,6 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     index_block_size = AttributeError()
     index_topk_blocks = AttributeError()
     index_local_blocks = AttributeError()
-    output_router_logits = AttributeError()
     routed_scaling_factor = AttributeError()
     router_aux_loss_coef = AttributeError()
     router_jitter_noise = AttributeError()
@@ -896,11 +895,12 @@ class Step3p7DecoderLayer(LagunaDecoderLayer):
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class Step3p7TextModel(Gemma3TextModel):
+class Step3p7TextModel(LagunaModel):
     config: Step3p7TextConfig
     _can_record_outputs = {
         "hidden_states": Step3p7DecoderLayer,
         "attentions": Step3p7Attention,
+        "router_logits": OutputRecorder(Step3p7TopKRouter, index=0),
     }
 
     def __init__(self, config: Step3p7TextConfig):

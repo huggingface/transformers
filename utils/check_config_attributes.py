@@ -309,6 +309,7 @@ ATTRIBUTES_TO_ALLOW = (
     "tokenizer_class",
     "is_encoder_decoder",
     "output_hidden_states",
+    "output_router_logits",  # read by `capture_outputs`, not by the modeling code
     "return_dict",
     # Inits related
     "initializer_range",
