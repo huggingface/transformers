@@ -249,7 +249,7 @@ jobs:
           pr_number: ${{ inputs.pr_number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_SLOW: yes
-        run: python3 -m pytest -v tests/models/mistral4/test_modeling_mistral4.py::Mistral4IntegrationTest -x
+        run: python3 -m pytest -v tests/models/mistral4/
 
       - name: Show results
         working-directory: /transformers
