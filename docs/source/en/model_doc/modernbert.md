@@ -168,3 +168,97 @@ out = model(**inputs)
 ### Usage tips
 
 The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
+
+
+
+
+
+
+
+## Advanced: Custom Attention Masking for Shared Prefixes
+
+ModernBERT's local attention layers use a sliding window mechanism. By default, this window is computed based on **sequence index** (the position in the input tensor), not on `position_ids`. 
+
+This works perfectly for standard use cases. However, if you're using **non-monotonic position_ids** (e.g., packing multiple segments that share a common prefix and restart at the same position), you need to explicitly construct a position-aware sliding window mask.
+
+### Example: Shared Prefix with Multiple Questions
+
+Here's how to correctly handle a scenario where you have one document prefix and multiple independent questions that all start from the same position:
+
+```python
+import torch
+from transformers import ModernBertConfig, ModernBertModel
+from transformers.masking_utils import and_masks, create_bidirectional_mask, create_bidirectional_sliding_window_mask
+
+# Configuration with local attention
+config = ModernBertConfig(
+    vocab_size=97,
+    hidden_size=64,
+    intermediate_size=96,
+    num_hidden_layers=6,
+    num_attention_heads=4,
+    local_attention=16,  # Sliding window size
+    global_attn_every_n_layers=3,
+    max_position_embeddings=512,
+    pad_token_id=0,
+    attn_implementation="sdpa"  # or "eager"
+)
+
+model = ModernBertModel(config).eval()
+sliding_window = config.sliding_window  # 8 in this example
+
+# Create a shared prefix (40 tokens) and two question blocks (10 tokens each)
+# Both questions restart at position 40 (non-monotonic position_ids)
+prefix_len = 40
+question_len = 10
+
+input_ids = torch.cat([
+    torch.randint(4, 97, (prefix_len,)),      # Shared prefix
+    torch.randint(4, 97, (question_len,)),    # Question 1
+    torch.randint(4, 97, (question_len,)),    # Question 2
+])[None]
+
+# Non-monotonic positions: both questions start at position 40
+position_ids = torch.cat([
+    torch.arange(prefix_len),                          # Positions 0-39
+    torch.arange(prefix_len, prefix_len + question_len),  # Positions 40-49
+    torch.arange(prefix_len, prefix_len + question_len),  # Positions 40-49 (repeated!)
+])[None]
+
+# Define which tokens can attend to which
+# Each segment sees the prefix and itself
+segment_ids = torch.tensor([0] * prefix_len + [1] * question_len + [2] * question_len)
+
+def block_mask(batch_idx, head_idx, q_idx, kv_idx):
+    """Prefix sees itself; each question sees prefix and itself."""
+    return (segment_ids[kv] == 0) | (segment_ids[kv] == segment_ids[q_idx])
+
+def position_based_window(batch_idx, head_idx, q_idx, kv_idx):
+    """Sliding window based on position_ids, not sequence index."""
+    return (position_ids[0, q_idx] - position_ids[0, kv_idx]).abs() <= sliding_window
+
+# Create the correct mask: combine block logic WITH position-based window
+attention_mask = {
+    "full_attention": create_bidirectional_mask(
+        config=config,
+        inputs_embeds=model.embeddings(input_ids=input_ids),
+        attention_mask=torch.ones_like(input_ids),
+        and_mask_function=block_mask
+    ),
+    "sliding_attention": create_bidirectional_mask(
+        config=config,
+        inputs_embeds=model.embeddings(input_ids=input_ids),
+        attention_mask=torch.ones_like(input_ids),
+        and_mask_function=and_masks(block_mask, position_based_window)
+    )
+}
+
+# Now run the model with the position-aware mask
+with torch.no_grad():
+    outputs = model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,  # Pass the dict, not a single tensor
+        position_ids=position_ids
+    )
+
+    
