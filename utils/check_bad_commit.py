@@ -15,6 +15,7 @@
 # limitations under the License.
 import argparse
 import copy
+import ctypes
 import json
 import os
 import re
@@ -33,6 +34,16 @@ sys.stdout.reconfigure(line_buffering=True)
 if os.path.isdir("/mnt/efs_cache"):
     os.environ["HF_HOME"] = "/mnt/efs_cache"
     print("Using EFS cache: HF_HOME=/mnt/efs_cache")
+
+
+# GitHub Actions cancellation sends SIGINT/SIGTERM only to the shell wrapping the
+# `run:` step, not to Python directly. When the shell exits, Python is orphaned and
+# keeps running. prctl(PR_SET_PDEATHSIG) makes the kernel deliver SIGTERM to this
+# process automatically when its parent (the shell) dies, triggering the handler below.
+try:
+    ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM, 0, 0, 0)  # PR_SET_PDEATHSIG=1
+except Exception:
+    pass
 
 
 def _sigterm_handler(signum, frame):
