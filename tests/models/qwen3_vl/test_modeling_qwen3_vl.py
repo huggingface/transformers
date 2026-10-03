@@ -18,6 +18,7 @@ import gc
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -25,6 +26,7 @@ from transformers import (
     Qwen3VLForConditionalGeneration,
     Qwen3VLModel,
     is_torch_available,
+    set_seed,
 )
 from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig, Qwen3VLVisionConfig
 from transformers.testing_utils import (
@@ -304,6 +306,64 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
+
+    @parameterized.expand([(2, False), (3, False), (2, True), (3, True)])
+    def test_generate_preserves_multi_image_groups(self, expand_size, do_sample):
+        set_seed(42)
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3VLForConditionalGeneration(config).to(torch_device).eval()
+        input_ids = torch.tensor(
+            [
+                [7] * 9,
+                [config.vision_start_token_id, config.image_token_id, config.vision_end_token_id] + [7] * 6,
+                [
+                    config.vision_start_token_id,
+                    config.image_token_id,
+                    config.image_token_id,
+                    config.vision_end_token_id,
+                    config.vision_start_token_id,
+                    config.image_token_id,
+                    config.vision_end_token_id,
+                    7,
+                    7,
+                ],
+            ],
+            device=torch_device,
+        )
+        patch_width = (
+            config.vision_config.in_channels
+            * config.vision_config.temporal_patch_size
+            * config.vision_config.patch_size**2
+        )
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
+            "mm_token_type_ids": (input_ids == config.image_token_id).long(),
+            "pixel_values": floats_tensor([4, patch_width]),
+            "image_grid_thw": torch.tensor([[1, 1, 1], [1, 1, 2], [1, 1, 1]], device=torch_device),
+        }
+        reference_inputs = {
+            key: inputs[key].repeat_interleave(expand_size, dim=0)
+            for key in ["input_ids", "attention_mask", "mm_token_type_ids"]
+        }
+        reference_inputs["pixel_values"] = inputs["pixel_values"][[0] * expand_size + [1, 2, 3] * expand_size]
+        reference_inputs["image_grid_thw"] = inputs["image_grid_thw"][[0] * expand_size + [1, 2] * expand_size]
+        generation_kwargs = {
+            "max_new_tokens": 1,
+            "eos_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        with torch.no_grad():
+            reference = model.generate(**reference_inputs, do_sample=False, **generation_kwargs)
+            outputs = model.generate(
+                **inputs,
+                num_beams=1 if do_sample else expand_size,
+                num_return_sequences=expand_size,
+                do_sample=do_sample,
+                **generation_kwargs,
+            )
+        torch.testing.assert_close(outputs.logits[0], reference.logits[0], rtol=1e-4, atol=1e-5)
 
     def test_video_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
