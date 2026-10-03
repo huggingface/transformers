@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
@@ -286,8 +287,9 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 @require_torch
 @require_torch_accelerator
 @slow
-class DeepseekVLHybridIntegrationTest(unittest.TestCase):
+class DeepseekVLHybridIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.model_id = "deepseek-community/deepseek-vl-7b-chat"
 
     def test_model_text_generation(self):
@@ -330,7 +332,6 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
             self.model_id, dtype="auto", device_map="auto"
         )
-        model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -370,7 +371,13 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding_side="left",
         )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
