@@ -23,7 +23,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -291,6 +291,56 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
             expected_arg_names = ["input_ids"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_cross_attention(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()[:3]
+        config.add_cross_attention = True
+        model = ImageGPTModel(config).to(torch_device).eval()
+
+        batch_size, seq_length = input_ids.shape
+        encoder_seq_length = seq_length + 2
+        padding = encoder_seq_length // 2
+        encoder_hidden_states = floats_tensor([batch_size, encoder_seq_length, self.model_tester.hidden_size]).to(
+            torch_device
+        )
+        encoder_attention_mask = torch.ones(batch_size, encoder_seq_length, dtype=torch.long, device=torch_device)
+        encoder_attention_mask[:, padding:] = 0
+
+        # Masked encoder positions must not affect the output; visible ones must, or the check is vacuous
+        masked_corrupted = encoder_hidden_states.clone()
+        masked_corrupted[:, padding:] = 1e6
+        visible_corrupted = encoder_hidden_states.clone()
+        visible_corrupted[:, :padding] = 1e6
+
+        with torch.no_grad():
+            outputs = [
+                model(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    encoder_hidden_states=states,
+                    encoder_attention_mask=encoder_attention_mask,
+                ).last_hidden_state
+                for states in (encoder_hidden_states, masked_corrupted, visible_corrupted)
+            ]
+            prefill = model(
+                input_ids[:, :-1],
+                attention_mask=attention_mask[:, :-1],
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+            )
+            step = model(
+                input_ids[:, -1:],
+                past_key_values=prefill.past_key_values,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+            )
+
+        output, output_masked_corrupted, output_visible_corrupted = outputs
+        self.assertTrue(torch.equal(output, output_masked_corrupted))
+        self.assertFalse(torch.equal(output, output_visible_corrupted))
+        self.assertEqual(step.past_key_values.cross_attention_cache.get_seq_length(), encoder_seq_length)
+        torch.testing.assert_close(step.last_hidden_state[:, -1], output[:, -1], rtol=1e-4, atol=1e-4)
 
     @unittest.skip(reason="Model inputs don't fit test pattern")  # and it's not used enough to be worth fixing :)
     def test_past_key_values_format(self):
