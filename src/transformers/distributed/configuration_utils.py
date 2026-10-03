@@ -14,8 +14,11 @@
 
 import json
 import os
+import warnings
 from dataclasses import asdict, dataclass
 from typing import Literal
+
+from .utils import _get_torch_distributed_rank
 
 
 @dataclass
@@ -33,7 +36,8 @@ class DistributedConfig:
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
-            Route MoE models through the expert-parallel path (``base_model_ep_plan``).
+            Deprecated alias for `ep_size=tp_size` when `ep_size` is omitted, removed in v5.20. An explicit
+            `ep_size` takes precedence. This flag does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -42,6 +46,9 @@ class DistributedConfig:
             Whether to enable mixed precision for FSDP2.
         pp_size (`int`, *optional*):
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
+        ep_size (`int`, *optional*):
+            Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP.
+            Model execution currently requires `ep_size=tp_size` when EP is enabled.
     """
 
     tp_size: int | None = None
@@ -52,10 +59,22 @@ class DistributedConfig:
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
+    ep_size: int | None = None
+
+    @property
+    def efsdp_size(self) -> int:
+        """Size of the expert FSDP axis in the expert mesh view."""
+        return self.fsdp_size * self.tp_size // self.ep_size
 
     def __post_init__(self):
-        if self.tp_plan is None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
-            return
+        self._resolve_parallelism()
+        self._validate_mesh_config()
+
+    def _resolve_parallelism(self):
+        """Resolve parallel sizes and legacy EP settings."""
+        for value in (self.tp_size, self.fsdp_size, self.pp_size, self.ep_size):
+            if value is not None and value < 1:
+                raise ValueError(f"Parallelism sizes must be >= 1, got {value}.")
 
         if self.fsdp_size is None:
             self.fsdp_size = 1
@@ -72,6 +91,29 @@ class DistributedConfig:
             self.tp_size = world_size // other_parallel_size
         elif self.tp_size is None:
             self.tp_size = 1
+
+        if self.enable_expert_parallel and self.ep_size is None:
+            self.ep_size = self.tp_size
+            if _get_torch_distributed_rank() == 0:
+                warnings.warn(
+                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
+                    f"Use ep_size={self.ep_size} instead.",
+                    FutureWarning,
+                    stacklevel=4,
+                )
+
+        if self.ep_size is None:
+            self.ep_size = 1
+        # Retain the legacy attribute for callers; internal EP decisions use ep_size.
+        self.enable_expert_parallel = self.ep_size > 1
+
+    def _validate_mesh_config(self):
+        """Validate mesh sizes before the model's expert plan is available."""
+        if self.ep_size > 1:
+            if self.ep_size % self.tp_size:
+                raise ValueError("`ep_size` must be a multiple of `tp_size`.")
+            if (self.fsdp_size * self.tp_size) % self.ep_size:
+                raise ValueError("`ep_size` must divide `fsdp_size * tp_size`.")
 
         if self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(

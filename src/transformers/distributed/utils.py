@@ -25,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
+    from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor
 
     from .configuration_utils import DistributedConfig
@@ -130,6 +131,45 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
+class TransformersDeviceMesh:
+    """
+    Holds the device meshes used by a model.
+
+    dense layers and experts are sharded differently, so they need different views of the same ranks.
+
+        dense  : (pp, fsdp, tp)     attention, dense MLPs, embeddings, lm_heads
+        expert : (pp, efsdp, ep)    experts
+
+    Both views cover the same world, so pp * fsdp * tp == pp * efsdp * ep.
+    efsdp is not something you pick, it is whatever is left once ep is fixed:
+    efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
+
+    There is no etp (expert tensor parallel) axis yet meaning experts are never tensor-sharded here.
+    If one were ever added, the identity would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
+    (efsdp = fsdp * tp / (ep * etp))
+
+    Why not reuse fsdp mesh ? When ep_size == tp_size, efsdp == fsdp, both in size and in which
+    ranks are grouped together, so the fsdp axis of the dense mesh would work for experts too.
+    As soon as ep_size != tp_size the two group different ranks and you need a separate axis.
+
+    Regarding ep value, We decide to default it to node width (8 on most machines) so all-to-all never leaves the node.
+    - On a single node, ep == fsdp * tp thus efsdp = 1, the axis does nothing.
+    - On several nodes, we still keep ep at node width, since all-to-all across nodes is expensive.
+    However, each node then holds a full copy of the expert group and efsdp is the number of copies, which is where FSDP happens for the experts
+    i.e: 2 nodes x 8 GPUs -> efsdp = 16 / 8 = 2, one EP group per node, two copies, sharded over efsdp.
+    """
+
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+        self._dense_mesh = dense_mesh
+        self._expert_mesh = expert_mesh
+
+    def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
+        """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
+        dims = (dims,) if isinstance(dims, str) else dims
+        mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
+        return mesh[dims]
+
+
 # Retained for the legacy transformers.integrations.tensor_parallel API.
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
@@ -223,22 +263,10 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
 def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
-):
+) -> tuple[torch.device | None, TransformersDeviceMesh | None]:
     """Create a device mesh containing every configured parallel dimension."""
-    mesh_shape = []
-    mesh_dim_names = []
-
-    if distributed_config.pp_size > 1:
-        mesh_shape.append(distributed_config.pp_size)
-        mesh_dim_names.append("pp")
-    if distributed_config.fsdp_size > 1:
-        mesh_shape.append(distributed_config.fsdp_size)
-        mesh_dim_names.append("fsdp")
-    if distributed_config.tp_size > 1:
-        mesh_shape.append(distributed_config.tp_size)
-        mesh_dim_names.append("tp")
-
-    if not mesh_shape:
+    mesh_shape = (distributed_config.pp_size, distributed_config.fsdp_size, distributed_config.tp_size)
+    if mesh_shape == (1, 1, 1):
         return None, None
 
     device_type = torch._C._get_accelerator().type
@@ -260,15 +288,17 @@ def initialize_distributed_mesh(
     else:
         device_map = torch.device(device_type)
 
-    device_mesh = torch.distributed.init_device_mesh(
+    dense_mesh = torch.distributed.init_device_mesh(
         device_type,
-        tuple(mesh_shape),
-        mesh_dim_names=tuple(mesh_dim_names),
+        mesh_shape,
+        mesh_dim_names=("pp", "fsdp", "tp"),
     )
-    # A flattened sub-mesh, so an all-reduce over every rank is one collective instead of one per dimension.
-    if len(mesh_dim_names) > 1:
-        device_mesh._flatten("_".join(mesh_dim_names))
-    return device_map, device_mesh
+    expert_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        (distributed_config.pp_size, distributed_config.efsdp_size, distributed_config.ep_size),
+        mesh_dim_names=("pp", "efsdp", "ep"),
+    )
+    return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
