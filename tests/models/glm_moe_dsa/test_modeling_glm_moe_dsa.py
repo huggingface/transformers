@@ -17,7 +17,6 @@ import os
 import unittest
 
 import torch
-from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
@@ -35,10 +34,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
-)
 
 
 if is_torch_available():
@@ -96,63 +91,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             config.indexer_types,
             ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
         )
-
-    # DSA selects tokens with a hard top-k, which is discontinuous: a tiny numerical difference in the
-    # indexer scores (attention backend, padding, batching, sequence packing) can flip which tokens are
-    # selected and thus change the output, so these exact-equivalence tests do not hold for DSA.
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across backends.")
-    def test_eager_matches_sdpa_inference(self, *args):
-        pass
-
-    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
-    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
-    def test_eager_matches_batched_and_grouped_inference(self, *args):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
-    def test_training_overfit(
-        self,
-    ):
-        pass
-
-    @require_torch_accelerator
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen2Moe flash attention does not support right padding")
-
-    @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with static cache")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with compiled forward")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with compilation")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("DSA indexer mask shape mismatch with static cache")
-    def test_generate_with_static_cache(self):
-        pass
 
 
 @require_torch_accelerator
