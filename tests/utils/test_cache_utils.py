@@ -1657,6 +1657,13 @@ class CacheCroppingTests(unittest.TestCase):
     conv_state_shape = (2, 32, 45)
     indexer_shape = (2, 45, 32)
 
+    @parameterized.expand([("full", DynamicLayer), ("sliding", DynamicSlidingWindowLayer)])
+    def test_crop_with_empty_layer(self, _, layer_cls):
+        layer = layer_cls(sliding_window=self.sliding_window)
+        layer.crop(0)
+        layer.crop(-2)
+        self.assertEqual(layer.get_seq_length(), 0)
+
     def test_crop_with_past(self):
         """Test that `crop` works correctly for all general layer classes, even with past recording activated"""
         keys = torch.rand(*self.attention_shape)

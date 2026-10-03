@@ -42,11 +42,8 @@ The models below are heterogeneous checkpoints. Layers are not uniform across th
 Pass `per_layer_config` to [`~transformers.LlamaConfig`] as a mapping from layer indices to attribute overrides. Layer
 indices are zero-based. Only attributes that differ from the global configuration need to be specified.
 
-`per_layer_config` records and resolves configuration values. It does not by itself change the modules a model creates
-or how those modules run. Applying a size override or a `skip` requires model code that reads the resolved per-layer
-configuration when constructing or running each layer. The current `LlamaModel` constructs every `LlamaDecoderLayer`
-with the global configuration, so the `skip` entries below remain configuration values rather than removing modules
-after `from_pretrained`.
+The example below shows how to specify per-layer overrides and resolve each layer's configuration. To apply these
+overrides or skips to a model, see [Architecture support](#architecture-support).
 
 The following example records overrides for four layers: layer 5 uses a smaller MLP, layer 11 uses
 fewer key-value heads, and layers 23 and 27 record `skip` values for architectures that support them.
@@ -201,3 +198,13 @@ serialized_per_layer_config
 
 Use sparse serialization for compact configs, and explicit serialization when you need the full per-layer layout for
 readability or tooling.
+
+## Architecture support
+
+The presence of `per_layer_config` does not by itself mean that an architecture supports generic heterogeneous modeling.
+Architectures can consume the resolved layer configurations directly, or opt into generic patching through a
+heterogeneous modeling spec.
+
+See [Architecture support](./generic_heterogeneous_modeling#architecture-support) for how built-in and custom models opt into
+generic patching. The [generic heterogeneous modeling guide](./generic_heterogeneous_modeling) also explains which submodules a `skip`
+attribute can name and how to write a spec for a new architecture.

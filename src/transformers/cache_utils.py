@@ -174,6 +174,9 @@ class DynamicLayer(CacheLayerMixin):
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
         """
+        if self.get_seq_length() == 0:
+            return
+
         # Legacy path: `tokens_to_remove` represents the final absolute size that the cache should have
         if tokens_to_remove > 0:
             logger.warning_once(
@@ -299,6 +302,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         minimal working size, i.e. `sliding_window - 1` if they reached the sliding window length. This means that `crop(0)` will not
         necessarily always be a no-op, as it may still remove useless states (i.e. states that are not needed for the next `forward`).
         """
+        if self.get_seq_length() == 0:
+            return
+
         # If we are beyond the sliding window, we need to be more careful
         if self.get_seq_length() >= self.sliding_window:
             if not self.record_past:
