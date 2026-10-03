@@ -242,7 +242,7 @@ class XGLMModelTester:
         model = XGLMForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
@@ -341,9 +341,9 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
     ):
         model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         else:
-            model.gradient_checkpointing_disable()
+            model.activation_checkpointing_disable()
         model.to(torch_device)
         input_ids = torch.tensor([[2, 268, 9865]], dtype=torch.long, device=torch_device)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other

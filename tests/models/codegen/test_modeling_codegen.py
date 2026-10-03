@@ -280,7 +280,7 @@ class CodeGenModelTester:
     ):
         model = CodeGenForCausalLM(config)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         model.to(torch_device)
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -433,9 +433,9 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
             model = self.cached_model
 
             if checkpointing:
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
             else:
-                model.gradient_checkpointing_disable()
+                model.activation_checkpointing_disable()
             model.to(torch_device)
 
             inputs = tokenizer("def hello_world():", return_tensors="pt").to(torch_device)

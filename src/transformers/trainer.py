@@ -748,7 +748,7 @@ class Trainer:
         elif isinstance(self.model, PreTrainedModel):
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-            find_unused = not (self.model.is_gradient_checkpointing or self.args.gradient_checkpointing)
+            find_unused = not (self.model.is_activation_checkpointing or self.args.activation_checkpointing)
         else:
             find_unused = True
 
@@ -870,11 +870,11 @@ class Trainer:
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
-            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.activation_checkpointing:
                 raise ValueError(
-                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
-                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
-                    "when using FSDP."
+                    "`fsdp_config['activation_checkpointing']` (FSDP's own activation checkpointing) and the "
+                    "`activation_checkpointing` training argument can't both be set to True. Use FSDP's activation "
+                    "checkpointing when using FSDP."
                 )
 
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
@@ -1495,16 +1495,16 @@ class Trainer:
         if (args.fp16_full_eval or args.bf16_full_eval) and not self.is_model_parallel and self.model_init is None:
             self._move_model_to_device(self.model, args.device)
 
-        # Activate gradient checkpointing if needed
-        if args.gradient_checkpointing:
+        # Activate activation checkpointing if needed
+        if args.activation_checkpointing:
             # `every_n_layers` selects which layers are checkpointed and `offload` where their saved
             # activations live; the remaining keys are forwarded to `torch.utils.checkpoint.checkpoint`, so both
             # have to come out of the dict before that happens.
-            gc_kwargs = dict(args.gradient_checkpointing_kwargs or {})
+            gc_kwargs = dict(args.activation_checkpointing_kwargs or {})
             every_n_layers = gc_kwargs.pop("every_n_layers", 1)
             offload = gc_kwargs.pop("offload", False)
-            self.model.gradient_checkpointing_enable(
-                gradient_checkpointing_kwargs=gc_kwargs or None,
+            self.model.activation_checkpointing_enable(
+                activation_checkpointing_kwargs=gc_kwargs or None,
                 every_n_layers=every_n_layers,
                 offload=offload,
             )
