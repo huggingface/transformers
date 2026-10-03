@@ -56,7 +56,7 @@ jobs:
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       runner_type: "a10"
