@@ -55,7 +55,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
     "Glm4MoeLiteConfig": ["n_routed_experts"],
-    "Glm4vMoeTextConfig": ["n_routed_experts", "output_router_logits"],
+    "Glm4vMoeTextConfig": ["n_routed_experts"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
     "FunAsrNanoEncoderConfig": [
@@ -309,6 +309,7 @@ ATTRIBUTES_TO_ALLOW = (
     "tokenizer_class",
     "is_encoder_decoder",
     "output_hidden_states",
+    "output_router_logits",  # read by `capture_outputs`, not by the modeling code
     "return_dict",
     # Inits related
     "initializer_range",
