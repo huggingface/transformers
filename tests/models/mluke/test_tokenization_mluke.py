@@ -26,18 +26,15 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
-# TODO: (Ita / Arthur) FIXME
-@unittest.skip("Skip for now as this fails after #40936")
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "studio-ousia/mluke-base"
+    # -lite shares mluke-base's sentencepiece vocab; mluke-base's 438MB entity_vocab.json OOMs CI under -n 4
+    from_pretrained_id = "studio-ousia/mluke-base-lite"
     tokenizer_class = MLukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.from_pretrained_id = "studio-ousia/mluke-base"
-        cls.tokenizer_class = MLukeTokenizer
 
         cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
 
