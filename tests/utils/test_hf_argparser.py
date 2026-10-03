@@ -490,3 +490,30 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    def test_17_set_and_tuple_parsing(self):
+        @dataclass
+        class ContainerExample:
+            tags: set[str] = field(default_factory=set)
+            coords: tuple[int, ...] = (0, 0)
+            items: list[str] = field(default_factory=list)
+
+        parser = HfArgumentParser(ContainerExample)
+
+        # CLI args
+        parsed = parser.parse_args_into_dataclasses(
+            ["--tags", "tag1", "tag2", "--coords", "10", "20", "--items", "a", "b"]
+        )[0]
+        self.assertIsInstance(parsed.tags, set)
+        self.assertEqual(parsed.tags, {"tag1", "tag2"})
+        self.assertIsInstance(parsed.coords, tuple)
+        self.assertEqual(parsed.coords, (10, 20))
+        self.assertIsInstance(parsed.items, list)
+        self.assertEqual(parsed.items, ["a", "b"])
+
+        # Dict parsing
+        parsed_dict = parser.parse_dict({"tags": ["tagA", "tagB"], "coords": [1, 2], "items": ["c"]})[0]
+        self.assertIsInstance(parsed_dict.tags, set)
+        self.assertEqual(parsed_dict.tags, {"tagA", "tagB"})
+        self.assertIsInstance(parsed_dict.coords, tuple)
+        self.assertEqual(parsed_dict.coords, (1, 2))
