@@ -721,6 +721,13 @@ if is_kernels_available():
                     ),
                 },
             },
+            "tdt_loss": {
+                "cuda": {
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/tdt-loss", layer_name="TDTLoss", version=1
+                    ),
+                },
+            },
         }
 
         return _KERNEL_MAPPING
