@@ -844,6 +844,14 @@ def pipeline(
         model_kwargs = {}
 
     code_revision = kwargs.pop("code_revision", None)
+    _model_kwargs_code_revision = model_kwargs.pop("code_revision", None)
+    if code_revision is not None and _model_kwargs_code_revision is not None:
+        raise ValueError(
+            "You cannot use both `pipeline(..., code_revision=...)` and "
+            '`pipeline(..., model_kwargs={"code_revision": ...})` as they might conflict, use only one.'
+        )
+    if _model_kwargs_code_revision is not None:
+        code_revision = _model_kwargs_code_revision
     kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
     local_files_only = kwargs.get("local_files_only", False)
 
@@ -854,6 +862,8 @@ def pipeline(
         "trust_remote_code": trust_remote_code,
         "local_files_only": local_files_only,
     }
+    if code_revision is not None:
+        hub_kwargs["code_revision"] = code_revision
     if task is None and model is None:
         raise RuntimeError(
             "Impossible to instantiate a pipeline without either a task or a model "
@@ -897,9 +907,7 @@ def pipeline(
     # Instantiate config if needed
     adapter_path = None
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(
-            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
+        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
@@ -930,9 +938,7 @@ def pipeline(
                             cache_dir=model_kwargs.get("cache_dir"),
                         )
 
-        config = AutoConfig.from_pretrained(
-            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
+        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -965,12 +971,7 @@ def pipeline(
                     " set the option `trust_remote_code=True` to remove this error."
                 )
             class_ref = targeted_task["impl"]
-            pipeline_class = get_class_from_dynamic_module(
-                class_ref,
-                model,
-                code_revision=code_revision,
-                **hub_kwargs,
-            )
+            pipeline_class = get_class_from_dynamic_module(class_ref, model, **hub_kwargs)
     else:
         normalized_task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
