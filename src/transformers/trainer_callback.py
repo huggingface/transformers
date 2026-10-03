@@ -51,6 +51,14 @@ class TrainerState:
             percentage of the current epoch completed).
         global_step (`int`, *optional*, defaults to 0):
             During training, represents the number of update steps completed.
+        optimizer_step_attempts (`int`, *optional*):
+            The number of optimizer steps attempted, including steps skipped by gradient scaling. Tracks attempted
+            work separately from completed updates.
+        train_dataloader_epoch (`int`, *optional*):
+            The dataloader pass to resume. Together with `train_dataloader_batches_seen`, records the data position
+            without assuming that an iterable dataset has a known length.
+        train_dataloader_batches_seen (`int`, *optional*):
+            The number of batches processed within the dataloader pass, including batches from skipped updates.
         max_steps (`int`, *optional*, defaults to 0):
             The number of update steps to do during the current training.
         logging_steps (`int`, *optional*, defaults to 500):
@@ -94,6 +102,9 @@ class TrainerState:
 
     epoch: float = 0
     global_step: int = 0
+    optimizer_step_attempts: int | None = None
+    train_dataloader_epoch: int | None = None
+    train_dataloader_batches_seen: int | None = None
     max_steps: int = 0
     logging_steps: int = 500
     eval_steps: int = 500
@@ -588,8 +599,15 @@ class DefaultFlowCallback(TrainerCallback):
         ):
             control.should_save = True
 
-        # End training
-        if state.global_step >= state.max_steps:
+        return self._maybe_stop_training(args, state, control)
+
+    def _maybe_stop_training(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        # Epoch-based runs finish at their data budget, even if some updates were skipped.
+        if state.global_step >= state.max_steps or (
+            args.max_steps <= 0
+            and state.optimizer_step_attempts is not None
+            and state.optimizer_step_attempts >= state.max_steps
+        ):
             control.should_training_stop = True
             # Evaluate at the end if we have a step-based eval strategy and this step
             # wasn't already going to be evaluated (to avoid duplicate evaluation).
@@ -617,6 +635,10 @@ class DefaultFlowCallback(TrainerCallback):
         # Save
         if args.save_strategy == SaveStrategy.EPOCH:
             control.should_save = True
+
+        # A skipped final attempt has no on_step_end event to finalize step-based strategies.
+        if args.max_steps <= 0 and state.optimizer_step_attempts is not None and not control.should_training_stop:
+            return self._maybe_stop_training(args, state, control)
 
         return control
 
