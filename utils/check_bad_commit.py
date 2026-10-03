@@ -53,6 +53,10 @@ print(f"[DEBUG] GITHUB_ACTIONS={os.environ.get('GITHUB_ACTIONS')!r}", flush=True
 print(f"[DEBUG] GITHUB_RUN_ID={os.environ.get('GITHUB_RUN_ID')!r}", flush=True)
 print(f"[DEBUG] GITHUB_JOB={os.environ.get('GITHUB_JOB')!r}", flush=True)
 print(f"[DEBUG] GITHUB_TOKEN present={bool(os.environ.get('GITHUB_TOKEN'))}", flush=True)
+print(f"[DEBUG] ACTIONS_RUNTIME_URL={os.environ.get('ACTIONS_RUNTIME_URL')!r}", flush=True)
+print(f"[DEBUG] ACTIONS_RUNTIME_TOKEN present={bool(os.environ.get('ACTIONS_RUNTIME_TOKEN'))}", flush=True)
+print(f"[DEBUG] RUNNER_TEMP={os.environ.get('RUNNER_TEMP')!r}", flush=True)
+print(f"[DEBUG] RUNNER_TRACKING_ID={os.environ.get('RUNNER_TRACKING_ID')!r}", flush=True)
 # ---
 
 # prctl(PR_SET_PDEATHSIG=1): ask kernel to deliver SIGTERM to this process when its
