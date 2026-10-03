@@ -53,7 +53,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@re-run-2026-09-30-daily-ci-workflow-run-f339035b
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-dummy"
