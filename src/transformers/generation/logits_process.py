@@ -469,15 +469,34 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         self.penalty = 1 / penalty
         self.encoder_input_ids = encoder_input_ids
+        self._expanded_encoder_input_ids = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        score = torch.gather(scores, 1, self.encoder_input_ids)
+        encoder_input_ids = self.encoder_input_ids
+        if scores.shape[0] != encoder_input_ids.shape[0]:
+            if encoder_input_ids.shape[0] == 0:
+                raise ValueError("`encoder_input_ids` cannot have an empty batch when `scores` is non-empty.")
+            if scores.shape[0] % encoder_input_ids.shape[0] != 0:
+                raise ValueError(
+                    "The batch size of `scores` must be a multiple of the batch size of `encoder_input_ids`, "
+                    f"but got {scores.shape[0]} and {encoder_input_ids.shape[0]}, respectively."
+                )
+            if (
+                self._expanded_encoder_input_ids is None
+                or self._expanded_encoder_input_ids.shape[0] != scores.shape[0]
+            ):
+                self._expanded_encoder_input_ids = encoder_input_ids.repeat_interleave(
+                    scores.shape[0] // encoder_input_ids.shape[0], dim=0
+                )
+            encoder_input_ids = self._expanded_encoder_input_ids
+
+        score = torch.gather(scores, 1, encoder_input_ids)
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
-        scores_processed = scores.scatter(1, self.encoder_input_ids, score)
+        scores_processed = scores.scatter(1, encoder_input_ids, score)
         return scores_processed
 
 
