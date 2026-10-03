@@ -286,3 +286,71 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "captured 1"):
             decompose_prefill_decode(_FakeGenerator(), {"input_ids": torch.zeros(1, 1, dtype=torch.long)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# decompose_prefill_decode branch filtering (VibeVoice's classifier-free guidance is
+# currently the only generator calling the top-level forward twice per token)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@require_torch
+class DecomposePrefillDecodeBranchTest(unittest.TestCase):
+    def test_keeps_only_the_prefill_branch(self):
+        # A generator running two decode branches through the same `forward` — a conditional pass and
+        # an unconditional one, each with its own cache (classifier-free guidance). Only the prefill's
+        # branch may end up in the captured prefill/decode inputs; mixing the two yields decode inputs
+        # whose query and cache axes disagree.
+        class _FakeCache:
+            def __init__(self, name):
+                self.name = name
+
+        class _TwoBranchGenerator(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(1, 1)
+                self.generation_config = GenerationConfig()
+                self.conditional_cache = _FakeCache("conditional")
+                self.unconditional_cache = _FakeCache("unconditional")
+
+            def forward(self, input_ids=None, attention_mask=None, past_key_values=None, **kwargs):
+                return input_ids
+
+            def generate(self, input_ids=None, generation_config=None, **kwargs):
+                token = torch.zeros(1, 1, dtype=torch.long)
+                # The two branches carry caches of different lengths, so their 4D masks differ on the
+                # kv axis (5 vs 3) — merging across branches can't concatenate them.
+                conditional_mask = torch.zeros(1, 1, 1, 5)
+                unconditional_mask = torch.zeros(1, 1, 1, 3)
+                self.forward(
+                    input_ids=input_ids,
+                    attention_mask=conditional_mask,
+                    past_key_values=self.conditional_cache,
+                )
+                for _ in range(generation_config.max_new_tokens - 1):
+                    self.forward(
+                        input_ids=token,
+                        attention_mask=conditional_mask,
+                        past_key_values=self.conditional_cache,
+                    )
+                    self.forward(
+                        input_ids=token,
+                        attention_mask=unconditional_mask,
+                        past_key_values=self.unconditional_cache,
+                    )
+                return input_ids
+
+        stages = decompose_prefill_decode(
+            _TwoBranchGenerator(),
+            {"input_ids": torch.zeros(1, 3, dtype=torch.long)},
+            multi_token_decode=True,
+        )
+
+        _, prefill_inputs = stages["prefill"]
+        _, decode_inputs = stages["decode"]
+        self.assertEqual(prefill_inputs["input_ids"].shape, (1, 3))
+        self.assertEqual(prefill_inputs["past_key_values"].name, "conditional")
+        # Two conditional decode steps merged — not one conditional step plus an unconditional one.
+        self.assertEqual(decode_inputs["input_ids"].shape, (1, 2))
+        self.assertEqual(decode_inputs["past_key_values"].name, "conditional")
+        self.assertEqual(decode_inputs["attention_mask"].shape, (1, 1, 2, 5))
