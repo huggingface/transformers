@@ -52,7 +52,8 @@ from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, LocalLayerRepository, Mode, kernelize
+    import kernels
+    from kernels import Device, LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -286,6 +287,24 @@ class TestHubKernels(MemoryCleanupTestCase):
         # Check kernelization by fwd matching
         self.assertIsNot(first_rms_norm.forward.__func__, type(first_rms_norm).forward)  # exchanged
         self.assertIs(first_rope.forward.__func__, type(first_rope).forward)  # not exchanged
+
+        del model
+
+    def test_kernelize_without_compatible_build(self):
+        # TODO: remove once kernels>=0.18 is the minimum version
+        if not hasattr(kernels, "KernelizeFallback"):
+            self.skipTest("Falling back when a kernel cannot be loaded requires kernels>=0.18")
+
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map=torch_device)
+        # This repo only has torch 2.4 builds, so no build variant is compatible with this system
+        repo = LayerRepository(repo_id="kernels-test/only-torch-2.4", layer_name="Silu", revision="main")
+        with use_kernel_mapping({"SiLU": {model.device.type: repo}}, inherit_mapping=False):
+            # Would previously raise a `FileNotFoundError` instead of keeping the original layer
+            hub_kernels_pkg.kernelize(model)
+        first_act_fn = model.model.layers[0].mlp.act_fn
+
+        self.assertTrue(model.use_kernels)
+        self.assertIs(first_act_fn.forward.__func__, type(first_act_fn).forward)  # not exchanged
 
         del model
 
@@ -824,7 +843,7 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     def test_train_eval_calls_kernelize_with_correct_mode(self):
         last_modes = []
 
-        def spy_kernelize(model, device=None, mode=None):
+        def spy_kernelize(model, device=None, mode=None, **kwargs):
             last_modes.append(mode)
 
         with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
