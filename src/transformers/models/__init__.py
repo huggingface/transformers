@@ -202,6 +202,7 @@ if TYPE_CHECKING:
     from .gptj import *
     from .granite import *
     from .granite4_vision import *
+    from .granite_for_docling import *
     from .granite_speech import *
     from .granite_speech5 import *
     from .granite_speech_plus import *
