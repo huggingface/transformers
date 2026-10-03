@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import math
 import re
 
 from ..utils import logging
@@ -28,6 +29,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
+    from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -241,6 +243,79 @@ class ColwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
+def _unit_mesh(mesh, unit_number: int):
+    """
+    A 2-D unit-view of `mesh`. We reshape the mesh as (units, replicas), so every rank owns units.
+    """
+    world = mesh.size()
+    groups = math.gcd(unit_number, world)
+    replicas = world // groups
+    outer = mesh.mesh_dim_names[0] if mesh.mesh_dim_names else "unit"
+    return DeviceMesh(
+        device_type=mesh.device_type,
+        mesh=mesh.mesh.reshape(groups, replicas),
+        mesh_dim_names=[outer, "unit_replicate"],
+    )
+
+
+class UnitColwiseParallel(ColwiseParallel):
+    """This forces all ranks to own at least 1 unit of the tensor.
+    It is designed to be used on `query/key/value` layers when running TP. You cannot
+    For `query = nn.Linear(hidden_dim, head_dim * num_heads)` you can't divide the second dimension blindly by the world size as the attention REQUIRES to split per-head. You cannot split 2 heads of dim 64 into 4 GPUs by just separating into 4 x 32. This would mix the heads.
+
+    The unit colwise handles 2 cases:
+    - Less heads than world size: 2 heads, 4 process -> we replicate the heads.
+          Rank: | 0 |  1 |  2 | 3 |
+    This gives: |h0 | h0 | h1 | h1|
+
+    - More heads than world size: 6 heads, 8 process -> we also replicate the heads.
+          Rank: |   0  |   1  |   2  |   3  |
+    This gives: |h0h1h2|h0h1h2|h3h4h5|h3h4h5|
+
+    1. Update the rank's expected shape.
+    2. Prepare the slices appropriately when sharding the param.
+
+    We need to have [Shard(0), Replicate()] .
+    """
+
+    needs_config = True
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        weight = module._parameters["weight"]
+        config = module.config
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        unit = weight.shape[0] // head_dim
+        unit_mesh = _unit_mesh(mesh, unit)
+        module._unit_mesh = unit_mesh
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, unit_mesh, [Shard(meta.ndim - 2), Replicate()], src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        # The inputs are on a different mesh. We HAVE to swap the meshs as cross mesh coms
+        # do not work.
+        # Swapping meshes is metadata only while the tensor is replicated, so gather first.
+        x = args[0]
+        if isinstance(x, DTensor):
+            replicated = [Replicate()] * x.device_mesh.ndim
+            if x.placements != tuple(replicated):
+                x = x.redistribute(placements=replicated)
+            x = x.to_local()
+        if not self.should_use_local_tensors(module):
+            x = DTensor.from_local(x, module._unit_mesh, [Replicate(), Replicate()], run_check=True)
+        return (x,) + args[1:], kwargs
+
+    def transform_output_post_forward(self, module, output, mesh):
+        # Already on the unit mesh, correctly laid out; the parent handles the local case.
+        if isinstance(output, DTensor):
+            return output
+        return super().transform_output_post_forward(module, output, mesh)
+
+
 class RowwiseParallel(TensorParallelLayer):
     """Row-wise: weight → Shard(1), bias → Replicate (Embedding: weight → Shard(0)).
 
@@ -295,9 +370,6 @@ class RowwiseParallel(TensorParallelLayer):
         if not self.should_use_local_tensors(module):
             yield
         else:
-            # A rowwise local forward must produce only its partial matmul. If we don't hide
-            # the bias, we will be adding the bias x world_size times which is not correct.
-            # We should add it once after the all_reduce (redistribute).
             bias = module._parameters.get("bias")
             if bias is not None:
                 module._parameters["bias"] = None
@@ -332,6 +404,49 @@ class RowwiseParallel(TensorParallelLayer):
                 output = output.to_local()
 
         return output
+
+
+class UnitRowwiseParallel(RowwiseParallel):
+    needs_config = True
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        weight = module._parameters["weight"]
+        config = module.config
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        unit = weight.shape[-1] // head_dim
+        module._unit_mesh = _unit_mesh(mesh, unit)
+        # bias is added once after the reduce, so it stays replicated
+        placements = [Replicate(), Replicate()] if param == "bias" else [Shard(meta.ndim - 1), Replicate()]
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, module._unit_mesh, placements, src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        x = args[0]
+        if self.should_use_local_tensors(module):
+            return (x.to_local() if isinstance(x, DTensor) else x,) + args[1:], kwargs
+        # `UnitColwiseParallel` already leaves its output on an equivalent unit mesh.
+        if not isinstance(x, DTensor):
+            x = DTensor.from_local(x, module._unit_mesh, [Shard(-1), Replicate()], run_check=True)
+        elif x.device_mesh != module._unit_mesh:
+            x = DTensor.from_local(x.to_local(), module._unit_mesh, [Shard(-1), Replicate()], run_check=True)
+        return (x,) + args[1:], kwargs
+
+    def transform_output_post_forward(self, module, output, mesh):
+        # The parent reduces over the whole world, which would also sum the replicas.
+        if not isinstance(output, DTensor):
+            dist.all_reduce(output, group=module._unit_mesh.get_group(0))
+            if (bias := module._parameters.get("bias")) is not None:
+                output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
+            return output if self.use_local_output else DTensor.from_local(output, mesh, [Replicate()], run_check=True)
+        # Resolve Partial while the unit axis still exists, then swap back (metadata only).
+        local = output.redistribute(placements=[Replicate(), Replicate()]).to_local()
+        output = DTensor.from_local(local, mesh, [Replicate()], run_check=True)
+        return output.to_local() if self.use_local_output else output
 
 
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
@@ -768,7 +883,9 @@ class ParallelInterface(GeneralInterface):
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
+            "unit_colwise": UnitColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
+            "unit_rowwise": UnitRowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "packed_colwise": PackedColwiseParallel(),
@@ -813,6 +930,9 @@ def apply_tensor_parallelism(model, tp_mesh):
             style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
+                if getattr(style, "needs_config", False):
+                    # Head-aware styles need the head size before they can size the shard.
+                    module.config = model.config.get_text_config()
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
 

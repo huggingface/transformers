@@ -1724,6 +1724,7 @@ def convert_and_load_state_dict_in_model(
             # accelerate will take care of putting back on correct device after loading
             # Note that we only do it with `device_map` but not with `tp_plan`, as tp will perform local sharding before, so memory
             # spike during conversion ops should be fine
+            # TODO: move commment to the doc of force cpu, the flow is broken.
             if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
                 param_device = "cpu"
 
