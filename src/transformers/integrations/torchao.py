@@ -69,11 +69,41 @@ class TorchAoQuantize(ConversionOps):
         # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
         module._hf_quantized_needs_local_tp = True
 
+    def _quantize_with_fallback(self, module, config, target_device, *args, **kwargs):
+        try:
+            self._quantize(module, config, *args, **kwargs)
+        except Exception:
+            if target_device is None:
+                raise
+            target_device = torch.device(target_device)
+            if next(module.parameters()).device == target_device:
+                raise
+            # Fallback for backends that only expose kernels on the destination accelerator.
+            module.to(target_device)
+            self._quantize(module, config, *args, **kwargs)
+
+    def _quantize_custom_param_with_fallback(self, module, tensor_name, config, target_device, *args, **kwargs):
+        try:
+            self._quantize(module, config, *args, **kwargs)
+        except Exception:
+            if target_device is None:
+                raise
+            target_device = torch.device(target_device)
+            param = module._parameters[tensor_name]
+            if param.device == target_device:
+                raise
+            # Keep peak memory low for large MoE tensors by moving only the active parameter.
+            module._parameters[tensor_name] = torch.nn.Parameter(
+                param.to(target_device), requires_grad=param.requires_grad
+            )
+            self._quantize(module, config, *args, **kwargs)
+
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
         model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
+        target_device=None,
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -81,6 +111,7 @@ class TorchAoQuantize(ConversionOps):
         value = value[0] if isinstance(value, list) else value
 
         module, tensor_name = get_module_from_name(model, full_layer_name)
+        target_device = torch.device(target_device) if target_device is not None else None
 
         module._parameters[tensor_name] = torch.nn.Parameter(value, requires_grad=value.requires_grad)
         # if we are quantizing tied parameters, to avoid tying the quantized weights
@@ -133,7 +164,16 @@ class TorchAoQuantize(ConversionOps):
                     if is_embedding_param and untie_embedding_weights:
                         lm_head = module.weight.clone()
                     # we can apply the module config directly
-                    self._quantize(module, c, (lambda x, fqn: True))
+                    self._quantize_with_fallback(module, c, target_device, (lambda x, fqn: True))
+                    if target_device is not None and next(module.parameters()).device != target_device:
+                        module.to(target_device)
+                    if (
+                        is_embedding_param
+                        and untie_embedding_weights
+                        and target_device is not None
+                        and lm_head.device != target_device
+                    ):
+                        lm_head = lm_head.to(target_device)
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
                     # torchao quantizes weights into a module but some models access the weight directly
@@ -146,7 +186,14 @@ class TorchAoQuantize(ConversionOps):
                 else:
                     # need to apply to custom param name
                     custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
-                    self._quantize(module, custom_param_fqn_config, filter_fn=None)
+                    self._quantize_custom_param_with_fallback(
+                        module, tensor_name, custom_param_fqn_config, target_device, filter_fn=None
+                    )
+                    if target_device is not None and module._parameters[tensor_name].device != target_device:
+                        param = module._parameters[tensor_name]
+                        module._parameters[tensor_name] = torch.nn.Parameter(
+                            param.to(target_device), requires_grad=param.requires_grad
+                        )
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
                     for param in module.parameters(recurse=False):
@@ -156,7 +203,41 @@ class TorchAoQuantize(ConversionOps):
 
         if is_embedding_param and untie_embedding_weights:
             lm_head = module.weight.clone()
-        self._quantize(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
+
+        base_config = self.hf_quantizer.quantization_config.get_apply_tensor_subclass()
+        if tensor_name == "weight":
+            self._quantize_with_fallback(
+                module,
+                base_config,
+                target_device,
+            )
+        else:
+            # Non-Fqn configs target module weights by default; wrap into a per-parameter
+            # config so custom params like MoE packed tensors are actually quantized.
+            custom_param_fqn_config = FqnToConfig({tensor_name: base_config})
+            self._quantize_custom_param_with_fallback(
+                module,
+                tensor_name,
+                custom_param_fqn_config,
+                target_device,
+                filter_fn=None,
+            )
+        if target_device is not None:
+            if tensor_name == "weight":
+                if next(module.parameters()).device != target_device:
+                    module.to(target_device)
+            elif module._parameters[tensor_name].device != target_device:
+                param = module._parameters[tensor_name]
+                module._parameters[tensor_name] = torch.nn.Parameter(
+                    param.to(target_device), requires_grad=param.requires_grad
+                )
+        if (
+            is_embedding_param
+            and untie_embedding_weights
+            and target_device is not None
+            and lm_head.device != target_device
+        ):
+            lm_head = lm_head.to(target_device)
         missing_keys.discard(full_layer_name)
         module._is_hf_initialized = True
         for param in module.parameters(recurse=False):

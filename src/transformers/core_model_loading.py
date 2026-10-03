@@ -1001,6 +1001,7 @@ class WeightRenaming(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
+        target_device=None,
         loading_info: LoadStateDictInfo | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
@@ -1021,6 +1022,7 @@ class WeightRenaming(WeightTransform):
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
                     full_layer_name=target_key,
+                    target_device=target_device,
                     model=model,
                     config=config,
                     missing_keys=loading_info.missing_keys if loading_info else None,
@@ -1178,6 +1180,7 @@ class WeightConverter(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
+        target_device=None,
         loading_info: LoadStateDictInfo | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
@@ -1220,6 +1223,7 @@ class WeightConverter(WeightTransform):
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
                     full_layer_name=layer_name,
+                    target_device=target_device,
                     config=config,
                     model=model,
                     missing_keys=loading_info.missing_keys if loading_info else None,
@@ -1601,7 +1605,8 @@ def convert_and_load_state_dict_in_model(
 
     """
     base_model_prefix = model.base_model_prefix
-    device_map = load_config.device_map or {"": "cpu"}
+    user_provided_device_map = load_config.device_map
+    device_map = user_provided_device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
     disk_offload_folder = load_config.disk_offload_folder
@@ -1645,6 +1650,7 @@ def convert_and_load_state_dict_in_model(
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
@@ -1727,10 +1733,20 @@ def convert_and_load_state_dict_in_model(
             if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
                 param_device = "cpu"
 
+            materialize_device = param_device
+            if hf_quantizer is not None:
+                materialize_device = hf_quantizer.get_param_materialization_device(
+                    model,
+                    renamed_key,
+                    target_device=param_device,
+                    target_dtype=_dtype,
+                    needs_quantization=bool(needs_quantization),
+                )
+
             future_or_tensor = spawn_materialize(
                 thread_pool,
                 tensor,
-                param_device,
+                materialize_device,
                 _dtype,
                 sharding_op=sharding_op,
                 tensor_idx=tensor_idx,
@@ -1751,11 +1767,18 @@ def convert_and_load_state_dict_in_model(
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
             try:
+                conversion_target_device = (
+                    get_device(device_map, first_param_name, valid_torch_device=True)
+                    if user_provided_device_map is not None
+                    else None
+                )
+
                 realized_value = mapping.convert(
                     first_param_name,
                     model=model,
                     config=model.config,
                     hf_quantizer=hf_quantizer,
+                    target_device=conversion_target_device,
                     loading_info=loading_info,
                 )
                 for target_name, param in realized_value.items():
