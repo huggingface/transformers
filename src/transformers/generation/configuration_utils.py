@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
@@ -378,6 +379,9 @@ class GenerationConfig(PushToHubMixin):
     _eos_token_tensor: "torch.Tensor | None"
     _pad_token_tensor: "torch.Tensor | None"
     _decoder_start_token_tensor: "torch.Tensor | None"
+
+    # To load and store a tokenizer if config has `stop_strings` saved
+    _tokenizer: "PreTrainedTokenizerBase | None"
 
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None
