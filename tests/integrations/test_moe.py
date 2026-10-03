@@ -41,6 +41,7 @@ def make_experts(num_experts, hidden, inter, is_expert_parallel):
         num_experts=num_experts,
         has_gate=True,
         has_bias=False,
+        has_post_expert_norm=False,
         is_transposed=False,
         act_fn=act_fn,
         _apply_gate=apply_gate,

@@ -192,7 +192,13 @@ class ColwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        placement = Shard(1) if isinstance(module, torch.nn.Embedding) else Shard(meta.ndim - 2)
+        # a 0-dim scale is one value for the whole tensor: no axis to split, every rank keeps it
+        if meta.ndim == 0:
+            placement = Replicate()
+        elif isinstance(module, torch.nn.Embedding):
+            placement = Shard(1)
+        else:
+            placement = Shard(meta.ndim - 2)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -263,7 +269,10 @@ class RowwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        if isinstance(module, torch.nn.Embedding):
+        # a 0-dim scale is one value for the whole tensor: no axis to split, every rank keeps it
+        if meta.ndim == 0:
+            placement = Replicate()
+        elif isinstance(module, torch.nn.Embedding):
             placement = Shard(0)
         else:
             # bias is replicated (added after the row-reduce); weight shards on input dim (-1)
@@ -469,7 +478,10 @@ class PackedColwiseParallel(TensorParallelLayer):
             return
         shard_dim = self._packed_output_shard_dim(meta.ndim)
         # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
-        if meta.ndim == 1:
+        # a 0-dim scale is one value for the whole tensor: no axis to split, every rank keeps it
+        if meta.ndim == 0:
+            placement = Replicate()
+        elif meta.ndim == 1:
             placement = Shard(shard_dim)
         else:
             placement = _StridedShard(dim=shard_dim, split_factor=self.split_factor)
@@ -510,7 +522,7 @@ class PackedRowwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        placement = Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
+        placement = Replicate() if meta.ndim <= 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -775,6 +787,9 @@ class ParallelInterface(GeneralInterface):
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
+            "moe_experts_colwise": MoEParamShard(Shard(1)),
+            "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
+            "moe_experts_rowwise": MoEParamShard(Shard(2)),
             "ep_router": EpRouterParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeExpertsParallel(),

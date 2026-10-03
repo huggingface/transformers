@@ -153,7 +153,7 @@ from transformers import (
     AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
-    FineGrainedFP8Config,
+    FineGrainedConfig,
 )
 from transformers.distributed import DistributedConfig
 
@@ -164,7 +164,7 @@ model = AutoModelForImageTextToText.from_pretrained(
     "MiniMaxAI/MiniMax-M3-preview",
     dtype=torch.bfloat16,
     # Dequantize the native MXFP8 weights to bf16 at load (the speed win); needs even TP/EP sharding.
-    quantization_config=FineGrainedFP8Config(dequantize=True),
+    quantization_config=FineGrainedConfig(dequantize=True),
     distributed_config=DistributedConfig(
         tp_size=int(os.environ["WORLD_SIZE"]),
         enable_expert_parallel=True,

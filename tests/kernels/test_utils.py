@@ -66,6 +66,7 @@ def _build_experts(
         num_experts=num_experts,
         has_gate=has_gate,
         has_bias=has_bias,
+        has_post_expert_norm=False,
         is_transposed=is_transposed,
         _is_expert_parallel=is_expert_parallel,
         act_fn=act_fn,
