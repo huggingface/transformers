@@ -182,7 +182,8 @@ with torch.inference_mode():
 ```
 
 The streaming loop above then compiles once. The offline forward chunks the same way, so the same wrapper applies with
-`config.fifo_length`, `config.chunk_length` and `config.chunk_right_context` in `max_window`.
+`config.fifo_length`, `config.chunk_left_context`, `config.chunk_length` and `config.chunk_right_context` in
+`max_window`.
 
 
 | Speedup vs eager (A100, batch size 1) | float32 | bfloat16 |
