@@ -18,10 +18,11 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images, split_to_tiles
+from ...image_transforms import convert_to_rgb, group_images_by_shape, reorder_images, split_to_tiles
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -31,13 +32,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
-
-
-if is_vision_available():
-    from PIL import Image
-
-from torchvision.transforms.v2 import functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
@@ -331,26 +326,6 @@ def convert_aspect_ratios_to_ids(
         for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
             aspect_ratios_ids[i, j] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
     return aspect_ratios_ids
-
-
-# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
-def convert_to_rgb(image: ImageInput) -> ImageInput:
-    """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
-    """
-    if not is_vision_available() or not isinstance(image, Image.Image):
-        return image
-
-    # PNG tRNS keeps mode "RGB"/"L"/"P" while storing transparency in image.info.
-    if image.mode == "RGB" and image.info.get("transparency") is None:
-        return image
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
 
 
 @auto_docstring
