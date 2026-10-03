@@ -41,7 +41,6 @@ from ...utils.generic import (
     can_return_tuple,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -92,15 +91,12 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
     @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, Cosmos3EdgeText has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        # So position_ids is broadcast to (3, bs, positions) and freqs has shape (3, bs, positions, dim // 2)
+        position_ids = position_ids.expand(3, -1, -1)
+        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
+        freqs = position_ids[..., None].float() * self.inv_freq.to(x.device, torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)
