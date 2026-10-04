@@ -130,10 +130,11 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(
-            model, sample_inputs, exclude=tuple(config.partition_exclude)
-        )
+        model.requires_grad_(False)
+        model, partitioner = prepare_for_backend(model, sample_inputs, exclude=tuple(config.partition_exclude))
         partitioner = partitioner if config.partition else []
+        # `spec_prop` rejects stride-0 broadcast inputs ("0 in strides").
+        sample_inputs = torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
         with (
             contiguous_nonzero_fake(),
@@ -377,18 +378,12 @@ def _get_backend_config(config):
 
 
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
-# Each `prepare_for_<backend>` returns `(model, sample_inputs, partitioners)`.
-
-
-def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
-    """Make input tensors contiguous: `spec_prop` rejects stride-0 broadcast inputs ("0 in strides")."""
-    return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
+# Each `prepare_for_<backend>` returns `(model, partitioners)`.
 
 
 def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
     """CPU inference via XNNPACK. The model is moved to CPU, which the partitioner and edge passes require."""
 
-    model.requires_grad_(False)
     model = model.to(device="cpu")
     # XNNPACK has no `_grouped_mm.out` kernel.
     if isinstance(model, PreTrainedModel):
@@ -407,7 +402,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], e
         partitioner = [XnnpackPartitioner(configs=configs)]
     else:
         partitioner = [XnnpackPartitioner()]
-    return model, _make_contiguous(sample_inputs), partitioner
+    return model, partitioner
 
 
 def prepare_for_openvino(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
@@ -415,10 +410,9 @@ def prepare_for_openvino(model: PreTrainedModel, sample_inputs: dict[str, Any], 
     from executorch.backends.openvino.partitioner import OpenvinoPartitioner
     from executorch.exir.backend.backend_details import CompileSpec
 
-    model.requires_grad_(False)
     model = model.to(device="cpu")
     partitioner = [OpenvinoPartitioner([CompileSpec("device", b"CPU")])]
-    return model, _make_contiguous(sample_inputs), partitioner
+    return model, partitioner
 
 
 def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
@@ -429,13 +423,12 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], excl
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
 
-    model.requires_grad_(False)
     dtype = module_dtype(model)
     if dtype is not None and dtype != torch.bfloat16:
         logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
-    return model, _make_contiguous(sample_inputs), partitioner
+    return model, partitioner
 
 
 def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
@@ -452,13 +445,12 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], exclu
 
     from executorch.backends.mlx import MLXPartitioner
 
-    model.requires_grad_(False)
     model = model.to(device="cpu")
     # MLX does not support grouped MoE kernels.
     if isinstance(model, PreTrainedModel):
         model.set_experts_implementation("batched_mm")
     partitioner = [MLXPartitioner()]
-    return model, _make_contiguous(sample_inputs), partitioner
+    return model, partitioner
 
 
 _BACKEND_PREPARE = {
