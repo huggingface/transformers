@@ -476,27 +476,12 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 )
 
 # Generation export tests run the product of three axes: shape dynamism, single- vs multi-token decode
-# capture, and the generation config used for the capture.
-_EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
-# `multi_token_decode=False` captures the classic single-token decode (its query axis specializes to 1;
-# the separate `prefill` graph serves the prompt); `True` merges two decode steps so the query axis stays
-# symbolic and one graph serves prefill and decode.
-_EXPORT_DECODE_MODES = [False, True]  # multi_token_decode
-# `generation_config=None` is the model's own config (growing `DynamicCache`);
-# `cache_implementation="static"` exports against a `StaticCache`. Every cache runs under every shape
-# mode — under dynamic shapes a static cache still keeps a symbolic (resizable) size, it just writes at
-# fixed positions. The static entry declares `max_cache_len` explicitly — a static-cache export's
-# contract: the runtime is handed the same generation config the model was exported with and builds the
-# cache it declares; without it, the capture sizes the cache from its own internal token count and the
-# runtime from the caller's, and backends that freeze the traced length reject the mismatch.
-# `max_cache_len` must fit every tester's prompt + new tokens: `generate` silently grows an under-sized
-# static cache, and it grows it *differently* in each phase — the capture adds its own internal token count,
-# the runtime the caller's — so the graph bakes one length and the runtime builds another (gpt_bigcode and
-# minimax prompt at ~127 and ~151, and were off by exactly the one-token difference). Multi-modal prompts
-# with image tokens run ~80 long, so this sits well clear of every tester.
-# Both entries declare `use_cache=True`: an exported decode graph is only useful with a cache, and a model
-# whose own config disables caching (bart's standalone decoder) would otherwise be captured cacheless —
-# re-feeding the whole growing sequence every step, which a frozen-shape graph can't serve at all.
+# capture (`True` merges two decode steps so one graph serves prefill and decode), and the capture's
+# generation config (the model's own growing cache, or a static one). `max_cache_len=256` must fit every
+# tester's prompt plus new tokens, since `generate` grows an under-sized static cache differently at capture
+# and at run time. `use_cache=True` because a cacheless decode graph can't serve a frozen-shape loop.
+_EXPORT_SHAPE_MODES = [False, True]
+_EXPORT_DECODE_MODES = [False, True]
 _EXPORT_GENERATION_CONFIGS = [
     GenerationConfig(use_cache=True),
     GenerationConfig(cache_implementation="static", max_cache_len=256, use_cache=True),
@@ -635,25 +620,9 @@ def _tolerating_executorch_limits(label: str):
         )
 
 
-# ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
-# ExecuTorch's own portable runtime / XNNPACK backend can't service it" — a runtime limitation, not a
-# transformers export defect (which surfaces earlier as a `torch.export` error or later as an output
-# mismatch). Each is a code whose own definition (`runtime/core/error.h`) attributes it to the runtime:
-# load 0x14 `OperatorMissing` (the registry has no kernel for an op the program needs) and 0x21
-# `MemoryAllocationFailed` (the arena cannot be allocated); execute 0x10 `NotSupported` (the backend
-# declines the operation in this context — XNNPACK cannot resize a static tensor to the runtime shape).
-# 0x1 `Internal` is generic ("an internal error occurred"), so it counts at *execute* only: by then
-# `set_inputs` has accepted the feed, and XNNExecutor reports a delegate refusal this way — the exception
-# carries only the code (the `xnn_status_*` detail goes to ExecuTorch's own log), so the phase is the whole
-# signal. At *load* the same code is as easily a malformed program of ours, so it does not count there.
-# 0x12 `InvalidArgument` never counts. It shows up as a kernel refusing to resize its own output ("Attempted
-# to resize a static tensor. Expected shape (2, 2, 32), but received (2, 1, 32)" from `tensor_impl.cpp`, via
-# `aten::embedding.out`), which happens when a dynamic axis reaches lowering without the bound that would let
-# the planner size it for the largest shape. That is a fixable defect on our side of the export, not a
-# platform ceiling, so it stays visible. Only failures from `execute()` itself count: the same codes also come out of
-# `set_inputs()`, but binding the runtime inputs is *our* side of the contract — it fails when we hand the
-# method something it never declared (feeding an fp32 cache to a half-precision program did exactly that,
-# and reading it as a backend limitation hid the bug across every MoE model), so those have to stay visible.
+# ExecuTorch error codes that are runtime limits, not export defects: load 0x14 `OperatorMissing` and 0x21
+# `MemoryAllocationFailed`; execute 0x1 `Internal` (an XNNPACK delegate refusal) and 0x10 `NotSupported`.
+# 0x12 `InvalidArgument` and any `set_inputs()` failure are on our side of the contract, so they stay visible.
 _ET_LOAD_LIMIT_CODES = {"0x14", "0x21"}
 _ET_EXECUTE_LIMIT_CODES = {"0x1", "0x10"}
 
@@ -673,36 +642,10 @@ def _is_executorch_runtime_limit(exc):
     return code in _ET_EXECUTE_LIMIT_CODES
 
 
-def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
-    """Return whether onnxscript optimisation should run for this model under this shape mode.
-
-    Mirrors ``_should_skip``'s scope walk on ``ONNX_DISABLE_OPTIMIZE`` — ``"all"`` always
-    applies; ``"dynamic"`` adds the dynamic-only entries.
-    """
-    name = model_class.__name__
-    scopes = ["all", "dynamic" if dynamic else "static"]
-    return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
-
-
-def _executorch_partition_exclude(model_class, dynamic: bool) -> tuple[str, ...]:
-    """The partitioner configs to withhold for this class, by the same scope walk as
-    ``_executorch_partition_enabled``. Empty means hand the partitioner everything."""
-    name = model_class.__name__
-    excluded: tuple[str, ...] = ()
-    for scope in ("all", "dynamic" if dynamic else "static"):
-        excluded += EXECUTORCH_PARTITION_EXCLUDE.get(scope, {}).get(name, ())
-    return excluded
-
-
-def _executorch_partition_enabled(model_class, dynamic: bool) -> bool:
-    """Return whether the ExecuTorch export may hand subgraphs to the backend's partitioner.
-
-    Mirrors ``_onnx_optimize_enabled``'s scope walk on ``EXECUTORCH_DISABLE_PARTITION`` — ``"all"``
-    always applies; ``"dynamic"`` / ``"static"`` add the entries for that shape variant.
-    """
-    name = model_class.__name__
-    scopes = ["all", "dynamic" if dynamic else "static"]
-    return not any(name in EXECUTORCH_DISABLE_PARTITION.get(scope, {}) for scope in scopes)
+def _scoped(table, model_class, dynamic: bool) -> list:
+    """The entries of a scope-keyed table (`"all"`, `"dynamic"`, `"static"`) that apply to `model_class`."""
+    scopes = ("all", "dynamic" if dynamic else "static")
+    return [table[scope][model_class.__name__] for scope in scopes if model_class.__name__ in table.get(scope, {})]
 
 
 def needs_half_precision_export(model) -> bool:
@@ -718,6 +661,17 @@ def needs_half_precision_export(model) -> bool:
         f"{type(module).__module__}.{type(module).__qualname__}.forward" in _VARLEN_ATTENTION_PATHS
         for module in model.modules()
     )
+
+
+def _build_export_model(model_class, config, inputs, backend, device):
+    """`model_class` and `inputs` on `device`, in half precision only for a half-precision-only kernel
+    (`needs_half_precision_export`): fp16 for ONNX (ORT lacks bf16 kernels), bf16 elsewhere."""
+    set_config_for_less_flaky_test(config)
+    model = model_class(config).eval()
+    half_dtype = torch.float16 if backend == "onnx" else torch.bfloat16
+    model = model.to(device, half_dtype if needs_half_precision_export(model) else torch.float32)
+    set_model_for_less_flaky_test(model)
+    return model, cast_leaf_tensors(inputs, dtype=module_dtype(model), device=module_device(model))
 
 
 # ──────────────────────────── mixins ────────────────────────────
@@ -739,16 +693,8 @@ _SELECTED_BY_TOPK = frozenset(
 
 
 def _assert_values_close(case, actual: dict, expected: dict, atol: float, rtol: float) -> None:
-    """Compare the tensors a runtime produced against eager's, on eager's device and in eager's dtype.
-
-    Checked on top of the names, since a graph can answer with the right names and the wrong numbers. A
-    backend stores at the precision it computes in, which for a half model is `f16` where eager kept
-    `bfloat16` — the same numbers to the tolerance, in a type the graph chose. Integers likewise: OpenVINO
-    keeps an `int64` counter in `int32` state, since its CPU plugin holds no `i64` variables. What the
-    precisions are is checked where the export declares them, not here. The device is eager's for the same
-    reason: OpenVINO answers on the host wherever the model was built, and moving its outputs over is what
-    lets the model stay on the GPU, where exporting from a GPU-resident model gets exercised too.
-    """
+    """Compare the tensors a runtime produced against eager's, cast to eager's device and dtype: a backend may
+    answer on the host or in the precision it computes in (OpenVINO keeps `int64` counters as `int32`)."""
     shared = {
         name: actual[name].to(expected[name].device, expected[name].dtype) for name in expected if name in actual
     }
@@ -756,24 +702,8 @@ def _assert_values_close(case, actual: dict, expected: dict, atol: float, rtol: 
     case._check_outputs_close(shared, {name: expected[name] for name in shared}, atol=atol, rtol=rtol)
 
 
-def _assert_openvino_outputs_close(case, runtime, actual: dict, expected: dict, atol: float, rtol: float) -> None:
-    """Every leaf eager returns is accounted for — as an output, or as folded state — and holds eager's values.
-
-    An OpenVINO export turns each round-tripped cache tensor into an internal variable the plugin keeps
-    between calls, so the graph returns logits and the cache stays behind its `Assign` sinks. Reading it
-    back off those sinks is what checks that the graph wrote the keys and values eager did, rather than
-    excusing what is missing.
-    """
-    case.assertTrue(actual, "OpenVINO outputs are empty.")
-    runner = getattr(runtime, "runner", None)
-    folded = runner.state_tensors() if runner is not None and runner.owns_state else {}
-    produced = {**actual, **folded}
-    case.assertEqual(set(produced), set(expected))
-    _assert_values_close(case, produced, expected, atol, rtol)
-
-
 class ExportTesterMixin:
-    """Mixin providing non-generative export tests for Dynamo, ONNX, and ExecuTorch backends.
+    """Mixin providing non-generative export tests for the Dynamo, ONNX, OpenVINO and ExecuTorch backends.
 
     Mixed into [`ModelTesterMixin`] so every model test class that inherits from it
     automatically runs these export tests against all entries in `all_model_classes`.
@@ -811,21 +741,10 @@ class ExportTesterMixin:
         generation_config=None,
         runtime=False,
     ):
-        """Return True if this model class should be skipped for export tests.
-
-        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current test —
-        ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
-        for that shape variant, ``"generate.multi_token"`` for the merged multi-token decode capture, and
-        ``"generate.runtime"`` for driving the exported graphs through `generate` (the export itself still
-        runs — use it when a model exports fine and only the runtime cannot serve it), and
-        ``"generate.runtime.multi_token"`` for a model the runtime drives fine *except* from a merged decode.
-        The runtime scope carries the shape variant too (``"generate.runtime.dynamic"`` /
-        ``"generate.runtime.static"``), so an entry can say "only the dynamic drive fails" instead of gating
-        every variant — and, backend-prefixed, "only this backend's dynamic drive". Every one of these
-        also exists ``"<backend>."``-prefixed (``"onnx.generate.multi_token"``, …) to skip on one backend
-        only, plus the bare ``"<backend>"`` for that whole backend. Also skips static-cache variants
-        (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
-        support a static cache.
+        """Whether `EXPORT_SKIPS` gates this model class for this test, walking the scopes that match it from
+        broad to specific: `"all"`, `"generate"` (with `.dynamic`, `.multi_token`, `.runtime`,
+        `.runtime.multi_token`, `.runtime.dynamic` / `.runtime.static`), `"dynamic"` / `"static"`, and each of
+        those `"<backend>."`-prefixed. Static-cache variants also skip models that can't compile fullgraph.
         """
         if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
             return True
@@ -875,18 +794,7 @@ class ExportTesterMixin:
         inputs_dict = self._prepare_for_class(inputs_dict, model_class)
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
-        set_config_for_less_flaky_test(config)
-        model = model_class(config).eval()
-        # Use half precision only when the model has a half-precision-only kernel — the vision varlen flash
-        # attention or grouped-mm MoE experts (see `needs_half_precision_export`); everything else stays fp32
-        # (realistic, and avoids spurious dtype mismatches). The half type is per-backend: fp16 for ONNX
-        # (ORT has no bf16 kernels for many ops), bf16 for torch.export/ExecuTorch (flash + grouped_mm need it).
-        half_dtype = torch.float16 if backend == "onnx" else torch.bfloat16
-        dtype = half_dtype if needs_half_precision_export(model) else torch.float32
-        model = model.to(device, dtype)
-        set_model_for_less_flaky_test(model)
-
-        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+        model, inputs_dict = _build_export_model(model_class, config, inputs_dict, backend, device)
 
         if is_multimodal(model):
             return decompose_multimodal(model, inputs_dict)
@@ -903,19 +811,22 @@ class ExportTesterMixin:
                 assert eager_outputs[name], f"Eager outputs are empty for {name}."
         return eager_outputs
 
-    def _maybe_assert_generate_matches_eager(
+    def _assert_generate_matches_eager(
         self, model_class, components, exported, backend, generation_config, dynamic, multi_token_decode
     ):
-        """End-to-end id-parity, wherever the exported graphs can serve `generate`'s loop.
+        """Drive the exported runners through `ExportedGenerator.generate` and compare with eager: fp32 by ids,
+        half precision by scores, stopping at the first near-tie.
 
-        Checking each component against the call it was captured from leaves the hand-offs between them
-        untested — a component is handed its cache, while the loop expects each graph to carry what the one
-        before it wrote. The loop runs via the dedicated `prefill` graph (always under dynamic shapes, under
-        static ones only with a static cache, whose frozen shapes reproduce every step), or via the
-        multi-token decode serving prefill and decode from one graph — and only once every component exported.
+        Runs where the graphs can serve the loop: a `prefill` graph (dynamic shapes, or static with a static
+        cache) or a multi-token decode under dynamic shapes, once every component exported. A multi-modal
+        static export can't, since its embedder graph is specialized to the prompt length.
         """
+        from transformers.exporters import ExportedGenerator
+
         can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
         if not (can_split_prefill or (dynamic and multi_token_decode)) or not components.keys() <= exported.keys():
+            return
+        if not dynamic and "embed_tokens" in components:
             return
         if self._should_skip(
             model_class,
@@ -927,56 +838,10 @@ class ExportTesterMixin:
             runtime=True,
         ):
             return
-        self._assert_generate_matches_eager(
-            components, exported, backend, generation_config, dynamic, multi_token_decode
-        )
-
-    def _assert_generate_matches_eager(
-        self, components, exported, backend, generation_config, dynamic, multi_token_decode
-    ):
-        """Wrap the exported components in `backend`'s `ModelRunner`s, reassemble them into the
-        `generate`-driving runtime via `ExportedGenerator` — the same artifacts-plus-configs
-        path a deployment would use (`generation_config` is the one the components were exported with, the
-        runtime's cache contract; `None` means the model's own defaults) — and assert it generates like the
-        eager model. Runs both on the runner's device with greedy decoding. fp32 models must match token
-        ids exactly; half-precision models (the varlen-attention VLM families and grouped-mm MoEs, see
-        `needs_half_precision_export`) compare per-step scores at the dtype-calibrated tolerance and ids
-        only until the first near-tie — export re-rounds ops by ~2^-8, and a tiny random model's argmax
-        legitimately flips on ties that small, while a real wiring bug (wrong cache / mask / positions)
-        shows up as systematic score divergence which the closeness check catches regardless. Covers
-        decoder-only text, VLMs (including M-RoPE, whose 4-axis position ids the runtime rebuilds
-        config-only in `_prepare_position_ids_for_generation`) and encoder-decoder models (encoder +
-        decoder-step graphs).
-
-        A single-token export wires its `prefill` graph as the generator's dedicated prefill runner, so the
-        `decode` graph only ever sees query=1 steps — which is what lets the *static-shape* variants run
-        parity too (over a static cache, every step reproduces the frozen shapes). A multi-token export has
-        one text graph serving both, exercising the single-graph path (dynamic shapes only)."""
-        from transformers.exporters import ExportedGenerator
-        from transformers.exporters.decompose import (
-            _MODALITY_SPECS,
-            _STREAMING_EMBEDDERS,
-        )
 
         model = components["decode"].module
-        if not dynamic and "embed_tokens" in components:
-            # A multi-modal model embeds its text in a graph of its own, captured on the *prompt* — under
-            # static shapes that graph is specialized to the prompt's length and cannot serve the 1-token
-            # decode steps the loop makes (`Guard failed: input_ids.size()[1] == 39`). The static-shape
-            # exports themselves are still asserted above; driving them needs a length-generic embedder.
-            return
-
-        wanted = {
-            "decode",
-            "prefill",
-            "encoder",
-            "embed_tokens",
-            *(spec.component for spec in _MODALITY_SPECS),
-            *(spec.component for spec in _STREAMING_EMBEDDERS.values()),
-        }
-        # The runners themselves, not the per-graph runtimes: `ExportedGenerator` assembles the generation
-        # loop out of `ModelRunner`s, and a single-graph runtime is an `ExportedModel` *wrapping* one.
-        runners = {name: exported[name].runtime().runner for name in components if name in wanted}
+        # The runners, not the per-graph runtimes: a single-graph runtime is an `ExportedModel` wrapping one.
+        runners = {name: exported[name].runtime().runner for name in components}
         runtime = ExportedGenerator(runners, model.config, model.generation_config)
         device = runtime.device
         model = model.to(device)
@@ -986,11 +851,8 @@ class ExportTesterMixin:
         # way the export path casts them, or the eager side hits its own tower with fp32 `pixel_values`
         inputs = cast_leaf_tensors(inputs, dtype=module_dtype(model), device=device)
 
-        # Called exactly like a normal model: the same generate inputs go to both, and no hand-rolled cache
-        # — the runtime builds the cache the exported graph needs, static or growing (`_prepare_cache_for_generation`).
-        # `eos_token_id=-1` keeps both running the full `max_new_tokens` so the ids compare directly.
-        # The same capture generation config goes to both sides, exactly as it went to the export's own
-        # generate — the runtime builds the cache it declares.
+        # The same inputs and capture generation config go to both sides; `eos_token_id=-1` keeps both running
+        # the full `max_new_tokens` so the ids compare directly.
         gen_kwargs = {
             "do_sample": False,
             "eos_token_id": -1,
@@ -1005,10 +867,7 @@ class ExportTesterMixin:
         try:
             exported_out = runtime.generate(**inputs, **gen_kwargs)
         except (RuntimeError, MemoryError) as e:
-            # A portable kernel refusing the step's shapes mid-run is this backend's ceiling, the same one
-            # the component checks absorb (`_tolerating_executorch_limits`) — the graphs themselves are asserted
-            # above. Only the *execute* phase counts: a failure while binding inputs means the runtime fed
-            # something the method never declared, which is our bug and must stay visible.
+            # The same runtime ceiling the component checks tolerate (`_tolerating_executorch_limits`).
             if backend == "executorch" and _is_executorch_runtime_limit(e):
                 return
             raise
@@ -1017,10 +876,8 @@ class ExportTesterMixin:
         self.assertEqual(
             len(exported_out.scores), len(eager_out.scores), "exported runtime generated a different number of steps"
         )
-        # A runtime holding its own cache is asked directly how much it holds, because nothing in the
-        # outputs would say: a graph attending to an empty cache still answers plausibly, and on a small
-        # model those logits sit well inside any tolerance. Only the decode graph is asked — it is the one
-        # carrying the whole sequence, prompt included, where a prefill graph holds just what it ran.
+        # A runtime holding its own cache is asked how much it holds: a graph attending to an empty cache still
+        # answers plausibly. The decode graph carries the whole sequence, prompt included.
         read = exported_out.sequences.shape[1] - 1
         decode_runner = getattr(runtime, "_decode_runner", None)
         if getattr(decode_runner, "owns_state", False) and decode_runner.state_length:
@@ -1058,7 +915,7 @@ class ExportTesterMixin:
             )
             break
 
-    def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True):
+    def _check_outputs_close(self, actual, expected, atol, rtol):
         """Assert outputs are close, allowing up to 5% element-level mismatch.
 
         For bf16/fp16 outputs the fp32-calibrated tolerance is far too tight — export re-rounds ops (fusion,
@@ -1072,7 +929,7 @@ class ExportTesterMixin:
         if any(t.dtype in (torch.bfloat16, torch.float16) for t in expected.values()):
             atol, rtol = max(atol, 1.6e-2), max(rtol, 1.6e-2)
         try:
-            torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol, check_device=check_device)
+            torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol)
         except AssertionError as e:
             mismatched_percentage = re.findall(r"Mismatched elements: (\d+) / (\d+)", str(e))
             if mismatched_percentage:
@@ -1086,7 +943,7 @@ class ExportTesterMixin:
         if backend == "dynamo":
             return DynamoExporter(), DynamoConfig(dynamic=dynamic)
         if backend == "onnx":
-            optimize = _onnx_optimize_enabled(model_class, dynamic)
+            optimize = not _scoped(ONNX_DISABLE_OPTIMIZE, model_class, dynamic)
             return OnnxExporter(), OnnxConfig(dynamic=dynamic, optimize=optimize, external_data=False)
         if backend == "openvino":
             return OpenVINOExporter(), OpenVINOConfig(dynamic=dynamic)
@@ -1094,8 +951,8 @@ class ExportTesterMixin:
         return ExecutorchExporter(), ExecutorchConfig(
             backend=executorch_backend,
             dynamic=dynamic,
-            partition=_executorch_partition_enabled(model_class, dynamic),
-            partition_exclude=_executorch_partition_exclude(model_class, dynamic),
+            partition=not _scoped(EXECUTORCH_DISABLE_PARTITION, model_class, dynamic),
+            partition_exclude=sum(_scoped(EXECUTORCH_PARTITION_EXCLUDE, model_class, dynamic), ()),
         )
 
     def _run_and_compare(self, backend, exported, inputs, expected, label, atol, rtol) -> bool:
@@ -1115,7 +972,13 @@ class ExportTesterMixin:
             return True
         if backend == "openvino":
             runtime = exported.runtime()
-            _assert_openvino_outputs_close(self, runtime, runtime(**inputs), expected, atol, rtol)
+            actual = runtime(**inputs)
+            self.assertTrue(actual, f"OpenVINO outputs are empty for {label}.")
+            # Round-tripped cache tensors become plugin variables; read them back so they are compared too.
+            runner = getattr(runtime, "runner", None)
+            produced = {**actual, **(runner.state_tensors() if runner is not None and runner.owns_state else {})}
+            self.assertEqual(set(produced), set(expected))
+            _assert_values_close(self, produced, expected, atol, rtol)
             return True
         # Building the runner stays inside the tolerance: loading the method is where ExecuTorch reports a
         # missing kernel or an oversized arena.
@@ -1142,7 +1005,7 @@ class ExportTesterMixin:
         """Export every model class (or its generation components) to `backend` and check each against eager.
 
         For `generate`, the exported components are then driven through `generate` and checked against eager
-        too (`_maybe_assert_generate_matches_eager`). ExecuTorch traces on CPU: XNNPACK targets CPU, and a CUDA
+        too (`_assert_generate_matches_eager`). ExecuTorch traces on CPU: XNNPACK targets CPU, and a CUDA
         trace surfaces models that build in-`forward` tensors without `device=`.
         """
         self._skip_if_not_exportable()
@@ -1182,7 +1045,7 @@ class ExportTesterMixin:
                         exported[name] = output
 
             if generate:
-                self._maybe_assert_generate_matches_eager(
+                self._assert_generate_matches_eager(
                     model_class, components, exported, backend, generation_config, dynamic, multi_token_decode
                 )
 
@@ -1228,7 +1091,7 @@ class ExportTesterMixin:
 
                     config = getattr(model, "config", None)
                     if config is None:
-                        continue  # a bare module (lm_head) has no config and nothing to precompute
+                        continue
 
                     with torch.no_grad():
                         precomputed_inputs = precompute_export_inputs(config, copy.deepcopy(inputs))
@@ -1264,8 +1127,21 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_onnx_export(self, dynamic, atol=1e-3, rtol=1e-3):
-        """Export each model class to ONNX and verify output names match eager."""
+        """Export each model class to ONNX and verify its outputs match eager."""
         self._export_and_compare("onnx", dynamic=dynamic, atol=atol, rtol=rtol)
+
+    # ──────────────────────── OpenVINO tests ─────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_openvino_export(self, dynamic, atol=1e-3, rtol=1e-3):
+        """Export each model class to OpenVINO IR and verify its outputs match eager."""
+        self._export_and_compare("openvino", dynamic=dynamic, atol=atol, rtol=rtol)
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1282,7 +1158,7 @@ class ExportTesterMixin:
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
-    """Mixin providing generation-aware export tests for torch.export, ONNX, and ExecuTorch backends.
+    """Mixin providing generation-aware export tests for the Dynamo, ONNX, OpenVINO and ExecuTorch backends.
 
     Inherits ``ExportTesterMixin`` for the shared exportability gate / skip logic / input prep, and
     is mixed into a model test class alongside ``GenerationTesterMixin``.
@@ -1292,9 +1168,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     - ``prepare_config_and_inputs_for_generate()`` — returns ``(config, inputs_dict)`` suitable
       for ``model.generate()``.
 
-    Each generative model is decomposed into prefill and decode components via
-    :func:`decompose_prefill_decode`.  Multi-modal models additionally decompose the prefill
-    stage into individual submodules via :func:`decompose_multimodal`.
+    Each generative model is decomposed into its generation components via `decompose_for_generation`.
     """
 
     def _prepare_export_generate_model_and_inputs(
@@ -1329,18 +1203,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
-        set_config_for_less_flaky_test(config)
-        model = model_class(config).eval()
-        # Use half precision only when the model has a half-precision-only kernel — the vision varlen flash
-        # attention or grouped-mm MoE experts (see `needs_half_precision_export`); everything else stays fp32
-        # (realistic, and avoids spurious dtype mismatches). The half type is per-backend: fp16 for ONNX
-        # (ORT has no bf16 kernels for many ops), bf16 for torch.export/ExecuTorch (flash + grouped_mm need it).
-        half_dtype = torch.float16 if backend == "onnx" else torch.bfloat16
-        dtype = half_dtype if needs_half_precision_export(model) else torch.float32
-        model = model.to(device, dtype)
-        set_model_for_less_flaky_test(model)
-
-        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+        model, inputs_dict = _build_export_model(model_class, config, inputs_dict, backend, device)
 
         return decompose_for_generation(
             model,
@@ -1358,12 +1221,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    # `atol` is looser than the non-generate check's 1e-4 because a component here can come back near zero:
-    # t5gemma2's `encoder_last_hidden_state` sits at ~1e-3 while its intermediates are O(1), so plain fp32
-    # accumulation lands up to 1.8e-4 apart — 17% of the value, yet ordinary in absolute terms, and it flips
-    # this comparison run to run (measured 6.6%/7.1%/8.1%/10.1%/10.6% of elements over, and not seedable:
-    # the variance survives pinning both weights and inputs). A real wiring bug — wrong cache, mask or
-    # positions — diverges by orders of magnitude more, and the id-parity check below still guards it.
+    # Looser `atol` than the non-generate 1e-4: t5gemma2's `encoder_last_hidden_state` sits near 1e-3 while its
+    # intermediates are O(1), so fp32 accumulation drifts up to 1.8e-4, unseedably.
     def test_torch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=5e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._export_and_compare(
@@ -1387,7 +1246,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
-        """Export prefill and decode stages to ONNX and verify output names match eager."""
+        """Export the generation components to ONNX and verify they match eager, then generate."""
         self._export_and_compare(
             "onnx",
             dynamic=dynamic,
@@ -1398,17 +1257,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             rtol=rtol,
         )
 
-    @DYNAMIC_EXPORT_PARAMS
-    @slow
-    @require_openvino
-    @pytest.mark.openvino_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
-    def test_openvino_export(self, dynamic, atol=1e-3, rtol=1e-3):
-        """Export each model class to OpenVINO IR and verify output names match eager."""
-        self._export_and_compare("openvino", dynamic=dynamic, atol=atol, rtol=rtol)
-
     @GENERATE_EXPORT_PARAMS
     @slow
     @require_openvino
@@ -1417,7 +1265,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_openvino_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
-        """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
+        """Export the generation components to OpenVINO IR and verify they match eager, then generate."""
         self._export_and_compare(
             "openvino",
             dynamic=dynamic,

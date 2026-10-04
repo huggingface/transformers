@@ -11,28 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Runtime tests for exported artifacts — running them in real inference settings.
-
-`test_export.py` checks that models *export* across backends (and that each component runs and returns
-the right number of outputs). This file is the complement: it takes exported artifacts and exercises
-them the way a deployment would — real inputs, real loops, on the actual runtimes (`torch.export`
-`module()`, ONNX Runtime, the ExecuTorch runtime) — checking the results match eager. That's the
-behaviour a count-only smoke test can't see.
-
-Current coverage — the generation `decode` component:
-
-- **query axis stays dynamic** — the exported multi-token decode runs at query lengths other than the
-  captured one;
-- **cache mutates in place** — driving the decode against a fixed-size `StaticCache` carries the cache
-  across steps in place and matches eager: `torch.export` via `USER_INPUT_MUTATION`, ONNX Runtime via the
-  shared cache buffers [`OnnxModelRunner`] binds (device-resident, no per-step allocation or host
-  round-trip);
-- **a saved export runs** — `save_pretrained` then `AutoExportedModel.from_pretrained` generates what the
-  in-memory export generated, and a single-graph export forwards like the model it came from.
-
-Everything here drives artifacts through the shipped runners rather than hand-built sessions: the runtime
-layer is what a deployment uses, so a test that reimplemented it could pass while the shipped path was
-broken.
+"""Runtime tests for exported artifacts: the exported `decode` runs at query lengths other than the captured one,
+a static cache is mutated in place across steps (`torch.export` and ONNX Runtime), an exported draft assists
+generation, and a saved export generates and forwards like the in-memory one. Everything runs through the
+shipped runners, the layer a deployment uses.
 """
 
 import copy
@@ -398,7 +380,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             loaded = AutoExportedModel.from_pretrained(directory, device="cpu")
-            self.assertIsNot(type(loaded).__name__, "ExportedGenerator")
+            self.assertNotIsInstance(loaded, ExportedGenerator)
             outputs = loaded(**inputs)
 
         torch.testing.assert_close(outputs.logits, expected, atol=1e-3, rtol=1e-3)

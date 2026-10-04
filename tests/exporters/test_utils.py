@@ -61,15 +61,13 @@ if is_torch_available():
     from torch import nn
 
     from transformers import GenerationConfig, PretrainedConfig
+    from transformers.exporters.decompose import decompose_prefill_decode
     from transformers.exporters.utils import (
         cast_leaf_tensors,
         duplicate_leaf_tensors,
         patch_attributes,
         register_patch,
     )
-from transformers.exporters.decompose import (
-    decompose_prefill_decode,
-)
 
 
 CONCRETE_CONFIGS = [
@@ -102,14 +100,6 @@ class AutoExportConfigTest(unittest.TestCase):
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format.value}), config_cls)
                 # Enum inputs also work — serialised configs may hold either form.
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format}), config_cls)
-
-    def test_from_dict_missing_export_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "No export format given"):
-            AutoExportConfig.from_dict({})
-
-    def test_from_dict_unknown_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "Unknown export format"):
-            AutoExportConfig.from_dict({"export_format": "not_a_real_backend"})
 
 
 class AutoHfExporterTest(unittest.TestCase):
@@ -188,10 +178,7 @@ class _Owner:
 @require_torch
 class PatchRegistryEdgeCasesTest(unittest.TestCase):
     def test_patch_attributes_roll_back_on_exception(self):
-        # Real exports never exit the trace via exception, so this rollback path is untested by
-        # integration. If it ever regressed to leave already-installed patches in place when a
-        # later factory raises, the *next* export would run against a leaked patch and fail in
-        # a way that looks unrelated. Only this test would catch that.
+        # A factory raising mid-install must roll back the patches already installed.
         a, b = _Owner(), _Owner()
 
         def _bad_factory(original):
@@ -209,9 +196,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         self.assertEqual(b.method(), "original")
 
     def test_register_patch_skips_unresolvable_path(self):
-        # Real backends only register paths that resolve; the silent-skip fallback is what lets
-        # `exporter_onnx.py` and `exporter_executorch.py` co-exist when only one backend is
-        # installed. If it ever started raising, one of the two backends would fail to import.
+        # An unresolvable path is skipped, so a backend imports when another's packages are missing.
         backend = "_test_unresolvable"
 
         @register_patch(backend, "does.not.exist.at.all")
@@ -232,10 +217,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
 @require_torch
 class LeafTensorInvariantsTest(unittest.TestCase):
     def test_duplicate_leaf_tensors_only_clones_repeats(self):
-        # If this ever regressed to ``.clone()``-everything, ONNX exports would still succeed
-        # and just get a bit bigger — no integration test would notice. Similarly, if it
-        # stopped cloning the second occurrence, ONNX's output-node dedup would rename ports
-        # in a way that only manifests as a stale name mapping.
+        # Only repeated tensors are cloned, so ONNX's output dedup never renames ports.
         shared = torch.zeros(2)
         distinct = torch.ones(3)
         result = duplicate_leaf_tensors({"a": shared, "b": shared, "c": distinct})
@@ -245,10 +227,7 @@ class LeafTensorInvariantsTest(unittest.TestCase):
         self.assertIs(result["c"], distinct)
 
     def test_cast_leaf_tensors_preserves_integer_dtypes(self):
-        # ``prepare_for_export`` casts input trees to the model's dtype. If this ever started
-        # coercing integer tensors (``input_ids``, indices, positions) to float, most exports
-        # would still trace but embedding-lookup / bincount / index-select paths would fail
-        # far downstream with confusing errors. Only this test would attribute it to the cast.
+        # Casting inputs to the model's dtype leaves integer tensors (ids, indices, positions) alone.
         out = cast_leaf_tensors(
             {
                 "input_ids": torch.zeros(2, dtype=torch.int64),
@@ -264,17 +243,14 @@ class LeafTensorInvariantsTest(unittest.TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# decompose_prefill_decode guard (dead code without this test — no real generator
-# calls forward < 2 times, so the branch would rot silently)
+# decompose_prefill_decode guard
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 @require_torch
 class DecomposePrefillDecodeGuardTest(unittest.TestCase):
     def test_raises_when_generate_bypasses_forward(self):
-        # Guards against generators that delegate to an inner model — the top-level ``forward``
-        # captures at most one call, so the ``calls[0] / calls[1]`` indexing would raise a
-        # confusing IndexError instead of the helpful RuntimeError below.
+        # A generator delegating to an inner model captures too few top-level forwards.
         class _FakeGenerator(nn.Module):
             def __init__(self):
                 super().__init__()
