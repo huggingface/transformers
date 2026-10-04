@@ -178,7 +178,6 @@ The ModernBert model can be fine-tuned using the HuggingFace Transformers librar
 ## Advanced: Custom Attention Masking for Shared Prefixes
 
 ModernBERT's local attention layers use a sliding window mechanism. By default, this window is computed based on **sequence index** (the position in the input tensor), not on `position_ids`. 
-
 This works perfectly for standard use cases. However, if you're using **non-monotonic position_ids** (e.g., packing multiple segments that share a common prefix and restart at the same position), you need to explicitly construct a position-aware sliding window mask.
 
 ### Example: Shared Prefix with Multiple Questions
@@ -260,5 +259,5 @@ with torch.no_grad():
         attention_mask=attention_mask,  # Pass the dict, not a single tensor
         position_ids=position_ids
     )
-
+    
     
