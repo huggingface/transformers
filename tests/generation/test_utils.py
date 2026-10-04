@@ -3300,6 +3300,80 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(p_prime).all())
         self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
 
+    def test_watermark_detector_is_invariant_to_mixed_bos_batch_order(self):
+        config = AutoConfig.for_model("gpt2")
+        detector = WatermarkDetector(
+            model_config=config,
+            device="cpu",
+            watermarking_config=WatermarkingConfig(
+                bias=2.5,
+                context_width=1,
+                seeding_scheme="selfhash",
+                greenlist_ratio=0.5,
+                hashing_key=15485863,
+            ),
+        )
+        row_without_bos = [
+            27857,
+            8827,
+            1110,
+            27211,
+            21242,
+            20265,
+            416,
+            26415,
+            23164,
+            50115,
+            19073,
+            32689,
+            42230,
+            35380,
+            36259,
+            26402,
+            26703,
+            17981,
+            38227,
+            11416,
+            2439,
+        ]
+        row_with_bos = [
+            config.bos_token_id,
+            2614,
+            47568,
+            31318,
+            29165,
+            45177,
+            15011,
+            33771,
+            47346,
+            2442,
+            18348,
+            5301,
+            25633,
+            31616,
+            38394,
+            46595,
+            20596,
+            22131,
+            31169,
+            17570,
+            30342,
+        ]
+
+        def score(rows):
+            return detector(torch.tensor(rows), return_dict=True)
+
+        without_bos = score([row_without_bos])
+        with_bos = score([row_with_bos])
+        batch_without_bos_first = score([row_without_bos, row_with_bos])
+        batch_with_bos_first = score([row_with_bos, row_without_bos])
+
+        for field in ("num_tokens_scored", "num_green_tokens", "z_score", "prediction"):
+            np.testing.assert_equal(getattr(batch_without_bos_first, field)[0], getattr(without_bos, field)[0])
+            np.testing.assert_equal(getattr(batch_without_bos_first, field)[1], getattr(with_bos, field)[0])
+            np.testing.assert_equal(getattr(batch_with_bos_first, field)[0], getattr(with_bos, field)[0])
+            np.testing.assert_equal(getattr(batch_with_bos_first, field)[1], getattr(without_bos, field)[0])
+
 
 global_rng = random.Random()
 

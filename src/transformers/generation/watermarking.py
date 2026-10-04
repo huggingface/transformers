@@ -210,8 +210,12 @@ class WatermarkDetector:
 
         """
 
-        # Let's assume that if one batch start with `bos`, all batched also do
-        if input_ids[0, 0] == self.bos_token_id:
+        bos_mask = (
+            input_ids[:, 0].eq(self.bos_token_id)
+            if self.bos_token_id is not None
+            else torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+        )
+        if bos_mask.all():
             input_ids = input_ids[:, 1:]
 
         if input_ids.shape[-1] - self.processor.context_width < 1:
@@ -220,7 +224,20 @@ class WatermarkDetector:
                 f"min_prefix_len={self.processor.context_width} tokens required by the seeding scheme."
             )
 
-        num_tokens_scored, green_token_count = self._score_ngrams_in_passage(input_ids)
+        if bos_mask.any() and not bos_mask.all():
+            row_scores = []
+            for row, has_bos in zip(input_ids, bos_mask.tolist()):
+                row = row[1:] if has_bos else row
+                if row.shape[-1] - self.processor.context_width < 1:
+                    raise ValueError(
+                        f"Must have at least `1` token to score after the first "
+                        f"min_prefix_len={self.processor.context_width} tokens required by the seeding scheme."
+                    )
+                row_scores.append(self._score_ngrams_in_passage(row.unsqueeze(0)))
+            num_tokens_scored = np.concatenate([score[0] for score in row_scores])
+            green_token_count = np.concatenate([score[1] for score in row_scores])
+        else:
+            num_tokens_scored, green_token_count = self._score_ngrams_in_passage(input_ids)
         z_score = self._compute_z_score(green_token_count, num_tokens_scored)
         prediction = z_score > z_threshold
 
