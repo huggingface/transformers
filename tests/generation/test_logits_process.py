@@ -53,6 +53,7 @@ if is_torch_available():
         TopPLogitsWarper,
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
+        WatermarkDetector,
         WatermarkLogitsProcessor,
     )
     from transformers.generation.logits_process import (
@@ -1147,6 +1148,33 @@ class LogitsProcessorTest(unittest.TestCase):
         out = watermark(input_ids=input_ids, scores=scores)
         greenlist_id = 3 if torch_device == "xpu" else 1
         self.assertTrue((out[:, greenlist_id] == scores_wo_bias + watermark.bias).all())
+
+    def test_watermark_detector_repeated_ngrams(self):
+        from transformers import GPT2Config, WatermarkingConfig
+
+        config = GPT2Config(vocab_size=50257, bos_token_id=50256, eos_token_id=50256)
+        detector_dedup = WatermarkDetector(
+            model_config=config,
+            device="cpu",
+            watermarking_config=WatermarkingConfig(),
+            ignore_repeated_ngrams=True,
+        )
+        detector_all = WatermarkDetector(
+            model_config=config,
+            device="cpu",
+            watermarking_config=WatermarkingConfig(),
+            ignore_repeated_ngrams=False,
+        )
+
+        # 10 identical tokens generate 9 identical bigrams
+        input_ids = torch.tensor([[3] * 10], dtype=torch.long)
+        out_dedup = detector_dedup(input_ids, return_dict=True)
+        out_all = detector_all(input_ids, return_dict=True)
+
+        # When deduplication is enabled, unique ngram count should be 1
+        self.assertEqual(int(out_dedup.num_tokens_scored[0]), 1)
+        # When deduplication is disabled, all 9 positions should be scored
+        self.assertEqual(int(out_all.num_tokens_scored[0]), 9)
 
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])
     def test_synthidtext_watermarking_processor_bias_uniformity(self, ngram_len, num_layers, vocab_size):

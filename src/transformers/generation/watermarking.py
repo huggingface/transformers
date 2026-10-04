@@ -157,12 +157,14 @@ class WatermarkDetector:
         num_tokens_scored_batch = np.zeros(batch_size)
         green_token_count_batch = np.zeros(batch_size)
         for batch_idx in range(ngram_tensors.shape[0]):
-            frequencies_table = collections.Counter(ngram_tensors[batch_idx])
+            ngram_tuples = [tuple(ngram.tolist()) for ngram in ngram_tensors[batch_idx]]
+            frequencies_table = collections.Counter(ngram_tuples)
             ngram_to_watermark_lookup = {}
-            for ngram_example in frequencies_table:
+            for ngram_tuple in frequencies_table:
+                ngram_example = input_ids.new_tensor(ngram_tuple)
                 prefix = ngram_example if selfhash else ngram_example[:-1]
-                target = ngram_example[-1]
-                ngram_to_watermark_lookup[ngram_example] = self._get_ngram_score_cached(prefix, target)
+                target = int(ngram_example[-1].item())
+                ngram_to_watermark_lookup[ngram_tuple] = self._get_ngram_score_cached(prefix, target)
 
             if self.ignore_repeated_ngrams:
                 # counts a green/red hit once per unique ngram.
