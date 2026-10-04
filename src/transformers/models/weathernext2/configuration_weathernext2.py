@@ -147,6 +147,9 @@ class WeatherNext2Config(PreTrainedConfig):
         Epsilon of every layer normalization.
     attention_dropout (`float`, *optional*, defaults to 0.0):
         Dropout ratio of the attention probabilities.
+    num_members (`int`, *optional*, defaults to 1):
+        Number of ensemble members [`~WeatherNext2GenerationMixin.generate`] draws from each initial condition
+        unless told otherwise.
     chunk_size (`int`, *optional*, defaults to 32768):
         Number of rows per chunk for the memory-heavy operations over the whole grid: grid points for the
         grid encoder, the head and the mesh-to-grid graph network, and edges for the grid-to-mesh one. `None`
@@ -207,6 +210,7 @@ class WeatherNext2Config(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
+    num_members: int | None = 1
     chunk_size: int | None = 32768
 
     def __post_init__(self, **kwargs):
@@ -220,6 +224,8 @@ class WeatherNext2Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.num_members is not None and self.num_members < 1:
+            raise ValueError(f"`num_members` must be at least 1, got {self.num_members}.")
         if self.chunk_size is not None and self.chunk_size < 1:
             raise ValueError(f"`chunk_size` must be positive, or None to disable chunking; got {self.chunk_size}.")
         if self.hidden_size % self.num_attention_heads != 0:

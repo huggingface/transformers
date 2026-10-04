@@ -18,15 +18,14 @@ normalized tensors the model consumes, and turns the model's normalized output b
 units. It also owns the two things the network itself has no notion of: the normalization statistics
 and the calendar forcings.
 
-The arithmetic runs in torch rather than numpy so that an autoregressive rollout can stay on the
-accelerator: numpy inputs are adopted with `torch.as_tensor`, which does not copy, and results are
-handed back as numpy again unless the caller passed tensors.
+Inputs may be any array-like and are converted to tensors once, with `torch.as_tensor`, which does not
+copy. Everything is computed and returned in torch, so an autoregressive rollout stays on the device
+its state lives on.
 """
 
+import math
 from collections.abc import Mapping
 from typing import Any
-
-import numpy as np
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import TensorType, is_torch_available, logging
@@ -43,17 +42,20 @@ SECONDS_PER_DAY = 24 * 3600
 AVERAGE_DAYS_PER_YEAR = 365.24219
 
 
-def get_year_progress(seconds_since_epoch: np.ndarray) -> np.ndarray:
-    """Position within the year, in `[0, 1)`."""
-    years = seconds_since_epoch / SECONDS_PER_DAY / np.float64(AVERAGE_DAYS_PER_YEAR)
-    return np.mod(years, 1.0).astype(np.float32)
+def get_year_progress(seconds_since_epoch: "torch.Tensor") -> "torch.Tensor":
+    """Position within the year, in `[0, 1)`.
+
+    Computed in float64: float32 resolves Unix seconds only to about two minutes.
+    """
+    years = seconds_since_epoch.double() / SECONDS_PER_DAY / AVERAGE_DAYS_PER_YEAR
+    return torch.remainder(years, 1.0).float()
 
 
-def get_day_progress(seconds_since_epoch: np.ndarray, longitude: np.ndarray) -> np.ndarray:
+def get_day_progress(seconds_since_epoch: "torch.Tensor", longitude: "torch.Tensor") -> "torch.Tensor":
     """Local position within the day at each longitude, in `[0, 1)`."""
-    greenwich = np.mod(seconds_since_epoch, SECONDS_PER_DAY) / SECONDS_PER_DAY
-    offsets = np.deg2rad(longitude) / (2 * np.pi)
-    return np.mod(greenwich[..., None] + offsets, 1.0).astype(np.float32)
+    greenwich = torch.remainder(seconds_since_epoch, SECONDS_PER_DAY).double() / SECONDS_PER_DAY
+    offsets = torch.deg2rad(longitude.double()) / (2 * math.pi)
+    return torch.remainder(greenwich[..., None] + offsets, 1.0).float()
 
 
 @requires(backends=("torch",))
@@ -138,12 +140,12 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         self.grid_longitudes = grid_longitudes
 
     @property
-    def latitudes(self) -> np.ndarray:
-        return np.linspace(-90.0, 90.0, self.grid_latitudes)
+    def latitudes(self) -> "torch.Tensor":
+        return torch.linspace(-90.0, 90.0, self.grid_latitudes, dtype=torch.float64)
 
     @property
-    def longitudes(self) -> np.ndarray:
-        return np.arange(self.grid_longitudes) * (360.0 / self.grid_longitudes)
+    def longitudes(self) -> "torch.Tensor":
+        return torch.arange(self.grid_longitudes, dtype=torch.float64) * (360.0 / self.grid_longitudes)
 
     def num_levels(self, variable: str) -> int:
         return len(self.pressure_levels) if variable in self.atmospheric_variables else 1
@@ -190,7 +192,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             raise ValueError(f"Statistic for {variable!r} has shape {tuple(value.shape)}, expected ({expected},).")
         return value.reshape(-1, 1, 1)
 
-    def normalize(self, values: np.ndarray, variable: str) -> np.ndarray:
+    def normalize(self, values: "torch.Tensor", variable: str) -> "torch.Tensor":
         """Maps a variable to roughly zero mean and unit variance, level by level.
 
         Missing values are replaced first, in physical units, so that the substituted value lands
@@ -206,20 +208,21 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             normalized = normalized / stddev.to(values.device)
         return normalized
 
-    def compute_forcings(self, seconds_since_epoch: np.ndarray) -> dict[str, np.ndarray]:
+    def compute_forcings(self, seconds_since_epoch: "torch.Tensor") -> dict[str, "torch.Tensor"]:
         """Clock-derived variables at the given times.
 
         `year_progress_*` is a single number per time; `day_progress_*` varies with longitude, since
-        it encodes local solar time.
+        it encodes local solar time. They are computed on the CPU, in float64 where it matters (not every
+        accelerator has float64), and are moved to the state's device by the callers.
         """
-        seconds_since_epoch = np.asarray(seconds_since_epoch, dtype=np.int64)
-        year = get_year_progress(seconds_since_epoch) * (2 * np.pi)
-        day = get_day_progress(seconds_since_epoch, self.longitudes) * (2 * np.pi)
+        seconds_since_epoch = torch.as_tensor(seconds_since_epoch).to("cpu", torch.int64)
+        year = get_year_progress(seconds_since_epoch) * (2 * math.pi)
+        day = get_day_progress(seconds_since_epoch, self.longitudes) * (2 * math.pi)
         return {
-            "year_progress_sin": np.sin(year),
-            "year_progress_cos": np.cos(year),
-            "day_progress_sin": np.sin(day),
-            "day_progress_cos": np.cos(day),
+            "year_progress_sin": torch.sin(year),
+            "year_progress_cos": torch.cos(year),
+            "day_progress_sin": torch.sin(day),
+            "day_progress_cos": torch.cos(day),
         }
 
     def _batch_size(self, state: Mapping[str, Any], forcings: Mapping[str, Any]) -> int:
@@ -262,7 +265,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     def __call__(
         self,
         state: Mapping[str, Any],
-        seconds_since_epoch: np.ndarray | None = None,
+        seconds_since_epoch: "torch.Tensor | None" = None,
         forcings: Mapping[str, Any] | None = None,
         return_tensors: str | TensorType | None = TensorType.PYTORCH,
         device: "torch.device | str | None" = None,
@@ -275,8 +278,9 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 `[batch, num_input_timesteps, (levels,) latitudes, longitudes]`, static variables `[latitudes,
                 longitudes]`, and variables with no spatial extent `[batch, num_input_timesteps]`. Longitude-only
                 variables such as `day_progress_sin` may be `[batch, num_input_timesteps, longitudes]`.
-            seconds_since_epoch (`np.ndarray` of shape `(batch,)`, *optional*):
-                Valid time of the *predicted* step, used to derive the forcings. Required unless `forcings` is given.
+            seconds_since_epoch (`torch.Tensor` of shape `(batch,)`, *optional*):
+                Valid time of the *predicted* step, as Unix seconds, used to derive the forcings. Required unless
+                `forcings` is given.
             forcings (`Mapping[str, array]`, *optional*):
                 Precomputed forcings for the predicted step, overriding `seconds_since_epoch`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `"pt"`):
@@ -292,7 +296,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         if forcings is None:
             if seconds_since_epoch is None:
                 raise ValueError("Pass either `seconds_since_epoch` or `forcings`.")
-            forcings = self.compute_forcings(np.asarray(seconds_since_epoch))
+            forcings = self.compute_forcings(seconds_since_epoch)
         forcings = {name: torch.as_tensor(values, dtype=torch.float32)[:, None] for name, values in forcings.items()}
 
         # The clock forcings and any static fields are built on the host, so every channel is moved to
@@ -323,7 +327,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def postprocess(self, prediction: Any, state: Mapping[str, Any] | None = None) -> dict[str, np.ndarray]:
+    def postprocess(self, prediction: Any, state: Mapping[str, Any] | None = None) -> dict[str, "torch.Tensor"]:
         """Decodes the model's normalized output into physical units.
 
         Variables that also appear in the inputs are predicted as normalized residuals and need the last
@@ -337,10 +341,9 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 also a forecast target because those targets are decoded as residuals.
 
         Returns:
-            `dict[str, array]`: physical values keyed by variable, shaped `[batch, (levels,) lat, lon]`, as
-            tensors on the device of `prediction` if it was a tensor and as numpy arrays otherwise.
+            `dict[str, torch.Tensor]`: physical values keyed by variable, shaped `[batch, (levels,) lat, lon]`, on
+            the device of `prediction`.
         """
-        as_numpy = not isinstance(prediction, torch.Tensor)
         prediction = torch.as_tensor(prediction, dtype=torch.float32).detach()
         expected_shape = (
             sum(levels for _, _, levels in self.target_channel_layout),
@@ -384,15 +387,15 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                     missing = missing[:, None]
                 values = torch.where(missing, torch.nan, values)
             values = values[:, 0] if levels == 1 else values
-            outputs[variable] = values.numpy() if as_numpy else values
+            outputs[variable] = values
         return outputs
 
     def advance_state(
         self,
         state: Mapping[str, Any],
-        forecast: Mapping[str, np.ndarray],
-        seconds_since_epoch: np.ndarray,
-    ) -> dict[str, np.ndarray]:
+        forecast: Mapping[str, "torch.Tensor"],
+        seconds_since_epoch: "torch.Tensor",
+    ) -> dict[str, "torch.Tensor"]:
         """Builds the conditioning state for the next autoregressive step.
 
         Drops the oldest frame, appends the forecast, and recomputes the clock variables. Targets that are not also
@@ -403,16 +406,15 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 The state the forecast was produced from.
             forecast (`Mapping[str, array]`):
                 Physical values from [`~WeatherNext2FeatureExtractor.postprocess`].
-            seconds_since_epoch (`np.ndarray` of shape `(batch,)`):
+            seconds_since_epoch (`torch.Tensor` of shape `(batch,)`):
                 Valid time of `forecast`, which is the same value that was passed to `__call__` to produce it. The
                 appended frame is stamped with it, so advancing the clock before calling this puts the physical
                 fields and the clock variables a step out of sync.
         """
         next_state: dict[str, Any] = {}
-        forcings = self.compute_forcings(np.asarray(seconds_since_epoch))
+        forcings = self.compute_forcings(seconds_since_epoch)
         for variable in self.input_variables:
             previous = torch.as_tensor(state[variable], dtype=torch.float32)
-            as_numpy = not isinstance(state[variable], torch.Tensor)
             if variable in self.static_variables:
                 updated = previous
             elif variable in forcings:
@@ -421,7 +423,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             else:
                 latest = torch.as_tensor(forecast[variable], dtype=torch.float32).to(previous.device)[:, None]
                 updated = torch.cat([previous[:, 1:], latest], dim=1)
-            next_state[variable] = updated.numpy() if as_numpy else updated
+            next_state[variable] = updated
         return next_state
 
 

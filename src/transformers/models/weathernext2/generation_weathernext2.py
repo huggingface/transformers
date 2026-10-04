@@ -16,7 +16,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import torch
 
 from ...modeling_outputs import ModelOutput
@@ -31,17 +30,19 @@ class WeatherNext2GenerationOutput(ModelOutput):
     """Output of [`WeatherNext2GenerationMixin.generate`].
 
     Args:
-        forecasts (`list[dict[str, array]]`):
-            One postprocessed forecast in physical units per generated time step.
-        state (`dict[str, array]`):
+        forecasts (`list[dict[str, torch.Tensor]]`):
+            One postprocessed forecast in physical units per generated time step. With `num_members > 1` the batch
+            axis holds every member of every initial condition: member `m` of initial condition `i` is row
+            `i * num_members + m`.
+        state (`dict[str, torch.Tensor]`):
             Conditioning state after the final forecast has been appended.
-        valid_time (`np.ndarray`):
+        valid_time (`torch.Tensor`):
             Valid time, as Unix seconds, of the next forecast that would be generated.
     """
 
-    forecasts: list[dict[str, Any]] | None = None
-    state: dict[str, Any] | None = None
-    valid_time: np.ndarray | None = None
+    forecasts: list[dict[str, torch.Tensor]] | None = None
+    state: dict[str, torch.Tensor] | None = None
+    valid_time: torch.Tensor | None = None
 
 
 class WeatherNext2GenerationMixin:
@@ -52,8 +53,9 @@ class WeatherNext2GenerationMixin:
         self,
         state: Mapping[str, Any],
         feature_extractor: "WeatherNext2FeatureExtractor",
-        seconds_since_epoch: np.ndarray,
+        seconds_since_epoch: torch.Tensor,
         num_steps: int,
+        num_members: int | None = None,
         noise: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
         **model_kwargs,
@@ -66,11 +68,14 @@ class WeatherNext2GenerationMixin:
                 [`WeatherNext2FeatureExtractor.__call__`].
             feature_extractor (`WeatherNext2FeatureExtractor`):
                 Feature extractor used to normalize inputs, decode predictions and advance the state.
-            seconds_since_epoch (`np.ndarray` of shape `(batch_size,)`):
+            seconds_since_epoch (`torch.Tensor` of shape `(batch_size,)`):
                 Valid time of the first generated forecast, as Unix seconds.
             num_steps (`int`):
                 Number of autoregressive time steps to generate.
-            noise (`torch.Tensor` of shape `(num_steps, batch_size, noise_channels)`, *optional*):
+            num_members (`int`, *optional*):
+                Number of ensemble members drawn from each initial condition. Each one is repeated `num_members`
+                times along the batch axis, and every member gets its own noise. Defaults to `config.num_members`.
+            noise (`torch.Tensor` of shape `(num_steps, batch_size * num_members, noise_channels)`, *optional*):
                 Explicit noise vector for every step and ensemble member. When omitted, a fresh vector is sampled
                 at every step.
             generator (`torch.Generator`, *optional*):
@@ -85,10 +90,19 @@ class WeatherNext2GenerationMixin:
         if num_steps < 1:
             raise ValueError(f"`num_steps` must be at least 1, got {num_steps}.")
 
-        valid_time = np.asarray(seconds_since_epoch, dtype=np.int64)
+        num_members = num_members if num_members is not None else self.config.num_members
+        valid_time = torch.as_tensor(seconds_since_epoch, dtype=torch.int64)
         if valid_time.ndim != 1:
             raise ValueError(f"`seconds_since_epoch` must have shape (batch_size,), got {tuple(valid_time.shape)}.")
 
+        # Every initial condition becomes `num_members` rows; static fields have no batch axis to repeat.
+        state = {
+            name: values
+            if name in feature_extractor.static_variables
+            else torch.as_tensor(values).repeat_interleave(num_members, dim=0)
+            for name, values in state.items()
+        }
+        valid_time = valid_time.repeat_interleave(num_members)
         batch_size = valid_time.shape[0]
         if noise is not None:
             expected_shape = (num_steps, batch_size, self.config.noise_channels)

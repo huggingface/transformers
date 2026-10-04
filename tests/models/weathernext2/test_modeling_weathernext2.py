@@ -422,6 +422,60 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         for name in extractor.input_variables:
             np.testing.assert_allclose(generated.state[name], manual_state[name], rtol=1e-5, atol=1e-5)
 
+    def test_generate_num_members(self):
+        """Each initial condition becomes `num_members` rows that differ only in their noise.
+
+        Row `i * num_members + m` must be exactly what running initial condition `i` alone with member `m`'s noise
+        gives, so batching the members changes nothing about any one of them.
+        """
+        config = self.model_tester.get_config()
+        extractor = self.model_tester.get_feature_extractor()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+        state = self.model_tester.prepare_state(extractor, batch_size=2)
+        valid_time = torch.full((2,), 1_728_280_800)  # 2024-10-07T06:00:00Z
+        members = 3
+        noise = torch.randn(1, 2 * members, config.noise_channels, device=torch_device)
+        name = "2m_temperature"
+
+        forecast = model.generate(
+            state=state,
+            feature_extractor=extractor,
+            seconds_since_epoch=valid_time,
+            num_steps=1,
+            num_members=members,
+            noise=noise,
+        ).forecasts[0][name]
+        self.assertEqual(forecast.shape[0], 2 * members)
+
+        for condition in range(2):
+            alone = {
+                k: v if k in extractor.static_variables else v[condition : condition + 1] for k, v in state.items()
+            }
+            for member in range(members):
+                row = condition * members + member
+                expected = model.generate(
+                    state=alone,
+                    feature_extractor=extractor,
+                    seconds_since_epoch=valid_time[condition : condition + 1],
+                    num_steps=1,
+                    noise=noise[:, row : row + 1],
+                ).forecasts[0][name][0]
+                torch.testing.assert_close(forecast[row], expected, rtol=1e-4, atol=1e-4)
+        self.assertFalse(torch.allclose(forecast[0], forecast[1]))
+
+    def test_generate_num_members_defaults_to_the_config(self):
+        config = self.model_tester.get_config()
+        config.num_members = 2
+        extractor = self.model_tester.get_feature_extractor()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+        state = self.model_tester.prepare_state(extractor, batch_size=1)
+        generated = model.generate(
+            state=state, feature_extractor=extractor, seconds_since_epoch=torch.zeros(1), num_steps=1
+        )
+        self.assertEqual(generated.forecasts[0]["2m_temperature"].shape[0], 2)
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "num_members"):
+            WeatherNext2Config(num_members=0)
+
     def test_generate_validates_noise_shape(self):
         config = self.model_tester.get_config()
         extractor = self.model_tester.get_feature_extractor()

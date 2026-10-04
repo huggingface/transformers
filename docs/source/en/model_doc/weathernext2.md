@@ -85,7 +85,7 @@ analysis, at the cost of a small mismatch with what these checkpoints were tuned
 
 The model itself works in a normalized space, and [`WeatherNext2FeatureExtractor`] owns everything physical: the per-variable
 normalization statistics, the calendar-derived forcings, and the residual connection that turns the model's output back
-into an atmospheric state.
+into an atmospheric state. It accepts numpy arrays or tensors and always returns tensors.
 
 The official WeatherNext 2 demo publishes a 1° example batch in the `dm_graphcast` bucket. It is also the sample used
 by Earth2Studio's WeatherNext 2 wrapper. Install the packages used to read it with
@@ -139,7 +139,7 @@ with torch.no_grad():
     outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
 
 forecast = processor.postprocess(outputs.prediction, state)
-print(forecast["2m_temperature"].shape)  # (1, 181, 360)
+print(forecast["2m_temperature"].shape)  # torch.Size([1, 181, 360])
 ```
 
 The noise is drawn on the generator's device and moved to the model's, so a plain CPU `torch.Generator` gives the
@@ -161,45 +161,43 @@ cover the reference fp32 path; bf16 should be validated against the forecast met
 
 ### Ensembles
 
-Each member is one draw of the 32-dimensional noise vector through the same weights, so an ensemble is a batch: stack
-one vector per member and run a single forward.
+Each member is one draw of the 32-dimensional noise vector through the same weights, so an ensemble is a batch.
+[`~WeatherNext2GenerationMixin.generate`] builds it: `num_members` repeats every initial condition and gives each member
+its own noise.
 
 ```python
-members = 8
-inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
-batched = {key: value.repeat(members, *([1] * (value.ndim - 1))) for key, value in inputs.items()}
-
-noise = torch.stack(
-    [
-        torch.randn(model.config.noise_channels, generator=torch.Generator().manual_seed(member))
-        for member in range(members)
-    ]
+outputs = model.generate(
+    state=state,
+    feature_extractor=processor,
+    seconds_since_epoch=valid_time,
+    num_steps=1,
+    num_members=8,
+    generator=torch.Generator().manual_seed(0),
 )
-with torch.no_grad():
-    outputs = model(**batched, noise=noise.to(model.device))
+print(outputs.forecasts[0]["2m_temperature"].shape)  # torch.Size([8, 181, 360])
 ```
 
-Seeding per member rather than drawing from one stream means the first `n` members are the same however large the
-ensemble is - the property the original implementation gets from `jax.random.fold_in`. Passing `generator=` instead of
-`noise=` lets the model draw every member from one stream, which is shorter to write but gives up that property.
+Member `m` of initial condition `i` is row `i * num_members + m`, and `num_members` defaults to `config.num_members`.
 
-At 0.25° the members are usually run one at a time to bound memory. That is also what the reference implementation
-does, one member per device, looping or sharding rather than batching:
+Drawing every member from one generator ties each member to the size of the ensemble. Seeding each member separately
+keeps the first `n` members the same however large the ensemble is, the property the original implementation gets from
+`jax.random.fold_in`. Pass the noise explicitly to get it, shaped `(num_steps, batch_size * num_members, noise_channels)`:
 
 ```python
-predictions = []
-for member in range(members):
-    noise = torch.randn(1, model.config.noise_channels, generator=torch.Generator().manual_seed(member))
-    with torch.no_grad():
-        predictions.append(model(**inputs, noise=noise.to(model.device)).prediction)
+noise = torch.stack(
+    [torch.randn(model.config.noise_channels, generator=torch.Generator().manual_seed(member)) for member in range(8)]
+)
+outputs = model.generate(
+    state=state, feature_extractor=processor, seconds_since_epoch=valid_time, num_steps=1, num_members=8, noise=noise[None]
+)
 ```
 
-Both give the same ensemble, agreeing to within float noise rather than bit-exactly, since a batched matmul reduces in
-a different order than a batch of one.
+At 0.25° and batch 1 a step peaks at about 17.5 GB in fp32 and 15.2 GB in bf16, so a few members fit on one large
+accelerator. The model is compute-bound, so running members together is no faster than running them in turn: split an
+ensemble that does not fit across several `generate` calls or devices.
 
-Note that the batch axis serves double duty: it carries ensemble members here, and independent initialization times
-when several forecasts are run together. The reference implementation keeps these as separate `sample` and `batch`
-dimensions.
+The batch axis serves double duty, carrying ensemble members and independent initialization times alike. The reference
+implementation keeps these as separate `sample` and `batch` dimensions.
 
 ### Autoregressive rollout
 
@@ -225,8 +223,8 @@ state = outputs.state
 ```
 
 `seconds_since_epoch` is the valid time of the first generated forecast. Every step draws fresh noise; pass an explicit
-tensor shaped `(num_steps, batch_size, noise_channels)` through `noise=` for a reproducible rollout. Passing numpy state
-arrays works as well, at the cost of transfers between the host and model device.
+tensor shaped `(num_steps, batch_size * num_members, noise_channels)` through `noise=` for a reproducible rollout. A numpy
+state works as well, at the cost of transfers between the host and the model's device.
 
 ### Tropical cyclones
 
@@ -248,14 +246,17 @@ from weathernext.cyclones import direct_tracker_6h_v1_config
 cyclone_fields = [name for name in processor.target_variables if name.startswith("cyclone_")]
 gridded = xarray.Dataset(
     {
-        name: (("time", "lat", "lon"), np.stack([analysis[name]] + [frame[name] for frame in frames]))
+        name: (
+            ("time", "lat", "lon"),
+            np.stack([np.asarray(analysis[name])] + [frame[name][0].cpu().numpy() for frame in frames]),
+        )
         for name in cyclone_fields
     },
     coords={
         # lead time, not valid time, and lead 0 has to be present
         "time": np.arange(0, 6 * (len(frames) + 1), 6).astype("timedelta64[h]").astype("timedelta64[ns]"),
-        "lat": latitudes,
-        "lon": longitudes,
+        "lat": processor.latitudes.numpy(),
+        "lon": processor.longitudes.numpy(),
         "init_time": np.datetime64("2024-10-07T00:00:00"),
     },
 )
