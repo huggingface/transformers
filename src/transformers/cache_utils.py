@@ -1757,43 +1757,6 @@ class Cache:
         return self.batch_size
 
 
-def kv_cache_geometry(config) -> list[tuple[int, int, int]] | None:
-    """`(num_kv_heads, key_head_dim, value_head_dim)` of the KV cache a model writes, one entry per cache
-    layer, from its config.
-
-    `None` for a model with no attention at all (mamba, rwkv, …): its cache holds only recurrent states, so
-    there is no key/value geometry to derive.
-
-    Per layer because a heterogeneous config (gemma4, …) declares geometry fields like `head_dim` as
-    per-layer and refuses to answer for the model as a whole; every other config answers the same for each.
-    `Cache.early_initialization` takes the three as lists for the same reason.
-    """
-    text_config = config.get_text_config()
-    layer_types, _ = get_layer_types_and_kwargs(text_config)
-    geometry = []
-    for _, layer_config in zip(layer_types, text_config.per_layer_config):
-        if getattr(layer_config, "num_attention_heads", None) is None:
-            return None
-        # Latent attention (deepseek_v2/v3, kimi_linear, minicpm3, …) caches the compressed latent rather
-        # than one entry per KV head, and `kv_lora_rank` is what says so: one head holding the latent as
-        # keys and the shared rope part as values, so the key and value dims differ. Read from the config
-        # rather than a list of models — `check_cache_geometry` catches one that disagrees.
-        kv_lora_rank = getattr(layer_config, "kv_lora_rank", None)
-        if kv_lora_rank is not None:
-            geometry.append((1, kv_lora_rank, getattr(layer_config, "qk_rope_head_dim", None) or kv_lora_rank))
-            continue
-        num_kv_heads = getattr(layer_config, "num_key_value_heads", None) or layer_config.num_attention_heads
-        default_dim = (
-            getattr(layer_config, "head_dim", None) or layer_config.hidden_size // layer_config.num_attention_heads
-        )
-        # decompressed latent attention keys are `qk_nope + qk_rope` wide against `v_head_dim` values
-        qk_nope = getattr(layer_config, "qk_nope_head_dim", None)
-        qk_rope = getattr(layer_config, "qk_rope_head_dim", None)
-        key_dim = qk_nope + qk_rope if qk_nope and qk_rope else default_dim
-        geometry.append((num_kv_heads, key_dim, getattr(layer_config, "v_head_dim", None) or default_dim))
-    return geometry or None
-
-
 def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
     From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize

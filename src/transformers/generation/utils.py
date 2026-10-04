@@ -34,8 +34,8 @@ from ..cache_utils import (
     EncoderDecoderCache,
     QuantizedCache,
     StaticCache,
-    kv_cache_geometry,
 )
+from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
@@ -2115,28 +2115,31 @@ class GenerationMixin(ContinuousMixin):
 
     def _get_static_cache_init_shape(
         self: "GenerativePreTrainedModel",
-    ) -> tuple[list[int], list[int], list[int]] | None:
+    ) -> tuple[int | list[int], int | list[int]] | None:
         """
-        Returns the per-rank `(num_heads, key_head_dim, value_head_dim)` to eagerly initialize a `StaticCache`, each a
-        list with one entry per layer, with the head count sharded for tensor parallelism. The two head dims differ for
-        latent attention, which caches the compressed latent as keys and the shared rope part as values. Returns `None`
-        when the cache cannot be early initialized.
+        Returns the per-rank `(num_heads, head_dim)` to eagerly initialize a `StaticCache`, with the head count sharded
+        for tensor parallelism. Either of them is a list with a value per layer if the layers differ in it. Returns
+        `None` when the cache cannot be early initialized.
         """
         if hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1:
             # The model layers are on different devices
             return None
-        geometry = kv_cache_geometry(self.config.get_text_config(decoder=True))
-        if geometry is None:
+        text_config = self.config.get_text_config(decoder=True)
+        num_cache_layers = text_config.num_hidden_layers - getattr(text_config, "num_kv_shared_layers", 0)
+        layer_configs = text_config.per_layer_config[:num_cache_layers]
+        if any(getattr(layer_config, "qk_head_dim", None) is not None for layer_config in layer_configs):
+            # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
             return None
+        num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
-        if any(num_key_value_heads % tp_size for num_key_value_heads, _, _ in geometry):
-            # The model cannot be evenly sharded by head
-            return None
-        return (
-            [num_key_value_heads // tp_size for num_key_value_heads, _, _ in geometry],
-            [key_head_dim for _, key_head_dim, _ in geometry],
-            [value_head_dim for _, _, value_head_dim in geometry],
-        )
+        if tp_size > 1:
+            layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
+            if any(heads % tp_size for heads in layer_heads):
+                # The model cannot be evenly sharded by head
+                return None
+            # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
+            num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
+        return num_heads, head_dim
 
     def _cross_attention_cache_config(self: "GenerativePreTrainedModel"):
         """The decoder's config with its sliding layers flattened.
@@ -2190,14 +2193,13 @@ class GenerationMixin(ContinuousMixin):
             # (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
             init_shape = self._get_static_cache_init_shape()
             if init_shape is not None:
-                num_heads, key_head_dim, value_head_dim = init_shape
+                num_heads, head_dim = init_shape
                 cache.early_initialization(
                     batch_size=batch_size,
                     num_heads=num_heads,
-                    head_dim=key_head_dim,
+                    head_dim=head_dim,
                     dtype=self.dtype,
                     device=self.device,
-                    value_head_dim=value_head_dim,
                 )
 
         # Set the current length on the current model, to avoid recompilation later if we can

@@ -32,7 +32,6 @@ from typing import Any, NamedTuple
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
 from .cache import (
-    check_cache_geometry,
     indexer_layers_of,
     keeps_write_once_state,
     kv_geometry_of,
@@ -58,7 +57,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from ..cache_utils import Cache, DynamicCrossAttentionLayer, EncoderDecoderCache, kv_cache_geometry
+    from ..cache_utils import Cache, DynamicCrossAttentionLayer, EncoderDecoderCache
     from ..modeling_utils import PreTrainedModel
 
 
@@ -288,13 +287,6 @@ def decompose_prefill_decode(
         with _capture_calls(model, "forward") as calls, patch_attributes(no_mm_encoder_outputs):
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
-        # A cache-shape error means `kv_cache_geometry` disagrees with what the model writes.
-        if "slice shapes" in str(e) or "Sizes of tensors must match" in str(e):
-            raise RuntimeError(
-                f"decompose_prefill_decode failed for {type(model).__name__}: the exporter materialized the "
-                f"cache as (heads, key_dim, value_dim)={(kv_cache_geometry(model.config) or [None])[0]}, which is not "
-                "what this model caches — `kv_cache_geometry` needs to learn its layout."
-            ) from e
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
             f"Inputs passed: {list(inputs.keys())}. "
@@ -318,10 +310,6 @@ def decompose_prefill_decode(
         if multi_token_decode
         else calls[first_decode]
     )
-    # `generate` built this cache, so it carries the real geometry to check the derived one against.
-    if (captured_cache := decode_inputs.get("past_key_values")) is not None:
-        check_cache_geometry(model.config, captured_cache)
-
     return {
         "prefill": Component(copy.copy(model), prefill_inputs),
         "decode": Component(copy.copy(model), decode_inputs),

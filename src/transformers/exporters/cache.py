@@ -35,7 +35,8 @@ if is_torch_available():
     import torch
     from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 
-    from ..cache_utils import DynamicCache, kv_cache_geometry
+    from ..cache_utils import DynamicCache
+    from ..configuration_utils import get_head_shapes
 
 
 def _cache_tensors(past_key_values) -> list[torch.Tensor]:
@@ -266,30 +267,17 @@ def _empty_container(container: str, config, batch_size: int, dtype, device, enc
 # ── Geometry and materialization ──────────────────────────────────────────────
 
 
-def check_cache_geometry(config: Any, cache: Any) -> None:
-    """Raise if the geometry `kv_cache_geometry` derives matches no layer of a post-prefill cache.
-
-    Some layers disagreeing is normal (deepseek_v32's indexer layers next to its latent ones).
-    """
-    cached, derived_any = [], None
-    by_layer = kv_cache_geometry(config) or []
-    for cache_half in _cache_halves(cache):
-        for layer_idx, layer in enumerate(cache_half.layers):
-            if getattr(layer, "keys", None) is None or layer_idx >= len(by_layer):
-                continue
-            derived = by_layer[layer_idx]
-            actual = (layer.keys.shape[1], layer.keys.shape[3], layer.values.shape[3])
-            if actual == derived:
-                return
-            cached.append(actual)
-            derived_any = derived
-    if cached:
-        model_type = getattr(config.get_text_config(), "model_type", type(config).__name__)
-        raise ValueError(
-            f"`{model_type}` caches (heads, key_dim, value_dim)={sorted(set(cached))} but the exporter "
-            f"derives {derived_any} for every layer, so the runtime would build a cache the exported "
-            "graph rejects. `kv_cache_geometry` needs to learn this model's layout."
-        )
+def _per_layer_head_shapes(config: Any) -> list[tuple[int, int, int]]:
+    """Per-layer `(kv_heads, head_dim, head_dim)` from the config, for the layers no filled cache describes; empty
+    for a model without attention."""
+    text_config = config.get_text_config()
+    if getattr(text_config.per_layer_config[0], "num_attention_heads", None) is None:
+        return []
+    num_heads, head_dim = get_head_shapes(text_config)
+    num_layers = text_config.num_hidden_layers - (getattr(text_config, "num_kv_shared_layers", 0) or 0)
+    num_heads = num_heads if isinstance(num_heads, list) else [num_heads] * num_layers
+    head_dim = head_dim if isinstance(head_dim, list) else [head_dim] * num_layers
+    return [(heads, dim, dim) for heads, dim in zip(num_heads, head_dim)]
 
 
 def kv_geometry_of(cache: Any) -> dict[int, tuple[int, int, int]]:
@@ -339,7 +327,7 @@ def materialize_cache_layers(
         if not hasattr(cache_half, "layers"):
             continue
         # A cache with state of its own sizes it by overriding `early_initialization` (`MiniMaxCache`).
-        by_layer = kv_cache_geometry(config) or []
+        by_layer = _per_layer_head_shapes(config)
         geometry = [
             kv_geometry.get(index) or (by_layer[index] if index < len(by_layer) else None)
             for index in range(len(cache_half.layers))
@@ -358,7 +346,7 @@ def materialize_cache_layers(
 
 def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry, indexer_layers) -> None:
     """`materialize_cache_layers` for one flat cache."""
-    by_layer = kv_cache_geometry(config) or []
+    by_layer = _per_layer_head_shapes(config)
     for layer_idx, layer in enumerate(cache.layers):
         # Before the `is_initialized` skip, which `early_initialization` sets with the indexer untouched; a lazy
         # indexer shifts every later leaf. Skipped where the trace had none (hy_v4's shared indexer layers).

@@ -171,7 +171,7 @@ class CacheTest(unittest.TestCase):
             num_attention_heads=4,
             per_layer_config={1: {"num_attention_heads": 2}},
         )
-        self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16], [8, 16]))
+        self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16]))
 
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
