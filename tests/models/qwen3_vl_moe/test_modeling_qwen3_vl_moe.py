@@ -28,6 +28,8 @@ from transformers import (
 from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 from transformers.testing_utils import (
     Expectations,
+    backend_device_count,
+    get_cpu_ram_total_gib,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -347,6 +349,21 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
 class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     maxDiff = None
 
+    @staticmethod
+    def _max_memory_for_auto_offload():
+        # device_map=auto fills each GPU to ~100%, leaving no headroom for the ~768 MiB
+        # temporary buffer that fuses per-expert shards into gate_up_proj during
+        # from_pretrained; cap per-GPU max_memory at 70% to avoid multi-GPU CUDA OOM
+        # (see Glm4vMoeIntegrationTest, #48776).
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            max_memory["cpu"] = f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"
+            return max_memory
+        return None
+
     def setUp(self):
         super().setUp()
 
@@ -475,7 +492,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             "Qwen/Qwen3-VL-30B-A3B-Instruct", max_image_size={"longest_edge": 50176}
         )
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype=torch.float16, device_map="auto"
+            "Qwen/Qwen3-VL-30B-A3B-Instruct",
+            dtype=torch.float16,
+            device_map="auto",
+            max_memory=self._max_memory_for_auto_offload(),
         )
         questions = ["How long is the video? Describe the it in short."]
         video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
@@ -509,7 +529,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     def test_small_model_integration_test_expand(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
+            "Qwen/Qwen3-VL-30B-A3B-Instruct",
+            dtype="auto",
+            device_map="auto",
+            max_memory=self._max_memory_for_auto_offload(),
         )
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
