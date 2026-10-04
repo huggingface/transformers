@@ -400,6 +400,12 @@ class ExportedGenerator(GenerationMixin):
         """Whether the graphs carry fixed-size recurrent state (`cache_params`) instead of a KV cache."""
         return self._decode_runner.cache_input == "cache_params"
 
+    @property
+    def _is_stateful(self) -> bool:
+        """Whether the cache can't be rolled back, which assisted decoding needs: recurrent state, or a cache the
+        backend keeps in its own variables."""
+        return self._is_recurrent or self._decode_runner.owns_state
+
     def _prepare_cache_for_generation(
         self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
     ):

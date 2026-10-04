@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 from packaging import version
 
+from ..generation.configuration_utils import GenerationMode
 from ..models.auto import AutoConfig
 from ..utils import cached_file, logging
 from ..utils.generic import ModelOutput
@@ -49,6 +50,9 @@ EXPORT_MANIFEST_FILE = "export.json"
 
 # The export recipe: written by `ExportArtifacts.save_pretrained`, read by `AutoHfExporter.from_pretrained`.
 EXPORT_CONFIG_NAME = "export_config.json"
+
+# Where an export's draft model for assisted generation is saved, as an export of its own.
+ASSISTANT_SUBFOLDER = "assistant"
 
 
 if TYPE_CHECKING:
@@ -146,12 +150,14 @@ class ExportArtifacts(Mapping):
         config: object | None = None,
         generation_config: GenerationConfig | None = None,
         export_config: ExportConfigMixin | dict[str, ExportConfigMixin] | None = None,
+        assistant: ExportArtifacts | None = None,
     ):
         self.components = dict(components)
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
         self.export_config = export_config
+        self.assistant = assistant
 
     def __getitem__(self, name: str) -> ExportedComponent:
         return self.components[name]
@@ -225,6 +231,8 @@ class ExportArtifacts(Mapping):
                 else self.export_config.to_dict()
             )
             (directory / EXPORT_CONFIG_NAME).write_text(json.dumps(recipe, indent=2, default=str) + "\n")
+        if self.assistant is not None:
+            self.assistant.save_pretrained(directory / ASSISTANT_SUBFOLDER)
 
     def _runners(self, components: Iterable[str] | None = None, **kwargs) -> dict[str, ModelRunner]:
         """A runner per artifact, built in memory with the same metadata a load passes.
@@ -368,9 +376,12 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
+        *,
         generation_config: GenerationConfig | None = None,
-        multi_token_decode: bool | None = None,
+        assistant_model: PreTrainedModel | None = None,
         decoder_writes_cross_cache: bool | None = None,
+        multi_token_decode: bool | None = None,
+        keep_all_logits: bool | None = None,
     ) -> ExportArtifacts:
         """Decompose a generative model into the components a generation loop drives, and export each.
 
@@ -386,16 +397,34 @@ class HfExporter(ABC):
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The config the capture generates under, which fixes the cache the graphs are traced against.
                 Saved with the export.
+            assistant_model ([`PreTrainedModel`], *optional*):
+                A draft model for assisted generation, exported alongside on the same `sample_inputs`, returned as
+                [`ExportArtifacts.assistant`] and saved in its `assistant/` subfolder. Pass its runtime to `generate`
+                as `assistant_model`, as with any draft. With a per-component `config` dict, its config is the
+                `"assistant"` entry.
+            decoder_writes_cross_cache (`bool`, *optional*):
+                For an encoder-decoder with a multi-token decode: whether the decode graph computes its own
+                cross-attention cache instead of the encoder graph. Defaults to the exporter class attribute.
             multi_token_decode (`bool`, *optional*):
                 Whether the decode graph takes several query tokens at once, so it also serves the prompt.
                 Defaults to whether the decode config is dynamic; refused on a static one. Pass `False` to keep a
                 single-token decode beside a prompt graph.
-            decoder_writes_cross_cache (`bool`, *optional*):
-                For an encoder-decoder with a multi-token decode: whether the decode graph computes its own
-                cross-attention cache instead of the encoder graph. Defaults to the exporter class attribute.
+            keep_all_logits (`bool`, *optional*):
+                Whether the graphs return logits for every position, which assisted (speculative) decoding needs.
+                Defaults to whether an `assistant_model` is given or `generation_config` asks for assisted generation
+                (prompt lookup, early exit, MTP); otherwise only the last position, which is all greedy and sampled
+                decoding read.
         """
-        generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
-            model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
+        generation_config, decoder_writes_cross_cache, multi_token_decode, keep_all_logits = (
+            self._resolve_generation_options(
+                model,
+                config,
+                generation_config=generation_config,
+                assistant_model=assistant_model,
+                decoder_writes_cross_cache=decoder_writes_cross_cache,
+                multi_token_decode=multi_token_decode,
+                keep_all_logits=keep_all_logits,
+            )
         )
 
         parts = decompose_for_generation(
@@ -405,6 +434,10 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
             decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
+        if keep_all_logits:
+            # Without the captured `logits_to_keep` the forward defaults to 0, i.e. every position
+            for part in parts.values():
+                part.inputs.pop("logits_to_keep", None)
         if isinstance(config, dict):
             missing = set(parts) - set(config)
             if missing:
@@ -427,22 +460,36 @@ class HfExporter(ABC):
                 ) from e
             components[name] = ExportedComponent(name, artifact, ExportMetadata.from_dict(metadata), part.role)
 
+        assistant = None
+        if assistant_model is not None:
+            if isinstance(config, dict) and "assistant" not in config:
+                raise ValueError('A per-component `config` dict needs an `"assistant"` entry for `assistant_model`.')
+            assistant = self.export_for_generation(
+                assistant_model,
+                sample_inputs,
+                config["assistant"] if isinstance(config, dict) else config,
+                multi_token_decode=multi_token_decode,
+            )
         return ExportArtifacts(
             components,
             self.export_format,
             config=getattr(model, "config", None),
             generation_config=generation_config,
             export_config=config,
+            assistant=assistant,
         )
 
     def _resolve_generation_options(
         self,
         model,
         config,
+        *,
         generation_config: GenerationConfig | None,
-        multi_token_decode: bool | None,
+        assistant_model: PreTrainedModel | None,
         decoder_writes_cross_cache: bool | None,
-    ) -> tuple[GenerationConfig | None, bool, bool]:
+        multi_token_decode: bool | None,
+        keep_all_logits: bool | None,
+    ) -> tuple[GenerationConfig | None, bool, bool, bool]:
         """Resolve and check `export_for_generation`'s `None` options.
 
         `generation_config` is filled from the model's own (e.g. `forced_eos_token_id`), as `generate` does;
@@ -453,6 +500,8 @@ class HfExporter(ABC):
             generation_config.update(
                 **model.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True
             )
+        if decoder_writes_cross_cache is None:
+            decoder_writes_cross_cache = self.decoder_writes_cross_cache
         decode_config = config.get("decode") if isinstance(config, dict) else config
         dynamic = bool(getattr(decode_config, "dynamic", False))
         if multi_token_decode is None:
@@ -462,9 +511,17 @@ class HfExporter(ABC):
                 "`multi_token_decode=True` needs a dynamic export: a static one freezes the decode graph's query axis "
                 "at the captured length, which no decode step feeds."
             )
-        if decoder_writes_cross_cache is None:
-            decoder_writes_cross_cache = self.decoder_writes_cross_cache
-        return generation_config, multi_token_decode, decoder_writes_cross_cache
+        if generation_config is not None and generation_config.use_mtp:
+            raise ValueError(
+                "`use_mtp` is not supported for exported models: the MTP drafter reads the main model's hidden "
+                "states and loads its own weights from it, and an exported decode graph returns logits only."
+            )
+        if keep_all_logits is None:
+            keep_all_logits = assistant_model is not None or (
+                generation_config is not None
+                and generation_config.get_generation_mode() == GenerationMode.ASSISTED_GENERATION
+            )
+        return generation_config, decoder_writes_cross_cache, multi_token_decode, keep_all_logits
 
     @classmethod
     @abstractmethod

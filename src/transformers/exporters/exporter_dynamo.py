@@ -528,6 +528,8 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
             attributes["cumulative_length"] = 0
         if "cumulative_length_int" in attributes:
             attributes["cumulative_length_int"] = 0
+        # `generate`'s mark on a cache the caller passed in (an assistant's, in assisted decoding), not structure
+        attributes.pop("_is_user_defined", None)
         return {
             "_t": "obj",
             "p": _class_to_path(cls),

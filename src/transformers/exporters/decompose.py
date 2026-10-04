@@ -286,6 +286,9 @@ def decompose_prefill_decode(
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
     capture_config.disable_compile = True
+    # Captured as plain decode steps: assisted generation would fold them into candidate windows
+    capture_config.prompt_lookup_num_tokens = None
+    capture_config.assistant_early_exit = None
     no_mm_encoder_outputs = []
     if hasattr(model, "_supports_mm_encoder_outputs"):
         no_mm_encoder_outputs.append((model, "_supports_mm_encoder_outputs", lambda original: lambda: False))

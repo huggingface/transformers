@@ -332,6 +332,49 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
         self.assertListEqual(from_disk.tolist(), in_memory.tolist())
 
+    @pytest.mark.torch_export_test
+    def test_exported_draft_assists_generation(self):
+        """An `assistant_model` passed to `export_for_generation` is exported with the target and saved beside it,
+        and its runtime drafts for the target's `generate` like any `assistant_model`. A draft with other weights
+        disagrees with the target, so candidates are rejected and the caches rolled back, and greedy assisted
+        decoding must still match plain greedy."""
+        import functools
+        import tempfile
+
+        from transformers.exporters import AutoExportedModel, DynamoConfig, DynamoExporter
+
+        torch.manual_seed(0)
+        target = self._tiny_model()
+        draft = self._tiny_model()
+        prompt = torch.randint(0, 64, (1, 6))
+        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+        generate_kwargs = {"do_sample": False, "max_new_tokens": 8, "min_new_tokens": 8}
+        expected = target.generate(**inputs, **generate_kwargs)
+        self.assertFalse(torch.equal(draft.generate(**inputs, **generate_kwargs), expected))
+
+        exported = DynamoExporter().export_for_generation(
+            target, copy.deepcopy(inputs), config=DynamoConfig(dynamic=True), assistant_model=draft
+        )
+
+        def assisted_generate(runtime, draft_runtime):
+            # Count the draft's steps, keeping the signature `generate` reads (`logits_to_keep`)
+            forward = draft_runtime.forward
+            calls = []
+            draft_runtime.forward = functools.wraps(forward)(lambda **kwargs: calls.append(1) or forward(**kwargs))
+            return runtime.generate(**inputs, **generate_kwargs, assistant_model=draft_runtime), len(calls)
+
+        in_memory, draft_steps = assisted_generate(exported.runtime(), exported.assistant.runtime())
+        self.assertGreater(draft_steps, 0)
+        self.assertListEqual(in_memory.tolist(), expected.tolist())
+
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = AutoExportedModel.from_pretrained(directory)
+            loaded_draft = AutoExportedModel.from_pretrained(directory, subfolder="assistant")
+            from_disk, draft_steps = assisted_generate(loaded, loaded_draft)
+        self.assertGreater(draft_steps, 0)
+        self.assertListEqual(from_disk.tolist(), expected.tolist())
+
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
