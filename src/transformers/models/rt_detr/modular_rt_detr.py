@@ -39,7 +39,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
@@ -54,10 +54,17 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
+from ..deformable_detr.image_processing_deformable_detr import DeformableDetrImageProcessorKwargs
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
-from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, DetrSelfAttention, replace_batch_norm
+from ..detr.modeling_detr import (
+    DetrFrozenBatchNorm2d,
+    DetrMLP,
+    DetrMLPPredictionHead,
+    DetrSelfAttention,
+    replace_batch_norm,
+)
 from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 from .configuration_rt_detr import RTDetrConfig
 
@@ -181,7 +188,7 @@ def prepare_coco_detection_annotation_pil(
     return new_target
 
 
-class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
+class RTDetrImageProcessorKwargs(DeformableDetrImageProcessorKwargs):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
         Data format of the annotations. One of "coco_detection" or "coco_panoptic".
@@ -190,9 +197,6 @@ class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
         bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
         Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
     """
-
-    format: str | AnnotationFormat
-    do_convert_annotations: bool
 
 
 class RTDetrImageProcessor(DetrImageProcessor):
@@ -731,7 +735,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-class RTDetrMLP(nn.Module):
+class RTDetrMLP(DetrMLP):
     def __init__(self, config: RTDetrConfig, hidden_size: int, intermediate_size: int, activation_function: str):
         super().__init__()
         self.fc1 = nn.Linear(hidden_size, intermediate_size)
@@ -739,13 +743,6 @@ class RTDetrMLP(nn.Module):
         self.activation_fn = ACT2FN[activation_function]
         self.activation_dropout = config.activation_dropout
         self.dropout = config.dropout
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        return hidden_states
 
 
 class RTDetrFrozenBatchNorm2d(DetrFrozenBatchNorm2d):

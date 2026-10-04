@@ -17,7 +17,6 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -29,7 +28,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -51,9 +49,9 @@ from ..bert.modeling_bert import (
     BertLMPredictionHead,
     BertModel,
     BertPooler,
+    BertPreTrainedModel,
     BertSelfAttention,
 )
-from .configuration_ernie import ErnieConfig
 
 
 logger = logging.get_logger(__name__)
@@ -148,29 +146,8 @@ class ErnieEncoder(BertEncoder):
 
 
 @auto_docstring
-class ErniePreTrainedModel(PreTrainedModel):
-    config_class = ErnieConfig
-    base_model_prefix = "ernie"
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": ErnieLayer,
-        "attentions": ErnieSelfAttention,
-        "cross_attentions": ErnieCrossAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, ErnieLMPredictionHead):
-            init.zeros_(module.bias)
-        elif isinstance(module, ErnieEmbeddings):
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros_(module.token_type_ids)
+class ErniePreTrainedModel(BertPreTrainedModel):
+    pass
 
 
 class ErnieModel(BertModel):

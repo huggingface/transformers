@@ -23,7 +23,6 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import gelu
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
@@ -49,6 +48,7 @@ from ..bert.modeling_bert import (
 from ..roberta.modeling_roberta import (
     RobertaClassificationHead,
     RobertaEmbeddings,
+    RobertaLMHead,
     RobertaPreTrainedModel,
 )
 
@@ -227,26 +227,8 @@ class XLMRobertaXLModel(BertModel):
     pass
 
 
-class XLMRobertaXLLMHead(nn.Module):
+class XLMRobertaXLLMHead(RobertaLMHead):
     """XLM-RoBERTa-XL Head for masked language modeling."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-    def forward(self, features, **kwargs):
-        x = self.dense(features)
-        x = gelu(x)
-        x = self.layer_norm(x)
-
-        # project back to size of vocabulary with bias
-        x = self.decoder(x)
-
-        return x
 
 
 class XLMRobertaXLClassificationHead(RobertaClassificationHead):

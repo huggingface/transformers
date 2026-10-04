@@ -41,6 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
+from ..gemma.modeling_gemma import GemmaTextScaledWordEmbedding
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -242,18 +243,10 @@ class Gemma3CausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     pass
 
 
-class Gemma3TextScaledWordEmbedding(nn.Embedding):
+class Gemma3TextScaledWordEmbedding(GemmaTextScaledWordEmbedding):
     """
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.scalar_embed_scale = embed_scale
-        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
-
-    def forward(self, input_ids: torch.Tensor):
-        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
 class Gemma3MLP(Gemma2MLP):

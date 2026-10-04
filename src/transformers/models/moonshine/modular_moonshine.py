@@ -39,6 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
@@ -154,19 +155,13 @@ class MoonshineEncoderModelOutput(BaseModelOutput):
     attention_mask: torch.Tensor | None = None
 
 
-class MoonshineEncoderMLP(nn.Module):
+class MoonshineEncoderMLP(CLIPMLP):
     def __init__(self, config, hidden_act):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
 
 
 class MoonshineDecoderMLP(nn.Module):

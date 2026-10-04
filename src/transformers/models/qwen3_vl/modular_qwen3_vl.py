@@ -30,7 +30,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import auto_docstring, is_torchvision_available, logging
 from ...utils.generic import (
     merge_with_config_defaults,
@@ -44,6 +44,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
+from ..glm4v.processing_glm4v import Glm4vProcessorKwargs
 from ..glm4v.video_processing_glm4v import smart_resize
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
@@ -889,15 +890,8 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         )
 
 
-class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+class Qwen3VLProcessorKwargs(Glm4vProcessorKwargs):
+    pass
 
 
 class Qwen3VLProcessor(Qwen2VLProcessor):
