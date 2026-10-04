@@ -1135,8 +1135,13 @@ def _patch_convert_guards_to_code(_original):
     "executorch.exir.verification.verifier._EXECUTORCH_SYM_OPS",
 )
 def _extend_sym_ops_allowlist(original):
-    """Extend the edge-dialect sym-op allowlist with trace-time sym ops that lack an `executorch_prim.*` kernel."""
-    return original | {torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float}
+    """Let the edge verifier accept the Python sym ops the trace emits (`torch.sym_min`, `math.ceil`, ...).
+
+    `to_executorch` maps them to `executorch_prim.*` itself; swapping them earlier pins dynamic axes to their hint.
+    `operator.*` is left out: it also covers tensor ops. `sym_sum` has no mapping and stays as is.
+    """
+    python_sym_ops = {op for op in _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS if op not in vars(operator).values()}
+    return original | python_sym_ops | {torch.sym_sum}
 
 
 def _make_squeeze_define_node(original):
@@ -1621,21 +1626,6 @@ def _fix_amax_dim(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
 
 
 @register_fx_node_fix("executorch")
-def _fix_python_sym_op(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Swap Python sym ops (``torch.sym_min``, ``math.ceil``, ...) for ``executorch_prim.*`` before the edge verifier.
-
-    ``operator.*`` is excluded: it also covers tensor ops (``Cannot cast NotImplemented to number``).
-    """
-    if node.target not in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round):
-        return False
-    replacement = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(node.target)
-    if replacement is None:
-        return False
-    node.target = replacement
-    return True
-
-
-@register_fx_node_fix("executorch")
 def _fix_clone_memory_format(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Force ``contiguous_format`` on ``aten.clone`` of a non-contiguous input.
 
@@ -1663,7 +1653,7 @@ def _fix_sym_pow_as_mul(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     base, exp = node.args
     if not isinstance(exp, int) or exp < 1:
         return False
-    # Safe here, unlike in `_fix_python_sym_op`: the operands are SymInts.
+    # Safe here: the operands are SymInts.
     mul_scalar = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(operator.mul)
     if mul_scalar is None:
         return False

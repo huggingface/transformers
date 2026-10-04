@@ -30,7 +30,7 @@ import copy
 import functools
 import json
 import operator
-from collections.abc import MutableMapping, Sequence
+from collections.abc import MutableMapping
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 from typing import Sequence as TypingSequence  # noqa: UP035  # onnxscript.script classifies attrs via typing.Sequence
@@ -63,33 +63,13 @@ if is_torch_available():
 if is_onnxscript_available():
     import onnx_ir
     from onnxscript import FLOAT, INT64, script  # runtime: `@script` evaluates these annotations at import
-    from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
-
-    # Mirrors torch.onnx's private _TORCH_DTYPE_TO_ONNX, restricted to realistic `Cast` targets.
-    _TORCH_DTYPE_TO_ONNX: dict[torch.dtype, onnx_ir.DataType] = {
-        torch.float32: onnx_ir.DataType.FLOAT,
-        torch.float64: onnx_ir.DataType.DOUBLE,
-        torch.float16: onnx_ir.DataType.FLOAT16,
-        torch.bfloat16: onnx_ir.DataType.BFLOAT16,
-        torch.bool: onnx_ir.DataType.BOOL,
-        torch.int8: onnx_ir.DataType.INT8,
-        torch.int16: onnx_ir.DataType.INT16,
-        torch.int32: onnx_ir.DataType.INT32,
-        torch.int64: onnx_ir.DataType.INT64,
-        torch.uint8: onnx_ir.DataType.UINT8,
-        torch.uint16: onnx_ir.DataType.UINT16,
-        torch.uint32: onnx_ir.DataType.UINT32,
-        torch.uint64: onnx_ir.DataType.UINT64,
-        torch.complex64: onnx_ir.DataType.COMPLEX64,
-        torch.complex128: onnx_ir.DataType.COMPLEX128,
-    }
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
     if is_onnxscript_available():
-        from onnxscript.function_libs.torch_lib.ops.core import BOOL, TReal
+        from onnxscript.function_libs.torch_lib.ops.core import TReal
 
 
 logger = logging.get_logger(__file__)
@@ -199,28 +179,6 @@ def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
 
 
-@register_patch("onnx", "torch.where")
-def _patch_where(original):
-    """Normalize dtypes and scalars in torch.where."""
-
-    def patch(condition, x=None, y=None):
-        if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
-            y = y.to(x.dtype)
-        elif isinstance(x, torch.Tensor) and isinstance(y, (int, float, bool)):
-            # Not `torch.tensor(...)`: a fresh constant trips aot's functional-graph assertion on retrace.
-            y = torch.full_like(x, y)
-        elif isinstance(y, torch.Tensor) and isinstance(x, (int, float, bool)):
-            x = torch.full_like(y, x)
-        if x is None and y is None:
-            return original(condition)
-        elif y is None:
-            return original(condition, x)
-        else:
-            return original(condition, x, y)
-
-    return patch
-
-
 @register_patch("onnx", "torch.unsqueeze", "torch.Tensor.unsqueeze")
 def _patch_unsqueeze(original):
     """Support complex tensors in torch.unsqueeze."""
@@ -257,19 +215,6 @@ def _patch_sdpa(original):
     return patch
 
 
-@register_patch("onnx", "torch.nn.RMSNorm.forward")
-def _patch_rms_norm_forward(original):
-    """Use non-fused RMS normalization when elementwise_affine is False."""
-
-    def patch(self, x):
-        if not self.elementwise_affine:
-            variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
-            return (x * torch.rsqrt(variance + self.eps)).to(x.dtype)
-        return original(self, x)
-
-    return patch
-
-
 @register_patch("onnx", "torch.split", "torch.Tensor.split")
 def _patch_split(original):
     """Expand a symbolic split size into statically-counted `narrow`s.
@@ -298,6 +243,20 @@ def _patch_randperm(original):
 
     def patch(n, *, dtype=torch.int64, layout=torch.strided, device=None, pin_memory=False, generator=None):
         return torch.argsort(torch.rand(n, device=device)).to(dtype)
+
+    return patch
+
+
+@register_patch("onnx", "torch.nn.RMSNorm.forward")
+def _patch_rms_norm_forward(original):
+    """Unfused RMSNorm without an affine weight: `aten._fused_rms_norm` has no ONNX translation (diffllama)."""
+
+    def patch(self, x):
+        if not self.elementwise_affine:
+            eps = self.eps if self.eps is not None else torch.finfo(x.dtype).eps
+            variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
+            return (x * torch.rsqrt(variance + eps)).to(x.dtype)
+        return original(self, x)
 
     return patch
 
@@ -443,33 +402,6 @@ def _patch_irfft(original):
         slc[dim] = slice(1, -1)
         full = torch.cat([input, input[tuple(slc)].flip(dims=[dim]).conj()], dim=dim)
         return torch.fft.ifft(full, n=n, dim=dim, norm=norm).real
-
-    return patch
-
-
-@register_patch("onnx", "torch.full")
-def _patch_full(original):
-    """Force dtype=torch.long when fill_value is int and no dtype specified (ONNX defaults to float32)."""
-
-    def patch(*args, dtype=None, **kwargs):
-        if dtype is None:
-            fill_value = kwargs.get("fill_value", args[1] if len(args) > 1 else None)
-            if isinstance(fill_value, int) and not isinstance(fill_value, bool):
-                dtype = torch.long
-        return original(*args, dtype=dtype, **kwargs)
-
-    return patch
-
-
-@register_patch("onnx", "torch.masked.mean")
-def _patch_masked_mean(original):
-    """Manual masked mean: avoids sum/int_count Div type mismatch in ONNX."""
-
-    def patch(input, *, mask, dim=None, keepdim=False, dtype=None):
-        mask_float = mask.float()
-        n = mask_float.sum(dim=dim, keepdim=True).clamp(min=1.0)
-        result = (input * mask_float).sum(dim=dim, keepdim=keepdim) / (n if keepdim else n.squeeze())
-        return result.to(dtype) if dtype is not None else result
 
     return patch
 
@@ -781,7 +713,8 @@ def _fix_integral_tensor_float_scalar(gm: torch.fx.GraphModule, node: torch.fx.N
     if len(node.args) < 2:
         return False
     tensor_arg, scalar_arg = node.args[0], node.args[1]
-    if not isinstance(tensor_arg, torch.fx.Node) or not isinstance(scalar_arg, float):
+    scalar = scalar_arg.meta.get("val") if isinstance(scalar_arg, torch.fx.Node) else scalar_arg
+    if not isinstance(tensor_arg, torch.fx.Node) or not isinstance(scalar, (float, torch.SymFloat)):
         return False
     operand, result = tensor_arg.meta.get("val"), node.meta.get("val")
     if operand is None or result is None:
@@ -894,101 +827,6 @@ def register_onnx_translation(*paths: str):
     return decorator
 
 
-def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
-    """Whether ``values.shape`` statically broadcasts against ``self.shape``; unknown dims answer ``False``."""
-    if values.shape is None or self.shape is None or len(values.shape) > len(self.shape):
-        return False
-    offset = len(self.shape) - len(values.shape)
-    for v_dim, s_dim in zip(values.shape, self.shape[offset:]):
-        try:
-            v_dim, s_dim = int(v_dim), int(s_dim)
-        except (TypeError, ValueError):
-            return False
-        if v_dim != 1 and v_dim != s_dim:
-            return False
-    return True
-
-
-@register_onnx_translation("torch.ops.aten.mul.Scalar")
-def _aten_mul_scalar(self: TReal, other: float) -> TReal:
-    """`aten.mul.Scalar` has no torchlib lowering; int tensor * float scalar (bros' `bbox`) needs an explicit
-    promotion cast."""
-    if not isinstance(other, (bool, int, float)):
-        # A symbolic scalar arrives as a graph value.
-        return op.Mul(self, op.CastLike(other, self))
-    scalar = op.Constant(value_float=float(other))
-    if isinstance(other, float) and not self.dtype.is_floating_point():
-        return op.Mul(op.Cast(self, to=onnx_ir.DataType.FLOAT), scalar)
-    return op.Mul(self, op.CastLike(scalar, self))
-
-
-@register_onnx_translation("torch.ops.aten.rsub.Scalar")
-def _aten_rsub_scalar(self: TReal, other: float, alpha: float = 1.0) -> TReal:
-    """`aten.rsub.Scalar` (big_bird's `1.0 - to_mask`) has no torchlib lowering, and its decomposition emits a
-    scalar-first `aten.sub` no overload accepts."""
-    scalar = op.Constant(value_float=float(other))
-    if isinstance(other, float) and not self.dtype.is_floating_point():
-        self = op.Cast(self, to=onnx_ir.DataType.FLOAT)
-    else:
-        scalar = op.CastLike(scalar, self)
-    if alpha != 1.0:
-        self = op.Mul(self, op.CastLike(op.Constant(value_float=float(alpha)), self))
-    return op.Sub(scalar, self)
-
-
-@register_onnx_translation("torch.ops.aten.index_put.default")
-def _aten_index_put(
-    self: TReal,
-    indices: Sequence[INT64 | BOOL | None],
-    values: TReal,
-    accumulate: bool = False,
-) -> TReal:
-    """Bool-mask `self[mask] = values`; other cases go to torchlib.
-
-    Values that statically broadcast against ``self`` use `Expand + Where`; otherwise (e.g.
-    `inputs_embeds[image_mask] = features`) a flat cumulative-count `Gather + Where`.
-    """
-    bool_mask = indices[0]
-    is_bool = (
-        bool_mask is not None and getattr(getattr(bool_mask, "type", None), "dtype", None) == onnx_ir.DataType.BOOL
-    )
-    # `Where` overwrites and can't express `accumulate`.
-    if not is_bool or accumulate:
-        return aten_index_put(self, indices, values, accumulate)
-    for _ in range(len(self.shape) - len(bool_mask.shape)):
-        bool_mask = op.Unsqueeze(bool_mask, op.Constant(value_ints=[-1]))
-    expanded_mask = op.Expand(bool_mask, op.Shape(self))
-    if _values_broadcast_to_self(values, self):
-        expanded_values = op.Expand(values, op.Shape(self))
-        return op.Where(expanded_mask, expanded_values, self)
-    flat_mask = op.Reshape(expanded_mask, op.Constant(value_ints=[-1]))
-    flat_mask_int = op.Cast(flat_mask, to=7)  # INT64
-    cs = op.CumSum(flat_mask_int, op.Constant(value_ints=[0]))
-    positions = op.Clip(op.Sub(cs, op.Constant(value_ints=[1])), op.Constant(value_ints=[0]))
-    flat_values = op.Reshape(values, op.Constant(value_ints=[-1]))
-    gathered = op.Gather(flat_values, positions)
-    flat_self = op.Reshape(self, op.Constant(value_ints=[-1]))
-    result = op.Where(flat_mask, gathered, flat_self)
-    return op.Reshape(result, op.Shape(self))
-
-
-@register_onnx_translation("torch.ops.aten.bincount.default")
-def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
-    """`torch.bincount` via `OneHot` + `ReduceSum` (no native ONNX op). Weights are unsupported."""
-    one = op.Constant(value_ints=[1])
-    max_val = op.Unsqueeze(op.ReduceMax(self, keepdims=0), op.Constant(value_ints=[0]))
-    depth = op.Add(max_val, one)
-    if minlength > 0:
-        depth = op.Max(depth, op.Constant(value_ints=[minlength]))
-    one_hot = op.OneHot(self, depth, op.Constant(value_ints=[0, 1]), axis=-1)
-    return op.ReduceSum(one_hot, op.Constant(value_ints=[0]), keepdims=0)
-
-
-def _torch_dtype_to_onnx(dtype: torch.dtype) -> int:
-    """Map a ``torch.dtype`` to the ONNX ``op.Cast(to=...)`` TensorProto int."""
-    return _TORCH_DTYPE_TO_ONNX[dtype].value
-
-
 def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dtype=None) -> TReal:
     """ONNX implementation of `aten._grouped_mm.default`, unrolled per group as `Slice + MatMul` + `Concat`.
 
@@ -1018,7 +856,8 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
 
     result = op.Concat(*outputs, axis=0)  # (M, N)
     if out_dtype is not None:
-        result = op.Cast(result, to=_torch_dtype_to_onnx(out_dtype))
+        # torch.onnx hands a translation `torch.dtype` arguments already as `ir.DataType`
+        result = op.Cast(result, to=out_dtype)
     return result
 
 

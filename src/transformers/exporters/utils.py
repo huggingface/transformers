@@ -17,8 +17,8 @@
 
 - **Patch and fix registries**: `@register_patch(backend, *paths)`, `@register_fx_node_fix` and
   `@register_fx_program_fix`, applied with `apply_patches` / `apply_fx_node_fixes` / `apply_fx_program_fixes`.
-- **Cross-backend patches**: the ones more than one backend needs (`torch.where` dtype mismatches,
-  `bucketize`, the cumulative reductions, the Mamba scan).
+- **Cross-backend patches**: the ones more than one backend needs (`bucketize`, the cumulative reductions, the
+  Mamba scan).
 - **Tensor utilities**: `get_leaf_tensors`, `cast_leaf_tensors`, `duplicate_leaf_tensors`, `runner_feed`, and
   `prepare_for_export` (attention / experts implementation, output flags, precomputed inputs).
 
