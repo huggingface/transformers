@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import json
-
 from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .metadata import (
-    EXPORT_METADATA_KEY,
     ExportMetadata,
 )
 from .utils import (
@@ -26,11 +23,7 @@ class DynamoModelRunner(ModelRunner):
 
     def __init__(self, module, export_metadata=None):
         self._module = module
-        # `graph_module.meta` survives `.module()`, but not `torch.export.save`.
-        self.export_metadata = self.resolve_metadata(
-            export_metadata,
-            lambda: ExportMetadata.from_dict(getattr(module, "meta", {}).get(EXPORT_METADATA_KEY)),
-        )
+        self.export_metadata = ExportMetadata.from_dict(export_metadata)
         # The pytree spec, not the metadata: the module also requires baked scalars (`max_seqlen`).
         self.input_names = tuple(module._in_spec.child(1).context)
         weight = next(self._module.parameters(), None)
@@ -54,12 +47,8 @@ class DynamoModelRunner(ModelRunner):
 
     @classmethod
     def from_pretrained(cls, path, export_metadata=None, device=None, **kwargs) -> DynamoModelRunner:
-        """Load a saved `.pt2` and unlift it, restoring the metadata the exporter parked in `extra_files`."""
-        extra_files = {EXPORT_METADATA_KEY: ""}
-        exported_program = torch.export.load(str(path), extra_files=extra_files)
-        payload = extra_files.get(EXPORT_METADATA_KEY)
-        if payload:
-            exported_program.graph_module.meta[EXPORT_METADATA_KEY] = json.loads(payload)
+        """Load a saved `.pt2` and unlift it."""
+        exported_program = torch.export.load(str(path))
         return cls.from_artifact(exported_program, export_metadata=export_metadata, device=device, **kwargs)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:

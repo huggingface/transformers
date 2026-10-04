@@ -34,7 +34,7 @@ from ..utils.import_utils import _is_package_available, is_torch_available
 from .components import ExportedComponent
 from .configs import ExportConfigMixin, ExportFormat
 from .decompose import decompose_for_generation
-from .metadata import EXPORT_METADATA_KEY, ExportMetadata
+from .metadata import ExportMetadata
 from .utils import runner_feed
 
 
@@ -545,7 +545,7 @@ class ModelRunner(ABC):
         if dtype := self.export_metadata.dtype:
             return dtype
         raise ValueError(
-            f"This artifact carries no `{EXPORT_METADATA_KEY}`, so the precision it was exported at is "
+            "This runner was built without its export metadata, so the precision it was exported at is "
             "unknown, and guessing it silently corrupts a half-precision export. Load it with "
             "`ExportedGenerator.from_pretrained` / `AutoExportedModel.from_pretrained`, or run it from the "
             "`ExportArtifacts` the export returned — both carry the metadata."
@@ -606,11 +606,6 @@ class ModelRunner(ABC):
             f"{type(self).__name__} is bound to {self.device} by the runtime that loaded it. Load the "
             f"artifact again with `device={device!r}` to run it elsewhere."
         )
-
-    @staticmethod
-    def resolve_metadata(injected, read_baked) -> ExportMetadata:
-        """The metadata a load passed in, else `read_baked()` (called lazily, as it can be costly)."""
-        return ExportMetadata.from_dict(injected) if injected is not None else read_baked()
 
     @classmethod
     def from_artifact(cls, artifact, export_metadata=None, **kwargs) -> ModelRunner:

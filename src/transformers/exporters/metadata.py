@@ -21,27 +21,20 @@ traced, the cache's per-layer geometry — written at export and read by every r
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from .. import __version__
-from ..utils import logging
 from ..utils.import_utils import is_torch_available
 from .cache import _self_attention_layers
 from .utils import _class_to_path, _path_to_class, get_leaf_tensors
 
 
-logger = logging.get_logger(__name__)
-
 if is_torch_available():
     import torch
 
     from ..cache_utils import Cache
-
-# The key the metadata travels under: an ONNX `metadata_props` entry, an ExecuTorch constant method.
-EXPORT_METADATA_KEY = "transformers_export_metadata"
 
 
 def _traced_kwarg(value: Any) -> dict[str, Any]:
@@ -148,18 +141,6 @@ class ExportMetadata:
     """
 
     raw: Mapping[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_json(cls, payload: str | None) -> ExportMetadata:
-        """Parse a text payload; an unreadable one gives empty metadata rather than an error."""
-        if not payload:
-            return cls()
-        try:
-            metadata = json.loads(payload)
-        except json.JSONDecodeError:
-            logger.warning_once(f"Ignoring an unreadable `{EXPORT_METADATA_KEY}`; falling back to inference.")
-            return cls()
-        return cls.from_dict(metadata)
 
     @classmethod
     def from_dict(cls, metadata: Any) -> ExportMetadata:

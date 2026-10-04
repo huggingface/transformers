@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import json
 import math
 import operator
 import re
@@ -43,9 +42,6 @@ from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig, ExportFormat
 from .decompose import _MODALITY_SPECS
 from .exporter_dynamo import DynamoExporter, varlen_attn_masked_sdpa
-from .metadata import (
-    EXPORT_METADATA_KEY,
-)
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -151,8 +147,6 @@ class ExecutorchExporter(DynamoExporter):
                     partitioner=partitioner,
                     compile_config=_get_edge_compile_config(exported_program, config.backend),
                     transform_passes=_get_transform_passes(config.backend),
-                    # A `.pte` reports only input counts and shapes; the export metadata rides as a constant method.
-                    constant_methods={EXPORT_METADATA_KEY: [json.dumps(metadata)]},
                 )
                 executorch_programs_manager = edge_program_manager.to_executorch(config=_get_backend_config(config))
 

@@ -10,7 +10,6 @@ from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .cache import _read_cache_entry
 from .metadata import (
-    EXPORT_METADATA_KEY,
     ExportMetadata,
 )
 from .utils import (
@@ -94,10 +93,7 @@ class OnnxModelRunner(ModelRunner):
         # What `to()` reopens: a session's provider is fixed at creation and it does not hand its model back.
         self._source = source
         self._output_names = [o.name for o in session.get_outputs()]
-        self.export_metadata = self.resolve_metadata(
-            export_metadata,
-            lambda: ExportMetadata.from_json(session.get_modelmeta().custom_metadata_map.get(EXPORT_METADATA_KEY)),
-        )
+        self.export_metadata = ExportMetadata.from_dict(export_metadata)
         # Read off the provider, not assumed: a pointer bound on the wrong GPU is an illegal access.
         options = session.get_provider_options().get("CUDAExecutionProvider")
         self.device = torch.device("cpu" if options is None else f"cuda:{options.get('device_id', 0)}")

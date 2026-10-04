@@ -9,7 +9,6 @@ from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .cache import _cache_tensors, _read_cache_entry
 from .metadata import (
-    EXPORT_METADATA_KEY,
     ExportMetadata,
 )
 from .utils import (
@@ -52,26 +51,16 @@ def _feed_mismatches(method, feed: tuple, names: list[str]) -> list[str]:
     return mismatches
 
 
-def _baked_export_metadata(program) -> str | None:
-    """The export metadata baked into a `.pte`, or `None` for a program exported without one."""
-    try:
-        return program.load_method(EXPORT_METADATA_KEY).execute(())[0]
-    except Exception:
-        return None
-
-
 class ExecutorchModelRunner(ModelRunner):
     """`ModelRunner` backed by a loaded ExecuTorch program (`Runtime.get().load_program(...)`).
 
-    A `.pte` binds inputs positionally and reports only counts and shapes; names come from the metadata baked in
-    as a constant method. Cache inputs are named by flat leaf index (`past_key_values_<N>`).
+    A `.pte` binds inputs positionally and reports only counts and shapes; names come from the recorded export
+    metadata. Cache inputs are named by flat leaf index (`past_key_values_<N>`).
     """
 
     def __init__(self, program, export_metadata=None):
         self._method = program.load_method("forward")
-        self.export_metadata = self.resolve_metadata(
-            export_metadata, lambda: ExportMetadata.from_json(_baked_export_metadata(program))
-        )
+        self.export_metadata = ExportMetadata.from_dict(export_metadata)
         self._output_names = self.export_metadata.output_names
         # The model's own outputs are the LAST that many: the lowering emits its mutated-input copies first.
         total_outputs = self._method.metadata.num_outputs()

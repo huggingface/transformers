@@ -44,8 +44,7 @@ class OpenVINOModelRunner(ModelRunner):
         # What each variable holds, read here rather than off `state.state`, which copies the variable out.
         self._state_types = {info.variable_id: info.data_type for info in infos}
         self._state_length = 0
-        # OV artifacts keep their metadata beside the file, so none is baked in to fall back on.
-        self.export_metadata = self.resolve_metadata(export_metadata, ExportMetadata)
+        self.export_metadata = ExportMetadata.from_dict(export_metadata)
         self.input_names = tuple(
             leaf_name(name) for port in self._compiled.inputs for name in [_port_name(port)] if name != "beam_idx"
         )

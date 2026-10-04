@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import copy
 import functools
-import json
 import operator
 from collections.abc import MutableMapping
 from contextlib import contextmanager
@@ -41,9 +40,6 @@ from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
-from .metadata import (
-    EXPORT_METADATA_KEY,
-)
 from .utils import (
     _resolve_dotted_path,
     apply_fx_node_fixes,
@@ -125,13 +121,11 @@ class OnnxExporter(DynamoExporter):
             )
 
         apply_onnx_ir_fixes(onnx_program)
-        # Read back via `session.get_modelmeta().custom_metadata_map`.
-        onnx_program.model.metadata_props[EXPORT_METADATA_KEY] = json.dumps(metadata)
         return onnx_program, metadata
 
     @classmethod
     def save_artifact(cls, artifact, path) -> None:
-        """The metadata is in `metadata_props`; ONNX decides whether initializers spill to a sidecar file."""
+        """ONNX decides whether initializers spill to a sidecar file."""
         artifact.save(path)
 
 

@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import copy
 import inspect
-import json
 import sys
 import types
 from collections.abc import MutableMapping
@@ -46,7 +45,6 @@ from ..utils.import_utils import is_detectron2_available, is_torch_available, to
 from .base import HfExporter
 from .configs import DynamoConfig, ExportFormat
 from .metadata import (
-    EXPORT_METADATA_KEY,
     build_export_metadata,
 )
 from .utils import (
@@ -133,17 +131,12 @@ class DynamoExporter(HfExporter):
 
         exported_program = drop_unused_weights(exported_program)
 
-        # `graph_module.meta` survives `.module()` but not `torch.export.save`; see `save_artifact`.
         metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
-        exported_program.graph_module.meta[EXPORT_METADATA_KEY] = metadata
         return exported_program, metadata
 
     @classmethod
     def save_artifact(cls, artifact, path) -> None:
-        """`torch.export.save` keeps a whitelist of `meta` keys, so the metadata rides in `extra_files`."""
-        metadata = artifact.graph_module.meta.get(EXPORT_METADATA_KEY)
-        extra_files = {EXPORT_METADATA_KEY: json.dumps(metadata)} if metadata is not None else None
-        torch.export.save(artifact, str(path), extra_files=extra_files)
+        torch.export.save(artifact, str(path))
 
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────
