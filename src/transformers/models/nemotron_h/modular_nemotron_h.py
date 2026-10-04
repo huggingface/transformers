@@ -81,7 +81,14 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
 
 
 class NemotronHRMSNorm(LlamaRMSNorm):
-    pass
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # Unlike Llama, the weight multiply is kept in fp32 and only the result is cast back to the input
+        # dtype, matching the reference implementation.
+        return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
 
 
 class NemotronHMLP(NemotronMLP, nn.Module):
@@ -126,7 +133,7 @@ class NemotronHExperts(nn.Module):
 
         # Create expert mask to identify which tokens go to which experts
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)  # (num_experts, num_experts_per_tok, num_tokens)
             # Only iterate over experts that have at least one token assigned
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze(-1)
@@ -261,7 +268,12 @@ class NemotronHBlock(GradientCheckpointingLayer):
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
         if self.block_type == "linear_attention":
-            hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
+            hidden_states = self.mixer(
+                hidden_states,
+                cache_params=past_key_values,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
         elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
                 hidden_states=hidden_states,

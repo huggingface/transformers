@@ -28,6 +28,9 @@ Notable checkpoints include Qwen/Qwen3.5-35B-A3B (35B total/3B active), Qwen/Qwe
 
 You can find all the official Qwen3.5 MoE checkpoints under the [Qwen](https://huggingface.co/Qwen) organization.
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Quickstart
 
 <hfoptions id="usage">

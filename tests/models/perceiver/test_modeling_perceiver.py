@@ -27,7 +27,6 @@ from transformers import PerceiverConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -815,16 +814,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                             )
 
                     loss.backward()
-
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason=(
-            "Perceiver does not work with data parallel (DP) because of a bug in PyTorch:"
-            " https://github.com/pytorch/pytorch/issues/36035"
-        )
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):

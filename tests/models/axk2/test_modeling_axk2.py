@@ -18,14 +18,13 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -74,10 +73,6 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = AXK2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
-    @unittest.skip("Can be fixed by #47438, currently does not properly considers cases where topk > prefill")
-    def test_left_padding_compatibility(self):
-        pass
-
     @unittest.skip("Fundamentally incompatible with indexer as there is no boundary between sequences")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -90,21 +85,15 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip("AXK2 uses deepseek_sparse_attention layers which are not compatible with QuantizedCache.")
+    @unittest.skip("AXK2 uses indexed_attention layers which are not compatible with QuantizedCache.")
     def test_generate_with_quant_cache(self):
         pass
 
 
 @slow
 @require_torch_accelerator
-class AXK1IntegrationTest(unittest.TestCase):
+class AXK2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "hf-internal-testing/tiny-axk2"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=False)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=False)
 
     def test_model_logits_batched(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
@@ -137,7 +126,7 @@ class AXK1IntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         expected_texts = Expectations(
             {
-                ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간を実{acknowledgements 사건과-OctCTPコロ passengers Dice GD workloads 울진 Fibonacci announcesdest denote 이야기도 scrap',
+                ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간 guarant 실시간 juicy김정 conceal 요소들은미세먼 lover평론가-graph 나가서 rooms rooms rooms rooms측에서pid',
                 ("xpu", None): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간 guarant 실시간 juicy김정 conceal 요소들은미세먼 lover평론가-graph 나가서 rooms rooms rooms rooms측에서pid',
             }
         )  # fmt: skip

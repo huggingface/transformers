@@ -96,7 +96,7 @@ class AnyToAnyPipeline(Pipeline):
     >>>         "content": [
     >>>             {
     >>>                 "type": "image",
-    >>>                 "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+    >>>                 "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
     >>>             },
     >>>             {"type": "text", "text": "Describe this image."},
     >>>         ],
@@ -111,7 +111,7 @@ class AnyToAnyPipeline(Pipeline):
     >>> pipe(text=messages, max_new_tokens=20, return_full_text=False)
     [{'input_text': [{'role': 'user',
         'content': [{'type': 'image',
-        'url': 'https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg'},
+        'url': 'https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg'},
         {'type': 'text', 'text': 'Describe this image.'}]},
     {'role': 'assistant',
         'content': [{'type': 'text', 'text': 'There is a dog and'}]}],
@@ -404,7 +404,9 @@ class AnyToAnyPipeline(Pipeline):
                 inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
 
         # If batched text inputs, we set padding to True unless specified otherwise
-        processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or processing_kwargs
+        processor_kwargs = processing_kwargs.pop("processor_kwargs", None)
+        if processor_kwargs is None:
+            processor_kwargs = processing_kwargs
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processor_kwargs.setdefault("padding", True)
         model_inputs = self.processor(text=text, **inputs, return_tensors="pt", **processor_kwargs).to(

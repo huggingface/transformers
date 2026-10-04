@@ -455,7 +455,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         ```python
         >>> from io import BytesIO
 
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
@@ -463,7 +463,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_path)
 
-        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
         >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
         >>> outputs = model(**inputs)
@@ -518,7 +518,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):
         return self.model.get_encoder(modality=modality)
 
@@ -528,7 +528,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def get_image_features(self):
         raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self):
+    def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 
 

@@ -13,34 +13,30 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
-from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import auto_docstring, is_torchvision_available, logging
 from ...utils.generic import (
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -48,12 +44,13 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
-from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
-from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..glm4v.video_processing_glm4v import smart_resize
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLForConditionalGeneration,
+    Qwen2_5_VLRotaryEmbedding,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
@@ -62,9 +59,9 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
     TransformersKwargs,
     VisionAttention,
-    VisionRotaryEmbedding,
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3DecoderLayer,
@@ -72,6 +69,10 @@ from ..qwen3.modeling_qwen3 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -102,6 +103,8 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -116,6 +119,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -239,7 +243,7 @@ class Qwen3VLVisionPatchEmbed(PatchEmbed):
         self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
 
 
-class Qwen3VLVisionRotaryEmbedding(VisionRotaryEmbedding):
+class Qwen3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -274,50 +278,26 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
         self.mlp = Qwen3VLVisionMLP(config=config)
 
 
-class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
-    @deprecate_kwarg("device", version="5.18")
+class Qwen3VLTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
     def __init__(self, config: Qwen3VLTextConfig, device=None):
-        super().__init__(config)
+        super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
-    def apply_interleaved_mrope(self, freqs, mrope_section):
-        """Apply interleaved MRoPE to 3D rotary embeddings.
-        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THWTHWTHW...TT], preserving frequency continuity.
-        args:
-            x: (3, bs, seq_len, head_dim // 2)
-            mrope_section: (3,)
-        returns:
-            x_t: (bs, seq_len, head_dim // 2)
+    def compute_default_rope_parameters(
+        config: Qwen3VLTextConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, device, **kwargs)
+
+    def recomposition_frequencies(self, freq):
         """
-        freqs_t = freqs[0]  # just overwrite the first dimension T
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freqs_thw = freq[0]  # just overwrite the first dimension T
         for dim, offset in enumerate((1, 2), start=1):  # H, W
-            length = mrope_section[dim] * 3
+            length = self.mrope_section[dim] * 3
             idx = slice(offset, length, 3)
-            freqs_t[..., idx] = freqs[dim, ..., idx]
-        return freqs_t
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        # In contrast to other models, Qwen3VL has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        if position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+            freqs_thw[..., idx] = freq[dim, ..., idx]
+        return torch.cat((freqs_thw, freqs_thw), dim=-1)
 
 
 class Qwen3VLTextAttention(Qwen3Attention):
@@ -404,12 +384,6 @@ class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
         "attentions": Qwen3VLTextAttention,
     }
 
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Qwen3VLVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
@@ -435,8 +409,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.interpolation_align_corners = True
         self.interpolation_mode = "bilinear"
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(config)
 
         self.blocks = nn.ModuleList([Qwen3VLVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen3VLVisionPatchMerger(
@@ -458,31 +431,6 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.gradient_checkpointing = False
 
         self.post_init()
-
-    def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb
-
-    def fast_pos_embed_interpolate(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in v5.11. Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
-        )
-        return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -513,13 +461,10 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
         hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
 
         deepstack_feature_lists = []
         for layer_num, blk in enumerate(self.blocks):
@@ -714,9 +659,10 @@ class Qwen3VLModel(Qwen2VLModel):
         )
         image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        vision_output.pooler_output = image_embeds
-
+        vision_output.pooler_output = torch.split(image_embeds, split_sizes)
+        vision_output.deepstack_features = [
+            torch.split(feat, split_sizes) for feat in vision_output.deepstack_features
+        ]
         return vision_output
 
     def get_video_features(
@@ -728,8 +674,6 @@ class Qwen3VLModel(Qwen2VLModel):
         # Same implementation as for images
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-    @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -742,10 +686,16 @@ class Qwen3VLModel(Qwen2VLModel):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3VLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -753,24 +703,29 @@ class Qwen3VLModel(Qwen2VLModel):
         image_mask = None
         video_mask = None
 
-        if pixel_values is not None:
-            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
-            image_embeds = image_outputs.pooler_output
-            deepstack_image_embeds = image_outputs.deepstack_features
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            deepstack_image_embeds = mm_encoder_outputs["image"].deepstack_features
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            )
-            video_embeds = video_outputs.pooler_output
-            deepstack_video_embeds = video_outputs.deepstack_features
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = mm_encoder_outputs["video"].pooler_output
+            deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -788,18 +743,21 @@ class Qwen3VLModel(Qwen2VLModel):
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(deepstack_image_embeds, deepstack_video_embeds):
-                embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1]).to(img_embed.device)
+                img_embed = torch.cat(img_embed, dim=0)
+                vid_embed = torch.cat(vid_embed, dim=0)
+                embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
+
                 embed_joint[image_mask_joint, :] = img_embed
                 embed_joint[video_mask_joint, :] = vid_embed
                 deepstack_visual_embeds.append(embed_joint)
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
             visual_pos_masks = image_mask
-            deepstack_visual_embeds = deepstack_image_embeds
+            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
             visual_pos_masks = video_mask
-            deepstack_visual_embeds = deepstack_video_embeds
+            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
 
         if position_ids is None:
             position_ids = self.compute_3d_position_ids(
@@ -856,6 +814,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3VLCausalLMOutputWithPast:
         r"""
@@ -907,6 +866,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -918,7 +878,9 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Qwen3VLCausalLMOutputWithPast(
             loss=loss,
@@ -928,102 +890,6 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Qwen3VL use timestamps and remove second_per_grid_ts
-        # Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw
-        # pixel_values.shape[0] is sum(seqlen_images for samples)
-        # image_grid_thw.shape[0] is sum(num_images for samples)
-
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
-
-        def _expand_dict_for_generation_visual(dict_to_expand):
-            image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            video_grid_thw = model_kwargs.get("video_grid_thw", None)
-            image_nums, video_nums = self._get_image_nums_and_video_nums(
-                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
-            )
-
-            # video_nums: (batch_size,)
-            # since video_nums is the number of videos in the input dependent on the input_ids(vision_start),
-            # but qwen3vl append vision_start to each frame of each video, so we need to recover the real video_nums according to video_grid_thw
-            if video_grid_thw is not None:
-                cumulative_frame_counts = torch.cumsum(video_grid_thw[:, 0], dim=0)
-                cumulative_token_video_counts = torch.cumsum(video_nums, dim=0)
-                # Find video boundaries in cumulative_frame_counts
-                video_boundary_indices = torch.searchsorted(cumulative_frame_counts, cumulative_token_video_counts)
-                # example: video_boundary_indices = [3, 5] means video_nums = [4, 2]
-                video_nums = torch.diff(torch.cat([-video_boundary_indices.new_ones(1), video_boundary_indices]))
-
-            def _repeat_interleave_samples(x, lengths, repeat_times):
-                samples = torch.split(x, lengths)
-                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-                return result
-
-            for key in dict_to_expand:
-                if key == "pixel_values":
-                    # split images into samples
-                    samples = torch.split(image_grid_thw, list(image_nums))
-                    # compute the sequence length of images for each sample
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "image_grid_thw":
-                    # get the num of images for each sample
-                    lengths = list(image_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "pixel_values_videos":
-                    samples = torch.split(video_grid_thw, list(video_nums))
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "video_grid_thw":
-                    lengths = list(video_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-            return dict_to_expand
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if key == "position_ids" and dict_to_expand[key].ndim == 3:
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
-                elif (
-                    dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
-                ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
 
 
 class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
@@ -1107,6 +973,21 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    min_frames (`int`, *optional*, defaults to 4):
+        The minimum number of frames to sample from video.
+    max_frames (`int`, *optional*, defaults to 768):
+        The maximum number of frames to sample from video.
+    cap_pixels_per_frame (`bool`, *optional*):
+        Whether to cap each frame's pixel cost the way the reference implementation (qwen-vl-utils) does:
+        per-frame pixels are limited to `min(max_video_tokens * factor**2, size["longest_edge"] / num_frames)`
+        and floored at `1.05 * size["shortest_edge"]`, so token cost scales with clip duration. Without the
+        cap, videos that sample few frames spend the whole `size["longest_edge"]` budget on those frames and
+        keep near-native per-frame resolution, so a short clip can cost almost as many tokens as a long
+        video. If unset, the current uncapped behavior is kept and a warning is emitted: the default will
+        change to `True` in v5.22, after which the argument will be removed.
+    max_video_tokens (`int`, *optional*, defaults to 768):
+        The per-frame token ceiling applied by `cap_pixels_per_frame`, in vision tokens per frame
+        (qwen-vl-utils' `VIDEO_MAX_TOKEN_NUM`).
     """
 
     patch_size: int
@@ -1114,17 +995,114 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
+    cap_pixels_per_frame: bool
+    max_video_tokens: int
 
 
-class Qwen3VLVideoProcessor(Glm4vVideoProcessor):
+class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
     size = {"shortest_edge": 128 * 32 * 32, "longest_edge": 32 * 32 * 768}
+    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
+    do_sample_frames = True
     patch_size = 16
     min_frames = 4
     max_frames = 768
     max_duration = None
     num_frames = None
+    fps = 2
+    cap_pixels_per_frame = None
+    max_video_tokens = 768
+
+    def __init__(self, **kwargs: Unpack[Qwen3VLVideoProcessorInitKwargs]):
+        BaseVideoProcessor.__init__(self, **kwargs)
+
+    def _standardize_kwargs(self, **super_kwargs):
+        raise NotImplementedError("No need to override, fallback to base class implementation")
+
+    def resize(
+        self,
+        videos: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        temporal_factor: int,
+        cap_pixels_per_frame: bool | None = None,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input video aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        num_frames = videos.shape[1]
+        max_pixels = size.longest_edge
+        if cap_pixels_per_frame:
+            # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
+            frame_cap = self.max_video_tokens * factor * factor
+            pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
+            max_pixels = pixels_per_frame * num_frames
+
+        height, width = videos.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            factor=factor,
+            temporal_factor=temporal_factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=max_pixels,
+        )
+        return BaseVideoProcessor.resize(
+            self,
+            image=videos,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        size = videos_kwargs.get("size", None) or self.size
+        min_pixels = size["shortest_edge"]
+        max_pixels = size["longest_edge"]
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None) or self.cap_pixels_per_frame
+
+        factor = patch_size * merge_size
+        if cap_pixels_per_frame:
+            # Keep the count in sync with `resize` when the per-frame cap is active.
+            frame_cap = self.max_video_tokens * factor * factor
+            pixels_per_frame = max(min(frame_cap, max_pixels // num_frames), int(min_pixels * 1.05))
+            max_pixels = pixels_per_frame * num_frames
+
+        resized_height, resized_width = smart_resize(
+            num_frames,
+            height,
+            width,
+            temporal_factor=temporal_patch_size,
+            factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t * grid_h * grid_w
 
     def sample_frames(
         self,
@@ -1148,8 +1126,7 @@ class Qwen3VLVideoProcessor(Glm4vVideoProcessor):
             fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray: Sampled video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")

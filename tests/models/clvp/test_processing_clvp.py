@@ -122,3 +122,43 @@ class ClvpProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
+
+    def test_text_and_audio_attention_mask(self):
+        # When both `text` and `audio` are passed, the CLVP model consumes the *text* attention mask.
+        # Ensure the audio feature extractor's (much longer) attention mask does not override the text one
+        # in the merged output. Regression test for the merged-output attention mask collision.
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        raw_speech = floats_list((3, 1000))
+        input_str = "This is a test string"
+
+        inputs = processor(text=input_str, raw_speech=raw_speech, return_tensors="pt")
+
+        self.assertIn("input_ids", inputs)
+        self.assertIn("input_features", inputs)
+        self.assertIn("attention_mask", inputs)
+        # The attention mask must match the text `input_ids`, not the audio features.
+        self.assertEqual(inputs["attention_mask"].shape, inputs["input_ids"].shape)
+
+    def test_text_and_audio_flat_kwargs(self):
+        # Flat (backward-compatible) kwargs must still be forwarded to the tokenizer when both `text` and
+        # `audio` are passed. Regression test ensuring the audio-mask handling does not discard flat kwargs.
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        raw_speech = floats_list((3, 1000))
+        input_str = "This is a test string"
+
+        inputs = processor(
+            text=input_str,
+            raw_speech=raw_speech,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=20,
+        )
+
+        self.assertEqual(inputs["input_ids"].shape[-1], 20)
+        self.assertEqual(inputs["attention_mask"].shape[-1], 20)

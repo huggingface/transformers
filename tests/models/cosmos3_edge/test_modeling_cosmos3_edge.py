@@ -312,7 +312,7 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
                         ),
                     },
                     {"type": "text", "text": "Identify the main subject of this image briefly."},
@@ -341,7 +341,7 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_video_generation(self):
         video, video_metadata = load_video(
             url_to_local_path(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
             ),
             num_frames=4,
             backend="pyav",

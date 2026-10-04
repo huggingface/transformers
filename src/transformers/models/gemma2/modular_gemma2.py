@@ -33,7 +33,6 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..gemma.modeling_gemma import (
     GemmaAttention,
@@ -147,8 +146,7 @@ class Gemma2MLP(GemmaMLP):
 
 
 class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Gemma2Config, device=None):
+    def __init__(self, config: Gemma2Config):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -159,7 +157,7 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
@@ -170,7 +168,7 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -289,7 +287,7 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)

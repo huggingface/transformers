@@ -239,21 +239,31 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any images/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
+            "test_get_image_features_output",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
+            # no last-hidden-states returned, only pooler output
             "test_get_audio_features_output",
         ]
 
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(reason="Gemma4 unified does not collect any hidden states or attentions (no mm tower)")
+
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
@@ -396,15 +406,15 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any audio/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
             "test_get_audio_features_output",
         ]
 
@@ -596,7 +606,7 @@ class Gemma4UnifiedIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         self.url2 = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         self.messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},

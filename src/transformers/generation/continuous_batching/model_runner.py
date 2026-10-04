@@ -13,7 +13,6 @@
 # limitations under the License.
 import time
 from collections.abc import Callable
-from contextlib import nullcontext
 
 import torch
 from torch import nn
@@ -22,8 +21,32 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
-from .requests import RequestStatus, logger
-from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_interval, pad_to_pow2
+from .requests import RequestState, RequestStatus, logger
+from .utils import (
+    accelerator_graph_capture_context,
+    create_accelerator_graph,
+    create_warmup_future_states,
+    get_memory_pools,
+    memory_pool_context,
+    pad_to_interval,
+    pad_to_pow2,
+    stream_context,
+)
+
+
+def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
+    """Returns the largest total length a single request can have on an empty cache, i.e. the largest length for
+    which all allocators can be served enough sectors at the same time."""
+    dummy_state = RequestState(request_id="", initial_tokens=[])
+    # Solve using dichotomy
+    low, high = 0, cache.max_tokens_read
+    while low < high:
+        mid = (low + high + 1) // 2
+        if cache.can_store_request_tokens(dummy_state, mid, dry_run=True):
+            low = mid
+        else:
+            high = mid - 1
+    return low
 
 
 class ModelRunner:
@@ -57,7 +80,7 @@ class ModelRunner:
 
         # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
         if self.use_cuda_graph_varlen or self.use_cuda_graph_decode:
-            self.mem_pool, self.graph_pool_id = get_cuda_pools()
+            self.mem_pool, self.graph_pool_id = get_memory_pools()
         else:
             self.mem_pool, self.graph_pool_id = None, None
 
@@ -83,7 +106,9 @@ class ModelRunner:
         # For varlen batches, we pad using interval sizes
         if not use_decode_fast_path:
             num_q_tokens = pad_to_interval(num_q_tokens, self.cb_config.q_padding_interval_size, max_batch_tokens)
-            max_kv_read = pad_to_interval(max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.num_pages)
+            max_kv_read = pad_to_interval(
+                max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.max_tokens_read
+            )
         # For decode fast path batches, we pad using powers of 2 and use no KV
         else:
             num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
@@ -116,16 +141,15 @@ class ModelRunner:
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
+            with stream_context(compute_stream):
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
 
-        # Otherwise, we either create or replay the graph (CUDA is available in this path)
+        # Otherwise, we either create or replay the graph (an accelerator is available in this path)
         else:
             graph = self.inputs_and_outputs.get_graph()
             # Case: the graph already exists, so we replay it
             if graph is not None:
-                with torch.cuda.stream(compute_stream):
+                with stream_context(compute_stream):
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
@@ -145,13 +169,11 @@ class ModelRunner:
     def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
         # Warmup (ensures the right result is computed before capturing the graph)
-        with torch.cuda.stream(compute_stream), mem_pool_ctx(self.mem_pool):
+        with stream_context(compute_stream), memory_pool_context(self.mem_pool):
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
-        graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(
-            graph, stream=compute_stream, pool=self.graph_pool_id, capture_error_mode="thread_local"
-        ):
+        graph = create_accelerator_graph()
+        with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
             forward_fn(*args)
         # Store
         self.inputs_and_outputs.set_graph(graph)
@@ -237,14 +259,13 @@ class ModelRunner:
         total_duration = 0
         iterations = 2 if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs) else 1
         for _ in range(iterations):
-            # Warm up the varlen path, with the largest possible dimensions to get the biggest pool and avoid fragmentation
+            # Warm up the varlen path, w/ the largest possible sizes to get the biggest pool and avoid fragmentation
             num_q_tokens = self.cache.max_batch_tokens
-            max_kv_read = self.cache.num_blocks * self.cache.block_size
-            max_kv_read -= num_q_tokens  # make room for the new tokens
+            max_kv_read = max(0, infer_max_single_request_tokens(self.cache) - num_q_tokens)
             total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=max_kv_read)
 
             # Exit here if the decode fast path is not available
-            if self.cache.max_blocks_per_request == 0:
+            if self.cache.max_decode_fast_path_length <= 0:
                 continue
 
             # Warm up the decode path
@@ -258,6 +279,8 @@ class ModelRunner:
             # Switch to the other IO pair if this is async
             if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
                 self.inputs_and_outputs.swap_io_pairs()
+        # Warmup requests pull all sectors into their allocators, so reset the cache toreturn them to the global pool
+        self.cache.reset()
         logger.info(f"Warmup completed in {total_duration:.2f}s")
 
     def run_one_warmup(self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None) -> float:
@@ -270,7 +293,7 @@ class ModelRunner:
             num_requests = num_q_tokens
             status = RequestStatus.DECODING
             num_q_tokens = 1
-            max_kv_read = self.cache.block_size
+            max_kv_read = self.cb_config.page_size
             logger.debug(f"Warming up decode fast path for {num_requests = }.")
         else:
             num_requests = 1

@@ -116,6 +116,30 @@ class RenderBadgeTest(unittest.TestCase):
         self.assertIn(f"{recap_mod.BADGE_URL}?pr=123", badge)
         self.assertIn("https://dash.example/d/x?var-pr=123", badge)
 
+    def test_render_ci_badge_emits_both_ci_streams(self):
+        """PR CI and run-slow GPU runs have separate verdicts, so each gets its
+        own badge asking the exporter for its own stream."""
+        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
+        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=pr-ci", badge)
+        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=run-slow", badge)
+        self.assertIn("![CPU CI]", badge)
+        self.assertIn("![GPU run-slow]", badge)
+
+    def test_render_ci_badge_keeps_both_badges_on_one_line(self):
+        """The two badges must sit side by side; a newline between them would
+        stack them and push the PR description further down."""
+        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
+        lines = badge.split("\n")
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[1].count("!["), 2)
+
+    def test_render_ci_badge_always_emits_the_run_slow_badge(self):
+        """It is unconditional by design: the body is only rewritten when PR CI
+        completes, so a run-slow that no push follows would otherwise never get a
+        badge. The exporter renders "not run" until a run-slow run exists."""
+        badge = render_ci_badge(999, "https://dash.example/d/x?var-pr=999")
+        self.assertIn("event=run-slow", badge)
+
 
 class RenderRecapTest(unittest.TestCase):
     def _recap(self, **overrides):

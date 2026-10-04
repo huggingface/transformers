@@ -33,9 +33,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma4UnifiedProcessor
-    video_unstructured_max_length = 570
-    video_text_kwargs_max_length = 570
-    video_text_kwargs_override_max_length = 570
+    videos_unstructured_max_length = 570
+    videos_text_kwargs_max_length = 570
+    videos_text_kwargs_override_max_length = 570
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -86,6 +86,16 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.pad_token_id = tokenizer.eos_token_id
         return tokenizer
 
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+            {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 2},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+            {"expected_dim": 1, "output_length": 2},
+        ]
+
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -110,9 +120,9 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     # Override as Gemma4Unified needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -132,7 +142,7 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_multi_images = f"{processor.image_token}{processor.image_token}Dummy text!"
         text_single_image = f"{processor.image_token}Dummy text!"
 
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
 
         # We can't be sure what is users intention: if user wants one image per text OR two images for first text and no image for second text
         with self.assertRaises(ValueError):
@@ -153,7 +163,7 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,
@@ -200,7 +210,3 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
-
-    @unittest.skip("This test seems to be loading a different video, check for all models and fix")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass

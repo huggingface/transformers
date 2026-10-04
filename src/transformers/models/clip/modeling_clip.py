@@ -612,7 +612,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, CLIPVisionModel
 
@@ -980,12 +980,6 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
             **kwargs,

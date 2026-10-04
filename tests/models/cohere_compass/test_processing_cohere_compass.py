@@ -16,10 +16,10 @@ import unittest
 import numpy as np
 
 from transformers import (
+    AutoTokenizer,
     CohereCompassImageProcessor,
     CohereCompassProcessor,
     CohereCompassVideoProcessor,
-    PreTrainedTokenizerFast,
 )
 from transformers.testing_utils import require_torch, require_vision
 
@@ -30,48 +30,10 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CohereCompassProcessor
-    video_unstructured_max_length = 870
-    video_text_kwargs_max_length = 870
-    video_text_kwargs_override_max_length = 870
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        from tokenizers import Tokenizer
-        from tokenizers.models import WordLevel
-        from tokenizers.pre_tokenizers import Whitespace
-
-        tokenizer = Tokenizer(
-            WordLevel(
-                {
-                    "<unk>": 0,
-                    "<bos>": 1,
-                    "<eos>": 2,
-                    "<pad>": 3,
-                    "<|IMAGE_PAD|>": 4,
-                    "<|VISION_START|>": 5,
-                    "<|VISION_END|>": 6,
-                    "<|VIDEO_PAD|>": 7,
-                    "describe": 8,
-                    "this": 9,
-                    "image": 10,
-                },
-                unk_token="<unk>",
-            )
-        )
-        tokenizer.pre_tokenizer = Whitespace()
-        return PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            bos_token="<bos>",
-            eos_token="<eos>",
-            pad_token="<pad>",
-            unk_token="<unk>",
-            additional_special_tokens=[
-                "<|IMAGE_PAD|>",
-                "<|VIDEO_PAD|>",
-                "<|VISION_START|>",
-                "<|VISION_END|>",
-            ],
-        )
+    videos_unstructured_max_length = 870
+    videos_text_kwargs_max_length = 870
+    videos_text_kwargs_override_max_length = 870
+    model_id = "CohereLabs/North-Micro-Vision-Instruct"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -85,18 +47,34 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_video_processor(cls):
         return CohereCompassVideoProcessor(patch_size=16)
 
+    @classmethod
+    def _setup_tokenizer(cls):
+        # For some reason the tokenizer has saved image processing fields, unset it all!
+        tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+        return tokenizer
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 640},
+            {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 640},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 1512},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 1512},
+            {"expected_dim": 0, "output_length": 640},
+        ]
+
     def _image(self, height=56, width=56):
         from PIL import Image
 
         return Image.fromarray(np.full((height, width, 3), 127, dtype=np.uint8))
 
-    def prepare_image_inputs(self, batch_size=None, nested=False):
+    def prepare_images_inputs(self, batch_size=None, nested=False):
         if batch_size is None:
             return self._image(64, 64)
         images = [self._image(64, 64) for _ in range(batch_size)]
         return [[image] for image in images] if nested else images
 
-    def prepare_video_inputs(self, batch_size=None):
+    def prepare_videos_inputs(self, batch_size=None):
         video = np.random.randint(255, size=(8, 3, 64, 64), dtype=np.uint8)
         return video if batch_size is None else [video] * batch_size
 
@@ -129,17 +107,3 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         output = processor._get_num_multimodal_tokens(image_sizes=[(56, 56), (56, 112)])
         self.assertEqual(output["num_image_patches"], [4, 8])
         self.assertEqual(output["num_image_tokens"], [1, 2])
-
-    def test_get_num_multimodal_tokens_matches_processor_call(self):
-        processor = self.get_processor()
-        image_sizes = [(64, 64), (64, 128), (128, 64)]
-        images = [np.random.randint(255, size=(*size, 3), dtype=np.uint8) for size in image_sizes]
-        output = processor(
-            text=[processor.image_token] * len(images),
-            images=images,
-            padding=True,
-            return_tensors="pt",
-        )
-        expected = processor._get_num_multimodal_tokens(image_sizes=image_sizes)["num_image_tokens"]
-        actual = (output.input_ids == processor.image_token_id).sum(dim=1).tolist()
-        self.assertEqual(actual, expected)

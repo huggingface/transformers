@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 
 from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -28,6 +27,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -50,7 +50,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Pix2StructVisionModelTester:
@@ -675,8 +675,8 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 # We will verify our results on an image of a stop sign
 def prepare_img():
-    url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+    im = load_test_image(url)
     return im
 
 
@@ -703,8 +703,8 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
-        image_2 = Image.open(requests.get(second_url, stream=True).raw)
+        second_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/temple-bar-dublin-world-famous-irish-pub.jpg"
+        image_2 = load_test_image(second_url)
 
         # image only
         inputs = processor(images=[image_1, image_2], return_tensors="pt").to(torch_device)
@@ -725,8 +725,8 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
-        image_2 = Image.open(requests.get(second_url, stream=True).raw)
+        second_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/temple-bar-dublin-world-famous-irish-pub.jpg"
+        image_2 = load_test_image(second_url)
         texts = ["A picture of", "An photography of"]
 
         # image only
@@ -749,8 +749,10 @@ class Pix2StructIntegrationTest(unittest.TestCase):
     def test_vqa_model(self):
         model_id = "google/pix2struct-ai2d-base"
 
-        image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(image_url, stream=True).raw)
+        image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo.jpg"
+        )
+        image = load_test_image(image_url)
 
         model = Pix2StructForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
@@ -767,11 +769,11 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         model_id = "google/pix2struct-ai2d-base"
 
         image_urls = [
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo-2.png",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo-2.png",
         ]
 
-        images = [Image.open(requests.get(image_url, stream=True).raw) for image_url in image_urls]
+        images = [load_test_image(image_url) for image_url in image_urls]
 
         texts = [
             "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud",

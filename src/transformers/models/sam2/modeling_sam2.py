@@ -1484,7 +1484,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

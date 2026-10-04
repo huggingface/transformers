@@ -113,10 +113,6 @@ The model is identical to [Donut](donut) in terms of architecture.
 
 [[autodoc]] NougatTokenizer
 
-## NougatTokenizerFast
-
-[[autodoc]] NougatTokenizerFast
-
 ## NougatProcessor
 
 [[autodoc]] NougatProcessor

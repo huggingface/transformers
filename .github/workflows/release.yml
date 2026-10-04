@@ -6,11 +6,13 @@ on:
     branches:
       - 'v*-release'
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   build_and_test:
+    permissions:
+      contents: read
     name: build release
     runs-on: ubuntu-latest
     steps:

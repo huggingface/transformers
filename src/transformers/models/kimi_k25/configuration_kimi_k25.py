@@ -39,6 +39,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     """
 
     model_type = "kimi_k25_vision"
+    default_rope_type = "axial"
 
     patch_size: int = 14
     pos_emb_height: int = 64
@@ -50,8 +51,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
-    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
-    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-K2.6")

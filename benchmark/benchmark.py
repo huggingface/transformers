@@ -140,7 +140,7 @@ def summarize(run_dir, metrics, expand_metrics=False):
         }
         summaries.append(summary)
 
-        with open(os.path.join(report_dir, "summary.json"), "w") as fp:
+        with open(os.path.join(report_dir, "summary.json"), "w", encoding="utf-8") as fp:
             json.dump(summary, fp, indent=4)
 
     return summaries
@@ -187,7 +187,7 @@ def combine_summaries(summaries):
         if commit not in combined[model][config]:
             combined[model][config][commit] = {"metrics": summary["metrics"]}
 
-    with open(os.path.join(exp_run_dir, "summary.json"), "w") as fp:
+    with open(os.path.join(exp_run_dir, "summary.json"), "w", encoding="utf-8") as fp:
         json.dump(combined, fp, indent=4)
 
     print(json.dumps(combined, indent=4))
@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
     # aggregate the information across the commits
     if exp_run_dir is not None:
-        with open(os.path.join(exp_run_dir, "summaries.json"), "w") as fp:
+        with open(os.path.join(exp_run_dir, "summaries.json"), "w", encoding="utf-8") as fp:
             json.dump(run_summaries, fp, indent=4)
 
         combined_summary = combine_summaries(run_summaries)

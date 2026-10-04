@@ -100,10 +100,6 @@ print(f"The predicted token is: {predicted_token}")
     - get_special_tokens_mask
     - save_vocabulary
 
-## BigBirdTokenizerFast
-
-[[autodoc]] BigBirdTokenizerFast
-
 ## BigBird specific outputs
 
 [[autodoc]] models.big_bird.modeling_big_bird.BigBirdForPreTrainingOutput

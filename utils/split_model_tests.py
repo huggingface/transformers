@@ -18,6 +18,11 @@ The main use case is a GitHub Actions workflow file calling this script to get t
 to split the list of jobs to run into multiple slices each containing a smaller number of jobs. This way, we can bypass
 the maximum of 256 jobs in a matrix.
 
+The other directories under `tests` are appended to the list too, except for two groups. The ones holding no test file
+at all (see `NO_TEST_FILES`) are dropped because a job for them would collect nothing. The ones a dedicated job runs in
+full (see `COVERED_BY_DEDICATED_JOB`) are dropped because keeping them here would run their tests twice per CI run, on
+every machine type.
+
 See the `setup` and `run_models_gpu` jobs defined in the reusable workflow file
 `.github/workflows/daily-ci_reusable.yml` in the `huggingface/transformers-ci` repository (called from
 `.github/workflows/self-scheduled-caller.yml` here) for more details.
@@ -38,6 +43,14 @@ import ast
 import os
 
 
+# Directories under `tests` (other than `models`) that a dedicated daily CI job already covers in full, skipped to avoid
+# running the same tests twice per CI run, on every machine type. Opt-out of the skip with --no-skip-dedicated-jobs.
+COVERED_BY_DEDICATED_JOB = ["pipelines", "quantization", "trainer"]
+
+# Directories under `tests` holding no test file at all, so a job for them collects nothing.
+NO_TEST_FILES = ["fixtures"]
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -52,6 +65,11 @@ if __name__ == "__main__":
         default=1,
         help="the number of splits into which the (flat) list of folders will be split.",
     )
+    parser.add_argument(
+        "--no-skip-dedicated-jobs",
+        action="store_true",
+        help="do not skip the directories a dedicated job already covers.",
+    )
     args = parser.parse_args()
 
     tests = os.getcwd()
@@ -59,6 +77,9 @@ if __name__ == "__main__":
     d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
     d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
     d1.remove("models")
+    # Only for the auto-discovered directories: an explicit `--subdirs` request below is honored as-is.
+    skipped = set(NO_TEST_FILES) | (set() if args.no_skip_dedicated_jobs else set(COVERED_BY_DEDICATED_JOB))
+    d1 = [x for x in d1 if x not in skipped]
     d = d2 + d1
 
     if args.subdirs != "":

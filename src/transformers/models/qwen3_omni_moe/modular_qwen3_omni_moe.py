@@ -48,11 +48,12 @@ from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
     TransformersKwargs,
+    accepts_precomputed_kwargs,
     get_max_seqlen,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
@@ -709,9 +710,6 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
         elif isinstance(module, SinusoidsPositionEmbedding):
             position_embeddings = module.compute_default_singular_positional_embedding()
             init.copy_(module.positional_embedding, position_embeddings)
-        elif isinstance(module, Qwen3OmniMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
@@ -1013,9 +1011,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
     def _get_feat_extract_output_lengths(self, input_lengths):
         raise NotImplementedError("Using the standalone function _get_feat_extract_output_lengths instead.")
 
-    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
-        raise NotImplementedError("Not needed")
-
     def get_input_embeddings(self):
         return self.conv2d1
 
@@ -1102,7 +1097,13 @@ class Qwen3OmniMoeVisionPatchMerger(nn.Module):
 
 
 class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
-    pass
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, device=None):
+        super().__init__(config, device=device)
+
+    def compute_axial_rope_parameters(
+        config: Qwen3OmniMoeVisionEncoderConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_axial_rope_parameters(config, device=device, **kwargs)
 
 
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
@@ -1162,7 +1163,7 @@ class Qwen3OmniMoeThinkerTextDecoderLayer(Qwen3MoeDecoderLayer):
 
 class Qwen3OmniMoeThinkerTextPreTrainedModel(Qwen3MoePreTrainedModel):
     config_class = Qwen3OmniMoeTextConfig
-    config = Qwen3OmniMoeTextConfig
+    config: Qwen3OmniMoeTextConfig
 
 
 class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
@@ -1220,8 +1221,10 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(video_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.deepstack_features = [
+            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
+        ]
         return vision_outputs
 
     def get_image_features(
@@ -1233,10 +1236,13 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(image_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.deepstack_features = [
+            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
+        ]
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
@@ -1265,8 +1271,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
 
         return audio_outputs
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -1286,11 +1290,17 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         output_router_logits: bool | None = None,
         use_audio_in_video=None,
         video_second_per_grid=None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
+
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             # 1. Extract the input embeddings
@@ -1308,24 +1318,29 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        if pixel_values is not None:
-            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
-            image_embeds = torch.cat(image_outputs.pooler_output, dim=0)
-            image_embeds_multiscale = image_outputs.deepstack_features
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds_multiscale = mm_encoder_outputs["image"].deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            )
-            video_embeds = torch.cat(video_outputs.pooler_output, dim=0)
-            video_embeds_multiscale = video_outputs.deepstack_features
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeds_multiscale = mm_encoder_outputs["video"].deepstack_features
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1340,18 +1355,21 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(image_embeds_multiscale, video_embeds_multiscale):
+                img_embed = torch.cat(img_embed, dim=0)
+                vid_embed = torch.cat(vid_embed, dim=0)
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
+
                 embed_joint[image_mask_joint, :] = img_embed
                 embed_joint[video_mask_joint, :] = vid_embed
                 visual_embeds_multiscale_joint = visual_embeds_multiscale_joint + (embed_joint,)
             visual_embeds_multiscale = visual_embeds_multiscale_joint
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
-            visual_embeds_multiscale = image_embeds_multiscale
+            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in image_embeds_multiscale]
             visual_pos_masks = image_mask
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
-            visual_embeds_multiscale = video_embeds_multiscale
+            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in video_embeds_multiscale]
             visual_pos_masks = video_mask
 
         if feature_attention_mask is not None:
@@ -1359,28 +1377,18 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         else:
             audio_feature_lengths = None
 
-        if attention_mask is not None and position_ids is None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if past_key_values_length == 0 or self.rope_deltas is None:
-                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-                position_ids, rope_deltas = self.get_rope_index(
-                    input_ids,
-                    image_grid_thw,
-                    video_grid_thw,
-                    attention_mask,
-                    use_audio_in_video,
-                    audio_feature_lengths,
-                    video_second_per_grid,
-                )
-                rope_deltas = rope_deltas - delta0
-                self.rope_deltas = rope_deltas
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                use_audio_in_video=use_audio_in_video,
+                audio_feature_lengths=audio_feature_lengths,
+                video_second_per_grid=video_second_per_grid,
+            )
 
         outputs = self.model(
             attention_mask=attention_mask,
@@ -1400,7 +1408,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
+                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
             )
 
         aux_loss = None
@@ -1422,6 +1430,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
             rope_deltas=self.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1747,6 +1756,98 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
 
+    def compute_3d_position_ids(
+        self,
+        inputs_tensor: torch.Tensor,
+        talker_input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        image_grid_thw: torch.Tensor | None = None,
+        video_grid_thw: torch.Tensor | None = None,
+        use_audio_in_video: bool | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        video_second_per_grid: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, seq_length = inputs_tensor.shape[:2]
+        past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        has_multimodal_data = audio_feature_lengths is not None or any(
+            grid is not None and grid.numel() > 0 for grid in (image_grid_thw, video_grid_thw)
+        )
+        if past_length == 0 or self.rope_deltas is None:
+            if attention_mask is None:
+                attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long, device=inputs_tensor.device)
+            if talker_input_ids is not None and has_multimodal_data:
+                position_ids, rope_deltas = self.get_rope_index(
+                    talker_input_ids,
+                    image_grid_thw,
+                    video_grid_thw,
+                    attention_mask,
+                    use_audio_in_video or False,
+                    audio_feature_lengths,
+                    video_second_per_grid,
+                )
+            else:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                rope_deltas = torch.zeros(batch_size, 1, dtype=torch.long, device=inputs_tensor.device)
+            self.rope_deltas = rope_deltas - (1 - attention_mask).sum(dim=-1).unsqueeze(1)
+        else:
+            delta = (past_length + self.rope_deltas).to(inputs_tensor.device)
+            position_ids = torch.arange(seq_length, device=inputs_tensor.device)
+            position_ids = position_ids.view(1, -1).expand(batch_size, -1).add(delta)
+            position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+        return position_ids
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- requires 3D position ids
+
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+        attention_mask = model_kwargs.get("attention_mask")
+        padding_length = (1 - attention_mask).sum(dim=-1, keepdim=True) if attention_mask is not None else 0
+
+        # Early exit in case we are continuing generation from past kv
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.rope_deltas is not None:
+            # Talker stores deltas relative to the physical cache length, which includes padding.
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1) + self.rope_deltas + padding_length
+            position_ids = torch.cat([text_positions[None, ...], vision_positions], dim=0)
+            return position_ids
+
+        # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
+        if "talker_input_ids" in model_kwargs and model_kwargs["talker_input_ids"] is not None:
+            inputs_tensor = model_kwargs["talker_input_ids"]
+
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        has_multimodal_data = model_kwargs.get("audio_feature_lengths") is not None or any(
+            grid is not None and grid.numel() > 0
+            for grid in (model_kwargs.get("image_grid_thw"), model_kwargs.get("video_grid_thw"))
+        )
+        if is_input_ids and attention_mask is not None and has_multimodal_data:
+            vision_positions, rope_deltas = self.get_rope_index(
+                inputs_tensor,
+                image_grid_thw=model_kwargs.get("image_grid_thw"),
+                video_grid_thw=model_kwargs.get("video_grid_thw"),
+                attention_mask=attention_mask,
+                use_audio_in_video=model_kwargs.get("use_audio_in_video") or False,
+                audio_seqlens=model_kwargs.get("audio_feature_lengths"),
+                second_per_grids=model_kwargs.get("video_second_per_grid"),
+            )
+            self.rope_deltas = rope_deltas - padding_length
+        else:
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.rope_deltas = (
+                torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device) - padding_length
+            )
+
+        # Concatenate "text + vision" positions into [4, bs, seq-len]
+        text_positions = text_positions[None, ...]
+        position_ids = torch.cat([text_positions, vision_positions], dim=0)
+
+        return position_ids
+
     def forward(
         self,
         input_ids=None,
@@ -1792,27 +1893,17 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
             generation_step = -1
             residual_codes = None
         if position_ids is None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if past_key_values_length == 0 or self.rope_deltas is None:
-                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-                position_ids, rope_deltas = self.get_rope_index(
-                    talker_input_ids,
-                    image_grid_thw,
-                    video_grid_thw,
-                    attention_mask,
-                    use_audio_in_video,
-                    audio_feature_lengths,
-                    video_second_per_grid,
-                )
-                rope_deltas = rope_deltas - delta0
-                self.rope_deltas = rope_deltas
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+            position_ids = self.compute_3d_position_ids(
+                inputs_embeds,
+                talker_input_ids=talker_input_ids,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                use_audio_in_video=use_audio_in_video,
+                audio_feature_lengths=audio_feature_lengths,
+                video_second_per_grid=video_second_per_grid,
+            )
 
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=None,
@@ -1889,9 +1980,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-
-        # Qwen3-Omni will prepare position ids in forward with deltas
-        inputs["position_ids"] = None
 
         # TODO(raushan, gante): Refactor this part to a utility function
         if not is_first_iteration and kwargs.get("use_cache", True):
@@ -2734,7 +2822,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         images: ImageInput | None = None,
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ):
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
@@ -2749,6 +2837,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
+        fps = fps if fps is not None else 1.0
         n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
 
         if audio is not None:
@@ -2774,9 +2863,8 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
             image_grid_thw = iter([])
 
         if videos is not None:
-            videos = make_batched_videos(videos)
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            fps = [fps] * len(videos)
+            fps = [fps] * len(videos_inputs["video_grid_thw"])
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
             ]

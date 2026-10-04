@@ -19,9 +19,7 @@
 # limitations under the License.
 
 import itertools
-import warnings
 from collections.abc import Callable
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -40,7 +38,6 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -57,8 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config, device=None):
+    def __init__(self, config: Ernie4_5_VLMoeTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -68,18 +64,15 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             raise ValueError(f"Ernie 4.5 VL requires the `default` rope type, but found {self.rope_type} instead.")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: Ernie4_5_VLMoeTextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Ernie4_5_VLMoeTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -107,7 +100,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
         inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
 
-        return inv_freq_3d.to(device), attention_factor
+        return inv_freq_3d, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -119,18 +112,21 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        sin = self.recomposition_to_3d(sin)
-        cos = self.recomposition_to_3d(cos)
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
 
         return cos, sin
 
-    def recomposition_to_3d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section], dim=-1)))
         freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
         freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
@@ -345,11 +341,7 @@ class Ernie4_5_VLMoeMoeTopKRouter(nn.Module):
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             router_logits = F.linear(hidden_states.float(), self.weight.float())
@@ -384,7 +376,7 @@ class Ernie4_5_VLMoeMoeExperts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -709,9 +701,6 @@ class Ernie4_5_VLMoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, Ernie4_5_VLMoeMoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Ernie4_5_VLMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -844,15 +833,67 @@ class Ernie4_5_VLMoePatchEmbed(nn.Module):
 
 
 class Ernie4_5_VLMoeVisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def __init__(self, config: Ernie4_5_VLMoeVisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_axial_rope_parameters(
+        config: Ernie4_5_VLMoeVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 @auto_docstring
@@ -877,25 +918,13 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
             embed_dim=config.hidden_size,
         )
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(head_dim // 2)
-
+        self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Ernie4_5_VLMoeVisionBlock(config) for _ in range(config.depth)])
         self.gradient_checkpointing = False
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.post_init()
-
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb
 
     @merge_with_config_defaults
     @capture_outputs
@@ -910,9 +939,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for block in self.blocks:
             hidden_states = block(
@@ -1068,7 +1095,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         grid_thw: list[int, int, int] | torch.Tensor,
         temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
-        time_interval: int = 1,
+        time_interval: float | torch.Tensor = 1.0,
         device: str | torch.device | None = None,
     ):
         """
@@ -1089,8 +1116,8 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             spatial_merge_size (`int`, *optional*):
                 Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
                 by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Spacing factor applied before quantizing temporal position indices.
             device (`str` or `torch.device`, *optional*):
                 Device on which the resulting tensor is allocated. If `None`, uses the current default device.
 
@@ -1105,7 +1132,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
         position_height = torch.arange(llm_grid_h, device=device) + start_position
         position_width = torch.arange(llm_grid_w, device=device) + start_position
 
@@ -1236,8 +1263,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             // self.vision_tower.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
         ).tolist()
-        video_embeds = torch.split(video_embeds, split_sizes)
-        video_outputs.pooler_output = video_embeds
+        video_outputs.pooler_output = torch.split(video_embeds, split_sizes)
         return video_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1252,8 +1278,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        image_outputs.pooler_output = image_embeds
+        image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return image_outputs
 
     def get_placeholder_mask(
@@ -1346,8 +1371,8 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             position_ids = None
         return position_ids
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1362,6 +1387,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
         r"""
@@ -1370,23 +1396,35 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         moe_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             The same as `mm_token_type_ids` while additionally considering start/end image/video tokens as respective vision tokens.
         """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = mm_encoder_outputs["video"].pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1457,51 +1495,38 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
 
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
 
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
 
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -1549,8 +1574,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1568,6 +1593,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
@@ -1595,6 +1621,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1605,7 +1632,9 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         aux_loss = None
         if output_router_logits:
@@ -1665,150 +1694,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         position_ids = torch.cat([text_positions, vision_positions], dim=0)
 
         return position_ids
-
-    def _get_image_nums_and_video_nums(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
-        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-
-        Returns:
-            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
-            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
-        """
-
-        if inputs_embeds is not None:
-            is_image = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            is_video_start = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            is_video_end = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-        else:
-            is_image = input_ids == self.config.image_start_token_id
-            is_video_start = input_ids == self.config.video_start_token_id
-            is_video_end = input_ids == self.config.video_end_token_id
-
-        # Cumulative sum to track if we're inside a video span
-        # We'll assume well-formed video tags (i.e. matching starts and ends)
-        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
-        inside_video = video_level > 0  # shape (batch_size, seq_length)
-
-        # Mask out image tokens that are inside video spans
-        standalone_images = is_image & (~inside_video)
-
-        # Count per batch
-        image_counts = standalone_images.sum(dim=1)
-        video_counts = is_video_start.sum(dim=1)
-
-        return image_counts, video_counts
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
-        # pixel_values.shape[0] is sum(seqlen_images for samples)
-        # image_grid_thw.shape[0] is sum(num_images for samples)
-
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
-
-        def _expand_dict_for_generation_visual(dict_to_expand):
-            image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            video_grid_thw = model_kwargs.get("video_grid_thw", None)
-            image_nums, video_nums = self._get_image_nums_and_video_nums(
-                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
-            )
-
-            def _repeat_interleave_samples(x, lengths, repeat_times):
-                samples = torch.split(x, lengths)
-                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-                return result
-
-            for key in dict_to_expand:
-                if key == "pixel_values":
-                    # split images into samples
-                    samples = torch.split(image_grid_thw, list(image_nums))
-                    # compute the sequence length of images for each sample
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "image_grid_thw":
-                    # get the num of images for each sample
-                    lengths = list(image_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "pixel_values_videos":
-                    samples = torch.split(video_grid_thw, list(video_nums))
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "video_grid_thw":
-                    lengths = list(video_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "second_per_grid_ts":
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
-                    )
-            return dict_to_expand
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if key == "position_ids" and dict_to_expand[key].ndim == 3:
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
-                elif (
-                    dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
-                ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
 
     def prepare_inputs_for_generation(
         self,

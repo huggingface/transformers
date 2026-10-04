@@ -24,15 +24,17 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
-from ..utils.generic import is_flash_attention_requested
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
+    get_device_type,
     is_kernels_available,
-    is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
     resolve_internal_import,
 )
 from .flash_attention import flash_attention_forward
@@ -63,14 +65,19 @@ _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
 # Maps from func name to the internal module path
 _KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_kda": "ops.kda",
+    "fused_recurrent_kda": "ops.kda",
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
-    "recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "fused_recurrent_gated_delta_rule": "ops.gated_delta_rule",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
     "selective_state_update": "ops.triton.selective_state_update",
     "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
     "mamba_inner_fn": "ops.selective_scan_interface",
     "selective_scan_fn": "ops.selective_scan_interface",
 }
+
+# Maps from import name to the distribution that ships it, where the two differ
+_PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
 
 
 if is_kernels_available():
@@ -80,6 +87,7 @@ if is_kernels_available():
         LayerRepository,
         LocalLayerRepository,
         Mode,
+        ROCMProperties,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_mapping,
@@ -162,18 +170,41 @@ if is_kernels_available():
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
+                # AMD Strix Halo (gfx1151, capability 11.5), ROCm build of the same layer
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): LayerRepository(
+                    repo_id="Atlas-Inference/gdn",
+                    layer_name="Qwen3_5GatedDeltaNet",
+                    revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
+                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                    trust_remote_code=True,
+                ),
             },
             "causal_conv1d_fn": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=3,
                     ),
                 },
             },
@@ -182,12 +213,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=3,
                     ),
                 },
             },
@@ -204,14 +247,30 @@ if is_kernels_available():
                         version=1,
                     ),
                 },
-            },
-            "recurrent_gated_delta_rule": {
-                "cuda": {
+                "xpu": {
                     Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_gated_delta_rule": {
+                # Inference only: the fused recurrent kernel has no backward implementation,
+                # so training stays on the torch path.
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_gated_delta_rule",
                         version=1,
                     ),
+                },
+                "xpu": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_gated_delta_rule",
@@ -224,12 +283,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=3,
                     ),
                 },
             },
@@ -238,12 +309,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=3,
                     ),
                 },
             },
@@ -252,12 +335,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=3,
                     ),
                 },
             },
@@ -266,12 +361,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=3,
                     ),
                 },
             },
@@ -280,12 +387,34 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=3,
+                    ),
+                },
+            },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="biohub/esmfold2-trimul",
+                        layer_name="ESMFold2TriangleMultiplication",
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
+                        trust_remote_code=True,
                     ),
                 },
             },
@@ -392,6 +521,18 @@ if is_kernels_available():
                         version=1,
                     ),
                 },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                },
             },
             "MegaBlocksMoeMLP": {
                 "cuda": {
@@ -440,7 +581,14 @@ if is_kernels_available():
                         layer_name="FastGELU",
                         version=1,
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="FastGELU",
+                        version=1,
+                    )
+                },
             },
             "QuickGELU": {
                 "cuda": {
@@ -449,7 +597,14 @@ if is_kernels_available():
                         layer_name="QuickGELU",
                         version=1,
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="QuickGELU",
+                        version=1,
+                    )
+                },
             },
             "NewGELU": {
                 "cuda": {
@@ -458,28 +613,91 @@ if is_kernels_available():
                         layer_name="NewGELU",
                         version=1,
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="NewGELU",
+                        version=1,
+                    )
+                },
             },
             "SiLU": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="Silu", version=1
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Silu", version=1
+                    )
+                },
             },
             "GeLU": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="Gelu", version=1
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Gelu", version=1
+                    )
+                },
             },
             "GeluTanh": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
+                    )
+                },
+            },
+            "chunk_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    # Inference only: the `chunk_kda` backward kernel uses Intel 2D block-read intrinsics
+                    # that the Triton XPU backend fails to build, so training stays on the torch path.
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_kda": {
+                # Inference only: the fused recurrent kernel has no backward implementation,
+                # so training stays on the torch path.
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
             },
             "rotary_pos_emb": {
                 "xpu": {
@@ -580,6 +798,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
+    "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -593,6 +812,11 @@ def is_kernel(attn_implementation: str | None) -> bool:
     )
 
 
+def get_attn_kernel_version(repo_id: str) -> int:
+    """Return the major version of the hub kernel repo `repo_id` to load, e.g. `3` for `kernels-community/flash-attn2`."""
+    return FLASH_ATTN_KERNEL_VERSIONS.get(repo_id, 1)
+
+
 def load_and_register_attn_kernel(
     attn_implementation: str, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
 ) -> ModuleType | None:
@@ -601,7 +825,7 @@ def load_and_register_attn_kernel(
 
     Args:
         attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
-        attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
+        attention_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continuous batching, where we
             want the `paged` wrapper, which calls the paged cache.
@@ -634,9 +858,7 @@ def load_and_register_attn_kernel(
     rev = rev.strip() if rev else None
     version = None
     if rev is None:
-        # FA4 is still in beta -> redirect to v0 else default to v1
-        is_fa4 = is_flash_attention_requested(requested_attention_implementation=repo_id, version=4)
-        version = 0 if is_fa4 else 1
+        version = get_attn_kernel_version(repo_id)
 
     # Load the kernel from hub
     try:
@@ -660,6 +882,9 @@ def load_and_register_attn_kernel(
         from .msa_attention import msa_attention_forward
 
         kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
+        mask_implementation = "sdpa"
+    elif hasattr(kernel, "flash_attn_forward") and hasattr(kernel, "supports_flash_attn"):
+        kernel_function = attention_wrapper if attention_wrapper is not None else kernel.flash_attn_forward
         mask_implementation = "sdpa"
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
@@ -726,16 +951,11 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
-    def get_device(device_type):
-        if device_type == "cuda" and is_rocm_platform():
-            device_type = "rocm"
-        return Device(type=device_type)
-
     mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
-    device = get_device(model.device.type)
+    device = Device(type=get_device_type(model.device))
 
     if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel
+        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
         with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
             _kernels_kernelize(model, device=device, mode=mode)
     else:
@@ -776,13 +996,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
     # Allow internal path prefix if given to resolve non __init__ imports
     internal_path = _KERNELS_INTERNAL_PATH_MAPPINGS.get(func_name, internal_path)  # defaults
-    full_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
+    full_func_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
+    full_module_path = package if internal_path is None else f"{package}.{internal_path}"
 
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
         try:
             module = importlib.import_module(package)
-            implementation = resolve_internal_import(module, full_path)
+            implementation = resolve_internal_import(module, full_func_path)
+            # Some packages, such as FLA, do not expose nested modules from their package root.
+            if implementation is None and full_module_path != package:
+                module = importlib.import_module(full_module_path)
+                implementation = getattr(module, func_name, None)
         except Exception:
             implementation = torch_function
         finally:
@@ -790,9 +1015,27 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
         applicable_params = tuple(inspect.signature(implementation).parameters)
+        # A boolean to track if the implementation is new, i.e. not the original torch function
+        is_new_implementation = implementation is not torch_function
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
+            # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
+            if is_new_implementation and is_torchdynamo_exporting():
+                return torch_function(*args, **kwargs)
+
+            if not is_new_implementation and not is_torchdynamo_compiling():
+                # These torch paths are readable references, not fast kernels, so their runtimes are
+                # significantly slower: for `chunk_gated_delta_rule` the gap is more than an order of
+                # magnitude on an H100. Warn the user when they end up on one. The logger is untraceable,
+                # hence the guard.
+                distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+                logger.warning_once(
+                    f"`{func_name}` is falling back to its reference PyTorch implementation because "
+                    f"`{distribution}` is not installed. This is correct but much slower; install "
+                    f"`{distribution}` for the optimized kernel."
+                )
+
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
 
