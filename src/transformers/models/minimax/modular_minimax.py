@@ -311,7 +311,7 @@ class MiniMaxLightningAttention(nn.Module):
                 current_query_decay = self.query_decay[:, :current_block_size]
                 current_key_decay = self.key_decay[:, -current_block_size:]
                 current_diagonal_decay = self.diagonal_decay[:, :, :current_block_size, :current_block_size]
-                
+
                 # FIX: Use float32 slope_rate
                 block_decay = torch.exp(-slope_rate * current_block_size)
 
@@ -329,7 +329,7 @@ class MiniMaxLightningAttention(nn.Module):
                 # calculate attn_weights_inter for next block or cache
                 next_attn_weights_inter = torch.matmul(
                     (current_key_states * current_key_decay).transpose(-1, -2), current_value_states
- a               )
+                )
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
         else:
@@ -365,6 +365,7 @@ class MiniMaxLightningAttention(nn.Module):
             past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
 
         return attn_output, attn_weights_inter
+
 
 class MiniMaxRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
