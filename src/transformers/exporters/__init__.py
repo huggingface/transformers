@@ -41,10 +41,7 @@ else:
         "AutoHfExporter",
         "ExportBackend",
         "export_backend",
-        "get_hf_exporter",
-        "register_export_config",
-        "register_exporter",
-        "register_runner",
+        "register_backend",
     ]
     _import_structure["base"] = [
         "ExportArtifacts",
@@ -93,10 +90,7 @@ if TYPE_CHECKING:
             AutoHfExporter,
             ExportBackend,
             export_backend,
-            get_hf_exporter,
-            register_export_config,
-            register_exporter,
-            register_runner,
+            register_backend,
         )
         from .base import ExportArtifacts, ExportedModel, HfExporter, ModelRunner
         from .components import Component, ExportedComponent

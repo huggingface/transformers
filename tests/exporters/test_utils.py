@@ -21,8 +21,7 @@ DON'T touch:
 - The **auto factory** (``AutoExportConfig`` / ``AutoHfExporter``) — models bypass it and
   instantiate concrete exporters directly.
 - **Config dict round-trips** — configs are built via constructor calls, never serialised.
-- **Registration edge cases** — collision warnings and type-check rejections in
-  ``register_exporter`` / ``register_export_config``.
+- **Registration edge cases** — type-check rejections in ``register_backend``.
 - **`patch_attributes` restore-on-exception** — the happy path is exercised but the exception
   branch never fires in real exports.
 - The **`decompose_prefill_decode` guard** against generators that bypass the top-level
@@ -42,11 +41,9 @@ from transformers.exporters.auto import (
     AutoExportConfig,
     AutoHfExporter,
     export_backend,
-    register_export_config,
-    register_exporter,
-    register_runner,
+    register_backend,
 )
-from transformers.exporters.base import HfExporter
+from transformers.exporters.base import HfExporter, ModelRunner
 from transformers.exporters.configs import (
     DynamoConfig,
     ExecutorchConfig,
@@ -146,68 +143,29 @@ class AutoHfExporterTest(unittest.TestCase):
 
 
 class RegistrationTest(unittest.TestCase):
-    """Cover the edge cases of the `register_*` decorators that normal registrations at module load don't
-    hit — the type-check rejection paths, and a backend registered a part at a time. `EXPORT_BACKENDS` is
-    temporarily patched so registrations never leak into other tests."""
+    """`register_backend` wires a format through to `export_backend`, and refuses parts of the wrong type.
+    `EXPORT_BACKENDS` is temporarily patched so registrations never leak into other tests."""
 
-    def test_register_exporter_rejects_non_subclass(self):
+    def test_register_backend_rejects_non_subclass(self):
         with mock.patch.dict(EXPORT_BACKENDS):
             with self.assertRaisesRegex(TypeError, "HfExporter"):
+                register_backend("bad", ExportConfigMixin, object, ModelRunner)
 
-                @register_exporter("bad")
-                class _NotAnExporter:
-                    pass
+    def test_register_backend_installs_stub(self):
+        class _StubExporter(HfExporter):
+            required_packages = []
 
-    def test_register_export_config_rejects_non_subclass(self):
+            def export_artifact(self, model, sample_inputs, config):
+                return None, {}
+
+            @classmethod
+            def save_artifact(cls, artifact, path):
+                return None
+
         with mock.patch.dict(EXPORT_BACKENDS):
-            with self.assertRaisesRegex(TypeError, "ExportConfigMixin"):
-
-                @register_export_config("bad_config")
-                class _NotAConfig:
-                    pass
-
-    def test_register_runner_rejects_non_subclass(self):
-        with mock.patch.dict(EXPORT_BACKENDS):
-            with self.assertRaisesRegex(TypeError, "ModelRunner"):
-
-                @register_runner("bad_runner")
-                class _NotARunner:
-                    pass
-
-    def test_register_exporter_installs_stub(self):
-        # Sanity check that a legit registration is wired through — protects against a future
-        # refactor that would break the decorator without breaking any real export test.
-        with mock.patch.dict(EXPORT_BACKENDS):
-
-            @register_exporter("stub_exporter")
-            class _StubExporter(HfExporter):
-                required_packages = []
-
-                def export_artifact(self, model, sample_inputs, config):
-                    return None, {}
-
-                @classmethod
-                def save_artifact(cls, artifact, path):
-                    return None
-
-            self.assertIs(EXPORT_BACKENDS["stub_exporter"].exporter, _StubExporter)
-        self.assertNotIn("stub_exporter", EXPORT_BACKENDS)
-
-    def test_backend_registered_one_part_at_a_time(self):
-        """A backend is assembled from whichever parts are registered, and asking for a missing one says
-        which decorator supplies it — the gap that used to be silent, since a runner could not be
-        registered at all."""
-        with mock.patch.dict(EXPORT_BACKENDS):
-
-            @register_export_config("halfway")
-            class _HalfwayConfig(ExportConfigMixin):
-                pass
-
-            self.assertIs(EXPORT_BACKENDS["halfway"].config, _HalfwayConfig)
-            self.assertIsNone(EXPORT_BACKENDS["halfway"].runner)
-            with self.assertRaisesRegex(ValueError, "no runner registered"):
-                export_backend("halfway", "runner")
-        self.assertNotIn("halfway", EXPORT_BACKENDS)
+            register_backend("stub", ExportConfigMixin, _StubExporter, ModelRunner)
+            self.assertIs(export_backend("stub", "exporter"), _StubExporter)
+        self.assertNotIn("stub", EXPORT_BACKENDS)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

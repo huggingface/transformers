@@ -35,9 +35,9 @@ from .runner_openvino import OpenVINOModelRunner
 class ExportBackend:
     """One export format's config, exporter, and runner."""
 
-    config: type[ExportConfigMixin] | None = None
-    exporter: type[HfExporter] | None = None
-    runner: type | None = None
+    config: type[ExportConfigMixin]
+    exporter: type[HfExporter]
+    runner: type[ModelRunner]
 
 
 EXPORT_BACKENDS: dict[str, ExportBackend] = {
@@ -48,6 +48,22 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
 }
 
 
+def register_backend(
+    name: str, config: type[ExportConfigMixin], exporter: type[HfExporter], runner: type[ModelRunner]
+) -> None:
+    """Register a format's config, exporter and runner, so every auto class and loader finds them."""
+    for part, cls, base in (
+        ("config", config, ExportConfigMixin),
+        ("exporter", exporter, HfExporter),
+        ("runner", runner, ModelRunner),
+    ):
+        if not (isinstance(cls, type) and issubclass(cls, base)):
+            raise TypeError(f"The {part} must extend {base.__name__}, got {cls!r}.")
+    if name in EXPORT_BACKENDS:
+        logger.warning(f"Export backend '{name}' is already registered and will be overwritten.")
+    EXPORT_BACKENDS[name] = ExportBackend(config, exporter, runner)
+
+
 def export_backend(export_format, part: str | None = None):
     """The registered backend for a format (an [`ExportFormat`] or its string value), or one named part of it."""
     if export_format is None:
@@ -56,15 +72,7 @@ def export_backend(export_format, part: str | None = None):
     backend = EXPORT_BACKENDS.get(name)
     if backend is None:
         raise ValueError(f"Unknown export format '{name}' — registered formats are {sorted(EXPORT_BACKENDS)}.")
-    if part is None:
-        return backend
-    registered = getattr(backend, part)
-    if registered is None:
-        raise ValueError(
-            f"The '{name}' backend has no {part} registered, so it cannot be used for this. Register one "
-            f"with `register_{part}('{name}')`."
-        )
-    return registered
+    return backend if part is None else getattr(backend, part)
 
 
 logger = logging.get_logger(__name__)
@@ -105,37 +113,3 @@ class AutoExportedModel:
         can_generate = "decode" in manifest["components"]
         target = ExportedGenerator if can_generate else ExportedModel
         return target.from_pretrained(save_directory, **kwargs)
-
-
-def _register(name: str, part: str, base: type):
-    """Fill one slot of a format's [`ExportBackend`], creating the entry if this is its first part."""
-
-    def register(cls):
-        if not issubclass(cls, base):
-            raise TypeError(f"{part.capitalize()} must extend {base.__name__}")
-        backend = EXPORT_BACKENDS.setdefault(name, ExportBackend())
-        if getattr(backend, part) is not None:
-            logger.warning(f"{part.capitalize()} for '{name}' is already registered and will be overwritten.")
-        setattr(backend, part, cls)
-        return cls
-
-    return register
-
-
-def register_exporter(name: str):
-    """Register the exporter that writes a format."""
-    return _register(name, "exporter", HfExporter)
-
-
-def register_export_config(name: str):
-    """Register the config that parameterizes a format."""
-    return _register(name, "config", ExportConfigMixin)
-
-
-def register_runner(name: str):
-    """Register the runner that loads and runs a format's saved artifacts."""
-    return _register(name, "runner", ModelRunner)
-
-
-def get_hf_exporter(export_config) -> HfExporter:
-    return AutoHfExporter.from_config(export_config)
