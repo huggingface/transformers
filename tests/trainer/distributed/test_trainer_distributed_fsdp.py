@@ -153,6 +153,34 @@ class InitializeMissingKeysTest(unittest.TestCase):
         for name, param in model.named_parameters():
             self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
 
+    def test_move_missing_keys_fsdp2_non_rank0_skips_meta_to_cpu(self):
+        """FSDP2 non-rank-0 path should skip CPU materialization and leave params on meta."""
+        with torch.device("meta"):
+            model = _BaseModel(PreTrainedConfig())
+
+        for param in model.parameters():
+            self.assertEqual(param.device, torch.device("meta"))
+
+        class MockFSDPPlugin:
+            fsdp_version = 2
+
+        class MockPartialState:
+            fsdp_plugin = MockFSDPPlugin()
+
+        with (
+            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
+            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.utils.is_accelerate_available", return_value=True),
+            patch("accelerate.state.is_initialized", return_value=True),
+            patch("accelerate.state.PartialState", return_value=MockPartialState()),
+        ):
+            model._move_missing_keys_from_meta_to_device(
+                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
+            )
+
+        for name, param in model.named_parameters():
+            self.assertEqual(param.device, torch.device("meta"), f"param {name} should be left on meta for FSDP2")
+
     def test_fsdp_non_rank0_end_to_end_no_reinit(self):
         """End-to-end: move from meta + _initialize_missing_keys should mark all params initialized
         without changing their values."""

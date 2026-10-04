@@ -4747,6 +4747,27 @@ class PreTrainedModel(
 
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
+            from .utils import is_accelerate_available
+
+            is_fsdp2 = False
+            if is_accelerate_available():
+                try:
+                    from accelerate.state import PartialState, is_initialized
+
+                    if is_initialized():
+                        state = PartialState()
+                        if getattr(state, "fsdp_plugin", None) is not None:
+                            is_fsdp2 = getattr(state.fsdp_plugin, "fsdp_version", 1) == 2
+                except ImportError:
+                    pass
+
+            if is_fsdp2:
+                for key, buffer in self.named_non_persistent_buffers():
+                    buffer_device = get_device(device_map, key, valid_torch_device=True)
+                    value = torch.empty_like(buffer, device=buffer_device)
+                    _load_parameter_into_model(self, key, value)
+                return
+
             for key, param in self.named_parameters():
                 value = torch.zeros_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
