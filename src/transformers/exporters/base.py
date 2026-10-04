@@ -94,7 +94,7 @@ def read_export_manifest(pretrained_model_name_or_path, **download_kwargs) -> di
         raise OSError(
             f"No `{EXPORT_MANIFEST_FILE}` in {pretrained_model_name_or_path}. Exported models are loaded "
             "from what `ExportArtifacts.save_pretrained` wrote; to assemble runners yourself, build each one "
-            "with `ModelRunner.from_pretrained` and pass them to `ExportedGenerator.from_runners`."
+            "with `ModelRunner.from_pretrained` and pass them to `ExportedGenerator`."
         )
     manifest = json.loads(Path(path).read_text(encoding="utf-8"))
     components = manifest.get("components") or {}
@@ -238,7 +238,7 @@ class ExportArtifacts(Mapping):
         if self.can_generate():
             from .generator import ExportedGenerator
 
-            return ExportedGenerator.from_runners(runners, self.config, self.generation_config)
+            return ExportedGenerator(runners, self.config, self.generation_config)
 
         return ExportedModel(next(iter(runners.values())), self.config)
 

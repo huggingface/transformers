@@ -80,7 +80,6 @@ graph is called. [`AutoExportedModel`] reads the manifest and picks between them
 
 [[autodoc]] exporters.generator.ExportedGenerator
     - from_pretrained
-    - from_runners
 
 ## ExportedModel
 

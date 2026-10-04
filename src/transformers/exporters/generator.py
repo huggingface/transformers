@@ -218,30 +218,52 @@ class ExportedGenerator(GenerationMixin):
     base_model_prefix = ""
     main_input_name = "input_ids"
 
-    _supports_cache_class = True
-
     def __init__(
         self,
+        runners: dict[str, ModelRunner],
         config,
-        generation_config,
-        decode: ModelRunner,
-        *,
-        prefill: ModelRunner | None = None,
-        encoder: ModelRunner | None = None,
-        text_embed: ModelRunner | None = None,
-        modalities: list[Modality] = (),
-        embedder: StreamingEmbedder | None = None,
+        generation_config: GenerationConfig | None = None,
     ):
+        """Assemble the generator from `{component_name: runner}` (as `HfExporter.export` names them) + configs.
+
+        Text-only from a `"decode"` runner, multi-modal when `"embed_tokens"` and `"<modality>_encoder"`
+        runners are present. `generation_config` must be the one used at export; when `None`, the model
+        config's generation defaults apply (a growing cache). Runners must carry the export's recorded
+        metadata, as [`~ExportArtifacts.runtime`] and [`~ExportedGenerator.from_pretrained`] build them."""
+        decode = runners["decode"]
+        encoder = runners.get("encoder")
         self.config = config
-        self.generation_config = generation_config
+        self.generation_config = (
+            generation_config if generation_config is not None else GenerationConfig.from_model_config(config)
+        )
         self._decode_runner = decode
         # (`_prefill`/`_decode` without the suffix would shadow `GenerationMixin` methods `generate` calls.)
-        self._prefill_runner = prefill if prefill is not None else decode
-        self._text_embed = text_embed
-        self._modalities = list(modalities)
+        self._prefill_runner = runners.get("prefill", decode)
+        # Scatter applies only when the decode graph (decoder-only VLMs) or the encoder graph (florence2) takes
+        # embeddings; otherwise run as a plain generator even if an embed graph was exported.
+        takes_embeds = text_input(decode) == "inputs_embeds" or (
+            encoder is not None and "inputs_embeds" in encoder.input_names
+        )
+        self._text_embed = runners["embed_tokens"] if "embed_tokens" in runners and takes_embeds else None
+        self._modalities = []
+        if self._text_embed is not None:
+            for spec in _MODALITY_SPECS:
+                token_id = getattr(config, spec.token_field, None)
+                if token_id is None:  # older configs name it `<modality>_token_index`
+                    token_id = getattr(config, f"{spec.token_field[:-3]}_index", None)
+                runner = runners.get(spec.component)
+                if runner is None:
+                    # A modality routed through another's getter (perception_lm's videos via
+                    # `get_image_features`) shares the image graph, if it has its own placeholder token.
+                    if spec.component == "image_encoder" or token_id is None or "image_encoder" not in runners:
+                        continue
+                    runner = runners["image_encoder"]
+                self._modalities.append(Modality(token_id, runner, spec))
         self._modality_keys = {key for modality in self._modalities for key in modality.input_keys}
         # An encoder taking `inputs_embeds` means features scatter in front of the text encoder (florence2).
-        scatters_at_encoder = text_embed is not None and encoder is not None and "inputs_embeds" in encoder.input_names
+        scatters_at_encoder = (
+            self._text_embed is not None and encoder is not None and "inputs_embeds" in encoder.input_names
+        )
         self._encoder = (
             _ExportedEncoder(
                 encoder,
@@ -259,72 +281,21 @@ class ExportedGenerator(GenerationMixin):
             if encoder is not None
             else None
         )
-        self._embedder = embedder
+        self._embedder = None
+        # The sub-config shaping the auxiliary cache the decode graph takes (the streaming encoder's own).
+        self._encoder_config = None
+        if (spec := streaming_embedder_spec(config)) is not None:
+            self._encoder_config = getattr(config, spec.encoder_config, None)
+            if spec.component in runners:
+                self._embedder = StreamingEmbedder(
+                    runners[spec.component], spec.source, spec.produces, _find_config_attr(config, spec.stride) or 1
+                )
         # Computed once from the whole prompt; each step reads its own window.
         self._embedded = None
-        # The sub-config shaping the auxiliary cache the decode graph takes (the streaming encoder's own).
-        self._encoder_config = (
-            getattr(config, spec.encoder_config, None)
-            if (spec := streaming_embedder_spec(config)) is not None
-            else None
-        )
-        runners = [decode, self._prefill_runner, encoder, text_embed, *(m.runner for m in self._modalities)]
-        if embedder is not None:
-            runners.append(embedder.runner)
-        self._graph_inputs = {name for runner in runners if runner is not None for name in runner.input_names}
+        self._rope_deltas = None
+        self._graph_inputs = {name for runner in runners.values() for name in runner.input_names}
         self._device = torch.device(decode.device)
         self._dtype = decode.dtype
-
-    @classmethod
-    def from_runners(
-        cls,
-        runners: dict[str, ModelRunner],
-        config,
-        generation_config: GenerationConfig | None = None,
-    ) -> ExportedGenerator:
-        """Assemble the generator from `{component_name: runner}` (as `HfExporter.export` names them) + configs.
-
-        Text-only from a `"decode"` runner, multi-modal when `"embed_tokens"` and `"<modality>_encoder"`
-        runners are present. `generation_config` must be the one used at export; when `None`, the model
-        config's generation defaults apply (a growing cache). Runners must carry the export's recorded
-        metadata, as [`~ExportArtifacts.runtime`] and [`~ExportedGenerator.from_pretrained`] build them."""
-        if generation_config is None:
-            generation_config = GenerationConfig.from_model_config(config)
-        # Scatter applies only when the decode graph (decoder-only VLMs) or the encoder graph (florence2) takes
-        # embeddings; otherwise run as a plain generator even if an embed graph was exported.
-        takes_embeds = text_input(runners["decode"]) == "inputs_embeds" or (
-            "encoder" in runners and "inputs_embeds" in runners["encoder"].input_names
-        )
-        text_embed = runners["embed_tokens"] if "embed_tokens" in runners and takes_embeds else None
-        modalities = []
-        if text_embed is not None:
-            for spec in _MODALITY_SPECS:
-                token_id = getattr(config, spec.token_field, None)
-                if token_id is None:  # older configs name it `<modality>_token_index`
-                    token_id = getattr(config, f"{spec.token_field[:-3]}_index", None)
-                runner = runners.get(spec.component)
-                if runner is None:
-                    # A modality routed through another's getter (perception_lm's videos via
-                    # `get_image_features`) shares the image graph, if it has its own placeholder token.
-                    if spec.component == "image_encoder" or token_id is None or "image_encoder" not in runners:
-                        continue
-                    runner = runners["image_encoder"]
-                modalities.append(Modality(token_id, runner, spec))
-        embedder = None
-        if (spec := streaming_embedder_spec(config)) is not None and spec.component in runners:
-            embedder = StreamingEmbedder(
-                runners[spec.component], spec.source, spec.produces, _find_config_attr(config, spec.stride) or 1
-            )
-        return ExportedGenerator(
-            config,
-            generation_config,
-            runners["decode"],
-            prefill=runners.get("prefill"),
-            encoder=runners.get("encoder"),
-            text_embed=text_embed,
-            modalities=modalities,
-            embedder=embedder,
-        )
 
     @classmethod
     def from_pretrained(cls, save_directory: str | Path, **kwargs) -> ExportedGenerator:
@@ -348,7 +319,7 @@ class ExportedGenerator(GenerationMixin):
         generation_config = (
             GenerationConfig.from_pretrained(save_directory, **download_kwargs) if has_generation_config else None
         )
-        return cls.from_runners(runners, config, generation_config)
+        return cls(runners, config, generation_config)
 
     # ── GenerationMixin plumbing (a real PreTrainedModel provides all of this) ──
     @property
@@ -859,7 +830,7 @@ class ExportedGenerator(GenerationMixin):
         past_length = self._past_length(model_kwargs.get("past_key_values"))
         runner = self._prefill_runner if past_length == 0 else self._decode_runner
         axes = runner.export_metadata.position_axes
-        if past_length != 0 and getattr(self, "_rope_deltas", None) is not None:
+        if past_length != 0 and self._rope_deltas is not None:
             positions = text_positions[None, ...] + self._rope_deltas
             # Every axis (hunyuan_vl) or the single broadcast row (qwen2_vl), as traced.
             return positions.expand(axes, -1, -1) if axes and axes > positions.shape[0] else positions

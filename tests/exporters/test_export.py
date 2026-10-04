@@ -1312,7 +1312,7 @@ class ExportTesterMixin:
         self, components, exported, backend, generation_config, dynamic, multi_token_decode
     ):
         """Wrap the exported components in `backend`'s `ModelRunner`s, reassemble them into the
-        `generate`-driving runtime via `ExportedGenerator.from_runners` — the same artifacts-plus-configs
+        `generate`-driving runtime via `ExportedGenerator` — the same artifacts-plus-configs
         path a deployment would use (`generation_config` is the one the components were exported with, the
         runtime's cache contract; `None` means the model's own defaults) — and assert it generates like the
         eager model. Runs both on the runner's device with greedy decoding. fp32 models must match token
@@ -1351,10 +1351,10 @@ class ExportTesterMixin:
             *(spec.component for spec in _MODALITY_SPECS),
             *(spec.component for spec in _STREAMING_EMBEDDERS.values()),
         }
-        # The runners themselves, not the per-graph runtimes: `from_runners` assembles the generation
+        # The runners themselves, not the per-graph runtimes: `ExportedGenerator` assembles the generation
         # loop out of `ModelRunner`s, and a single-graph runtime is an `ExportedModel` *wrapping* one.
         runners = {name: exported[name].runtime().runner for name in components if name in wanted}
-        runtime = ExportedGenerator.from_runners(runners, model.config, model.generation_config)
+        runtime = ExportedGenerator(runners, model.config, model.generation_config)
         device = runtime.device
         model = model.to(device)
         inputs = self.prepare_config_and_inputs_for_generate()[1]
