@@ -351,7 +351,7 @@ def _multimodal_text_decoder(model: PreTrainedModel | torch.nn.Module) -> torch.
         encoder = model.get_encoder(modality=modality)
         if encoder is not None and encoder is not model:
             return decoder
-    if any(_modality_owner(model, getter) is not None for _name, getter, *_ in _MODALITY_SPECS):
+    if any(_modality_owner(model, spec.getter) is not None for spec in _MODALITY_SPECS):
         return decoder
     return None
 
@@ -359,11 +359,6 @@ def _multimodal_text_decoder(model: PreTrainedModel | torch.nn.Module) -> torch.
 def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
     """Returns `True` if the model is multi-modal with a modality to export and a language model."""
     return _multimodal_text_decoder(model) is not None
-
-
-# Suffixes marking a modality input as aux (grid, mask, size table): skipped by presence checks and feature
-# routing, since `generate` may keep one after dropping the features it described.
-_MODALITY_AUX_SUFFIXES = ("_grid_thw", "_position_mask", "_attention_mask", "_sizes", "padding_mask", "_indices")
 
 
 class StreamingEmbedderSpec(NamedTuple):
@@ -403,42 +398,52 @@ def streaming_embedder_spec(config) -> StreamingEmbedderSpec | None:
     return _STREAMING_EMBEDDERS.get(getattr(config, "model_type", None))
 
 
-# (component name, getter, input kwargs signalling the modality, native grid kwarg, placeholder-id field).
-# The first input kwarg present is used; the rest of the tuple covers per-model names and aux keys.
+class ModalitySpec(NamedTuple):
+    """One input modality a model may take, and the generate kwargs that carry it."""
+
+    # The component exporting it, and the model method it is captured from
+    component: str
+    getter: str
+    # The modality's data, under each name a model gives it; a call carrying one has the modality
+    feature_keys: tuple[str, ...]
+    # Side inputs riding along (masks, sizes, indices), which `generate` may keep after dropping the features
+    aux_keys: tuple[str, ...]
+    # The native grid kwarg, which the exported graph takes as `grid_thw`
+    grid_key: str | None
+    # The config field holding the placeholder token id its features scatter into
+    token_field: str
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return self.feature_keys + self.aux_keys
+
+
 _MODALITY_SPECS = (
-    (
+    ModalitySpec(
         "image_encoder",
         "get_image_features",
-        (
-            "pixel_values",
-            "pixel_values_images",
-            "flattened_patches",
-            "image_patches",
-            "image_patches_indices",
-            "image_embeds_position_mask",
-            "pixel_attention_mask",
-            "target_sizes",
-        ),
+        ("pixel_values", "pixel_values_images", "flattened_patches", "image_patches"),
+        ("image_patches_indices", "image_embeds_position_mask", "pixel_attention_mask", "target_sizes"),
         "image_grid_thw",
         "image_token_id",
     ),
-    (
+    ModalitySpec(
         "video_encoder",
         "get_video_features",
-        ("pixel_values_videos", "target_sizes_videos"),
+        ("pixel_values_videos",),
+        ("target_sizes_videos",),
         "video_grid_thw",
         "video_token_id",
     ),
-    (
+    ModalitySpec(
         "audio_encoder",
         "get_audio_features",
-        ("input_features", "audio_input_ids", "input_values", "padding_mask"),
+        ("input_features", "audio_input_ids", "input_values"),
+        ("padding_mask",),
         None,
         "audio_token_id",
     ),
 )
-
-_MODALITY_GETTERS = {name: getter for name, getter, *_ in _MODALITY_SPECS}
 
 
 def grid_renamed(key: str) -> str:
@@ -552,11 +557,11 @@ def decompose_multimodal(
     # An encoder-decoder consumed its modality inputs before prefill; the caller passes the recorded calls.
     recorded_features = recorded_features or {}
     active_modalities = []
-    for name, getter, input_keys, grid_key, _token_field in _MODALITY_SPECS:
-        if (owner := _modality_owner(model, getter)) is None:
+    for spec in _MODALITY_SPECS:
+        if (owner := _modality_owner(model, spec.getter)) is None:
             continue
-        if _present_input_key(inputs, input_keys) is not None or recorded_features.get(name):
-            active_modalities.append((name, getter, owner, grid_key))
+        if _present_input_key(inputs, spec.input_keys) is not None or recorded_features.get(spec.component):
+            active_modalities.append((spec.component, spec.getter, owner, spec.grid_key))
 
     try:
         with contextlib.ExitStack() as stack, torch.no_grad():
@@ -578,9 +583,9 @@ def decompose_multimodal(
     token_ids = inputs.get("input_ids") if inputs.get("input_ids") is not None else prompt_ids
     if token_ids is not None and _embeds_input_ids(decoder):
         placeholder_ids = [
-            getattr(model.config, spec[-1], None)
+            token_id
             for spec in _MODALITY_SPECS
-            if getattr(model.config, spec[-1], None) is not None
+            if (token_id := getattr(model.config, spec.token_field, None)) is not None
         ]
         components["embed_tokens"] = Component(TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids})
 
@@ -648,9 +653,9 @@ def _needs_prefill_graph(model, components: dict, *, cross_written_without_promp
     prefill_inputs = components["prefill"].inputs
     return any(
         prefill_inputs.get(key) is not None
-        for name, _getter, input_keys, *_ in _MODALITY_SPECS
-        if name not in components
-        for key in input_keys
+        for spec in _MODALITY_SPECS
+        if spec.component not in components
+        for key in spec.input_keys
     )
 
 
@@ -768,14 +773,14 @@ def _capture_generation(
 
     # The encoder and modality getters run outside the captured forwards, so record them over the same generate.
     modality_owners = {
-        name: owner for name, getter, *_ in _MODALITY_SPECS if (owner := _modality_owner(model, getter)) is not None
+        spec: owner for spec in _MODALITY_SPECS if (owner := _modality_owner(model, spec.getter)) is not None
     }
     with contextlib.ExitStack() as stack:
         encoder_calls = stack.enter_context(_capture_calls(model.get_encoder(), "forward"))
         cross_writers = stack.enter_context(capture_cross_writers(model))
         live = {
-            name: stack.enter_context(_capture_calls(owner, _MODALITY_GETTERS[name]))
-            for name, owner in modality_owners.items()
+            spec.component: stack.enter_context(_capture_calls(owner, spec.getter))
+            for spec, owner in modality_owners.items()
         }
         components = capture()
     encoder_inputs = {key: value for key, value in encoder_calls[0].items() if isinstance(value, torch.Tensor)}
@@ -803,11 +808,9 @@ def _embedded_inputs(call_inputs: dict, components: dict) -> dict:
     """A text graph's captured kwargs, rewritten to take embeddings instead of token ids and modality inputs,
     so the runtime can scatter features in."""
     call_inputs = copy.copy(call_inputs)
-    for _name, _getter, input_keys, grid_key, _token_field in _MODALITY_SPECS:
-        for input_key in input_keys:
+    for spec in _MODALITY_SPECS:
+        for input_key in (*spec.input_keys, spec.grid_key):
             call_inputs.pop(input_key, None)
-        if grid_key is not None:
-            call_inputs.pop(grid_key, None)
     # Only the runtime's anyres packing reads the image sizes.
     call_inputs.pop("image_sizes", None)
     # `mm_token_type_ids` only feeds `get_rope_index`, unused once `position_ids` is given.

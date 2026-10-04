@@ -1318,8 +1318,8 @@ def _modality_axis_symbols(exported_program: ExportedProgram) -> set:
     The text-axis floor multiplied through the planner's buffers (SmolVLM arena 13.5 GB instead of 0.9 GB).
     """
     modality_inputs = tuple(
-        {key for _name, _getter, input_keys, *_rest in _MODALITY_SPECS for key in input_keys}
-        | {grid for *_head, grid, _token in _MODALITY_SPECS if grid}
+        {key for spec in _MODALITY_SPECS for key in spec.input_keys}
+        | {spec.grid_key for spec in _MODALITY_SPECS if spec.grid_key}
     )
     symbols = set()
     for node in exported_program.graph_module.graph.nodes:

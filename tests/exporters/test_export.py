@@ -1370,8 +1370,8 @@ class ExportTesterMixin:
             "prefill",
             "encoder",
             "embed_tokens",
-            *(spec[0] for spec in _MODALITY_SPECS),
-            *(spec[0] for spec in _STREAMING_EMBEDDERS.values()),
+            *(spec.component for spec in _MODALITY_SPECS),
+            *(spec.component for spec in _STREAMING_EMBEDDERS.values()),
         }
         # The runners themselves, not the per-graph runtimes: `from_runners` assembles the generation
         # loop out of `ModelRunner`s, and a single-graph runtime is an `ExportedModel` *wrapping* one.

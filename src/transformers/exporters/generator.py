@@ -51,8 +51,8 @@ from .cache import (
     resize_to_traced_lengths,
 )
 from .decompose import (
-    _MODALITY_AUX_SUFFIXES,
     _MODALITY_SPECS,
+    ModalitySpec,
     flatten_anyres_patches,
     grid_renamed,
     pack_anyres_features,
@@ -100,14 +100,22 @@ class Modality:
     - `token_id`: placeholder id in `input_ids` its features scatter into; `None` when the model marks rows
       with a `*_position_mask` kwarg instead (kosmos2_5).
     - `runner`: the exported `get_<modality>_features` graph.
-    - `input_keys`: the generate kwargs it owns; the first is the presence key.
-    - `kind`: its key in `generate`'s `mm_encoder_outputs`.
+    - `spec`: which generate kwargs carry it.
     """
 
     token_id: int | None
     runner: ModelRunner
-    input_keys: tuple
-    kind: str
+    spec: ModalitySpec
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        """Every generate kwarg it owns, the grid included."""
+        return self.spec.input_keys + ((self.spec.grid_key,) if self.spec.grid_key else ())
+
+    @property
+    def kind(self) -> str:
+        """Its key in `generate`'s `mm_encoder_outputs`: `"image"`, `"video"` or `"audio"`."""
+        return self.spec.component.removesuffix("_encoder")
 
 
 @dataclass
@@ -290,19 +298,18 @@ class ExportedGenerator(GenerationMixin):
         text_embed = runners["embed_tokens"] if "embed_tokens" in runners and takes_embeds else None
         modalities = []
         if text_embed is not None:
-            for name, _getter, spec_input_keys, grid_key, token_field in _MODALITY_SPECS:
-                token_id = getattr(config, token_field, None)
+            for spec in _MODALITY_SPECS:
+                token_id = getattr(config, spec.token_field, None)
                 if token_id is None:  # older configs name it `<modality>_token_index`
-                    token_id = getattr(config, f"{token_field[:-3]}_index", None)
-                runner = runners.get(name)
+                    token_id = getattr(config, f"{spec.token_field[:-3]}_index", None)
+                runner = runners.get(spec.component)
                 if runner is None:
                     # A modality routed through another's getter (perception_lm's videos via
                     # `get_image_features`) shares the image graph, if it has its own placeholder token.
-                    if name == "image_encoder" or token_id is None or "image_encoder" not in runners:
+                    if spec.component == "image_encoder" or token_id is None or "image_encoder" not in runners:
                         continue
                     runner = runners["image_encoder"]
-                input_keys = tuple(spec_input_keys) + ((grid_key,) if grid_key is not None else ())
-                modalities.append(Modality(token_id, runner, input_keys, name.removesuffix("_encoder")))
+                modalities.append(Modality(token_id, runner, spec))
         embedder = None
         if (spec := streaming_embedder_spec(config)) is not None and spec.component in runners:
             embedder = StreamingEmbedder(
@@ -694,7 +701,7 @@ class ExportedGenerator(GenerationMixin):
             return model_kwargs
         encoded = model_kwargs.setdefault("mm_encoder_outputs", {})
         for modality in self._modalities:
-            feature_keys = [key for key in modality.input_keys if not key.endswith(_MODALITY_AUX_SUFFIXES)]
+            feature_keys = modality.spec.feature_keys
             # `generate` pre-encodes images and videos only; deepstack per-layer features don't fit that form.
             if (
                 modality.kind not in ("image", "video")
@@ -721,7 +728,7 @@ class ExportedGenerator(GenerationMixin):
         image_sizes = kwargs.get("image_sizes")
         packs_anyres = (
             image_sizes is not None
-            and modality.input_keys[0] == "pixel_values"
+            and modality.spec.feature_keys[0] == "pixel_values"
             and "image_sizes" not in modality.runner.input_names
             and _find_config_attr(self.config, "image_grid_pinpoints") is not None
         )
@@ -759,15 +766,13 @@ class ExportedGenerator(GenerationMixin):
         for modality in self._modalities:
             # Never presence-key on aux keys, which `generate` may keep after dropping the features.
             pre_encoded = encoded.get(modality.kind)
-            if pre_encoded is None and all(
-                kwargs.get(key) is None for key in modality.input_keys if not key.endswith(_MODALITY_AUX_SUFFIXES)
-            ):
+            if pre_encoded is None and all(kwargs.get(key) is None for key in modality.spec.feature_keys):
                 continue
             if modality.token_id is not None:
                 mask = (input_ids == modality.token_id).unsqueeze(-1)
             else:
                 # kosmos2_5 marks rows with a mask kwarg that `generate` keeps full-length; take this step's tail.
-                mask_key = next(key for key in modality.input_keys if key.endswith("_position_mask"))
+                mask_key = next(key for key in modality.spec.aux_keys if key.endswith("_position_mask"))
                 mask = (kwargs[mask_key][:, -input_ids.shape[1] :] == 1).unsqueeze(-1)
             if not mask.any():
                 continue
@@ -796,11 +801,7 @@ class ExportedGenerator(GenerationMixin):
         declared = set(modality.runner.input_names)
         feature_input = modality.runner.input_names[0]
         present = next(
-            (
-                key
-                for key in modality.input_keys
-                if not key.endswith(_MODALITY_AUX_SUFFIXES) and key not in declared and kwargs.get(key) is not None
-            ),
+            (key for key in modality.spec.feature_keys if key not in declared and kwargs.get(key) is not None),
             None,
         )
         foreign = {key for other in self._modalities if other is not modality for key in other.input_keys} - set(
