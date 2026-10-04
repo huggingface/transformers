@@ -30,7 +30,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torchaudio,
     slow,
     torch_device,
 )
@@ -107,7 +106,6 @@ class HiggsAudioV2TokenizerModelTester:
 
 
 @require_torch
-@require_torchaudio
 class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HiggsAudioV2TokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = True
