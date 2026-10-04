@@ -815,6 +815,7 @@ def register_onnx_translation(*paths: str):
     return decorator
 
 
+@register_onnx_translation("torch.ops.aten._grouped_mm.default")
 def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dtype=None) -> TReal:
     """ONNX implementation of `aten._grouped_mm.default`, unrolled per group as `Slice + MatMul` + `Concat`.
 
@@ -976,6 +977,7 @@ def _compiled_varlen_translation():
     return _aten_varlen_attn
 
 
+@register_onnx_translation("torch.ops.higher_order.associative_scan")
 def _translate_associative_scan(combine, xs, additional_inputs):
     """Translate the SSM mixers' `higher_order.associative_scan`; only their first-order recurrence combine
     `(a_l * a_r, a_r * b_l + b_r)` is supported."""
@@ -1025,14 +1027,10 @@ def _get_onnx_translation_table() -> dict[Any, Any]:
     not exist yet (older torch, or `grouped_mm_fallback` before `transformers.integrations.moe` is imported).
     """
     table = dict(_ONNX_TRANSLATIONS)
-    if hasattr(torch.ops.aten, "_grouped_mm"):
-        table[torch.ops.aten._grouped_mm.default] = _aten_grouped_mm
     if hasattr(torch.ops.transformers, "grouped_mm_fallback"):
         table[torch.ops.transformers.grouped_mm_fallback.default] = _aten_grouped_mm
     if hasattr(torch.ops.torch_attn, "_varlen_attn"):
         table[torch.ops.torch_attn._varlen_attn.default] = _compiled_varlen_translation()
-    if hasattr(torch.ops.higher_order, "associative_scan"):
-        table[torch.ops.higher_order.associative_scan] = _translate_associative_scan
     return table
 
 

@@ -43,6 +43,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    apply_rotary_pos_emb_pairs,
     drop_runtime_asserts,
     get_leaf_tensors,
     leaf_name,
@@ -1382,19 +1383,6 @@ def _patch_polar(original):
     return patch
 
 
-def _rotate_half_pairs(pairs: torch.Tensor) -> torch.Tensor:
-    """``rotate_half`` for interleaved re/im pairs: swap each pair and negate the imaginary part."""
-    real, imag = pairs[..., 0], pairs[..., 1]
-    return torch.stack((-imag, real), dim=-1)
-
-
-def _apply_rotary_pos_emb_pairs(x: torch.Tensor, freqs_pairs: torch.Tensor) -> torch.Tensor:
-    """Rotate ``x`` by ``freqs_pairs``, both viewed as ``[..., d/2, 2]`` interleaved re/im pairs."""
-    pairs = x.float().reshape(*x.shape[:-1], -1, 2)
-    cos, sin = freqs_pairs[..., 0:1], freqs_pairs[..., 1:2]
-    return (pairs * cos + _rotate_half_pairs(pairs) * sin).flatten(3).type_as(x)
-
-
 @register_patch("openvino", "transformers.models.deepseek_v2.modeling_deepseek_v2.apply_rotary_emb")
 def _patch_deepseek_rotary_emb(original):
     """Rewrite complex-arithmetic RoPE with the equivalent real re/im-pair math.
@@ -1404,7 +1392,7 @@ def _patch_deepseek_rotary_emb(original):
 
     def patch(xq, xk, freqs_cis):
         freqs_pairs = torch.view_as_real(freqs_cis).unsqueeze(1).to(xq.device)
-        return _apply_rotary_pos_emb_pairs(xq, freqs_pairs), _apply_rotary_pos_emb_pairs(xk, freqs_pairs)
+        return apply_rotary_pos_emb_pairs(xq, freqs_pairs), apply_rotary_pos_emb_pairs(xk, freqs_pairs)
 
     return patch
 
@@ -1415,7 +1403,7 @@ def _patch_llama4_rotary_emb(original):
 
     def patch(xq, xk, freqs_cis):
         freqs_pairs = torch.view_as_real(freqs_cis)[:, :, None, :, :]
-        return _apply_rotary_pos_emb_pairs(xq, freqs_pairs), _apply_rotary_pos_emb_pairs(xk, freqs_pairs)
+        return apply_rotary_pos_emb_pairs(xq, freqs_pairs), apply_rotary_pos_emb_pairs(xk, freqs_pairs)
 
     return patch
 
@@ -1429,7 +1417,7 @@ def _patch_llama4_vision_rotary_emb(original):
         # Mirror ``reshape_for_broadcast``: keep dims 1 (seq) and -1 (d/2), plus the re/im pair.
         shape = [d if i == 1 else 1 for i, d in enumerate(query.shape[:-1])] + [freqs_pairs.shape[-2], 2]
         freqs_pairs = freqs_pairs.view(*shape).to(query.device)
-        return _apply_rotary_pos_emb_pairs(query, freqs_pairs), _apply_rotary_pos_emb_pairs(key, freqs_pairs)
+        return apply_rotary_pos_emb_pairs(query, freqs_pairs), apply_rotary_pos_emb_pairs(key, freqs_pairs)
 
     return patch
 
@@ -1728,20 +1716,6 @@ def _patch_fftn(original):
         for d, n in zip(dims, sizes):
             out = torch.fft.fft(out, n=n, dim=d, norm=norm)
         return out
-
-    return patch
-
-
-@register_patch("openvino", "torch.Tensor.scatter_reduce_", "torch.Tensor.scatter_reduce")
-def _patch_scatter_reduce(original):
-    """Map ``scatter_reduce(reduce="sum")`` to ``scatter_add_``, whose overload OV recognises (BLT)."""
-
-    def patch(self, dim, index, src, *, reduce="sum", include_self=True):
-        if reduce == "sum":
-            if not include_self:
-                self.zero_()
-            return self.scatter_add_(dim, index, src)
-        return original(self, dim, index, src, reduce=reduce, include_self=include_self)
 
     return patch
 

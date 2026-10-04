@@ -46,6 +46,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    apply_rotary_pos_emb_pairs,
     drop_runtime_asserts,
     module_dtype,
     register_fx_node_fix,
@@ -163,10 +164,7 @@ class ExecutorchExporter(DynamoExporter):
 def _patch_varlen_attn(original):
     """Lower `varlen_attn` to masked SDPA: the edge verifier trips on the flash op's aux outputs."""
 
-    def varlen_attn(*args, **kwargs):
-        return varlen_attn_masked_sdpa(*args, **kwargs)
-
-    return varlen_attn
+    return varlen_attn_masked_sdpa
 
 
 @register_patch("executorch", "executorch.exir.program._program.serialize_for_executorch")
@@ -688,16 +686,8 @@ def _patch_deepseek_v2_apply_rotary_emb(original):
     """deepseek_v2's rotary as real arithmetic on the `[cos, sin]` pair from the patch above."""
 
     def patch(xq, xk, freqs_cis):
-        cos = freqs_cis[..., 0].unsqueeze(1).to(xq.device)
-        sin = freqs_cis[..., 1].unsqueeze(1).to(xq.device)
-
-        def rotate(x):
-            paired = x.float().reshape(*x.shape[:-1], -1, 2)
-            real, imaginary = paired[..., 0], paired[..., 1]
-            rotated = torch.stack((real * cos - imaginary * sin, real * sin + imaginary * cos), dim=-1)
-            return rotated.flatten(3).type_as(x)
-
-        return rotate(xq), rotate(xk)
+        freqs_pairs = freqs_cis.unsqueeze(1).to(xq.device)
+        return apply_rotary_pos_emb_pairs(xq, freqs_pairs), apply_rotary_pos_emb_pairs(xk, freqs_pairs)
 
     return patch
 
@@ -718,11 +708,7 @@ def _patch_unsqueeze(original):
 @register_patch("executorch.cuda", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
     """No-op detach."""
-
-    def patch(input):
-        return input
-
-    return patch
+    return lambda input: input
 
 
 @register_patch("executorch.cuda", "torch.nn.functional.avg_pool2d")
@@ -1104,10 +1090,7 @@ def _patch_convert_guards_to_code(_original):
     (Mask2Former). Torch never uses them for ExecuTorch callers (``_ok_to_generate_guards_fn``).
     """
 
-    def patch(graph_module):
-        return []
-
-    return patch
+    return lambda graph_module: []
 
 
 @register_patch(
@@ -1562,18 +1545,12 @@ def _fix_amax_dim(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     if rank is None:
         return False
     dim_arg = node.args[1]
-    if isinstance(dim_arg, int) and dim_arg < 0:
-        new_args = list(node.args)
-        new_args[1] = rank + dim_arg
-        node.args = tuple(new_args)
-        return True
-    if isinstance(dim_arg, (list, tuple)) and any(isinstance(d, int) and d < 0 for d in dim_arg):
-        new_dims = [d + rank if isinstance(d, int) and d < 0 else d for d in dim_arg]
-        new_args = list(node.args)
-        new_args[1] = type(dim_arg)(new_dims)
-        node.args = tuple(new_args)
-        return True
-    return False
+    dims = dim_arg if isinstance(dim_arg, (list, tuple)) else [dim_arg]
+    if not any(isinstance(d, int) and d < 0 for d in dims):
+        return False
+    dims = [d + rank if isinstance(d, int) and d < 0 else d for d in dims]
+    node.args = (node.args[0], type(dim_arg)(dims) if isinstance(dim_arg, (list, tuple)) else dims[0], *node.args[2:])
+    return True
 
 
 @register_fx_node_fix("executorch")

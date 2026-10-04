@@ -205,6 +205,19 @@ def drop_runtime_asserts(graph_module) -> None:
         module.recompile()
 
 
+def _rotate_half_pairs(pairs: torch.Tensor) -> torch.Tensor:
+    """``rotate_half`` for interleaved re/im pairs: swap each pair and negate the imaginary part."""
+    real, imag = pairs[..., 0], pairs[..., 1]
+    return torch.stack((-imag, real), dim=-1)
+
+
+def apply_rotary_pos_emb_pairs(x: torch.Tensor, freqs_pairs: torch.Tensor) -> torch.Tensor:
+    """Rotate ``x`` by ``freqs_pairs``, both viewed as ``[..., d/2, 2]`` interleaved re/im pairs."""
+    pairs = x.float().reshape(*x.shape[:-1], -1, 2)
+    cos, sin = freqs_pairs[..., 0:1], freqs_pairs[..., 1:2]
+    return (pairs * cos + _rotate_half_pairs(pairs) * sin).flatten(3).type_as(x)
+
+
 # ── Cross-backend patches ─────────────────────────────────────────────────────
 
 
@@ -422,19 +435,13 @@ def _patch_reshape(original):
 @register_patch("onnx", "torch.bucketize")
 @register_patch("executorch", "torch.bucketize")
 def _patch_bucketize(_original):
-    """Decompose `bucketize` into a broadcast comparison and a sum.
+    """`bucketize` as the `searchsorted` decomposition: neither ONNX nor ExecuTorch's portable runtime has a
+    kernel (idefics3 position ids)."""
 
-    Neither ONNX nor ExecuTorch's portable runtime has a kernel (reached by e.g. idefics3 position ids).
-    """
+    searchsorted = _patch_searchsorted(None)
 
     def patch(input, boundaries, *, out_int32=False, right=False, out=None):
-        if boundaries.numel() == 0:
-            result = torch.zeros_like(input, dtype=torch.int64)
-        else:
-            below = boundaries <= input.unsqueeze(-1) if right else boundaries < input.unsqueeze(-1)
-            result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
+        return searchsorted(boundaries, input, out_int32=out_int32, right=right, out=out)
 
     return patch
 
@@ -443,7 +450,7 @@ def _patch_bucketize(_original):
 @register_patch("openvino", "torch.searchsorted")
 @register_patch("executorch", "torch.searchsorted")
 def _patch_searchsorted(_original):
-    """Decompose `searchsorted` like `bucketize`: count the sorted entries below each value (O(N*M))."""
+    """Decompose `searchsorted` into a broadcast comparison and a sum: count the sorted entries below each value."""
 
     def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
         if side is not None:
