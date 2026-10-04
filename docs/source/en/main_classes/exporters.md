@@ -55,6 +55,12 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
     - export_artifact
     - save_artifact
 
+## OpenVINOExporter
+
+[[autodoc]] exporters.exporter_openvino.OpenVINOExporter
+    - export_artifact
+    - save_artifact
+
 ## ExportArtifacts
 
 [[autodoc]] exporters.base.ExportArtifacts
@@ -67,12 +73,11 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.components.ExportedComponent
 
-## Running an export
-
-What an export is loaded back as: a decomposed, cache-driven export is driven through `generate`, a single
-graph is called. [`AutoExportedModel`] reads the manifest and picks between them.
-
 ## AutoExportedModel
+
+A decomposed, cache-driven export is loaded back as an [`ExportedGenerator`] and driven through `generate`; a
+single graph is loaded as an [`ExportedModel`] and called. [`AutoExportedModel`] reads the manifest and picks
+between them.
 
 [[autodoc]] exporters.auto.AutoExportedModel
 

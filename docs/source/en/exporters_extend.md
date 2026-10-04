@@ -98,7 +98,7 @@ this reference line up. Look there for the exact ops and classes each stage hand
 
 ### DynamoExporter
 
-The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export_artifact`
+The base exporter runs six stages, in order, inside `DynamoExporter.export_artifact`
 (see [exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)).
 
 1. Forward-signature patch: gives `model.forward` a flat argument signature so `torch.export`
@@ -112,6 +112,7 @@ The base exporter runs one patch stage and four helpers, in order, inside `Dynam
    with `DynamoConfig.dynamic_shapes`.
 5. State cleanup: reset tensor attributes a model sets inside `forward` that `torch.export` leaves
    as fake tensors. Extend by adding the attribute name to `_STATEFUL_CACHE_ATTRS`.
+6. Unused-weight removal: drop parameters and buffers the traced graph never reads.
 
 ### OnnxExporter
 
@@ -143,7 +144,7 @@ starting with backend preparation (see
 [exporter_executorch.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_executorch.py)).
 
 1. Backend preparation: move the model to the target device and dtype and pick its partitioner
-   (`prepare_for_xnnpack`, `prepare_for_cuda`). Add a backend by registering `prepare_for_<name>` in
+   (`prepare_for_xnnpack`, `prepare_for_cuda`, `prepare_for_mlx`, `prepare_for_openvino`). Add a backend by registering `prepare_for_<name>` in
    `_BACKEND_PREPARE`.
 2. Torch patches: replace `torch` ops the ExecuTorch backends can't accept, such as `split_copy`,
    `chunk`, and `topk(k>dim)`. Extend with `@register_patch("executorch", ...)`.
@@ -155,16 +156,10 @@ starting with backend preparation (see
 5. FX node fixes: rewrite individual nodes, such as mapping Python sym ops to `executorch_prim.*` or
    rewriting `pow` as a `mul` chain. Extend with `@register_fx_node_fix("executorch")`.
 
-## Known upstream workarounds
+## Test skip tables
 
-A few model classes hit confirmed bugs in the `onnxscript` graph optimizer (constant folding crashing
-on `SplitToSequence`, FPN initializers being dropped). [ONNX_DISABLE_OPTIMIZE](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_export.py) 
-disables `onnxscript` optimization for those models. Each entry records the
-upstream issue next to the model name. The list is expected to shrink as upstream bugs land, so a
-new entry must reference a specific upstream bug rather than disable optimization arbitrarily.
-
-[EXPORT_SKIPS](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_export.py),
-opts a handful of model classes out of the export sweep entirely when the model is
-fundamentally non-exportable as-is (data-dependent control flow that can't be vectorized, or modules
-treated as forward arguments). Each entry carries a reason naming the model-side change needed. This
-list is also expected to shrink, not grow.
+[test_export.py](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_export.py) keeps
+the models the export sweep treats differently in scope-keyed tables: `EXPORT_SKIPS` for classes a backend or
+variant can't export or compare yet (with the reason and, where one exists, the TODO that lifts it), and
+`ONNX_DISABLE_OPTIMIZE` / `EXECUTORCH_PARTITION_EXCLUDE` / `EXECUTORCH_DISABLE_PARTITION` for classes that
+export only with a backend option turned off. New entries need a reason next to the model name.

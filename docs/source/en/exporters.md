@@ -16,10 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-Export any [`PreTrainedModel`] to ONNX, ExecuTorch, or a standalone PyTorch program, regardless of the target runtime.
+Export any [`PreTrainedModel`] to ONNX, ExecuTorch, OpenVINO, or a standalone PyTorch program, regardless of the target runtime.
 
 ```python
-exporter = DynamoExporter()  # or OnnxExporter, ExecutorchExporter
+exporter = DynamoExporter()  # or OnnxExporter, ExecutorchExporter, OpenVINOExporter
 config = DynamoConfig(dynamic=True)
 exported_artifacts = exporter.export(model, inputs, config=config)
 ```
@@ -174,15 +174,7 @@ exported_artifacts = ExecutorchExporter().export(
 
 ### Run it
 
-`runner()` binds the graph to the runtime that runs it — an unlifted `torch.export` module, an ONNX Runtime
-session, a loaded `.pte` — and returns its outputs as named tensors, whichever backend produced it.
-
-```python
-outputs = exported_artifacts.runtime()(**inputs)
-logits = outputs["logits"]
-```
-
-`runtime()` goes one level up and gives something that behaves like the model: an
+`runtime()` gives something that behaves like the model, whichever backend produced the graph: an
 [`~exporters.ExportedModel`] for a single graph, an [`~exporters.ExportedGenerator`] for an export that
 `generate` drives (see [Generative models](#generative-models)).
 
@@ -194,7 +186,7 @@ To reach the backend's own program object — for tooling that speaks ONNX or Ex
 `artifact`:
 
 ```python
-exported_artifacts.artifact                        # ONNXProgram / ExportedProgram / ExecutorchProgramManager
+exported_artifacts.artifact                        # ONNXProgram / ExportedProgram / ExecutorchProgramManager / openvino.Model
 ```
 
 ### Save and load it
@@ -239,36 +231,6 @@ retracing.
 For fine-grained control over which dimensions are dynamic, pass explicit `dynamic_shapes`
 instead, which is forwarded directly to [torch.export.export](https://pytorch.org/docs/stable/export.html).
 
-<hfoptions id="explicit-dynamic-shapes">
-<hfoption id="Dynamo">
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters import DynamoExporter, DynamoConfig
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
-
-batch = torch.export.Dim("batch", min=1, max=32)
-seq = torch.export.Dim("seq", min=1, max=2048)
-
-exporter = DynamoExporter()
-config = DynamoConfig(
-    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
-    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
-    # guard wouldn't hold across the explicit symbolic range. Most LLMs need this under fine-grained
-    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
-    # infers shape relations instead of verifying them against user-stated bounds.
-    prefer_deferred_runtime_asserts_over_guards=True,
-)
-exported_artifacts = exporter.export(model, inputs, config=config)
-```
-
-</hfoption>
-<hfoption id="ONNX">
-
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -281,75 +243,18 @@ inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
 
-exporter = OnnxExporter()
 config = OnnxConfig(
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
-    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
-    # guard wouldn't hold across the explicit symbolic range. Most LLMs need this under fine-grained
-    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
-    # infers shape relations instead of verifying them against user-stated bounds.
+    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a guard
+    # wouldn't hold across the explicit range. Not needed with `dynamic=True`, where torch.export infers
+    # shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-exported_artifacts = exporter.export(model, inputs, config=config)
+exported_artifacts = OnnxExporter().export(model, inputs, config=config)
 ```
 
-</hfoption>
-<hfoption id="ExecuTorch">
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters import ExecutorchExporter, ExecutorchConfig
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
-
-batch = torch.export.Dim("batch", min=1, max=32)
-seq = torch.export.Dim("seq", min=1, max=2048)
-
-exporter = ExecutorchExporter()
-config = ExecutorchConfig(
-    backend="xnnpack",  # Use "mlx" on Apple Silicon.
-    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
-    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
-    # guard wouldn't hold across the explicit symbolic range. Most LLMs need this under fine-grained
-    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
-    # infers shape relations instead of verifying them against user-stated bounds.
-    prefer_deferred_runtime_asserts_over_guards=True,
-)
-exported_artifacts = exporter.export(model, inputs, config=config)
-```
-
-</hfoption>
-<hfoption id="OpenVINO">
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters import OpenVINOExporter, OpenVINOConfig
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
-
-batch = torch.export.Dim("batch", min=1, max=32)
-seq = torch.export.Dim("seq", min=1, max=2048)
-
-exporter = OpenVINOExporter()
-config = OpenVINOConfig(
-    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
-    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
-    # guard wouldn't hold across the explicit symbolic range — most LLMs need this under fine-grained
-    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
-    # infers shape relations instead of verifying them against user-stated bounds.
-    prefer_deferred_runtime_asserts_over_guards=True,
-)
-ov_model = exporter.export(model, inputs, config=config)
-```
-
-</hfoption>
-</hfoptions>
+Every config accepts the same `dynamic_shapes` and `prefer_deferred_runtime_asserts_over_guards`, so the
+other exporters take this unchanged.
 
 ## Generative models
 
@@ -363,29 +268,6 @@ that method runs both), and `embed_tokens` for `input_ids -> inputs_embeds`. The
 `decode`, taking `inputs_embeds`, so the runtime scatters each modality's features into the embeddings
 before running it. Any architecture exposing those methods works without further wiring.
 
-<hfoptions id="generate">
-<hfoption id="Dynamo">
-
-```python
-from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.exporters import DynamoExporter, DynamoConfig
-
-model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
-text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
-
-exporter = DynamoExporter()
-config = DynamoConfig(dynamic=True)
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
-# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
-# program through `exported_artifacts["decode"].artifact`
-```
-
-</hfoption>
-<hfoption id="ONNX">
-
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters import OnnxExporter, OnnxConfig
@@ -396,63 +278,16 @@ messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggi
 text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
-exporter = OnnxExporter()
-config = OnnxConfig(dynamic=True)
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
-# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
-# program through `exported_artifacts["decode"].artifact`
+exported_artifacts = OnnxExporter().export_for_generation(model, inputs, config=OnnxConfig(dynamic=True))
+# components: "image_encoder", "embed_tokens", "decode"; reach a backend program through
+# `exported_artifacts["decode"].artifact`, or run them all with `exported_artifacts.runtime().generate(...)`
 ```
 
-</hfoption>
-<hfoption id="ExecuTorch">
-
-```python
-from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.exporters import ExecutorchExporter, ExecutorchConfig
-
-model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
-text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
-
-exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
-# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
-# program through `exported_artifacts["decode"].artifact`
-```
-
-</hfoption>
-<hfoption id="OpenVINO">
-
-```python
-from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.exporters import OpenVINOExporter, OpenVINOConfig
-
-model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
-text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
-
-exporter = OpenVINOExporter()
-config = OpenVINOConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": openvino.Model, "language_model": openvino.Model, "lm_head": openvino.Model, "decode": openvino.Model}
-```
-
-</hfoption>
-</hfoptions>
-
-> [!WARNING]
-> The exported components are independent graphs, not a ready-to-run inference pipeline. The
-> caller is responsible for running each encoder, projecting embeddings, and orchestrating the
-> generation loop.
+Swap in any other exporter and its config; the components are the same.
 
 ### How `export_for_generation` works
 
-[`~exporters.utils.decompose_for_generation`] runs `model.generate(**inputs, max_new_tokens=2)`
+[`~exporters.decompose.decompose_for_generation`] runs `model.generate(**inputs, max_new_tokens=2)`
 once and hooks `model.forward` to capture the real prefill and decode kwargs (and the
 per-submodule kwargs via hooks on each encoder/projector/language model if the model is
 multi-modal). That's why it works for any architecture, including decoder-only, SSM,
@@ -484,52 +319,13 @@ for name, component in components.items():
 ### Multi-token decode
 
 A dynamic export (`dynamic=True`) captures `decode` as a **multi-token** decode:
-[`~exporters.utils.decompose_for_generation`] merges two consecutive decode steps (it captures with
+[`~exporters.decompose.decompose_for_generation`] merges two consecutive decode steps (it captures with
 `max_new_tokens=3`) into one forward, so the query-sequence axis stays symbolic. A single graph then serves
 every query length — one token (ordinary decoding), many tokens at once (continuation-from-past, e.g.
 accepting a chunk of speculative tokens), and a plain prefill when the cache is empty — so the export ships
 one text stack instead of two. A prompt graph is kept only where the decode graph provably cannot stand in.
 Pass `multi_token_decode=False` to keep a single-token `decode` beside a separate `prefill` graph anyway — for
 a runtime that wants a fixed one-token decode shape.
-
-<hfoptions id="multi-token-decode">
-<hfoption id="Dynamo">
-
-```python
-from transformers.exporters import DynamoExporter, DynamoConfig
-
-exporter = DynamoExporter()
-config = DynamoConfig(dynamic=True)
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
-# components["decode"] now accepts a variable number of query tokens
-```
-
-</hfoption>
-<hfoption id="ONNX">
-
-```python
-from transformers.exporters import OnnxExporter, OnnxConfig
-
-exporter = OnnxExporter()
-config = OnnxConfig(dynamic=True)
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
-# components["decode"] now accepts a variable number of query tokens
-```
-
-</hfoption>
-<hfoption id="ExecuTorch">
-
-```python
-from transformers.exporters import ExecutorchExporter, ExecutorchConfig
-
-exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
-# components["decode"] now accepts a variable number of query tokens
-```
-
-</hfoption>
-</hfoptions>
 
 A static export cannot keep the query axis symbolic, so it captures a **single-token** `decode` step
 instead, with a separate `prefill` graph for the prompt (asking it for `multi_token_decode=True` is refused). The multi-token decode composes with the static KV
@@ -550,50 +346,15 @@ number of query tokens, so one graph serves both the prompt (empty cache → pre
 token (populated cache → decode). Export it by forwarding a `GenerationConfig` with
 `cache_implementation="static"` (and a `max_cache_len`) with a dynamic export:
 
-<hfoptions id="static-cache">
-<hfoption id="Dynamo">
-
-```python
-from transformers import GenerationConfig
-from transformers.exporters import DynamoExporter, DynamoConfig
-
-exporter = DynamoExporter()
-gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-components = exporter.export_for_generation(
-    model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config
-)
-```
-
-</hfoption>
-<hfoption id="ONNX">
-
 ```python
 from transformers import GenerationConfig
 from transformers.exporters import OnnxExporter, OnnxConfig
 
-exporter = OnnxExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-components = exporter.export_for_generation(
+exported_artifacts = OnnxExporter().export_for_generation(
     model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config
 )
 ```
-
-</hfoption>
-<hfoption id="ExecuTorch XNNPACK">
-
-```python
-from transformers import GenerationConfig
-from transformers.exporters import ExecutorchExporter, ExecutorchConfig
-
-exporter = ExecutorchExporter()
-gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-components = exporter.export_for_generation(
-    model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True), generation_config=gen_config
-)
-```
-
-</hfoption>
-</hfoptions>
 
 The `decode` graph now has two symbolic axes — the query length (how many tokens you feed) and the cache
 length (`max_cache_len`, resizable at load time). `dynamic=True` marks these (and every other axis)
