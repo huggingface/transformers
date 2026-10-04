@@ -841,12 +841,13 @@ def pipeline(
     if model_kwargs is None:
         model_kwargs = {}
 
-    code_revision = kwargs.pop("code_revision", None)
+    code_revision = kwargs.pop("code_revision", None) or model_kwargs.pop("code_revision", None)
     commit_hash = kwargs.pop("_commit_hash", None)
     local_files_only = kwargs.get("local_files_only", False)
 
     hub_kwargs = {
         "revision": revision,
+        "code_revision": code_revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
         "_commit_hash": commit_hash,
@@ -901,9 +902,7 @@ def pipeline(
     # Instantiate config if needed
     adapter_path = None
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(
-            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
+        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
         hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
@@ -928,9 +927,7 @@ def pipeline(
                     if not os.path.exists(model) or not os.path.exists(os.path.join(model, CONFIG_NAME)):
                         model = adapter_config["base_model_name_or_path"]
 
-        config = AutoConfig.from_pretrained(
-            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
+        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
         hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
