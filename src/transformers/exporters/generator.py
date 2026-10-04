@@ -173,11 +173,6 @@ class _ExportedEncoder:
 # Input-role derivations only the generation loop needs; kept off `ModelRunner` so runners stay task-agnostic.
 
 
-def _mask_type(name: str) -> str:
-    """The attention type a per-type mask input names, under either backend's flattening."""
-    return name.removeprefix("attention_mask.").removeprefix("attention_mask_")
-
-
 def text_input(runner) -> str:
     """The graph's text input: `"decoder_input_ids"`, `"inputs_embeds"` or `"input_ids"`."""
     return next((n for n in ("decoder_input_ids", "inputs_embeds") if n in runner.input_names), "input_ids")
@@ -188,12 +183,6 @@ def mask_inputs(runner) -> tuple[str, ...]:
     return tuple(
         n for n in runner.input_names if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
     )
-
-
-def decoder_mask_input(runner) -> str | None:
-    """`"decoder_attention_mask"` when the graph declares one. On encoder-decoders `attention_mask` covers the
-    encoder sequence, so the causal mask goes here; `generate` does not supply it."""
-    return "decoder_attention_mask" if "decoder_attention_mask" in runner.input_names else None
 
 
 class ExportedGenerator(GenerationMixin):
@@ -241,9 +230,9 @@ class ExportedGenerator(GenerationMixin):
         self._prefill_runner = runners.get("prefill", decode)
         # Scatter applies only when the decode graph (decoder-only VLMs) or the encoder graph (florence2) takes
         # embeddings; otherwise run as a plain generator even if an embed graph was exported.
-        takes_embeds = text_input(decode) == "inputs_embeds" or (
-            encoder is not None and "inputs_embeds" in encoder.input_names
-        )
+        # An encoder taking `inputs_embeds` means features scatter in front of the text encoder (florence2).
+        encoder_takes_embeds = encoder is not None and "inputs_embeds" in encoder.input_names
+        takes_embeds = text_input(decode) == "inputs_embeds" or encoder_takes_embeds
         self._text_embed = runners["embed_tokens"] if "embed_tokens" in runners and takes_embeds else None
         self._modalities = []
         if self._text_embed is not None:
@@ -260,10 +249,7 @@ class ExportedGenerator(GenerationMixin):
                     runner = runners["image_encoder"]
                 self._modalities.append(Modality(token_id, runner, spec))
         self._modality_keys = {key for modality in self._modalities for key in modality.input_keys}
-        # An encoder taking `inputs_embeds` means features scatter in front of the text encoder (florence2).
-        scatters_at_encoder = (
-            self._text_embed is not None and encoder is not None and "inputs_embeds" in encoder.input_names
-        )
+        scatters_at_encoder = self._text_embed is not None and encoder_takes_embeds
         self._encoder = (
             _ExportedEncoder(
                 encoder,
@@ -311,7 +297,7 @@ class ExportedGenerator(GenerationMixin):
             ids = runtime.generate(input_ids=prompt, max_new_tokens=32)
         """
         download_kwargs, _ = split_download_kwargs(dict(kwargs))
-        runners, _ = load_export_runners(save_directory, **kwargs)
+        runners = load_export_runners(save_directory, **kwargs)
         config = AutoConfig.from_pretrained(save_directory, **download_kwargs)
         has_generation_config = (
             resolve_export_file(save_directory, GENERATION_CONFIG_NAME, **download_kwargs) is not None
@@ -352,18 +338,16 @@ class ExportedGenerator(GenerationMixin):
     def __call__(self, **kwargs):
         return self.forward(**kwargs)
 
-    @property
-    def _consumed_kwargs(self) -> set[str]:
-        """Kwargs this runtime consumes without naming them on `forward`: every graph input, the text-path
+    def _validate_model_kwargs(self, model_kwargs):
+        """Skip the kwargs this runtime consumes without naming them on `forward`: every graph input, the text-path
         kwargs (a model deriving one internally, e.g. ctrl's `token_type_ids`, exports a graph without it),
         and with modalities their inputs plus `mm_token_type_ids`."""
         consumed = self._graph_inputs | _TEXT_KWARGS | self._modality_keys
         if self._embedder is not None:
             consumed = consumed | {self._embedder.source}
-        return (consumed | {"mm_token_type_ids"}) if self._text_embed is not None else consumed
-
-    def _validate_model_kwargs(self, model_kwargs):
-        super()._validate_model_kwargs({k: v for k, v in model_kwargs.items() if k not in self._consumed_kwargs})
+        if self._text_embed is not None:
+            consumed = consumed | {"mm_token_type_ids"}
+        super()._validate_model_kwargs({k: v for k, v in model_kwargs.items() if k not in consumed})
 
     def _supports_default_dynamic_cache(self) -> bool:  # noqa: D401 (instance form: reads the prototype)
         """Whether `generate` should build a `DynamicCache`, read off the traced cache input.
@@ -429,7 +413,7 @@ class ExportedGenerator(GenerationMixin):
                     self.config,
                     self._dtype,
                     self._device,
-                    kv_geometry=self._decode_runner.kv_geometry,
+                    kv_geometry=self._decode_runner.export_metadata.kv_geometry,
                     indexer_layers=self._decode_runner.export_metadata.indexer_layers,
                 )
 
@@ -451,8 +435,7 @@ class ExportedGenerator(GenerationMixin):
                 keys, values = keys.repeat_interleave(repeats, dim=0), values.repeat_interleave(repeats, dim=0)
             cross.layers[index].lazy_initialization(keys, values)
             cross.layers[index].keys, cross.layers[index].values = keys, values
-            if hasattr(cache, "is_updated"):
-                cache.is_updated[index] = True
+            cache.is_updated[index] = True
         # A state-owning graph is never fed the loop's cache, so seed its variables directly.
         runner = self._prefill_runner
         if runner.owns_state:
@@ -474,6 +457,7 @@ class ExportedGenerator(GenerationMixin):
     def _mask_feed(self, runner, attention_mask, position_ids, cache_len):
         """Feed the graph's mask input(s), rebuilding the causal mask where `generate` dropped one as
         redundant but the graph still takes a tensor."""
+        masks = mask_inputs(runner)
         # Mixed-attention models (nemotron_h, jamba) build their per-type mask dict inside forward.
         mask_ranks = runner.export_metadata.mask_ranks
         if mask_ranks and not isinstance(attention_mask, dict):
@@ -493,23 +477,24 @@ class ExportedGenerator(GenerationMixin):
                 for layer_type, mask in attention_mask.items()
             }
             # ONNX flattens the dict to `attention_mask.<type>` inputs; dynamo takes it whole.
-            if declared := [name for name in mask_inputs(runner) if name != "attention_mask"]:
+            if declared := [name for name in masks if name != "attention_mask"]:
                 fallback = None
                 feed = {}
                 for name in declared:
-                    mask = attention_mask.get(_mask_type(name))
+                    # The attention type, under either backend's flattening.
+                    mask = attention_mask.get(name.removeprefix("attention_mask.").removeprefix("attention_mask_"))
                     if mask is None:
                         fallback = fallback if fallback is not None else self._causal_mask(position_ids, cache_len)
                         mask = fallback
                     feed[name] = mask
                 return feed
             return {"attention_mask": attention_mask}
-        if not mask_inputs(runner):
+        if not masks:
             return {}
         if attention_mask is None:
             # Nothing is padded; build the rank the graph took. A 2-D-traced graph guards on mask width, so a
             # 4-D causal mask would trip it.
-            name = mask_inputs(runner)[0]
+            name = masks[0]
             if runner.export_metadata.mask_rank == 2:
                 dtype = runner.export_metadata.mask_dtype or torch.long
                 batch = position_ids.shape[-2] if position_ids.dim() == 3 else position_ids.shape[0]
@@ -521,7 +506,7 @@ class ExportedGenerator(GenerationMixin):
         if pads_to_cache and attention_mask.dim() == 2:
             if (padding_length := cache_len - attention_mask.shape[-1]) > 0:
                 attention_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
-        return {mask_inputs(runner)[0]: attention_mask}
+        return {masks[0]: attention_mask}
 
     def _causal_mask(self, position_ids, cache_len):
         """Full causal mask `[batch, 1, query, cache_len]` from the positions (M-RoPE: text row 0). Assumes no
@@ -629,13 +614,13 @@ class ExportedGenerator(GenerationMixin):
         else:
             cache_len = mask_width(past_key_values, text.shape[1])
         feed.update(self._mask_feed(runner, attention_mask, position_ids, cache_len))
-        # `generate` supplies neither the decoder mask nor decoder positions, so count them off the cache.
-        decoder_mask = decoder_mask_input(runner)
-        if decoder_mask is not None and decoder_mask not in feed:
+        # `generate` supplies neither the decoder mask nor decoder positions, so count them off the cache. On
+        # encoder-decoders `attention_mask` covers the encoder sequence, so the causal mask goes here.
+        if "decoder_attention_mask" in runner.input_names and "decoder_attention_mask" not in feed:
             decoder_positions = (
                 torch.arange(text.shape[1], device=self._device).unsqueeze(0).expand(text.shape[0], -1) + past_len
             )
-            feed[decoder_mask] = self._causal_mask(decoder_positions, cache_len)
+            feed["decoder_attention_mask"] = self._causal_mask(decoder_positions, cache_len)
         # Only when declared: some graphs take no cache even though `generate` builds one (xlstm).
         if past_key_values is not None and runner.cache_input is not None and not runner.owns_state:
             feed[runner.cache_input] = past_key_values
@@ -658,7 +643,7 @@ class ExportedGenerator(GenerationMixin):
         cache never grows."""
         if self._decode_runner.owns_state:
             return self._decode_runner.state_length
-        return _cache_length(cache) if cache is not None else 0
+        return _cache_length(cache)
 
     def _maybe_prepare_encoder_kwargs_for_generation(
         self, inputs_tensor, model_kwargs, model_input_name, generation_config

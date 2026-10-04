@@ -67,7 +67,9 @@ class OpenVINOModelRunner(ModelRunner):
 
     def to(self, device) -> OpenVINOModelRunner:
         """Recompile for another plugin — a compiled model is bound to the one it was compiled for."""
-        return type(self)(self._model, export_metadata=self.export_metadata, device=device, ov_config=self._ov_config)
+        return type(self)(
+            self._model, export_metadata=self.export_metadata.raw, device=device, ov_config=self._ov_config
+        )
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(kwargs).items()}

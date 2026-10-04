@@ -146,9 +146,6 @@ class ExportMetadata:
     def from_dict(cls, metadata: Any) -> ExportMetadata:
         return cls(metadata) if isinstance(metadata, Mapping) else cls()
 
-    def __bool__(self) -> bool:
-        return bool(self.raw)
-
     @property
     def input_names(self) -> tuple[str, ...]:
         """What the graph takes, in the flat order it takes them."""

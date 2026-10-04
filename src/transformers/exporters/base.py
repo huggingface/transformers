@@ -20,7 +20,7 @@ import copy
 import functools
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -110,14 +110,14 @@ def read_export_manifest(pretrained_model_name_or_path, **download_kwargs) -> di
     return manifest
 
 
-def load_export_runners(pretrained_model_name_or_path, **kwargs) -> tuple[dict[str, ModelRunner], dict]:
-    """Resolve a saved export into `{component: runner}`, each handed its recorded metadata, plus the manifest."""
+def load_export_runners(pretrained_model_name_or_path, **kwargs) -> dict[str, ModelRunner]:
+    """Resolve a saved export into `{component: runner}`, each handed its recorded metadata."""
     from .auto import export_backend
 
     download_kwargs, runner_kwargs = split_download_kwargs(kwargs)
     manifest = read_export_manifest(pretrained_model_name_or_path, **download_kwargs)
     runner_class = export_backend(manifest["export_format"], "runner")
-    runners = {
+    return {
         component: runner_class.from_pretrained(
             resolve_export_file(pretrained_model_name_or_path, entry["file"], **download_kwargs),
             export_metadata=entry["metadata"],
@@ -125,7 +125,6 @@ def load_export_runners(pretrained_model_name_or_path, **kwargs) -> tuple[dict[s
         )
         for component, entry in manifest["components"].items()
     }
-    return runners, manifest
 
 
 class ExportArtifacts(Mapping):
@@ -167,13 +166,6 @@ class ExportArtifacts(Mapping):
         return "decode" in self.components
 
     @property
-    def backend(self) -> type[HfExporter]:
-        """The exporter class for this format, which knows the suffix and how to write the files."""
-        from .auto import export_backend
-
-        return export_backend(self.export_format, "exporter")
-
-    @property
     def artifact(self):
         """The backend's own program, for a single-graph export."""
         if len(self.components) != 1:
@@ -188,7 +180,9 @@ class ExportArtifacts(Mapping):
 
         Reload with [`~exporters.ExportedGenerator.from_pretrained`].
         """
-        backend = self.backend
+        from .auto import export_backend
+
+        backend = export_backend(self.export_format, "exporter")
         directory = Path(save_directory)
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -203,7 +197,6 @@ class ExportArtifacts(Mapping):
                 {
                     "schema_version": 1,
                     "export_format": self.export_format.value,
-                    # A load dispatches on each component's role; the names are not a contract.
                     "components": components,
                 },
                 indent=2,
@@ -217,24 +210,16 @@ class ExportArtifacts(Mapping):
         if self.assistant is not None:
             self.assistant.save_pretrained(directory / ASSISTANT_SUBFOLDER)
 
-    def _runners(self, components: Iterable[str] | None = None, **kwargs) -> dict[str, ModelRunner]:
-        """A runner per artifact, built in memory with the same metadata a load passes.
-
-        `components` limits which ones are built; `kwargs` (e.g. `device=`) go to each runner.
-        """
+    def runtime(self, **kwargs):
+        """Run without going to disk: an [`ExportedGenerator`] for an export with a decode graph, else an
+        [`ExportedModel`]. `kwargs` (e.g. `device=`) go to each runner, which gets the metadata a load passes."""
         from .auto import export_backend
 
         runner_class = export_backend(self.export_format, "runner")
-        wanted = self.components if components is None else {name: self.components[name] for name in components}
-        return {
+        runners = {
             name: runner_class.from_artifact(component.artifact, export_metadata=component.metadata.raw, **kwargs)
-            for name, component in wanted.items()
+            for name, component in self.components.items()
         }
-
-    def runtime(self, **kwargs):
-        """Run without going to disk: an [`ExportedGenerator`] for an export with a decode graph, else an
-        [`ExportedModel`]."""
-        runners = self._runners(**kwargs)
         if self.can_generate():
             from .generator import ExportedGenerator
 
@@ -593,12 +578,6 @@ class ModelRunner(ABC):
         `None`."""
         return self.cache_inputs[0] if self.cache_inputs else None
 
-    @property
-    def kv_geometry(self) -> dict[int, tuple[int, int, int]]:
-        """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` the cache was traced with; non-KV layers
-        are omitted."""
-        return self.export_metadata.kv_geometry
-
     def to(self, device) -> ModelRunner:
         """The runner to use for `device`; returned rather than moved in place since some backends must reopen
         (ORT) or cannot move at all (ExecuTorch)."""
@@ -686,7 +665,7 @@ class ExportedModel:
         """Load a single-component export (local directory or Hub repo) written by
         [`~ExportArtifacts.save_pretrained`]."""
         download_kwargs, _ = split_download_kwargs(dict(kwargs))
-        runners, _ = load_export_runners(save_directory, **kwargs)
+        runners = load_export_runners(save_directory, **kwargs)
         if len(runners) != 1:
             raise ValueError(
                 f"{save_directory} describes {len(runners)} components ({sorted(runners)}); use "

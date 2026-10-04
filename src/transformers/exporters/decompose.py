@@ -498,11 +498,6 @@ def _modality_owner(model, getter):
     return base if hasattr(base, getter) else (model if hasattr(model, getter) else None)
 
 
-def _present_input_key(inputs, input_keys):
-    """The modality's input kwarg that this call actually carries, or `None` when the modality is absent."""
-    return next((key for key in input_keys if inputs.get(key) is not None), None)
-
-
 def _embeds_input_ids(decoder: Any) -> bool:
     """Whether `decoder` turns `input_ids` into embeddings with a single module (not musicgen's
     per-codebook `ModuleList`)."""
@@ -540,7 +535,7 @@ def decompose_multimodal(
     for spec in _MODALITY_SPECS:
         if (owner := _modality_owner(model, spec.getter)) is None:
             continue
-        if _present_input_key(inputs, spec.input_keys) is not None or recorded_features.get(spec.component):
+        if any(inputs.get(key) is not None for key in spec.input_keys) or recorded_features.get(spec.component):
             active_modalities.append((spec.component, spec.getter, owner, spec.grid_key))
 
     try:

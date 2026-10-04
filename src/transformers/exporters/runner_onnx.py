@@ -9,12 +9,8 @@ from typing import Any
 from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .cache import _read_cache_entry
-from .metadata import (
-    ExportMetadata,
-)
-from .utils import (
-    get_leaf_tensors,
-)
+from .metadata import ExportMetadata
+from .utils import get_leaf_tensors
 
 
 if is_torch_available():
@@ -125,7 +121,7 @@ class OnnxModelRunner(ModelRunner):
         specs = (*session.get_inputs(), *session.get_outputs())
         self._element_types = {spec.name: _ort_element_type(spec.type) for spec in specs}
         self._io_dtypes = {spec.name: _ort_to_torch_dtype(spec.type) for spec in specs}
-        self._io_binding, self._shared_outputs, self._binds = None, {}, False
+        self._io_binding, self._shared_outputs = None, {}
         # An input/output without an element type cannot be bound; such a graph keeps the plain `run` path.
         if all(kind is not None for kind in self._element_types.values()):
             self._io_binding = session.io_binding()
@@ -135,7 +131,6 @@ class OnnxModelRunner(ModelRunner):
                 paired = "output." + spec.name.removeprefix("input.")
                 if spec.name.startswith("input.") and self._output_shapes.get(paired) == tuple(spec.shape):
                     self._shared_outputs[spec.name] = paired
-            self._binds = True
 
     @staticmethod
     def _providers_for(device=None) -> list[str | tuple[str, dict]]:
@@ -195,7 +190,7 @@ class OnnxModelRunner(ModelRunner):
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         feed = self._flattened(kwargs)
-        return self._bound_run(feed) if self._binds else self._host_run(feed)
+        return self._bound_run(feed) if self._io_binding is not None else self._host_run(feed)
 
     def _flattened(self, kwargs: dict[str, Any]) -> dict[str, torch.Tensor]:
         """The graph's inputs as flat tensors under their declared names; pytree kwargs flatten by dotted path."""

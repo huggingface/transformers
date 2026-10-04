@@ -4,12 +4,8 @@ from __future__ import annotations
 
 from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
-from .metadata import (
-    ExportMetadata,
-)
-from .utils import (
-    get_leaf_tensors,
-)
+from .metadata import ExportMetadata
+from .utils import get_leaf_tensors
 
 
 if is_torch_available():

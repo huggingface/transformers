@@ -31,6 +31,9 @@ from .runner_onnx import OnnxModelRunner
 from .runner_openvino import OpenVINOModelRunner
 
 
+logger = logging.get_logger(__name__)
+
+
 @dataclass
 class ExportBackend:
     """One export format's config, exporter, and runner (`None` for an export-only format)."""
@@ -70,23 +73,19 @@ def register_backend(
     EXPORT_BACKENDS[name] = ExportBackend(config, exporter, runner)
 
 
-def export_backend(export_format, part: str | None = None):
-    """The registered backend for a format (an [`ExportFormat`] or its string value), or one named part of it."""
+def export_backend(export_format, part: str):
+    """One part (`"config"`, `"exporter"`, `"runner"`) of the backend registered for a format (an [`ExportFormat`]
+    or its string value)."""
     if export_format is None:
         raise ValueError(f"No export format given — registered formats are {sorted(EXPORT_BACKENDS)}.")
     name = export_format.value if isinstance(export_format, ExportFormat) else export_format
     backend = EXPORT_BACKENDS.get(name)
     if backend is None:
         raise ValueError(f"Unknown export format '{name}' — registered formats are {sorted(EXPORT_BACKENDS)}.")
-    if part is None:
-        return backend
     registered = getattr(backend, part)
     if registered is None:
         raise ValueError(f"The '{name}' backend registers no {part}, so its artifacts can only be exported and saved.")
     return registered
-
-
-logger = logging.get_logger(__name__)
 
 
 class AutoExportConfig:

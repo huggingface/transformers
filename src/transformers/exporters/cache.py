@@ -138,7 +138,7 @@ def resize_to_traced_lengths(cache, lengths: dict[int, int]) -> None:
 
 def is_fixed_size(cache) -> bool:
     """Whether `cache` is allocated at its full length up front (`StaticCache`), read off its first layer."""
-    layers = _self_attention_layers(cache) if cache is not None else []
+    layers = _self_attention_layers(cache)
     return bool(layers) and getattr(layers[0], "is_compileable", False)
 
 
@@ -255,7 +255,7 @@ def _empty_container(container: str, config, batch_size: int, dtype, device, enc
     would flatten shorter); anything else names a model's own class in its `modeling_*` module."""
     if container != "cache":
         module = _resolve_modeling_module(config)
-        container_class = getattr(module, container, None) if module is not None else None
+        container_class = getattr(module, container, None)
         return container_class() if container_class is not None else None
     if encoder_config is None:
         return DynamicCache()
@@ -322,17 +322,17 @@ def materialize_cache_layers(
             are left alone.
     """
     kv_geometry = kv_geometry or {}
+    by_layer = _per_layer_head_shapes(config)
     for cache_half in _cache_halves(cache):
         # A model-specific cache may have no `layers` list (xLSTM's `rnn_state`).
         if not hasattr(cache_half, "layers"):
             continue
-        # A cache with state of its own sizes it by overriding `early_initialization` (`MiniMaxCache`).
-        by_layer = _per_layer_head_shapes(config)
         geometry = [
             kv_geometry.get(index) or (by_layer[index] if index < len(by_layer) else None)
             for index in range(len(cache_half.layers))
         ]
-        if all(entry is not None for entry in geometry) and geometry:
+        # A cache with state of its own sizes it by overriding `early_initialization` (`MiniMaxCache`).
+        if geometry and all(entry is not None for entry in geometry):
             cache_half.early_initialization(
                 batch_size,
                 [entry[0] for entry in geometry],
@@ -341,29 +341,20 @@ def materialize_cache_layers(
                 device,
                 value_head_dim=[entry[2] for entry in geometry],
             )
-        _materialize_layers(cache_half, batch_size, config, dtype, device, kv_geometry, indexer_layers)
-
-
-def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry, indexer_layers) -> None:
-    """`materialize_cache_layers` for one flat cache."""
-    by_layer = _per_layer_head_shapes(config)
-    for layer_idx, layer in enumerate(cache.layers):
-        # Before the `is_initialized` skip, which `early_initialization` sets with the indexer untouched; a lazy
-        # indexer shifts every later leaf. Skipped where the trace had none (hy_v4's shared indexer layers).
-        traced_indexer = indexer_layers.get(layer_idx, True) if indexer_layers else True
-        if traced_indexer and hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
-            index_head_dim = config.get_text_config().index_head_dim
-            empty_indexer_keys = torch.zeros(batch_size, 0, index_head_dim, dtype=dtype, device=device)
-            layer.lazy_initialization_indexer(empty_indexer_keys)
-        if getattr(layer, "is_initialized", True):
-            continue
-        geometry = kv_geometry.get(layer_idx) or (by_layer[layer_idx] if layer_idx < len(by_layer) else None)
-        if geometry is None:
-            continue
-        num_kv_heads, key_dim, value_dim = geometry
-        # The recorded head count is part of the input spec, so it follows the buffers, not the config.
-        if hasattr(layer, "num_heads"):
-            layer.num_heads = num_kv_heads
-        empty_keys = torch.zeros(batch_size, num_kv_heads, 0, key_dim, dtype=dtype, device=device)
-        empty_values = torch.zeros(batch_size, num_kv_heads, 0, value_dim, dtype=dtype, device=device)
-        layer.lazy_initialization(empty_keys, empty_values)
+        for layer_idx, (layer, layer_geometry) in enumerate(zip(cache_half.layers, geometry)):
+            # Before the `is_initialized` skip, which `early_initialization` sets with the indexer untouched; a
+            # lazy indexer shifts every later leaf. Skipped where the trace had none (hy_v4's shared indexers).
+            traced_indexer = indexer_layers.get(layer_idx, True) if indexer_layers else True
+            if traced_indexer and hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
+                index_head_dim = config.get_text_config().index_head_dim
+                empty_indexer_keys = torch.zeros(batch_size, 0, index_head_dim, dtype=dtype, device=device)
+                layer.lazy_initialization_indexer(empty_indexer_keys)
+            if getattr(layer, "is_initialized", True) or layer_geometry is None:
+                continue
+            num_kv_heads, key_dim, value_dim = layer_geometry
+            # The recorded head count is part of the input spec, so it follows the buffers, not the config.
+            if hasattr(layer, "num_heads"):
+                layer.num_heads = num_kv_heads
+            empty_keys = torch.zeros(batch_size, num_kv_heads, 0, key_dim, dtype=dtype, device=device)
+            empty_values = torch.zeros(batch_size, num_kv_heads, 0, value_dim, dtype=dtype, device=device)
+            layer.lazy_initialization(empty_keys, empty_values)

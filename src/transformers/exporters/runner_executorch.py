@@ -8,12 +8,8 @@ from pathlib import Path
 from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .cache import _cache_tensors, _read_cache_entry
-from .metadata import (
-    ExportMetadata,
-)
-from .utils import (
-    get_leaf_tensors,
-)
+from .metadata import ExportMetadata
+from .utils import get_leaf_tensors
 
 
 if is_torch_available():
