@@ -924,14 +924,12 @@ class BltModel(BltPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache:
-            if past_key_values is None:
-                past_key_values = EncoderDecoderCache(
-                    DynamicCache(config=self.config), DynamicCache(config=self.config)
-                )
-            elif not isinstance(past_key_values, EncoderDecoderCache):
-                # BLT uses an encoder-decoder cache even though it is not en encoder-decoder model. Create a cross-cache
-                # if not yet created by the user
+        if use_cache and past_key_values is not None:
+            if not isinstance(past_key_values, EncoderDecoderCache):
+                # BLT is not encoder-decoder; only create a cross-cache when a cache is
+                # already in use, preserving the first no-cache pass and avoiding
+                # passing composite BltConfig (no top-level num_hidden_layers) to
+                # DynamicCache.
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
 
         # Extract input embeddings as early as possible
