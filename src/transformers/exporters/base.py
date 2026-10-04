@@ -31,7 +31,7 @@ from ..models.auto import AutoConfig
 from ..utils import cached_file, logging
 from ..utils.generic import ModelOutput
 from ..utils.import_utils import _is_package_available, is_torch_available
-from .components import ComponentRole, ExportedComponent
+from .components import ExportedComponent
 from .configs import ExportConfigMixin, ExportFormat
 from .decompose import decompose_for_generation
 from .metadata import EXPORT_METADATA_KEY, ExportMetadata
@@ -48,8 +48,6 @@ if is_torch_available():
 # can carry the metadata (`torch.export` cannot).
 EXPORT_MANIFEST_FILE = "export.json"
 
-# The export recipe: written by `ExportArtifacts.save_pretrained`, read by `AutoHfExporter.from_pretrained`.
-EXPORT_CONFIG_NAME = "export_config.json"
 
 # Where an export's draft model for assisted generation is saved, as an export of its own.
 ASSISTANT_SUBFOLDER = "assistant"
@@ -112,11 +110,6 @@ def read_export_manifest(pretrained_model_name_or_path, **download_kwargs) -> di
     return manifest
 
 
-def saved_roles(manifest: dict) -> dict[str, ComponentRole]:
-    """`{component: role}` from a manifest, which a load dispatches on like `ExportArtifacts.can_generate`."""
-    return {name: ComponentRole(entry["role"]) for name, entry in manifest["components"].items()}
-
-
 def load_export_runners(pretrained_model_name_or_path, **kwargs) -> tuple[dict[str, ModelRunner], dict]:
     """Resolve a saved export into `{component: runner}`, each handed its recorded metadata, plus the manifest."""
     from .auto import export_backend
@@ -149,14 +142,12 @@ class ExportArtifacts(Mapping):
         export_format: ExportFormat,
         config: object | None = None,
         generation_config: GenerationConfig | None = None,
-        export_config: ExportConfigMixin | dict[str, ExportConfigMixin] | None = None,
         assistant: ExportArtifacts | None = None,
     ):
         self.components = dict(components)
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
-        self.export_config = export_config
         self.assistant = assistant
 
     def __getitem__(self, name: str) -> ExportedComponent:
@@ -173,7 +164,7 @@ class ExportArtifacts(Mapping):
 
     def can_generate(self) -> bool:
         """Whether these artifacts are driven through `generate`, i.e. whether there is a decode graph."""
-        return any(component.role is ComponentRole.DECODE for component in self.components.values())
+        return "decode" in self.components
 
     @property
     def backend(self) -> type[HfExporter]:
@@ -205,7 +196,7 @@ class ExportArtifacts(Mapping):
         for name, component in self.components.items():
             filename = f"{name}{backend.artifact_suffix}"
             backend.save_artifact(component.artifact, directory / filename)
-            components[name] = {"file": filename, "metadata": component.metadata.raw, "role": component.role.value}
+            components[name] = {"file": filename, "metadata": component.metadata.raw}
 
         (directory / EXPORT_MANIFEST_FILE).write_text(
             json.dumps(
@@ -223,14 +214,6 @@ class ExportArtifacts(Mapping):
             self.config.save_pretrained(directory)
         if self.generation_config is not None:
             self.generation_config.save_pretrained(directory)
-        # A per-component export writes a mapping of recipes.
-        if self.export_config is not None:
-            recipe = (
-                {name: config.to_dict() for name, config in self.export_config.items()}
-                if isinstance(self.export_config, Mapping)
-                else self.export_config.to_dict()
-            )
-            (directory / EXPORT_CONFIG_NAME).write_text(json.dumps(recipe, indent=2, default=str) + "\n")
         if self.assistant is not None:
             self.assistant.save_pretrained(directory / ASSISTANT_SUBFOLDER)
 
@@ -365,11 +348,9 @@ class HfExporter(ABC):
         `output.artifact`.
         """
         artifact, metadata = self.export_artifact(model, sample_inputs, config)
-        component = ExportedComponent("model", artifact, ExportMetadata.from_dict(metadata), ComponentRole.MODEL)
+        component = ExportedComponent(artifact, ExportMetadata.from_dict(metadata))
         # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
-        return ExportArtifacts(
-            {"model": component}, self.export_format, config=getattr(model, "config", None), export_config=config
-        )
+        return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
 
     def export_for_generation(
         self,
@@ -458,7 +439,7 @@ class HfExporter(ABC):
                     f"{type(self).__name__}.export_artifact failed on component '{name}' "
                     f"(submodel={type(part.module).__name__}, input keys={list(part.inputs)})."
                 ) from e
-            components[name] = ExportedComponent(name, artifact, ExportMetadata.from_dict(metadata), part.role)
+            components[name] = ExportedComponent(artifact, ExportMetadata.from_dict(metadata))
 
         assistant = None
         if assistant_model is not None:
@@ -475,7 +456,6 @@ class HfExporter(ABC):
             self.export_format,
             config=getattr(model, "config", None),
             generation_config=generation_config,
-            export_config=config,
             assistant=assistant,
         )
 

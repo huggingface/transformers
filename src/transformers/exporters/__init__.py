@@ -54,7 +54,6 @@ else:
     ]
     _import_structure["components"] = [
         "Component",
-        "ComponentRole",
         "ExportedComponent",
     ]
     _import_structure["exporter_dynamo"] = ["DynamoExporter"]
@@ -100,7 +99,7 @@ if TYPE_CHECKING:
             register_runner,
         )
         from .base import ExportArtifacts, ExportedModel, HfExporter, ModelRunner
-        from .components import Component, ComponentRole, ExportedComponent
+        from .components import Component, ExportedComponent
         from .exporter_dynamo import DynamoExporter
         from .exporter_executorch import ExecutorchExporter
         from .exporter_onnx import OnnxExporter

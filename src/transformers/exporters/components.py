@@ -13,17 +13,16 @@
 # limitations under the License.
 """What a component is, shared by the three stages that pass one along.
 
-A decomposition produces components, an exporter turns each into a graph, and a runtime drives them. The
-vocabulary lives here so all three agree by construction rather than by recognising each other's strings:
-the `Component` / `ExportedComponent` pair and the `ComponentRole` they carry, then the modules a
-decomposition wraps a model's own methods in so each can be exported on its own.
+A decomposition produces components, an exporter turns each into a graph, and a runtime drives them. Components
+are keyed by name (`"decode"`, `"prefill"`, `"encoder"`, `"embed_tokens"`, `"<modality>_encoder"`), and an export
+with a `"decode"` graph is driven through `generate`. This holds the `Component` / `ExportedComponent` pair, then
+the modules a decomposition wraps a model's own methods in so each can be exported on its own.
 """
 
 from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
 from ..utils.import_utils import is_torch_available
@@ -37,42 +36,20 @@ if is_torch_available():
     from ..modeling_utils import PreTrainedModel
 
 
-class ComponentRole(str, Enum):
-    """What a component is to a runtime; runtimes and loaders dispatch on the role, never the name.
-
-    An export with a `DECODE` graph is driven through `generate`.
-    """
-
-    MODEL = "model"
-    # The text stack, driven once per step; with a symbolic query axis it also serves the prompt.
-    DECODE = "decode"
-    # The prompt's own graph, shipped only where the decode graph cannot stand in for it.
-    PREFILL = "prefill"
-    ENCODER = "encoder"
-    EMBED_TOKENS = "embed_tokens"
-    MODALITY_ENCODER = "modality_encoder"
-    # Embedded once ahead of the loop, each step reading its own window (voxtral_realtime).
-    STREAMING_EMBEDDER = "streaming_embedder"
-
-
 @dataclass
 class Component:
     """One piece of a decomposed model, ready to export: what to trace, and what to trace it with."""
 
-    name: str
     module: Any
     inputs: dict[str, Any]
-    role: ComponentRole
 
 
 @dataclass
 class ExportedComponent:
-    """One exported graph, with its trace metadata and role."""
+    """One exported graph, with its trace metadata."""
 
-    name: str
     artifact: Any
     metadata: ExportMetadata
-    role: ComponentRole
 
 
 class _ModelComponent(torch.nn.Module):

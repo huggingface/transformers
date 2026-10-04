@@ -67,10 +67,6 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.components.ExportedComponent
 
-## ComponentRole
-
-[[autodoc]] exporters.components.ComponentRole
-
 ## Running an export
 
 What an export is loaded back as: a decomposed, cache-driven export is driven through `generate`, a single

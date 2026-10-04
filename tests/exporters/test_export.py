@@ -30,7 +30,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.components import Component, ComponentRole
+from transformers.exporters.components import Component
 from transformers.exporters.decompose import decompose_for_generation, decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import _VARLEN_ATTENTION_PATHS, DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
@@ -1289,7 +1289,7 @@ class ExportTesterMixin:
 
         if is_multimodal(model):
             return decompose_multimodal(model, inputs_dict)
-        return {"model": Component("model", model, inputs_dict, ComponentRole.MODEL)}
+        return {"model": Component(model, inputs_dict)}
 
     def _collect_eager_outputs(self, components):
         """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""

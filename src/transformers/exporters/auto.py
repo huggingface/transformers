@@ -16,12 +16,10 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
-from ..models.auto import AutoConfig
 from ..utils import logging
-from .base import EXPORT_CONFIG_NAME, ExportedModel, HfExporter, ModelRunner
+from .base import ExportedModel, HfExporter, ModelRunner
 from .configs import ExportConfigMixin, ExportFormat
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
@@ -88,42 +86,6 @@ class AutoHfExporter:
         export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
         return export_backend(export_config_dict.get("export_format"), "exporter")(**kwargs)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter:
-        """Build the exporter a checkpoint's export recipe (`export_config.json`, or an `export_config` field in
-        `config.json`) asks for:
-
-            exporter = AutoHfExporter.from_pretrained("org/model-name")
-            program = exporter.export(model, inputs)
-
-        `kwargs` naming an export-config field override the recipe; the rest go to the download and the exporter.
-        """
-        config_dict = cls._load_export_config_dict(pretrained_model_name_or_path, **kwargs)
-        overrides = {key: kwargs.pop(key) for key in list(kwargs) if key in config_dict}
-        config_dict = {**config_dict, **overrides}
-        return cls.from_config(AutoExportConfig.from_dict(config_dict), **kwargs)
-
-    @staticmethod
-    def _load_export_config_dict(pretrained_model_name_or_path, **kwargs) -> dict:
-        """Find the export recipe: `export_config.json`, else the model config's `export_config` field."""
-        from .base import resolve_export_file, split_download_kwargs
-
-        download_kwargs, _ = split_download_kwargs(dict(kwargs))
-        resolved = resolve_export_file(pretrained_model_name_or_path, EXPORT_CONFIG_NAME, **download_kwargs)
-        if resolved is not None:
-            with open(resolved, encoding="utf-8") as file:
-                return json.load(file)
-
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **download_kwargs)
-        export_config = getattr(config, "export_config", None)
-        if export_config is None:
-            raise OSError(
-                f"{pretrained_model_name_or_path} ships no export recipe: no `{EXPORT_CONFIG_NAME}` and no "
-                "`export_config` field in its `config.json`. Build the config yourself and call "
-                "`AutoHfExporter.from_config(...)`."
-            )
-        return dict(export_config)
-
 
 class AutoExportedModel:
     """Load a saved export as an [`ExportedGenerator`] if it has a decode graph, else an [`ExportedModel`].
@@ -135,12 +97,12 @@ class AutoExportedModel:
     @classmethod
     def from_pretrained(cls, save_directory, **kwargs):
         """Load a saved export from a local directory or a Hub repo."""
-        from .base import ComponentRole, read_export_manifest, saved_roles, split_download_kwargs
+        from .base import read_export_manifest, split_download_kwargs
         from .generator import ExportedGenerator
 
         download_kwargs, _ = split_download_kwargs(dict(kwargs))
         manifest = read_export_manifest(save_directory, **download_kwargs)
-        can_generate = ComponentRole.DECODE in saved_roles(manifest).values()
+        can_generate = "decode" in manifest["components"]
         target = ExportedGenerator if can_generate else ExportedModel
         return target.from_pretrained(save_directory, **kwargs)
 

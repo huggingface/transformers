@@ -40,7 +40,6 @@ from .cache import (
 )
 from .components import (
     Component,
-    ComponentRole,
     CrossAttentionEncoder,
     ModalityEncoder,
     PatchVisionEncoder,
@@ -331,8 +330,8 @@ def decompose_prefill_decode(
         check_cache_geometry(model.config, captured_cache)
 
     return {
-        "prefill": Component("prefill", copy.copy(model), prefill_inputs, ComponentRole.PREFILL),
-        "decode": Component("decode", copy.copy(model), decode_inputs, ComponentRole.DECODE),
+        "prefill": Component(copy.copy(model), prefill_inputs),
+        "decode": Component(copy.copy(model), decode_inputs),
     }
 
 
@@ -572,11 +571,7 @@ def decompose_multimodal(
             f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
 
-    components = (
-        {"text_decoder": Component("text_decoder", decoder, decoder_calls[-1], ComponentRole.DECODE)}
-        if decoder_calls
-        else {}
-    )
+    components = {"text_decoder": Component(decoder, decoder_calls[-1])} if decoder_calls else {}
 
     # Dual-encoders (owlvit) refuse `get_input_embeddings`. `prompt_ids` covers an encoder-decoder, whose
     # prefill kwargs carry `decoder_input_ids` instead.
@@ -587,12 +582,7 @@ def decompose_multimodal(
             for spec in _MODALITY_SPECS
             if getattr(model.config, spec[-1], None) is not None
         ]
-        components["embed_tokens"] = Component(
-            "embed_tokens",
-            TokenEmbedder(decoder, placeholder_ids),
-            {"input_ids": token_ids},
-            ComponentRole.EMBED_TOKENS,
-        )
+        components["embed_tokens"] = Component(TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids})
 
     for name, getter, owner, grid_key in active_modalities:
         calls = captured_features.get(name) or recorded_features.get(name) or []
@@ -615,12 +605,10 @@ def decompose_multimodal(
                     if key in feature_inputs
                 }
             )
-            components[name] = Component(name, PatchVisionEncoder(owner), tower_inputs, ComponentRole.MODALITY_ENCODER)
+            components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
-        components[name] = Component(
-            name, ModalityEncoder(owner, getter, grid_key), feature_inputs, ComponentRole.MODALITY_ENCODER
-        )
+        components[name] = Component(ModalityEncoder(owner, getter, grid_key), feature_inputs)
     return components
 
 
@@ -792,7 +780,7 @@ def _capture_generation(
         components = capture()
     encoder_inputs = {key: value for key, value in encoder_calls[0].items() if isinstance(value, torch.Tensor)}
     components = {
-        "encoder": Component("encoder", model.get_encoder(), encoder_inputs, ComponentRole.ENCODER),
+        "encoder": Component(model.get_encoder(), encoder_inputs),
         **components,
     }
     return components, {name: list(calls) for name, calls in live.items() if calls}, cross_writers
@@ -808,7 +796,7 @@ def _streaming_embedder(model, inputs) -> Component | None:
         module = getattr(module, attribute, None)
         if module is None:
             return None
-    return Component(spec.component, module, {spec.source: inputs[spec.source]}, ComponentRole.STREAMING_EMBEDDER)
+    return Component(module, {spec.source: inputs[spec.source]})
 
 
 def _embedded_inputs(call_inputs: dict, components: dict) -> dict:
@@ -870,7 +858,7 @@ def decompose_for_generation(
         split.pop("text_decoder", None)
         components.update(split)
         if (embedder := _streaming_embedder(model, inputs)) is not None:
-            components[embedder.name] = embedder
+            components[streaming_embedder_spec(model.config).component] = embedder
 
     cross_written_by_decoder = False
     if multi_token_decode and decoder_writes_cross_cache:
