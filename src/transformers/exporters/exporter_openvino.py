@@ -46,7 +46,6 @@ from .utils import (
     get_leaf_tensors,
     leaf_name,
     register_fx_node_fix,
-    register_fx_program_fix,
     register_patch,
 )
 
@@ -897,57 +896,6 @@ def _fix_varlen_attn_getitem(gm, node):
 
 
 @register_fx_node_fix("openvino")
-def _fix_sym_float(gm, node):
-    """``torch.sym_float`` is a no-op at the OV layer; replace it with its input."""
-    if node.target is not torch.sym_float:
-        return False
-    node.replace_all_uses_with(node.args[0])
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("openvino")
-def _fix_sym_min_max(gm, node):
-    """Rewrite ``torch.sym_min``/``torch.sym_max`` to the built-in ``min``/``max``.
-
-    OV keys translations on ``str(target)``, and ``torch.sym_min``'s repr contains a per-process address.
-    """
-    if node.target is torch.sym_min:
-        node.target = min
-        return True
-    if node.target is torch.sym_max:
-        node.target = max
-        return True
-    return False
-
-
-@register_fx_program_fix("openvino")
-def _fix_to_dtype_layout_in_subgraphs(exported_program):
-    """Rewrite every ``aten.to.*`` node to ``aten._to_copy`` (keeping only the dtype), in every graph.
-
-    OV has no ``aten.to.*`` translators; an unhandled variant becomes a dangling ``torch::None`` (Chameleon).
-    """
-    graphs = [exported_program.graph_module]
-    graphs.extend(m for _, m in exported_program.graph_module.named_children() if hasattr(m, "graph"))
-    for gm_or_submod in graphs:
-        for node in list(gm_or_submod.graph.nodes):
-            if node.op != "call_function":
-                continue
-            target = node.target
-            if target is torch.ops.aten.to.dtype:
-                dtype = node.args[1] if len(node.args) > 1 else node.kwargs.get("dtype")
-                node.target = torch.ops.aten._to_copy.default
-                node.args = (node.args[0],)
-                node.kwargs = {"dtype": dtype} if dtype is not None else {}
-            elif target in (torch.ops.aten.to.dtype_layout, torch.ops.aten.to.device, torch.ops.aten.to.other):
-                dtype = node.kwargs.get("dtype")
-                node.target = torch.ops.aten._to_copy.default
-                node.args = (node.args[0],)
-                node.kwargs = {"dtype": dtype} if dtype is not None else {}
-        gm_or_submod.recompile()
-
-
-@register_fx_node_fix("openvino")
 def _fix_drop_assert_ops(gm, node):
     """Erase runtime assert nodes, which OV translates into unconvertible ``torch::None`` constants."""
     if node.target not in (torch.ops.aten._assert_tensor_metadata.default, torch.ops.aten._assert_scalar.default):
@@ -1475,16 +1423,6 @@ def _patch_feature_vector_attention_mask(original):
     return patch
 
 
-@register_patch("openvino", "torch.empty_permuted")
-def _patch_empty_permuted(original):
-    """Replace ``torch.empty_permuted`` with ``torch.empty``; OV has no lowering and only the layout differs."""
-
-    def patch(size, physical_layout, **kwargs):
-        return torch.empty(size, **kwargs)
-
-    return patch
-
-
 @register_patch("openvino", "torch.polar")
 def _patch_polar(original):
     """Build ``polar(abs, angle)`` via Euler's formula; OV has no ``aten.polar`` lowering."""
@@ -1808,16 +1746,16 @@ def _patch_rfft(original):
     return patch
 
 
-def _dft(input, n, dim, *, inverse):
+def _dft(input, n, dim):
     """1-D DFT as a twiddle matmul; OV translates no ``aten._fft_c2c``."""
     if n is None:
         n = input.shape[dim]
     k = torch.arange(n, device=input.device, dtype=torch.float32)
-    angles = (2.0 if inverse else -2.0) * torch.pi * k.view(-1, 1) * k / n
+    angles = -2.0 * torch.pi * k.view(-1, 1) * k / n
     twiddle = torch.complex(angles.cos(), angles.sin())
     x = input if torch.is_complex(input) else input.to(torch.complex64)
     out = x.movedim(dim, -1) @ twiddle.T
-    return (out / n if inverse else out).movedim(-1, dim)
+    return out.movedim(-1, dim)
 
 
 @register_patch("openvino", "torch.fft.fft")
@@ -1825,17 +1763,7 @@ def _patch_fft(original):
     """``torch.fft.fft`` lowers to an ``aten._fft_c2c`` OV's frontend can't translate."""
 
     def patch(input, n=None, dim=-1, norm=None):
-        return _dft(input, n, dim, inverse=False)
-
-    return patch
-
-
-@register_patch("openvino", "torch.fft.ifft")
-def _patch_ifft(original):
-    """Inverse of ``_patch_fft`` — conjugate twiddle, divided by ``n``."""
-
-    def patch(input, n=None, dim=-1, norm=None):
-        return _dft(input, n, dim, inverse=True)
+        return _dft(input, n, dim)
 
     return patch
 
@@ -1851,51 +1779,6 @@ def _patch_fftn(original):
         for d, n in zip(dims, sizes):
             out = torch.fft.fft(out, n=n, dim=d, norm=norm)
         return out
-
-    return patch
-
-
-@register_patch("openvino", "torch.fft.ifftn")
-def _patch_ifftn(original):
-    """Multi-dim inverse FFT — same decomposition as ``_patch_fftn`` via ``torch.fft.ifft``."""
-
-    def patch(input, s=None, dim=None, norm=None):
-        dims = list(range(input.ndim)) if dim is None else list(dim)
-        sizes = [None] * len(dims) if s is None else list(s)
-        out = input
-        for d, n in zip(dims, sizes):
-            out = torch.fft.ifft(out, n=n, dim=d, norm=norm)
-        return out
-
-    return patch
-
-
-@register_patch("openvino", "torch.fft.rfftn")
-def _patch_rfftn(original):
-    """Real N-D FFT — last dim uses ``rfft`` (one-sided), remaining dims use ``fft``."""
-
-    def patch(input, s=None, dim=None, norm=None):
-        dims = list(range(input.ndim)) if dim is None else list(dim)
-        sizes = [None] * len(dims) if s is None else list(s)
-        out = input
-        for d, n in zip(dims[:-1], sizes[:-1]):
-            out = torch.fft.fft(out, n=n, dim=d, norm=norm)
-        return torch.fft.rfft(out, n=sizes[-1], dim=dims[-1], norm=norm)
-
-    return patch
-
-
-@register_patch("openvino", "torch.fft.irfftn")
-def _patch_irfftn(original):
-    """Real N-D inverse FFT — last dim uses ``irfft``, remaining dims use ``ifft``."""
-
-    def patch(input, s=None, dim=None, norm=None):
-        dims = list(range(input.ndim)) if dim is None else list(dim)
-        sizes = [None] * len(dims) if s is None else list(s)
-        out = torch.fft.irfft(input, n=sizes[-1], dim=dims[-1], norm=norm)
-        for d, n in zip(dims[:-1], sizes[:-1]):
-            out = torch.fft.ifft(out, n=n, dim=d, norm=norm)
-        return out.real if torch.is_complex(out) else out
 
     return patch
 
@@ -2084,28 +1967,6 @@ def _convert_view_as_real(context):
     return [context.get_input(0)]
 
 
-def _convert_fft_c2c(context):
-    """Convert ``aten._fft_c2c`` to OV's ``DFT``/``IDFT``, which take a trailing ``[..., 2]`` real/imag pair.
-
-    A real input (FNet's ``fftn(real)``) gets a zero imaginary part stacked on first.
-    """
-    data = context.get_input(0)
-    axes = context.get_input(1)
-    forward = bool(context.get_values_from_const_input(3))
-    pshape = data.get_partial_shape()
-    needs_pair = pshape.rank.is_static and (
-        not pshape[pshape.rank.get_length() - 1].is_static or pshape[pshape.rank.get_length() - 1].get_length() != 2
-    )
-    if needs_pair:
-        zeros = ov_ops.broadcast(ov_ops.constant(np.float32(0.0)), ov_ops.shape_of(data))
-        data = ov_ops.concat(
-            [ov_ops.unsqueeze(data, ov_ops.constant(-1)), ov_ops.unsqueeze(zeros, ov_ops.constant(-1))],
-            axis=-1,
-        )
-    op = ov_ops.dft if forward else ov_ops.idft
-    return [op(data, ov_ops.convert(axes, "i64")).output(0)]
-
-
 def _convert_conj(context):
     """Convert ``aten._conj`` by negating the imaginary half of the ``[..., 2]`` representation."""
     data = context.get_input(0)
@@ -2124,7 +1985,7 @@ def _convert_conj(context):
 def _convert_bitwise_not(context):
     """Convert ``aten.bitwise_not`` to ``LogicalNot`` on a boolean view.
 
-    OV's translator leaves an unconverted ``torch.sym_float`` node behind (deformable_detr).
+    OV's own translator leaves a ``torch.sym_float`` call on the dynamic dims behind (deformable_detr).
     """
     data = context.get_input(0)
     return [ov_ops.logical_not(ov_ops.convert(data, "boolean")).output(0)]
@@ -2292,7 +2153,6 @@ if is_openvino_available():
             ConversionExtension("aten.bmm.default", _convert_bmm),
             ConversionExtension("aten.complex.default", _convert_complex),
             ConversionExtension("aten.view_as_real.default", _convert_view_as_real),
-            ConversionExtension("aten._fft_c2c.default", _convert_fft_c2c),
             ConversionExtension("aten._conj.default", _convert_conj),
             ConversionExtension("aten._to_copy.default", _convert_to_copy),
             ConversionExtension("aten.layer_norm.default", _convert_layer_norm),
@@ -2311,7 +2171,9 @@ if is_openvino_available():
             ConversionExtension("<built-in function ceil>", _convert_sym_unop(ov_ops.ceiling, cast_to_i64=True)),
             ConversionExtension("<built-in function min>", _convert_sym_binop(ov_ops.minimum)),
             ConversionExtension("<built-in function max>", _convert_sym_binop(ov_ops.maximum)),
-            # ``str(torch.sym_float)`` is address-based, so register by its runtime str.
+            # These reprs are address-based, so register them by their runtime str
             ConversionExtension(str(torch.sym_float), _convert_sym_unop(lambda x: ov_ops.convert(x, "f32"))),
+            ConversionExtension(str(torch.sym_min), _convert_sym_binop(ov_ops.minimum)),
+            ConversionExtension(str(torch.sym_max), _convert_sym_binop(ov_ops.maximum)),
         ]
     )
