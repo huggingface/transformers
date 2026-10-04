@@ -251,7 +251,7 @@ class MiniMaxLightningAttention(nn.Module):
 
         return query_decay, key_decay, diagonal_decay
 
-        def forward(
+    def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
@@ -272,31 +272,30 @@ class MiniMaxLightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        # --- FIX START: Upcast to float32 for precision in recurrence ---
+        # FIX: Upcast to float32 for precision in recurrence
         input_dtype = value_states.dtype
         query_states = query_states.float()
         key_states = key_states.float()
         value_states = value_states.float()
         slope_rate = self.slope_rate.float()
-        # --- FIX END ---
 
         # calculated (K.T @ V) and saved as cache
         attn_weights_inter = None
         if past_key_values is not None:
             attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
-            # --- FIX: Upcast cached state to float32 if it exists ---
+            # FIX: Upcast cached state to float32 if it exists
             if attn_weights_inter is not None:
                 attn_weights_inter = attn_weights_inter.float()
 
         if attn_weights_inter is None:
-            # --- FIX: Initialize in float32 ---
+            # FIX: Initialize in float32
             attn_weights_inter = torch.zeros(
                 batch_size,
                 self.num_attention_heads,
                 self.head_dim,
                 self.head_dim,
                 device=value_states.device,
-                dtype=torch.float32, 
+                dtype=torch.float32,
             )
 
             attn_output = []
@@ -312,8 +311,8 @@ class MiniMaxLightningAttention(nn.Module):
                 current_query_decay = self.query_decay[:, :current_block_size]
                 current_key_decay = self.key_decay[:, -current_block_size:]
                 current_diagonal_decay = self.diagonal_decay[:, :, :current_block_size, :current_block_size]
-                
-                # --- FIX: Use float32 slope_rate ---
+
+                # FIX: Use float32 slope_rate
                 block_decay = torch.exp(-slope_rate * current_block_size)
 
                 # intra: ( Q @ K.T ) @ V -> QK * V
@@ -334,7 +333,7 @@ class MiniMaxLightningAttention(nn.Module):
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
         else:
-            # --- FIX: Use float32 slope_rate ---
+            # FIX: Use float32 slope_rate
             ratio = torch.exp(-slope_rate)
             attn_output = []
             for i in range(seq_len):
@@ -351,7 +350,7 @@ class MiniMaxLightningAttention(nn.Module):
         # concatenate attention outputs over all blocks
         attn_output = torch.cat(attn_output, dim=-2)
 
-        # --- FIX: Cast back to input dtype before projection ---
+        # FIX: Cast back to input dtype before projection
         attn_output = attn_output.to(input_dtype)
 
         # final output projection
@@ -366,6 +365,7 @@ class MiniMaxLightningAttention(nn.Module):
             past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
 
         return attn_output, attn_weights_inter
+
 
 class MiniMaxRotaryEmbedding(Gemma2RotaryEmbedding):
     pass

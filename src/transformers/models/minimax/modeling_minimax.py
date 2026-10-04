@@ -218,7 +218,7 @@ class MiniMaxLightningAttention(nn.Module):
                 self.head_dim,
                 self.head_dim,
                 device=value_states.device,
-                dtype=torch.float32, 
+                dtype=torch.float32,
             )
 
             attn_output = []
@@ -234,7 +234,7 @@ class MiniMaxLightningAttention(nn.Module):
                 current_query_decay = self.query_decay[:, :current_block_size]
                 current_key_decay = self.key_decay[:, -current_block_size:]
                 current_diagonal_decay = self.diagonal_decay[:, :, :current_block_size, :current_block_size]
-                
+
                 # --- FIX: Use float32 slope_rate ---
                 block_decay = torch.exp(-slope_rate * current_block_size)
 
@@ -288,7 +288,8 @@ class MiniMaxLightningAttention(nn.Module):
             past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
 
         return attn_output, attn_weights_inter
-    
+
+
 class MiniMaxRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MiniMaxConfig, device=None):
