@@ -52,6 +52,7 @@ from .utils import (
     get_leaf_tensors,
     register_fx_node_fix,
     register_patch,
+    zero_fully_masked_rows,
 )
 
 
@@ -203,14 +204,7 @@ def _patch_sdpa(original):
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
-        if attn_mask is None:
-            return attn_output
-        if attn_mask.dtype == torch.bool:
-            unattended = ~attn_mask.any(dim=-1, keepdim=True)
-        else:
-            unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
-        zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
-        return torch.where(unattended, zero, attn_output)
+        return attn_output if attn_mask is None else zero_fully_masked_rows(attn_output, attn_mask)
 
     return patch
 

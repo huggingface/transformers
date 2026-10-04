@@ -208,6 +208,15 @@ def drop_runtime_asserts(graph_module) -> None:
 # ── Cross-backend patches ─────────────────────────────────────────────────────
 
 
+def zero_fully_masked_rows(attn_output, attn_mask):
+    """Zero the attention rows whose mask attends no key, as torch's fused SDPA kernels do."""
+    if attn_mask.dtype == torch.bool:
+        unattended = ~attn_mask.any(dim=-1, keepdim=True)
+    else:
+        unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
+    return torch.where(unattended, attn_output.new_zeros(()), attn_output)
+
+
 @register_patch("onnx", "transformers.models.blt.modeling_blt.byte_group_hash_function")
 @register_patch("openvino", "transformers.models.blt.modeling_blt.byte_group_hash_function")
 def _patch_byte_group_hash(original):

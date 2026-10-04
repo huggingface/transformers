@@ -48,6 +48,7 @@ from .utils import (
     leaf_name,
     register_fx_node_fix,
     register_patch,
+    zero_fully_masked_rows,
 )
 
 
@@ -1296,11 +1297,10 @@ def _patch_sdpa(original):
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
         # OV's SDPA returns NaN for fully masked rows under a boolean mask
         # (https://github.com/openvinotoolkit/openvino/issues/31630); pass a finite additive mask instead.
-        unattended = None
-        if attn_mask is not None:
+        masked = attn_mask is not None
+        if masked:
             masked_value = torch.finfo(query.dtype).min
             if attn_mask.dtype == torch.bool:
-                unattended = ~attn_mask.any(dim=-1, keepdim=True)
                 attn_mask = torch.where(
                     attn_mask,
                     torch.zeros((), dtype=query.dtype, device=attn_mask.device),
@@ -1308,7 +1308,6 @@ def _patch_sdpa(original):
                 )
             else:
                 attn_mask = attn_mask.clamp_min(masked_value)
-                unattended = attn_mask.amax(dim=-1, keepdim=True) <= masked_value
         elif not kwargs.get("is_causal", False):
             # OV's fused KV-cache SDPA rejects a call without a mask (`attention_mask do not match q and k`)
             attn_mask = query.new_zeros(query.shape[-2], key.shape[-2])
@@ -1326,11 +1325,7 @@ def _patch_sdpa(original):
                 query = query * (scale / default_scale)
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         # OV returns the uniform average for a fully-masked row; torch's fused kernels write zeros.
-        if unattended is not None:
-            attn_output = torch.where(
-                unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
-            )
-        return attn_output
+        return zero_fully_masked_rows(attn_output, attn_mask) if masked else attn_output
 
     return patch
 
