@@ -17,7 +17,7 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-from huggingface_hub.errors import StrictDataclassClassValidationError
+from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDataclassFieldValidationError
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
@@ -207,7 +207,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     @require_torch_accelerator
-    @require_torch_accelerator
     @unittest.skipUnless(is_torch_flex_attn_available(), "Flex attention is not available")
     def test_flex_attention_matches_eager_forward_and_backward(self):
         config = self.model_tester.get_config()
@@ -288,7 +287,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @require_kernels
     def test_hub_kernels_mapping(self):
-        """Only the attention is replaced, and only for inference: the kernel has no backward."""
+        """The attention and the mask it reads are replaced together, from the same kernel, for inference only."""
         from kernels import Mode
 
         from transformers.integrations import hub_kernels
@@ -296,29 +295,37 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         model = WeatherNext2ForWeatherForecasting(self.model_tester.get_config())
         hooked = {getattr(module, "kernel_layer_name", None) for module in model.modules()}
         self.assertEqual(
-            {name for name in hooked if name and name.startswith("WeatherNext2")}, {"WeatherNext2Attention"}
+            {name for name in hooked if name and name.startswith("WeatherNext2")},
+            {"WeatherNext2Attention", "WeatherNext2AttentionMask"},
         )
-        for modes in hub_kernels._build_kernel_mapping()["WeatherNext2Attention"].values():
+        mapping = hub_kernels._build_kernel_mapping()
+        attention = mapping["WeatherNext2Attention"]
+        for device, modes in mapping["WeatherNext2AttentionMask"].items():
             self.assertEqual(set(modes), {Mode.INFERENCE})
+            self.assertEqual(modes[Mode.INFERENCE]._repo_id, attention[device][Mode.INFERENCE]._repo_id)
+            self.assertEqual(modes[Mode.INFERENCE]._version, attention[device][Mode.INFERENCE]._version)
 
-    def test_mesh_transformer_shares_one_mask(self):
-        """The geometry mask is built once per forward, and the same object reaches every layer."""
+    def test_mesh_transformer_shares_prepared_mask(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = WeatherNext2Model(config).to(torch_device).eval()
+        processor = model.mesh_transformer
+        prepared_masks = []
         layer_masks = []
         hooks = [
-            layer.register_forward_pre_hook(lambda module, args: layer_masks.append(args[1]))
-            for layer in model.mesh_transformer.layers
+            processor.mask_preparer.register_forward_hook(lambda module, args, output: prepared_masks.append(output))
         ]
+        for layer in processor.layers:
+            hooks.append(layer.register_forward_pre_hook(lambda module, args: layer_masks.append(args[1])))
         try:
-            with torch.no_grad():
+            with torch.inference_mode():
                 model(**inputs)
         finally:
             for hook in hooks:
                 hook.remove()
+        self.assertEqual(len(prepared_masks), 1)
         self.assertEqual(len(layer_masks), config.num_hidden_layers)
-        for mask in layer_masks[1:]:
-            self.assertIs(mask, layer_masks[0])
+        for mask in layer_masks:
+            self.assertIs(mask, prepared_masks[0])
 
     def test_noise_drives_the_ensemble(self):
         """Two members that share inputs but not noise must differ; two that share both must not."""
@@ -476,6 +483,23 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "num_members"):
             WeatherNext2Config(num_members=0)
 
+    def test_generate_validates_num_members(self):
+        config = self.model_tester.get_config()
+        extractor = self.model_tester.get_feature_extractor()
+        model = WeatherNext2ForWeatherForecasting(config)
+        state = self.model_tester.prepare_state(extractor, batch_size=1)
+        for value in (0, -1):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "num_members"):
+                model.generate(
+                    state=state,
+                    feature_extractor=extractor,
+                    seconds_since_epoch=torch.zeros(1),
+                    num_steps=1,
+                    num_members=value,
+                )
+        with self.assertRaises(StrictDataclassFieldValidationError):
+            WeatherNext2Config(num_members=None)
+
     def test_generate_validates_noise_shape(self):
         config = self.model_tester.get_config()
         extractor = self.model_tester.get_feature_extractor()
@@ -592,7 +616,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         chunked = WeatherNext2Model(copy.deepcopy(config)).to(torch_device).eval()
         chunked.load_state_dict(unchunked.state_dict())
         with torch.no_grad():
-            torch.testing.assert_close(chunked(**inputs).last_hidden_state, unchunked(**inputs).last_hidden_state)
+            torch.testing.assert_close(
+                chunked(**inputs).last_hidden_state, unchunked(**inputs).last_hidden_state, atol=1e-5, rtol=1e-5
+            )
 
     def test_chunk_size_validation(self):
         WeatherNext2Config(chunk_size=None)

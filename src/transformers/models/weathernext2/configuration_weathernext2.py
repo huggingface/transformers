@@ -210,7 +210,7 @@ class WeatherNext2Config(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
-    num_members: int | None = 1
+    num_members: int = 1
     chunk_size: int | None = 32768
 
     def __post_init__(self, **kwargs):
@@ -224,7 +224,7 @@ class WeatherNext2Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_members is not None and self.num_members < 1:
+        if self.num_members < 1:
             raise ValueError(f"`num_members` must be at least 1, got {self.num_members}.")
         if self.chunk_size is not None and self.chunk_size < 1:
             raise ValueError(f"`chunk_size` must be positive, or None to disable chunking; got {self.chunk_size}.")

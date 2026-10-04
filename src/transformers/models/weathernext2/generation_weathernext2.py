@@ -91,6 +91,8 @@ class WeatherNext2GenerationMixin:
             raise ValueError(f"`num_steps` must be at least 1, got {num_steps}.")
 
         num_members = num_members if num_members is not None else self.config.num_members
+        if num_members < 1:
+            raise ValueError(f"`num_members` must be at least 1, got {num_members}.")
         valid_time = torch.as_tensor(seconds_since_epoch, dtype=torch.int64)
         if valid_time.ndim != 1:
             raise ValueError(f"`seconds_since_epoch` must have shape (batch_size,), got {tuple(valid_time.shape)}.")
