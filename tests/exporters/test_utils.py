@@ -167,6 +167,13 @@ class RegistrationTest(unittest.TestCase):
             self.assertIs(export_backend("stub", "exporter"), _StubExporter)
         self.assertNotIn("stub", EXPORT_BACKENDS)
 
+    def test_export_only_backend_refuses_to_run(self):
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend("export_only", ExportConfigMixin, HfExporter)
+            self.assertIs(export_backend("export_only", "exporter"), HfExporter)
+            with self.assertRaisesRegex(ValueError, "registers no runner"):
+                export_backend("export_only", "runner")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Registry edge cases the happy-path exports don't exercise

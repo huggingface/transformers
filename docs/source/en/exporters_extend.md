@@ -32,7 +32,8 @@ loading it back are built on those two and need no per-backend code.
 Pair it with a [`~exporters.ModelRunner`], which is what runs the artifact back: `from_artifact` and
 `from_pretrained` build one, `__call__` takes the graph's kwargs and returns its named tensor leaves.
 Register the config, the exporter and the runner under one format name with
-`register_backend(name, config, exporter, runner)`, and every auto class and loader finds them.
+`register_backend(name, config, exporter, runner)`, and every auto class and loader finds them. The runner
+is optional: a format registered without one exports and saves, but can't run or load its artifacts.
 
 The smallest pair in the tree is [`DynamoExporter`] and [`DynamoModelRunner`], in
 [exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)

@@ -33,11 +33,11 @@ from .runner_openvino import OpenVINOModelRunner
 
 @dataclass
 class ExportBackend:
-    """One export format's config, exporter, and runner."""
+    """One export format's config, exporter, and runner (`None` for an export-only format)."""
 
     config: type[ExportConfigMixin]
     exporter: type[HfExporter]
-    runner: type[ModelRunner]
+    runner: type[ModelRunner] | None = None
 
 
 EXPORT_BACKENDS: dict[str, ExportBackend] = {
@@ -49,14 +49,20 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
 
 
 def register_backend(
-    name: str, config: type[ExportConfigMixin], exporter: type[HfExporter], runner: type[ModelRunner]
+    name: str,
+    config: type[ExportConfigMixin],
+    exporter: type[HfExporter],
+    runner: type[ModelRunner] | None = None,
 ) -> None:
-    """Register a format's config, exporter and runner, so every auto class and loader finds them."""
+    """Register a format's config, exporter and runner, so every auto class and loader finds them. Without a
+    runner the format can export and save, but not run or load its artifacts."""
     for part, cls, base in (
         ("config", config, ExportConfigMixin),
         ("exporter", exporter, HfExporter),
         ("runner", runner, ModelRunner),
     ):
+        if part == "runner" and cls is None:
+            continue
         if not (isinstance(cls, type) and issubclass(cls, base)):
             raise TypeError(f"The {part} must extend {base.__name__}, got {cls!r}.")
     if name in EXPORT_BACKENDS:
@@ -72,7 +78,12 @@ def export_backend(export_format, part: str | None = None):
     backend = EXPORT_BACKENDS.get(name)
     if backend is None:
         raise ValueError(f"Unknown export format '{name}' — registered formats are {sorted(EXPORT_BACKENDS)}.")
-    return backend if part is None else getattr(backend, part)
+    if part is None:
+        return backend
+    registered = getattr(backend, part)
+    if registered is None:
+        raise ValueError(f"The '{name}' backend registers no {part}, so its artifacts can only be exported and saved.")
+    return registered
 
 
 logger = logging.get_logger(__name__)
