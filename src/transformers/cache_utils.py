@@ -12,7 +12,6 @@ from .utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from .utils.deprecation import deprecate_kwarg
 
 
 if is_hqq_available():
@@ -173,7 +172,6 @@ class DynamicLayer(CacheLayerMixin):
         self.is_initialized = False
         super().reset()
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
@@ -309,7 +307,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         """Return the maximum cache shape of the cache"""
         return self.sliding_window
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
@@ -406,7 +403,6 @@ class DynamicIndexedLayer(DynamicLayer):
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
         if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
@@ -1171,7 +1167,6 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicLayer.reorder_cache(self, beam_idx)
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicLayer.crop(self, tokens_to_remove)
@@ -1203,7 +1198,6 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicSlidingWindowLayer.crop(self, tokens_to_remove)
@@ -1776,12 +1770,8 @@ def kv_cache_geometry(config) -> list[tuple[int, int, int]] | None:
     """
     text_config = config.get_text_config()
     layer_types, _ = get_layer_types_and_kwargs(text_config)
-    per_layer = (
-        getattr(text_config, "per_layer_config", None) if getattr(text_config, "is_heterogeneous", False) else None
-    )
     geometry = []
-    for index in range(len(layer_types)):
-        layer_config = per_layer[index] if per_layer is not None else text_config
+    for _, layer_config in zip(layer_types, text_config.per_layer_config):
         if getattr(layer_config, "num_attention_heads", None) is None:
             return None
         # Latent attention (deepseek_v2/v3, kimi_linear, minicpm3, …) caches the compressed latent rather
@@ -1804,40 +1794,48 @@ def kv_cache_geometry(config) -> list[tuple[int, int, int]] | None:
     return geometry or None
 
 
-def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dict]:
+def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
     From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
-    the corresponding layer caches.
+    the corresponding layer caches. In order to support heterogeneous configs as well, the kwargs are returned
+    per layer.
     """
+    layer_configs = config.per_layer_config
+
     layer_types = getattr(config, "layer_types", None)
-    # If `layer_types` is not explicitly provided, infer it from config fields
+    # If `layer_types` is not explicitly provided, infer it from the layer config fields
     if layer_types is None:
-        if getattr(config, "sliding_window", None) is not None:
-            layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
-        elif getattr(config, "attention_chunk_size", None) is not None:
-            layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
-        else:
-            layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+        layer_types = []
+        for layer_config in layer_configs:
+            if getattr(layer_config, "sliding_window", None) is not None:
+                layer_types.append("sliding_attention")
+            elif getattr(layer_config, "attention_chunk_size", None) is not None:
+                layer_types.append("chunked_attention")
+            else:
+                layer_types.append("full_attention")
 
     # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
     num_kv_shared_layers = getattr(config, "num_kv_shared_layers", None)
     if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
-        layer_types = layer_types[: -config.num_kv_shared_layers]
+        layer_types = layer_types[:-num_kv_shared_layers]
 
-    # Prepare additional kwargs that may be needed to __init__ the cache layers
-    layer_kwargs = {}
-    if "sliding_attention" in layer_types or "hybrid_sliding" in layer_types:
-        layer_kwargs["sliding_window"] = config.sliding_window
-    if "chunked_attention" in layer_types:
-        layer_kwargs["sliding_window"] = config.attention_chunk_size
-    # In this case, we need to pass the config as well to properly __init__ the layer classes
-    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
-        layer_kwargs["config"] = config
-    # We may need more than 1 conv/recurrent state
-    if any(layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding") for layer_type in layer_types):
-        layer_kwargs["number_of_states"] = getattr(config, "number_of_conv_states", 1)
+    # Prepare additional kwargs that may be needed to __init__ each cache layer
+    per_layer_kwargs = []
+    for layer_type, layer_config in zip(layer_types, layer_configs):
+        layer_kwargs = {}
+        if layer_type in ("sliding_attention", "hybrid_sliding"):
+            layer_kwargs["sliding_window"] = layer_config.sliding_window
+        elif layer_type == "chunked_attention":
+            layer_kwargs["sliding_window"] = layer_config.attention_chunk_size
+        # In this case, we need to pass the config as well to properly __init__ the layer classes
+        elif layer_type in ("heavily_compressed_attention", "compressed_sparse_attention"):
+            layer_kwargs["config"] = layer_config
+        # We may need more than 1 conv/recurrent state
+        if layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding"):
+            layer_kwargs["number_of_states"] = getattr(layer_config, "number_of_conv_states", 1)
+        per_layer_kwargs.append(layer_kwargs)
 
-    return layer_types, layer_kwargs
+    return layer_types, per_layer_kwargs
 
 
 class DynamicCache(Cache):
@@ -1894,9 +1892,12 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            layer_types, layer_kwargs = get_layer_types_and_kwargs(decoder_config)
+            layer_types, per_layer_kwargs = get_layer_types_and_kwargs(decoder_config)
             # Dispatch the layer types
-            layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+            layers = [
+                DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs)
+                for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
+            ]
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -1980,10 +1981,12 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        layer_types, layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
-        layer_kwargs["max_cache_len"] = max_cache_len
+        layer_types, per_layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
         # Dispatch the layer types
-        layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+        layers = [
+            STATIC_LAYER_TYPE_MAPPING[layer_type](max_cache_len=max_cache_len, **layer_kwargs)
+            for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
+        ]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
 
@@ -2160,7 +2163,6 @@ class EncoderDecoderCache(Cache):
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
 
-    @deprecate_kwarg("maximum_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
