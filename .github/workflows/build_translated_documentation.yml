@@ -1,0 +1,24 @@
+name: Build translated documentation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  translate_and_build:
+    if: github.repository == 'huggingface/transformers' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        # Enable each language in doc-builder and remove it from main's
+        # build_other_lang list before adding it here.
+        language: [ja]
+    uses: ./.github/workflows/build_translated_language.yml
+    with:
+      language: ${{ matrix.language }}
+    secrets:
+      HF_DOC_BUILD_PUSH: ${{ secrets.HF_DOC_BUILD_PUSH }}
