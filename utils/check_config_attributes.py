@@ -299,6 +299,9 @@ SPECIAL_CASES_TO_ALLOW = {
     # `mesh_splits`, `attention_k_hop` and `ball_query_radius_fraction` record how the geometry stored
     # in the checkpoint was built; the modeling file reads the mesh size through `num_mesh_nodes`.
     "WeatherNext2Config": [
+        # Read in generation_weathernext2.py (the rollout), which this check does not scan -- it only looks
+        # at files named modeling_*.
+        "num_members",
         "attention_k_hop",
         "ball_query_radius_fraction",
         "mesh_splits",

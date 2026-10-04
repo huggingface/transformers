@@ -224,31 +224,31 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             grid_states = grid_states + self.grid_node_update(grid_states, conditioning)
             return grid_states, mesh_states
 
-        projected_senders = self.edge_update.sender_proj(mesh_states)
         num_points = grid_states.shape[1]
+        if senders.numel() != 3 * num_points:
+            raise ValueError(
+                f"The mesh-to-grid graph has {senders.numel()} edges, but every one of the {num_points} grid points "
+                "receives exactly three, one from each vertex of its mesh triangle."
+            )
+        projected_senders = self.edge_update.sender_proj(mesh_states)
         chunk_size = self.chunk_size or num_points
-        starts = list(range(0, num_points, chunk_size))
-        # Edges are sorted by receiver, so each block of grid points owns one contiguous run of edges.
-        bounds = torch.searchsorted(
-            receivers, torch.tensor([*starts, num_points], dtype=receivers.dtype, device=receivers.device)
-        ).tolist()
         blocks: list[torch.Tensor] = []
-        for start, first, last in zip(starts, bounds, bounds[1:]):
+        for start in range(0, num_points, chunk_size):
             block = grid_states[:, start : start + chunk_size]
+            # The edges are sorted by receiver, three per grid point, so a block of points owns one
+            # contiguous run of edges.
+            edges = slice(3 * start, 3 * (start + block.shape[1]))
+            local_receivers = receivers[edges] - start
+            messages = self.edge_update(
+                self.edge_encoder(edge_features[:, edges], conditioning),
+                projected_senders,
+                block,
+                senders[edges],
+                local_receivers,
+                conditioning,
+            )
             aggregated = torch.zeros(block.shape, dtype=torch.float32, device=block.device)
-            # A block can receive no edges at all, as in the all-zero placeholder graph of a model built
-            # from a config; its aggregate then stays zero.
-            if last > first:
-                local_receivers = receivers[first:last] - start
-                messages = self.edge_update(
-                    self.edge_encoder(edge_features[:, first:last], conditioning),
-                    projected_senders,
-                    block,
-                    senders[first:last],
-                    local_receivers,
-                    conditioning,
-                )
-                aggregated.index_add_(1, local_receivers, messages.float())
+            aggregated.index_add_(1, local_receivers, messages.float())
             blocks.append(block + self.grid_node_update(self.with_aggregate(block, aggregated), conditioning))
         mesh_states = mesh_states + self.mesh_node_update(mesh_states, conditioning)
         return torch.cat(blocks, dim=1), mesh_states
@@ -584,6 +584,10 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         # The initialization helpers leave checkpoint geometry unchanged.
         for name in GEOMETRY_BUFFERS[:-1]:
             init.zeros_(getattr(self, name))
+        # Every grid point receives exactly three edges from the mesh, which the mesh-to-grid network relies
+        # on, so the placeholder graph keeps that layout too.
+        receivers = self.mesh_to_grid_receivers
+        init.copy_(receivers, torch.arange(receivers.numel() // 3, device=receivers.device).repeat_interleave(3))
         if not getattr(self.attention_mask, "_is_hf_initialized", False):
             init.zeros_(self.attention_mask)
             block_size = self.attention_mask.shape[2]

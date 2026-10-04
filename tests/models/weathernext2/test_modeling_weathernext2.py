@@ -568,23 +568,31 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                         for original, replacement in zip(reference.parameters(), layer.parameters()):
                             torch.testing.assert_close(replacement.grad, original.grad)
 
-    @parameterized.expand([("irregular",), ("placeholder",)])
-    def test_mesh_to_grid_chunking_any_sorted_receivers(self, layout):
-        """Blocks are found by searching the sorted receivers, so the grid points need not receive three
-        edges each. That includes the all-zero placeholder graph of a model built from a config."""
+    def test_mesh_to_grid_needs_three_edges_per_grid_point(self):
+        """Blocks of grid points are mapped to their edges by counting three per point, so another graph is
+        rejected rather than aggregated into the wrong points."""
         config = self.model_tester.get_config()
-        torch.manual_seed(0)
         layer = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=False)
-        reference = copy.deepcopy(layer)
-        reference.chunk_size = None
-        layer.chunk_size = 8
-        receivers = (
-            torch.randint(19, (57,)).sort().values if layout == "irregular" else torch.zeros(57, dtype=torch.long)
-        )
-        args = self.graph_inputs(config, grid_to_mesh=False, receivers=receivers)
+        args = self.graph_inputs(config, grid_to_mesh=False)
+        with self.assertRaisesRegex(ValueError, "exactly three"):
+            layer(args[0][:, :18], *args[1:])
+
+    def test_placeholder_geometry_is_chunkable(self):
+        """A model built from a config has a placeholder graph, laid out three edges per grid point like a real one,
+        so it chunks to the same result as running unchunked."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.chunk_size = None
+        torch.manual_seed(0)
+        unchunked = WeatherNext2Model(copy.deepcopy(config)).to(torch_device).eval()
+        receivers = unchunked.mesh_to_grid_receivers
+        expected = torch.arange(receivers.numel() // 3, device=torch_device).repeat_interleave(3)
+        torch.testing.assert_close(receivers, expected)
+
+        config.chunk_size = 7
+        chunked = WeatherNext2Model(copy.deepcopy(config)).to(torch_device).eval()
+        chunked.load_state_dict(unchunked.state_dict())
         with torch.no_grad():
-            for result, target in zip(layer(*args), reference(*args)):
-                torch.testing.assert_close(result, target)
+            torch.testing.assert_close(chunked(**inputs).last_hidden_state, unchunked(**inputs).last_hidden_state)
 
     def test_chunk_size_validation(self):
         WeatherNext2Config(chunk_size=None)
