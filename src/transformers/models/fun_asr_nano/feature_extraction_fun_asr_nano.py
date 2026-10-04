@@ -180,10 +180,16 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             [`BatchFeature`] with `input_features` of shape
             `(batch, max_lfr_frames, feature_size * num_frames_lfr)` and the frame-level `input_features_mask`.
         """
-        if sampling_rate is not None and sampling_rate != self.sampling_rate:
-            raise ValueError(
-                f"Expected sampling rate {self.sampling_rate}, got {sampling_rate}. "
-                f"Please resample your audio to {self.sampling_rate} Hz."
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"Expected sampling rate {self.sampling_rate}, got {sampling_rate}. "
+                    f"Please resample your audio to {self.sampling_rate} Hz."
+                )
+        else:
+            logger.warning(
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
+                "Failing to do so can result in silent errors that might be hard to debug."
             )
 
         raw_speech = make_list_of_audio(raw_speech)

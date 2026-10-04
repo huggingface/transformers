@@ -32,13 +32,8 @@ if is_soundfile_available():
     import soundfile as sf
 
 
-# trf-ignore: TRF019, `sampling_rate` is recommended by the feature extractor
 class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-        },
-    }
+    _defaults = {}
 
 
 @requires(backends=("torch",))

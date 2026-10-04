@@ -2729,7 +2729,6 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
         },
         "audio_kwargs": {
             "n_window": 50,  # should match model config
-            "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
             "return_attention_mask": True,

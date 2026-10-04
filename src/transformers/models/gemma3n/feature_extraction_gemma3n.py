@@ -273,6 +273,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: int | None = 128,
         return_tensors: str | TensorType | None = None,
         return_attention_mask: bool | None = True,
+        sampling_rate: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Creates a batch of MEL spectrograms from the provided raw speech.
@@ -297,7 +298,22 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
                 The type of tensors to return (e.g., NumPy, or Torch).
             return_attention_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the attention mask for the generated MEL spectrograms.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
         """
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
+                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
+                )
+        else:
+            logger.warning(
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
+                "Failing to do so can result in silent errors that might be hard to debug."
+            )
 
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         is_batched_sequence = isinstance(raw_speech, Sequence) and isinstance(raw_speech[0], (np.ndarray, Sequence))
