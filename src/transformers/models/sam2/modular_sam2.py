@@ -49,6 +49,7 @@ from ..auto import AutoModel
 from ..detr.modeling_detr import DetrSinePositionEmbedding
 from ..sam.image_processing_sam import SamImageProcessor
 from ..sam.modeling_sam import (
+    SamFeedForward,
     SamLayerNorm,
     SamMaskDecoder,
     SamMaskEmbedding,
@@ -481,7 +482,7 @@ class Sam2MultiScaleAttention(nn.Module):
         return attn_output
 
 
-class Sam2FeedForward(nn.Module):
+class Sam2FeedForward(SamFeedForward):
     def __init__(
         self,
         input_dim: int,
@@ -498,17 +499,6 @@ class Sam2FeedForward(nn.Module):
         self.proj_out = nn.Linear(hidden_dim, output_dim)
         self.layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 2)])
         self.sigmoid_output = sigmoid_output
-
-    def forward(self, hidden_states):
-        hidden_states = self.proj_in(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        for layer in self.layers:
-            hidden_states = self.activation(layer(hidden_states))
-
-        hidden_states = self.proj_out(hidden_states)
-        if self.sigmoid_output:
-            hidden_states = F.sigmoid(hidden_states)
-        return hidden_states
 
 
 class Sam2MultiScaleBlock(GradientCheckpointingLayer):

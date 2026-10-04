@@ -19,7 +19,6 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
@@ -29,6 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..sew_d.modeling_sew_d import SEWDPositionalConvEmbedding, SEWDUpsampling
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
@@ -60,73 +60,16 @@ class SEWGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
     pass
 
 
-class SEWPositionalConvEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=config.num_conv_pos_embeddings,
-            padding=config.num_conv_pos_embeddings // 2,
-            groups=config.num_conv_pos_embedding_groups,
-            stride=config.squeeze_factor,
-        )
-
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = weight_norm(self.conv, name="weight", dim=2)
-            if hasattr(self.conv, "parametrizations"):
-                weight_g = self.conv.parametrizations.weight.original0
-                weight_v = self.conv.parametrizations.weight.original1
-            else:
-                weight_g = self.conv.weight_g
-                weight_v = self.conv.weight_v
-            deepspeed.zero.register_external_parameter(self, weight_v)
-            deepspeed.zero.register_external_parameter(self, weight_g)
-        else:
-            self.conv = weight_norm(self.conv, name="weight", dim=2)
-
-        self.padding = SEWSamePadLayer(config.num_conv_pos_embeddings)
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.padding(hidden_states)
-        hidden_states = self.activation(hidden_states)
-
-        return hidden_states
+class SEWPositionalConvEmbedding(SEWDPositionalConvEmbedding):
+    pass
 
 
 class SEWSamePadLayer(Wav2Vec2SamePadLayer):
     pass
 
 
-class SEWUpsampling(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.projection = nn.Linear(config.hidden_size, config.hidden_size * config.squeeze_factor)
-        self.activation = ACT2FN[config.feat_extract_activation]
-        self.squeeze_factor = config.squeeze_factor
-
-    def forward(self, hidden_states):
-        hidden_states = self.projection(hidden_states)
-        hidden_states = self.activation(hidden_states)
-
-        if self.squeeze_factor > 1:
-            # transform embedding channels to sequence length
-            bsz, src_len, src_embed_dim = hidden_states.size()
-            tgt_len = src_len * self.squeeze_factor
-            tgt_embed_dim = src_embed_dim // self.squeeze_factor
-            hidden_states = hidden_states.reshape(bsz, src_len, self.squeeze_factor, tgt_embed_dim)
-            hidden_states = hidden_states.reshape(bsz, tgt_len, tgt_embed_dim)
-
-        return hidden_states
+class SEWUpsampling(SEWDUpsampling):
+    pass
 
 
 class SEWFeatureEncoder(Wav2Vec2FeatureEncoder):
