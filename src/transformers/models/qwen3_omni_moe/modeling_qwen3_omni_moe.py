@@ -1914,6 +1914,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         ]
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
