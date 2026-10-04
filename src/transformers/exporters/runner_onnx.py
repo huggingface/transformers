@@ -126,7 +126,6 @@ class OnnxModelRunner(ModelRunner):
         self._element_types = {spec.name: _ort_element_type(spec.type) for spec in specs}
         self._io_dtypes = {spec.name: _ort_to_torch_dtype(spec.type) for spec in specs}
         self._io_binding, self._shared_outputs, self._binds = None, {}, False
-        self._buffers: dict[str, torch.Tensor] = {}
         # An input/output without an element type cannot be bound; such a graph keeps the plain `run` path.
         if all(kind is not None for kind in self._element_types.values()):
             self._io_binding = session.io_binding()
@@ -231,14 +230,6 @@ class OnnxModelRunner(ModelRunner):
             for name, value in zip(self._output_names, outputs)
         }
 
-    def _scratch(self, tensor: torch.Tensor, name: str) -> int:
-        """Address of a runner-owned one-element buffer standing in for an empty `tensor`."""
-        key = f"{name}\0scratch"
-        scratch = self._buffers.get(key)
-        if scratch is None or scratch.dtype != tensor.dtype or scratch.device != tensor.device:
-            scratch = self._buffers[key] = torch.empty(1, dtype=tensor.dtype, device=tensor.device)
-        return scratch.data_ptr()
-
     def _bound_run(self, feed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Run the session over io-binding; output buffers are sized from the inputs' symbolic axes."""
         device, known_axes = self.device, {}
@@ -255,6 +246,15 @@ class OnnxModelRunner(ModelRunner):
         self._io_binding.clear_binding_inputs()
         self._io_binding.clear_binding_outputs()
         outputs = {}
+        # ORT refuses the null pointer of an empty tensor; a one-element stand-in, kept alive through the run.
+        scratch = []
+
+        def address(tensor: torch.Tensor) -> int:
+            if tensor.data_ptr():
+                return tensor.data_ptr()
+            scratch.append(torch.empty(1, dtype=tensor.dtype, device=tensor.device))
+            return scratch[-1].data_ptr()
+
         for name in list(feed):
             # Assigned back into `feed` so a converted tensor outlives the run (ORT holds only its pointer).
             on_host = device_type == "cuda" and not feed[name].is_floating_point() and name not in self._shared_outputs
@@ -262,8 +262,7 @@ class OnnxModelRunner(ModelRunner):
             tensor = feed[name] = (feed[name].cpu() if on_host else feed[name].to(device)).contiguous()
             # A rank-0 input binds as `[1]`: ORT would otherwise write into nothing.
             bound_shape = list(tensor.shape) or [1]
-            # ORT refuses the null pointer of an empty tensor (a prefill cache entry).
-            pointer = tensor.data_ptr() or self._scratch(tensor, name)
+            pointer = address(tensor)
             self._io_binding.bind_input(
                 name,
                 "cpu" if on_host else device_type,
@@ -290,9 +289,8 @@ class OnnxModelRunner(ModelRunner):
                 self._io_binding.bind_output(name, device_type=device_type, device_id=device_index)
                 ort_allocated.append(name)
                 continue
-            buffer = self._buffers.get(name)
-            if buffer is None or tuple(buffer.shape) != shape:
-                buffer = self._buffers[name] = torch.empty(shape, dtype=self._io_dtypes[name], device=device)
+            # Fresh each call: a reused buffer would overwrite the outputs an earlier call returned.
+            buffer = torch.empty(shape, dtype=self._io_dtypes[name], device=device)
             # Exactly as declared: ORT verifies output shapes, so a rank-0 output cannot be padded to `[1]`.
             self._io_binding.bind_output(
                 name,
@@ -300,7 +298,7 @@ class OnnxModelRunner(ModelRunner):
                 device_index,
                 self._element_types[name],
                 list(shape),
-                buffer.data_ptr() or self._scratch(buffer, name),
+                address(buffer),
             )
             outputs[name] = buffer
         # ORT runs on its own stream: sync both ways or half-written tensors are read (illegal access on busy GPUs).
