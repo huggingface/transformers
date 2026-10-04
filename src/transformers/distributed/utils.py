@@ -60,6 +60,35 @@ def _get_torch_distributed_world_size() -> int:
     return torch.distributed.get_world_size()
 
 
+def prefetch_checkpoint_shards(checkpoint_files: list[str]) -> None:
+    """Warm the page cache for the checkpoint shards before the per-tensor loading pass, opt-in via
+    `HF_SHARD_PREFETCH=<read threads per rank>`.
+
+    The per-tensor read pattern of sharded loading reads a network filesystem at well under 1 GiB/s
+    while large sequential reads sustain many times that. The reads run in background threads, ahead of
+    the loading pass, which starts right away and finds more and more of the checkpoint in the page
+    cache. Local ranks split the shard list between them (every node needs the full checkpoint cached,
+    since every rank slices tensors from all shards).
+    """
+    prefetch_threads = int(os.environ.get("HF_SHARD_PREFETCH", "0"))
+    if not checkpoint_files or not prefetch_threads:
+        return
+    from concurrent.futures import ThreadPoolExecutor
+
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    local_world = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
+
+    def _warm(path, bufsize=16 * 2**20):
+        with open(path, "rb", buffering=0) as f:
+            while f.read(bufsize):
+                pass
+
+    pool = ThreadPoolExecutor(max_workers=prefetch_threads)
+    for path in checkpoint_files[local_rank::local_world]:
+        pool.submit(_warm, path)
+    pool.shutdown(wait=False)
+
+
 def is_local_dist_rank_0() -> bool:
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
