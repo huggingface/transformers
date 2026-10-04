@@ -36,6 +36,11 @@ if TYPE_CHECKING:
 
     from transformers import PreTrainedConfig, PreTrainedModel
 
+# The names that modules in the library give the `forward` argument that passes in the cache
+_CACHE_ARGUMENT_NAMES = frozenset({"past_key_values", "layer_past", "cache_params", "cache"})
+# The name of the `forward` argument that passes in the attention mask
+_ATTENTION_MASK_ARGUMENT_NAMES = frozenset({"attention_mask"})
+
 
 @dataclass(frozen=True)
 class _LayerInitContext:
@@ -45,6 +50,7 @@ class _LayerInitContext:
     skip_descriptors: dict[str, SkipDescriptor]
     model_layer_configs: dict[int, PreTrainedConfig]
     cache_receivers_skipped_layers: set[int]
+    attention_mask_receivers_skipped_layers: set[int]
 
 
 _layer_init_contexts: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
@@ -100,6 +106,9 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
         cache_receivers_skipped_layers=(
             same_config_context.cache_receivers_skipped_layers if same_config_context else set()
         ),
+        attention_mask_receivers_skipped_layers=(
+            same_config_context.attention_mask_receivers_skipped_layers if same_config_context else set()
+        ),
     )
     _layer_init_contexts.set((*layer_init_contexts, context))
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
@@ -152,6 +161,9 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
                 heterogeneity_spec = context.model.config._heterogeneity_spec
                 heterogeneity_spec.model_layer_configs = context.model_layer_configs
                 heterogeneity_spec.cache_receivers_skipped_layers = frozenset(context.cache_receivers_skipped_layers)
+                heterogeneity_spec.attention_mask_receivers_skipped_layers = frozenset(
+                    context.attention_mask_receivers_skipped_layers
+                )
         finally:
             _layer_init_contexts.reset(layer_init_contexts_token)
         return result
@@ -205,6 +217,12 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             orig_layer_init(self, layer_config, *args, **kwargs)
 
             # --- Replace skipped sublayers ---
+            # Heuristically find the cache and attention mask receivers before applying the skips. Searching afterwards
+            # would find the layer itself instead, as it still takes them while the replacements don't
+            cache_receivers = _get_receivers(self, _CACHE_ARGUMENT_NAMES) if layer_config.skip else []
+            attention_mask_receivers = (
+                _get_receivers(self, _ATTENTION_MASK_ARGUMENT_NAMES) if layer_config.skip else []
+            )
             for skip_type in layer_config.skip:
                 _apply_skip_descriptor(
                     layer=self,
@@ -212,6 +230,11 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                     skip_descriptor=context.skip_descriptors[skip_type],
                     layer_idx=layer_idx,
                 )
+            remaining_modules = set(self.modules())
+            if cache_receivers and remaining_modules.isdisjoint(cache_receivers):
+                context.cache_receivers_skipped_layers.add(layer_idx)
+            if attention_mask_receivers and remaining_modules.isdisjoint(attention_mask_receivers):
+                context.attention_mask_receivers_skipped_layers.add(layer_idx)
 
             # --- Register attention mask selection forward pre-hook ---
             _register_layer_attention_mask_selection_hook(layer=self, layer_idx=layer_idx)
@@ -278,6 +301,18 @@ def _validate_skip_descriptors(
     missing_descriptors = skip_types - skip_descriptors.keys()
     if missing_descriptors:
         raise ValueError(f"No-op descriptors are missing for the following types: {missing_descriptors}")
+
+
+def _get_receivers(module: nn.Module, argument_names: frozenset[str]) -> list[nn.Module]:
+    """Return the modules that take one of `argument_names` in `forward` while none of their submodules do, so they're
+    assumed to be the ones that use the argument instead of passing it down."""
+    receivers = [receiver for child in module.children() for receiver in _get_receivers(child, argument_names)]
+    if receivers:
+        return receivers
+
+    parameters = inspect.signature(module.forward).parameters
+    receives_argument = any(name in parameters for name in argument_names)
+    return [module] if receives_argument else []
 
 
 def _apply_skip_descriptor(

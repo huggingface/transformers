@@ -53,6 +53,7 @@ class _HeterogeneitySpec:
 
     model_layer_configs: dict[int, PreTrainedConfig] | None = None
     cache_receivers_skipped_layers: frozenset[int] = frozenset()
+    attention_mask_receivers_skipped_layers: frozenset[int] = frozenset()
 
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:

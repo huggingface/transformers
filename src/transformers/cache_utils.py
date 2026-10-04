@@ -1569,7 +1569,7 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
+                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__}, which "
                     "does not track sequence length."
                 )
             try:
@@ -1578,7 +1578,7 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers."
+                    "LinearAttention layers or `NoCacheLayer`s."
                 )
 
         return self.layers[layer_idx].get_seq_length()
@@ -1645,7 +1645,7 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
+                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__}, which "
                     "does not track sequence length."
                 )
             try:
@@ -1654,7 +1654,7 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_mask_sizes` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers."
+                    "LinearAttention layers or `NoCacheLayer`s."
                 )
 
         return self.layers[layer_idx].get_mask_sizes(query_length)

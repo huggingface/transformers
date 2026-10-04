@@ -126,6 +126,21 @@ def _create_attention_masks_by_layer_idx(
     layer_configs = config._heterogeneity_spec.model_layer_configs
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
+        if layer_idx in config._heterogeneity_spec.attention_mask_receivers_skipped_layers:
+            # The skips replaced every module in this layer detected as receiving the attention mask, so nothing left
+            # in the layer needs it
+            attention_masks[layer_idx] = None
+            continue
+
+        if past_key_values is not None and layer_idx in config.cache_receivers_skipped_layers:
+            # A module left in this layer receives the attention mask, but with a cache, the mask factories size each
+            # layer's mask from its cache entry, and this layer's entry is a `NoCacheLayer`, which holds nothing
+            raise ValueError(
+                f"Layer {layer_idx} still has modules that receive the attention mask, but its skips replaced every "
+                "module that receives the cache, so there is no cache entry to build its attention mask from. Skip "
+                "the modules that receive the attention mask too, or run without a cache."
+            )
+
         layer_config = layer_configs[layer_idx]
 
         if attribute_name is not None:
@@ -171,7 +186,7 @@ def support_per_layer_mask_creation(attribute_name: str | None = None) -> Callab
             config = mask_kwargs["config"]
             layer_idx = mask_kwargs.get("layer_idx")
 
-            if config.generic_modeling_applied and layer_idx is None:
+            if config.generic_heterogeneous_modeling_applied and layer_idx is None:
                 attention_mask = mask_kwargs.get("attention_mask")
                 if isinstance(attention_mask, AttentionMasksByLayerIdx):
                     return attention_mask
