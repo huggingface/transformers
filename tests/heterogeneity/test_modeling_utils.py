@@ -52,6 +52,7 @@ if is_torch_available():
         PreTrainedModel,
         StaticCache,
     )
+    from transformers.configuration_utils import get_head_shapes
     from transformers.integrations.heterogeneity import (
         HeterogeneousModelingSpec,
         LayerIdxFromArgument,
@@ -187,7 +188,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
         model = build_model(config, LlamaForSequenceClassification)
 
-        self.assertTrue(config.generic_modeling_applied)
+        self.assertTrue(config.generic_heterogeneous_modeling_applied)
         self.assertIs(config._heterogeneity_spec.model_layer_configs[1], model.model.layers[1].self_attn.config)
 
     def test_failed_outer_init_does_not_publish_layer_configs(self):
@@ -202,10 +203,10 @@ class TestHeterogeneousModeling(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Outer model initialization failed"):
                 build_model(config, LlamaForCausalLM)
 
-        self.assertFalse(config.generic_modeling_applied)
+        self.assertFalse(config.generic_heterogeneous_modeling_applied)
 
         model = build_model(config, LlamaForCausalLM)
-        self.assertTrue(config.generic_modeling_applied)
+        self.assertTrue(config.generic_heterogeneous_modeling_applied)
         for layer_idx, layer in enumerate(model.model.layers):
             self.assertIs(config._heterogeneity_spec.model_layer_configs[layer_idx], layer.self_attn.config)
 
@@ -228,7 +229,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Composite model initialization failed"):
                 _TwoTowerModel(config)
 
-        self.assertFalse(text_config.generic_modeling_applied)
+        self.assertFalse(text_config.generic_heterogeneous_modeling_applied)
 
         model = _TwoTowerModel(config)
         for layer_idx, (first_layer, second_layer) in enumerate(zip(model.first.layers, model.second.layers)):
@@ -309,7 +310,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
 
         self.assertTrue(mtp_model.config.is_heterogeneous)
-        self.assertTrue(mtp_model.config.generic_modeling_applied)
+        self.assertTrue(mtp_model.config.generic_heterogeneous_modeling_applied)
         self.assertEqual(mtp_model.layers[0].mtp_block.mlp.gate_proj.out_features, 64)
         self.assertEqual(mtp_model.layers[1].mtp_block.mlp.gate_proj.out_features, 96)
         self.assertEqual(mtp_model.layers[0].enorm.variance_epsilon, 1e-5)
@@ -328,7 +329,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         }
         config._attn_implementation = "eager"
         main_model = build_model(config, GptOssForCausalLM)
-        self.assertFalse(main_model.config.generic_modeling_applied)
+        self.assertFalse(main_model.config.generic_heterogeneous_modeling_applied)
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
 
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
@@ -451,29 +452,48 @@ class TestHeterogeneousCache(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("llama", {0: {"num_key_value_heads": 2}, 1: {"skip": ["attention"]}, 2: {"num_key_value_heads": 1}}),
-            ("gpt_oss", {0: {"sliding_window": 3}, 1: {"skip": ["attention"]}, 2: {"sliding_window": 4}}),
-            ("llama4", {0: {"attention_chunk_size": 2}, 1: {"attention_chunk_size": 3}, 2: {"skip": ["attention"]}}),
-            ("nemotron_h", {1: {"skip": ["mixer"]}, 3: {"skip": ["mixer"]}}),
+            (
+                "llama",
+                "llama",
+                {0: {"num_key_value_heads": 2}, 1: {"skip": ["attention"]}, 2: {"num_key_value_heads": 1}},
+            ),
+            # Caches read positions from layer 0 by default, and here nothing writes to its cache
+            ("llama_first_attention_skipped", "llama", {0: {"skip": ["attention"]}}),
+            ("gpt_oss", "gpt_oss", {0: {"sliding_window": 3}, 1: {"skip": ["attention"]}, 2: {"sliding_window": 4}}),
+            (
+                "llama4",
+                "llama4",
+                {0: {"attention_chunk_size": 2}, 1: {"attention_chunk_size": 3}, 2: {"skip": ["attention"]}},
+            ),
+            ("nemotron_h", "nemotron_h", {1: {"skip": ["mixer"]}, 3: {"skip": ["mixer"]}}),
         ]
     )
-    def test_cached_decoding_matches_uncached(self, name, overrides):
+    def test_cached_decoding_matches_uncached(self, _name, model_name, overrides):
         factory, model_class = {
             "llama": (tiny_llama_config, LlamaForCausalLM),
             "gpt_oss": (tiny_gpt_oss_config, GptOssForCausalLM),
             "llama4": (tiny_llama4_config, Llama4ForCausalLM),
             "nemotron_h": (tiny_nemotron_h_config, NemotronHForCausalLM),
-        }[name]
+        }[model_name]
         config = factory(per_layer_config=overrides)
         model = build_model(config, model_class)
         input_ids = torch.tensor([[0, 0, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6]])
         attention_mask = torch.tensor([[0, 0, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1]])
-        caches = (DynamicCache(config=config), StaticCache(config=config, max_cache_len=input_ids.shape[1]))
+        # Like the static cache of a chunked prefill
+        early_initialized_static_cache = StaticCache(config=config, max_cache_len=input_ids.shape[1])
+        early_initialized_static_cache.early_initialization(
+            input_ids.shape[0], *get_head_shapes(config), model.dtype, model.device
+        )
+        caches = {
+            "dynamic": DynamicCache(config=config),
+            "static": StaticCache(config=config, max_cache_len=input_ids.shape[1]),
+            "early_initialized_static": early_initialized_static_cache,
+        }
 
         with torch.no_grad():
             expected_logits = model(input_ids, attention_mask=attention_mask, use_cache=False).logits[:, -2:]
-            for cache in caches:
-                with self.subTest(cache_type=type(cache).__name__):
+            for cache_name, cache in caches.items():
+                with self.subTest(cache=cache_name):
                     model(
                         input_ids[:, :-2], attention_mask=attention_mask[:, :-2], past_key_values=cache, use_cache=True
                     )

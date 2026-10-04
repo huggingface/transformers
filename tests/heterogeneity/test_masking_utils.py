@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -23,8 +24,14 @@ from transformers.testing_utils import cleanup, is_torch_available, require_torc
 if is_torch_available():
     import torch
 
-    from tests.heterogeneity.testing_utils import tiny_llama4_config, tiny_llama_config
-    from transformers import DynamicCache, StaticCache
+    from tests.heterogeneity.testing_utils import build_model, tiny_llama4_config, tiny_llama_config
+    from transformers import DynamicCache, LlamaForCausalLM, ModernBertConfig, ModernBertModel, StaticCache
+    from transformers.integrations.heterogeneity import (
+        HeterogeneousModelingSpec,
+        LayerIdxFromArgument,
+        ReturnEntry,
+        get_skip_replacement_factory,
+    )
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.masking_utils import (
         create_bidirectional_mask,
@@ -33,6 +40,7 @@ if is_torch_available():
         create_chunked_causal_mask,
         create_sliding_window_causal_mask,
     )
+    from transformers.models.modernbert.modeling_modernbert import ModernBertAttention, ModernBertEncoderLayer
 
 
 @require_torch
@@ -172,21 +180,67 @@ class TestHeterogeneousMasking(unittest.TestCase):
 
         self.assertIs(mask[0], mask[1])
 
-    @parameterized.expand([("no_skips", {}, True), ("with_skip", {0: {"skip": ["attention"]}}, False)])
-    def test_static_cache_layers_share_masks_unless_some_layer_skips(self, _name, per_layer_config, expect_shared):
-        config = tiny_llama_config(num_hidden_layers=2, per_layer_config=per_layer_config)
+    def test_static_cache_layers_share_masks_when_a_layer_skips_attention(self):
+        config = tiny_llama_config(num_hidden_layers=3, per_layer_config={0: {"skip": ["attention"]}})
         config._attn_implementation = "eager"
-        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        build_model(config, LlamaForCausalLM)
         # Once a static layer is written to, it reports its position as a device tensor
         cache = StaticCache(config=config, max_cache_len=8)
         states = torch.randn(1, config.num_key_value_heads, 2, config.head_dim)
-        for layer_idx in range(config.num_hidden_layers):
+        # Layer 0's attention is skipped, so nothing writes to its cache
+        for layer_idx in (1, 2):
             cache.update(states, states, layer_idx=layer_idx)
 
         mask = create_causal_mask(config, torch.randn(1, 1, config.hidden_size), None, cache)
 
-        # A layer that skips a module may never write to its cache, so masks are only shared when no layer skips
-        self.assertEqual(mask[0] is mask[1], expect_shared)
+        # The layers that write to their caches stay at the same position, so they share a mask
+        self.assertIs(mask[1], mask[2])
+        self.assertIsNone(mask[0])
+
+    def test_encoder_layer_with_skipped_attention_gets_no_mask(self):
+        # ModernBERT's attention receives the attention mask but no cache
+        spec = HeterogeneousModelingSpec(
+            layer_cls=ModernBertEncoderLayer,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+            skip_descriptors={
+                "attention": {
+                    "attn": get_skip_replacement_factory(
+                        ModernBertAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                    )
+                }
+            },
+        )
+        config = ModernBertConfig(
+            hidden_size=64,
+            intermediate_size=128,
+            num_attention_heads=4,
+            num_hidden_layers=2,
+            layer_types=["full_attention", "full_attention"],
+            per_layer_config={0: {"skip": ["attention"]}},
+        )
+        with patch.object(ModernBertModel, "_heterogeneous_modeling_spec", spec, create=True):
+            ModernBertModel(config)
+        attention_mask = torch.tensor([[0, 1, 1, 1], [1, 1, 1, 1]])
+
+        mask = create_bidirectional_mask(config, torch.randn(2, 4, config.hidden_size), attention_mask)
+
+        self.assertIsNone(mask[0])
+        self.assertIsNotNone(mask[1])
+
+    def test_attention_masks_round_trip_through_serialized_pytree(self):
+        # With a compileable cache, `generate` passes the per-layer masks to the forward, so `torch.export` takes them
+        # as an input, and `torch.export.load` rebuilds them from their serialized tree structure
+        masks = AttentionMasksByLayerIdx({0: torch.ones(1, 1, 2, 2), 1: None})
+
+        leaves, tree_spec = torch.utils._pytree.tree_flatten(masks)
+        serialized_tree_spec = torch.utils._pytree.treespec_dumps(tree_spec)
+        restored_masks = torch.utils._pytree.tree_unflatten(
+            leaves, torch.utils._pytree.treespec_loads(serialized_tree_spec)
+        )
+
+        self.assertIsInstance(restored_masks, AttentionMasksByLayerIdx)
+        self.assertIs(restored_masks[0], masks[0])
+        self.assertIsNone(restored_masks[1])
 
     def test_chunked_attention_masks_are_keyed_by_layer_idx(self):
         config = tiny_llama4_config(
