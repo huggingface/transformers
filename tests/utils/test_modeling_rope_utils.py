@@ -15,6 +15,7 @@
 
 import logging as stdlib_logging
 import math
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -27,7 +28,7 @@ from transformers.utils import logging as transformers_logging
 if is_torch_available():
     import torch
 
-    from transformers import ROPE_INIT_FUNCTIONS
+    from transformers import ROPE_INIT_FUNCTIONS, Gemma3TextModel, LlamaForCausalLM
     from transformers.models.gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
     from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
@@ -1617,3 +1618,159 @@ class RopeTest(unittest.TestCase):
         for layer_type in layer_types:
             inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ, atol=1e-04, rtol=1e-04)
+
+
+def _tiny_llama_config():
+    return LlamaConfig(
+        hidden_size=64,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        intermediate_size=128,
+        vocab_size=128,
+        max_position_embeddings=32768,
+    )
+
+
+def _tiny_gemma3_config():
+    return Gemma3TextConfig(
+        vocab_size=128,
+        hidden_size=64,
+        intermediate_size=128,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=32,
+        max_position_embeddings=32768,
+        sliding_window=64,
+        layer_types=["full_attention", "sliding_attention"],
+        query_pre_attn_scalar=32,
+    )
+
+
+def _rope_frequency_buffers(module):
+    buffers = {}
+    for name, buffer in module.named_buffers():
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf == "inv_freq" or leaf.endswith("_inv_freq"):
+            buffers[name] = buffer
+    return buffers
+
+
+@require_torch
+class RopeFrequencyBufferCastTest(unittest.TestCase):
+    """`.to()` / `.half()` / `.bfloat16()` must not round RoPE frequencies.
+
+    `from_pretrained(dtype=...)` already leaves `inv_freq` in fp32. Casting afterwards has to match that,
+    including Gemma3's per-layer buffers. See https://github.com/huggingface/transformers/issues/49288.
+    """
+
+    def _build(self, arch):
+        torch.manual_seed(0)
+        if arch == "llama":
+            return LlamaForCausalLM(_tiny_llama_config())
+        if arch == "gemma3":
+            return Gemma3TextModel(_tiny_gemma3_config())
+        raise AssertionError(arch)
+
+    def _rotary(self, model, arch):
+        return model.model.rotary_emb if arch == "llama" else model.rotary_emb
+
+    def _cast(self, model, how, dtype):
+        if how == "to":
+            return model.to(dtype)
+        if how == "bfloat16":
+            return model.bfloat16()
+        if how == "half":
+            return model.half()
+        raise AssertionError(how)
+
+    def _cos_sin(self, model, arch, dtype):
+        rotary = self._rotary(model, arch)
+        hidden = model.config.hidden_size
+        positions = torch.arange(32768)[None]
+        hidden_states = torch.zeros(1, 32768, hidden, dtype=dtype)
+        if arch == "llama":
+            return rotary(hidden_states, positions)
+        return {layer_type: rotary(hidden_states, positions, layer_type) for layer_type in model.config.layer_types}
+
+    @parameterized.expand(
+        [
+            ("llama", "to", "bfloat16"),
+            ("llama", "bfloat16", "bfloat16"),
+            ("llama", "half", "float16"),
+            ("gemma3", "to", "bfloat16"),
+            ("gemma3", "half", "float16"),
+        ]
+    )
+    def test_cast_keeps_rope_frequencies_fp32(self, arch, how, dtype_name):
+        dtype = getattr(torch, dtype_name)
+        model = self._build(arch)
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            loaded = type(model).from_pretrained(tmp, dtype=dtype)
+            cast = self._cast(type(model).from_pretrained(tmp), how, dtype)
+
+        loaded_buffers = _rope_frequency_buffers(loaded)
+        cast_buffers = _rope_frequency_buffers(cast)
+        self.assertEqual(set(loaded_buffers), set(cast_buffers))
+        self.assertGreaterEqual(len(cast_buffers), 2)
+        for name, cast_buffer in cast_buffers.items():
+            self.assertEqual(cast_buffer.dtype, torch.float32, name)
+            self.assertTrue(torch.equal(cast_buffer, loaded_buffers[name]), name)
+
+        # Weights follow the cast. Unrelated buffers (Gemma3's embed scale) do too.
+        weight = model.model.embed_tokens.weight if arch == "llama" else model.embed_tokens.weight
+        cast_weight = cast.model.embed_tokens.weight if arch == "llama" else cast.embed_tokens.weight
+        self.assertEqual(weight.dtype, torch.float32)
+        self.assertEqual(cast_weight.dtype, dtype)
+        if arch == "gemma3":
+            self.assertEqual(cast.embed_tokens.embed_scale.dtype, dtype)
+            for layer_type in ("full_attention", "sliding_attention"):
+                self.assertEqual(getattr(cast.rotary_emb, f"{layer_type}_inv_freq").dtype, torch.float32)
+                self.assertEqual(getattr(cast.rotary_emb, f"{layer_type}_original_inv_freq").dtype, torch.float32)
+
+        # Single-threaded matmul so the comparison does not depend on OpenMP reduction order.
+        threads = torch.get_num_threads()
+        torch.set_num_threads(1)
+        try:
+            loaded_angles = self._cos_sin(loaded, arch, dtype)
+            cast_angles = self._cos_sin(cast, arch, dtype)
+        finally:
+            torch.set_num_threads(threads)
+
+        if arch == "llama":
+            pairs = [(loaded_angles, cast_angles)]
+        else:
+            pairs = [
+                (loaded_angles[layer_type], cast_angles[layer_type])
+                for layer_type in dict.fromkeys(model.config.layer_types)
+            ]
+        for loaded_pair, cast_pair in pairs:
+            # cos/sin are returned in the activation dtype. A bf16 ulp is enough slack for that cast.
+            # A rounded inv_freq is off by tenths of a radian at this length, which this does not allow.
+            torch.testing.assert_close(cast_pair[0], loaded_pair[0], atol=1e-2, rtol=0)
+            torch.testing.assert_close(cast_pair[1], loaded_pair[1], atol=1e-2, rtol=0)
+
+    def test_double_casts_rope_frequencies(self):
+        model = self._build("llama").double()
+        rotary = model.model.rotary_emb
+        self.assertEqual(rotary.inv_freq.dtype, torch.float64)
+        self.assertEqual(rotary.original_inv_freq.dtype, torch.float64)
+        self.assertEqual(model.model.embed_tokens.weight.dtype, torch.float64)
+
+    def test_meta_to_empty_does_not_break(self):
+        config = _tiny_llama_config()
+        with torch.device("meta"):
+            model = LlamaForCausalLM(config)
+        self.assertTrue(model.model.rotary_emb.inv_freq.is_meta)
+        model.to_empty(device="cpu")
+        self.assertFalse(model.model.rotary_emb.inv_freq.is_meta)
+        self.assertEqual(model.model.rotary_emb.inv_freq.device.type, "cpu")
+        self.assertEqual(model.model.embed_tokens.weight.device.type, "cpu")
+
+        with torch.device("meta"):
+            meta_model = LlamaForCausalLM(config)
+        meta_model.to(dtype=torch.bfloat16)
+        self.assertTrue(meta_model.model.embed_tokens.weight.is_meta)
+        self.assertEqual(meta_model.model.embed_tokens.weight.dtype, torch.bfloat16)

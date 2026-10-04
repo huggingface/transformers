@@ -3648,6 +3648,31 @@ class PreTrainedModel(
                 )
         return super().cuda(*args, **kwargs)
 
+    def _apply(self, fn, recurse=True):
+        # RoPE frequencies are built in fp32 and are not part of the checkpoint, so `from_pretrained(dtype=...)`
+        # leaves them in fp32. `.to()` / `.half()` / `.bfloat16()` would round them, and a later `.float()`
+        # cannot undo that. Keep every fp32 buffer on those modules (cached angles are derived from them).
+        # `.double()` still casts. Meta tensors are skipped so `to_empty` keeps working.
+        rope_buffers = []
+        for module in self.modules():
+            buffers = list(module.named_buffers(recurse=False))
+            if not any(name == "inv_freq" or name.endswith("_inv_freq") for name, _ in buffers):
+                continue
+            for name, buffer in buffers:
+                if buffer.dtype == torch.float32 and not buffer.is_meta:
+                    rope_buffers.append((module, name, buffer))
+
+        result = super()._apply(fn, recurse)
+        for module, name, buffer in rope_buffers:
+            new_buffer = module._buffers.get(name)
+            if (
+                new_buffer is not None
+                and not new_buffer.is_meta
+                and new_buffer.dtype in (torch.float16, torch.bfloat16)
+            ):
+                module._buffers[name] = buffer.to(device=new_buffer.device)
+        return result
+
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
         # For BNB/GPTQ models, we prevent users from casting the model to another dtype to restrict unwanted behaviours.
