@@ -1784,7 +1784,9 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
-    for layer_type, layer_config in zip(layer_types, layer_configs):
+    for layer_idx, layer_type in enumerate(layer_types):
+        # `layer_types` may count cache layers beyond the decoder layers (e.g. Idefics' gated cross-attention)
+        layer_config = layer_configs[layer_idx] if layer_idx < len(layer_configs) else config
         layer_kwargs = {}
         if layer_type in ("sliding_attention", "hybrid_sliding"):
             layer_kwargs["sliding_window"] = layer_config.sliding_window

@@ -496,7 +496,7 @@ def _freeze_batchless_states(
 ) -> None:
     """Replace batch-less tensors the graph passes through unchanged with constants (updating ``pairs``).
 
-    Such a tensor (Cohere2's ``_sliding_window_tensor``) is config-derived, not state. One the graph writes (a
+    Such a tensor (Cohere2's ``sliding_window_tensor``) is config-derived, not state. One the graph writes (a
     static layer's ``cumulative_length``) stays state.
     """
     sample_leaves = get_leaf_tensors(sample_inputs)
