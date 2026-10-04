@@ -83,7 +83,6 @@ class HunYuanVLRMSNorm(nn.Module):
 
 
 class HunYuanVLRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: HunYuanVLTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -98,23 +97,20 @@ class HunYuanVLRotaryEmbedding(nn.Module):
             base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.config.head_dim)).to(
-                device
-            )
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.config.head_dim))
             self.attention_scaling = 1.0
         else:
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-            inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+            inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: HunYuanVLConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: HunYuanVLConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -130,7 +126,7 @@ class HunYuanVLRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
