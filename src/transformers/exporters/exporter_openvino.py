@@ -43,6 +43,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    drop_runtime_asserts,
     get_leaf_tensors,
     leaf_name,
     register_fx_node_fix,
@@ -148,10 +149,11 @@ def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedPr
 
     Both are returned because ``_make_stateful`` reads the program while the port fixes read the module.
     """
-    _drop_runtime_asserts(exported_program.graph_module)
+    drop_runtime_asserts(exported_program.graph_module)
     exported_program = _run_openvino_decompositions(exported_program)
     apply_fx_program_fixes("openvino", exported_program)
     graph_module = exported_program.module()
+    drop_runtime_asserts(graph_module)
     _deduplicate_output_args(graph_module)
     apply_fx_node_fixes("openvino", graph_module)
     _rename_bare_node_names(graph_module)
@@ -782,25 +784,6 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
 # ── Graph preparation ───────────────────────────────────────────────────────
 
 
-def _drop_runtime_asserts(graph_module) -> None:
-    """Drop ``_assert_tensor_metadata`` / ``_assert_scalar`` runtime asserts before the replay.
-
-    The first re-checks trace-time dtypes later stages change; the second lowers to a ``Piecewise`` chain OV's
-    ``_ModuleStackTracer`` can't proxy. The range facts survive on ``range_constraints``.
-    """
-    for module in graph_module.modules():
-        if not isinstance(module, torch.fx.GraphModule):
-            continue
-        for node in list(module.graph.nodes):
-            if node.op == "call_function" and node.target in (
-                torch.ops.aten._assert_tensor_metadata.default,
-                torch.ops.aten._assert_scalar.default,
-            ):
-                module.graph.erase_node(node)
-        module.graph.eliminate_dead_code()
-        module.recompile()
-
-
 # Ops OV keeps for itself that we decompose anyway: its ``index_copy`` broadcasts the source against the index,
 # which a ``[batch, 1, 1, dim]`` write into a static cache can't satisfy.
 _DECOMPOSE_ANYWAY = frozenset({"aten.index_copy.default"})
@@ -891,15 +874,6 @@ def _fix_varlen_attn_getitem(gm, node):
     if not isinstance(source, torch.fx.Node) or "_varlen_attn" not in str(source.target):
         return False
     node.replace_all_uses_with(source)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("openvino")
-def _fix_drop_assert_ops(gm, node):
-    """Erase runtime assert nodes, which OV translates into unconvertible ``torch::None`` constants."""
-    if node.target not in (torch.ops.aten._assert_tensor_metadata.default, torch.ops.aten._assert_scalar.default):
-        return False
     gm.graph.erase_node(node)
     return True
 

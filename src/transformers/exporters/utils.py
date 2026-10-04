@@ -173,6 +173,38 @@ def apply_fx_node_fixes(backend: str, graph_module) -> None:
             pass
 
 
+def drop_runtime_asserts(graph_module) -> None:
+    """Drop ``_assert_scalar`` / ``_assert_tensor_metadata`` runtime asserts, and the nodes only they used.
+
+    Backend decomposition tracers can't proxy the ``Piecewise`` chain of ``_assert_scalar`` (``... is not
+    tracked with proxy``), and ``_assert_tensor_metadata`` re-checks dtypes later stages change. The range facts
+    survive in ``range_constraints``.
+    """
+    targets = (torch.ops.aten._assert_tensor_metadata.default, torch.ops.aten._assert_scalar.default)
+    for module in graph_module.modules():
+        if not isinstance(module, torch.fx.GraphModule):
+            continue
+        asserts = [node for node in module.graph.nodes if node.op == "call_function" and node.target in targets]
+        # Targeted removal: a global `eliminate_dead_code` trips an fx `SystemError` on unrelated nodes.
+        stack = [feeder for node in asserts for feeder in node.all_input_nodes]
+        for node in asserts:
+            module.graph.erase_node(node)
+        # A feeder can be reached more than once; erasing it twice corrupts the graph.
+        erased = set()
+        while stack:
+            feeder = stack.pop()
+            if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
+                continue
+            # Erasing some dead `sym_size`s trips a C-level fx `SystemError`; leaving them is harmless.
+            try:
+                module.graph.erase_node(feeder)
+            except SystemError:
+                continue
+            stack.extend(feeder.all_input_nodes)
+            erased.add(feeder)
+        module.recompile()
+
+
 # ── Cross-backend patches ─────────────────────────────────────────────────────
 
 

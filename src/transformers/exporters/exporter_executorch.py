@@ -50,6 +50,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    drop_runtime_asserts,
     module_dtype,
     register_fx_node_fix,
     register_fx_program_fix,
@@ -67,12 +68,6 @@ if is_torch_available():
 
     from ..cache_utils import EncoderDecoderCache, StaticCache
     from ..modeling_utils import PreTrainedModel
-
-    # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
-    _RUNTIME_ASSERT_TARGETS = (
-        torch.ops.aten._assert_tensor_metadata.default,
-        torch.ops.aten._assert_scalar.default,
-    )
 
 
 if is_executorch_available():
@@ -1387,37 +1382,7 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
 
 @register_fx_program_fix("executorch")
 def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
-    """Drop ``_assert_scalar`` / ``_assert_tensor_metadata`` runtime asserts before lowering.
-
-    The decomposition tracer can't proxy the ``Piecewise`` chain of ``_assert_scalar`` (``... is not tracked
-    with proxy``). The facts survive in ``range_constraints``, and ExecuTorch re-validates input specs at load.
-    """
-    for module in exported_program.graph_module.modules():
-        if not isinstance(module, torch.fx.GraphModule):
-            continue
-        asserts = [
-            node
-            for node in module.graph.nodes
-            if node.op == "call_function" and node.target in _RUNTIME_ASSERT_TARGETS
-        ]
-        # Targeted removal: a global `eliminate_dead_code` trips an fx `SystemError` on unrelated nodes.
-        stack = [feeder for node in asserts for feeder in node.all_input_nodes]
-        for node in asserts:
-            module.graph.erase_node(node)
-        # A feeder can be reached more than once; erasing it twice corrupts the graph.
-        erased = set()
-        while stack:
-            feeder = stack.pop()
-            if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
-                continue
-            # Erasing some dead `sym_size`s trips a C-level fx `SystemError`; leaving them is harmless.
-            try:
-                module.graph.erase_node(feeder)
-            except SystemError:
-                continue
-            stack.extend(feeder.all_input_nodes)
-            erased.add(feeder)
-        module.recompile()
+    drop_runtime_asserts(exported_program.graph_module)
 
 
 @register_fx_program_fix("executorch")
