@@ -2052,6 +2052,21 @@ class PreTrainedModel(
                 Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
                 of the `kernels-community` hub repository.
         """
+        if hasattr(self, "config"):
+
+            def _propagate(config, impl):
+                if isinstance(impl, dict):
+                    for k, v in impl.items():
+                        if hasattr(config, k) and hasattr(getattr(config, k), "_attn_implementation"):
+                            _propagate(getattr(config, k), v)
+                else:
+                    config._attn_implementation = impl
+                    for val in config.__dict__.values():
+                        if hasattr(val, "_attn_implementation"):
+                            _propagate(val, impl)
+
+            _propagate(self.config, attn_implementation)
+
         requested_implementation = (
             attn_implementation
             if not isinstance(attn_implementation, dict)
