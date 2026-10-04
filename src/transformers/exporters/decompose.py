@@ -95,13 +95,6 @@ def _capture_calls(obj: Any, attribute: str):
             delattr(obj, attribute)
 
 
-@contextlib.contextmanager
-def _capture_forward(module: torch.nn.Module):
-    """Capture each `module(...)` call's kwargs."""
-    with _capture_calls(module, "forward") as calls:
-        yield calls
-
-
 class CrossWriter(NamedTuple):
     """One module that fills the cross-attention cache, and the call that filled it.
 
@@ -292,7 +285,7 @@ def decompose_prefill_decode(
     if hasattr(model, "_supports_mm_encoder_outputs"):
         no_mm_encoder_outputs.append((model, "_supports_mm_encoder_outputs", lambda original: lambda: False))
     try:
-        with _capture_forward(model) as calls, patch_attributes(no_mm_encoder_outputs):
+        with _capture_calls(model, "forward") as calls, patch_attributes(no_mm_encoder_outputs):
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
         # A cache-shape error means `kv_cache_geometry` disagrees with what the model writes.
@@ -455,7 +448,6 @@ def pack_anyres_features(config, features, image_sizes, outputs) -> torch.Tensor
     """The `pack_image_features` step `PatchVisionEncoder` leaves out of the graph, using the modeling's own
     grid/unpad helpers."""
     from ..models.llava_next.modeling_llava_next import get_anyres_image_grid_shape, unpad_image
-    from .precompute import _find_config_attr
 
     newline = next((t for name, t in outputs.items() if name.endswith("image_newline")), None)
     pinpoints = _find_config_attr(config, "image_grid_pinpoints")
@@ -565,7 +557,7 @@ def decompose_multimodal(
 
     try:
         with contextlib.ExitStack() as stack, torch.no_grad():
-            decoder_calls = stack.enter_context(_capture_forward(decoder))
+            decoder_calls = stack.enter_context(_capture_calls(decoder, "forward"))
             captured_features = {
                 name: stack.enter_context(_capture_calls(owner, getter))
                 for name, getter, owner, _ in active_modalities
@@ -617,7 +609,7 @@ def decompose_multimodal(
     return components
 
 
-def _needs_prefill_graph(model, components: dict, *, cross_written_without_prompt=None) -> bool:
+def _needs_prefill_graph(model, components: dict, *, cross_written_without_prompt: bool = False) -> bool:
     """Whether the prompt needs a graph of its own, beside a decode graph that could serve it.
 
     A second graph duplicates every parameter, so "no" unless the decode graph provably cannot stand in:
@@ -626,10 +618,8 @@ def _needs_prefill_graph(model, components: dict, *, cross_written_without_promp
     """
     # The decode graph only reads the cross cache unless the encoder component writes it.
     encoder = components.get("encoder")
-    writes_cross_cache = (
-        isinstance(encoder.module if encoder is not None else None, CrossAttentionEncoder)
-        if cross_written_without_prompt is None
-        else cross_written_without_prompt
+    writes_cross_cache = cross_written_without_prompt or isinstance(
+        encoder.module if encoder is not None else None, CrossAttentionEncoder
     )
     if encoder is not None and not writes_cross_cache:
         return True
@@ -796,11 +786,10 @@ def _streaming_embedder(model, inputs) -> Component | None:
     spec = streaming_embedder_spec(model.config)
     if spec is None or inputs.get(spec.source) is None:
         return None
-    module = model.base_model
-    for attribute in spec.path.split("."):
-        module = getattr(module, attribute, None)
-        if module is None:
-            return None
+    try:
+        module = model.base_model.get_submodule(spec.path)
+    except AttributeError:
+        return None
     return Component(module, {spec.source: inputs[spec.source]})
 
 
@@ -869,8 +858,9 @@ def decompose_for_generation(
     elif multi_token_decode:
         components = _fold_cross_cache_into_encoder(model, components, cross_writers)
 
-    written = True if cross_written_by_decoder else None
-    if not multi_token_decode or _needs_prefill_graph(model, components, cross_written_without_prompt=written):
+    if not multi_token_decode or _needs_prefill_graph(
+        model, components, cross_written_without_prompt=cross_written_by_decoder
+    ):
         _materialize_prefill_cache(model, components["prefill"].inputs, components["decode"].inputs)
     else:
         del components["prefill"]
