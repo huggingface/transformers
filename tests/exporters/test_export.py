@@ -328,25 +328,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Lifting it is a refactor of the ngram mask machinery, and would also unblock prompt-lookup and "
             "assisted decoding, which hit this same assert today (measured) — so it is not export-only."
         ),
-        "ReformerModelWithLMHead": (
-            "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
-            "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). "
-            "Same chunked-attention limitation as the `onnx.generate` skip."
-        ),
-        "VibeVoiceForConditionalGeneration": (
-            "Classifier-free guidance runs `forward()` twice per generated token — the conditional branch "
-            "and the unconditional one, each with its own cache of a different length — so the captured "
-            "calls interleave the two branches. `_merge_decode_calls` then merges a conditional decode step "
-            "with an unconditional call, mismatching the query and cache axes (`size 5 vs 3` in attention). "
-            "Single-token static generate is fine (it captures a conditional decode step). "
-            "TODO: make the capture branch-aware."
-        ),
     },
-    # Multi-token decode capture on ExecuTorch: the SSM associative scan (what keeps the query axis
-    # symbolic under export) has no ExecuTorch lowering and the runtime has no loop
-    # primitive to lower it to, so those exports keep the sequential scan — which unrolls and pins the
-    # merged decode to the traced step length. torch.export runs the scan natively; ONNX lowers it to a
-    # dynamic-trip-count `Loop` (`_translate_associative_scan`).
     # ONNX, every variant.
     "onnx": {
         "DFineModel": (
@@ -411,8 +393,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "by guarding all three modeling-side detaches with `if self.training`). Static works."
         ),
         "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
-        "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
-        "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
@@ -512,7 +492,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Deimv2ForObjectDetection": "Same as `Deimv2Model`.",
         "PPDocLayoutV2ForObjectDetection": "Same as `Deimv2Model`.",
     },
-    "executorch.generate": {},
     "executorch.dynamic": {
         "Qwen3NextModel": (
             "The dynamic lowering exceeds the 1000s test timeout even run alone (measured on CPU with ExecuTorch "
@@ -576,7 +555,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swin2SRModel": (
             "ExecuTorch plans its arena ahead of time from per-dimension upper bounds, and the windowed "
             "attention's compound `Mod`/`FloorDiv` extents (window padding plus the cyclic shift) leave "
