@@ -1153,11 +1153,13 @@ def _fix_view_inferred_dim(gm, node):
 
 
 @register_fx_node_fix("openvino")
-def _fix_index_put_none_indices(gm, node):
-    """Rewrite ``aten.index_put`` with ``None`` index entries into a broadcast ``where``.
+def _fix_index_put_as_where(gm, node):
+    """Rewrite a non-accumulating ``aten.index_put`` into a broadcast ``where`` when its index is a mask.
 
-    OV turns each ``None`` into an untranslatable ``torch::None`` (chameleon's logit masking). Handles one 1-D
-    index tensor and a scalar value only.
+    Two shapes are rewritten. A single boolean mask, which OV lowers through a ``nonzero``-style gather it can't
+    convert (``SequenceMark``; t5gemma2); flattened per-row values, which ``where`` can't express, are left
+    untouched. One 1-D index tensor among ``None`` entries with a scalar value, as OV turns each ``None`` into
+    an untranslatable ``torch::None`` (chameleon's logit masking).
     """
     if node.target not in (torch.ops.aten.index_put.default, torch.ops.aten.index_put_.default):
         return False
@@ -1167,66 +1169,44 @@ def _fix_index_put_none_indices(gm, node):
     accumulate = node.args[3] if len(node.args) > 3 else node.kwargs.get("accumulate", False)
     if accumulate or not isinstance(indices, (list, tuple)):
         return False
+    self_val = self_arg.meta.get("val")
+    values_val = values.meta.get("val") if hasattr(values, "meta") else None
     non_none = [(dim, ix) for dim, ix in enumerate(indices) if ix is not None]
-    # Exactly one index tensor among ``None``s; OV lowers fully-explicit puts.
-    if len(non_none) != 1 or len(indices) == len(non_none):
+    if self_val is None or values_val is None or len(non_none) != 1:
         return False
-    dim, idx = non_none[0]
-    self_val = self_arg.meta.get("val")
-    idx_val = idx.meta.get("val") if hasattr(idx, "meta") else None
-    values_val = values.meta.get("val") if hasattr(values, "meta") else None
-    if self_val is None or idx_val is None or idx_val.ndim != 1:
+    dim, index = non_none[0]
+    index_val = index.meta.get("val") if hasattr(index, "meta") else None
+    if index_val is None:
         return False
-    if values_val is None or values_val.numel() != 1:  # scalar / broadcast value only
+
+    if len(indices) == 1 and index_val.dtype == torch.bool:
+        # Otherwise ``values`` is a flattened selected-rows tensor.
+        if index_val.ndim > self_val.ndim or values_val.ndim > self_val.ndim - index_val.ndim:
+            return False
+        with gm.graph.inserting_before(node):
+            mask = index
+            for _ in range(self_val.ndim - index_val.ndim):
+                mask = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(mask, -1))
+    elif len(indices) > 1 and index_val.ndim == 1 and values_val.numel() == 1:
+        size = self_val.shape[dim]
+        if not isinstance(size, int):
+            return False
+        with gm.graph.inserting_before(node):
+            iota = gm.graph.call_function(
+                torch.ops.aten.arange.default, args=(size,), kwargs={"device": self_val.device}
+            )
+            iota = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(iota, 1))
+            index = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(index, 0))
+            eq = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(iota, index))
+            mask = gm.graph.call_function(torch.ops.aten.any.dim, args=(eq, 1))
+            broadcast_shape = [1] * self_val.ndim
+            broadcast_shape[dim] = size
+            mask = gm.graph.call_function(torch.ops.aten.view.default, args=(mask, broadcast_shape))
+    else:
         return False
-    size = self_val.shape[dim]
-    if not isinstance(size, int):
-        return False
+
     with gm.graph.inserting_before(node):
-        iota = gm.graph.call_function(torch.ops.aten.arange.default, args=(size,), kwargs={"device": self_val.device})
-        iota_u = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(iota, 1))
-        idx_u = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(idx, 0))
-        eq = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(iota_u, idx_u))
-        mask = gm.graph.call_function(torch.ops.aten.any.dim, args=(eq, 1))
-        broadcast_shape = [1] * self_val.ndim
-        broadcast_shape[dim] = size
-        mask = gm.graph.call_function(torch.ops.aten.view.default, args=(mask, broadcast_shape))
         result = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, values, self_arg))
-        result.meta.update(node.meta)
-    node.replace_all_uses_with(result)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("openvino")
-def _fix_index_put_bool_mask(gm, node):
-    """Rewrite ``aten.index_put`` with a single boolean-mask index into a broadcast ``where``.
-
-    OV lowers the boolean index through a ``nonzero``-style gather it can't convert (``SequenceMark``; t5gemma2).
-    Flattened per-row values, which ``where`` can't express, are left untouched.
-    """
-    if node.target not in (torch.ops.aten.index_put.default, torch.ops.aten.index_put_.default):
-        return False
-    if len(node.args) < 3:
-        return False
-    self_arg, indices, values = node.args[0], node.args[1], node.args[2]
-    accumulate = node.args[3] if len(node.args) > 3 else node.kwargs.get("accumulate", False)
-    if accumulate or not isinstance(indices, (list, tuple)) or len(indices) != 1 or indices[0] is None:
-        return False
-    mask = indices[0]
-    self_val = self_arg.meta.get("val")
-    mask_val = mask.meta.get("val") if hasattr(mask, "meta") else None
-    values_val = values.meta.get("val") if hasattr(values, "meta") else None
-    if self_val is None or mask_val is None or getattr(mask_val, "dtype", None) != torch.bool:
-        return False
-    # Otherwise ``values`` is a flattened selected-rows tensor.
-    if mask_val.ndim > self_val.ndim or values_val is None or values_val.ndim > self_val.ndim - mask_val.ndim:
-        return False
-    with gm.graph.inserting_before(node):
-        broadcast_mask = mask
-        for _ in range(self_val.ndim - mask_val.ndim):
-            broadcast_mask = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(broadcast_mask, -1))
-        result = gm.graph.call_function(torch.ops.aten.where.self, args=(broadcast_mask, values, self_arg))
         result.meta.update(node.meta)
     node.replace_all_uses_with(result)
     gm.graph.erase_node(node)
