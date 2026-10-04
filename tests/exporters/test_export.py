@@ -1480,6 +1480,111 @@ class ExportTesterMixin:
                     return  # allow up to 5%
             raise e
 
+    def _exporter_and_config(self, backend, model_class, dynamic, executorch_backend=None):
+        """The exporter and export config a backend's tests use for `model_class`."""
+        if backend == "dynamo":
+            return DynamoExporter(), DynamoConfig(dynamic=dynamic)
+        if backend == "onnx":
+            optimize = _onnx_optimize_enabled(model_class, dynamic)
+            return OnnxExporter(), OnnxConfig(dynamic=dynamic, optimize=optimize, external_data=False)
+        if backend == "openvino":
+            return OpenVINOExporter(), OpenVINOConfig(dynamic=dynamic)
+        # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
+        return ExecutorchExporter(), ExecutorchConfig(
+            backend=executorch_backend,
+            dynamic=dynamic,
+            partition=_executorch_partition_enabled(model_class, dynamic),
+            partition_exclude=_executorch_partition_exclude(model_class, dynamic),
+        )
+
+    def _run_and_compare(self, backend, exported, inputs, expected, label, atol, rtol) -> bool:
+        """Run one exported component and assert it matches eager; `False` when ExecuTorch could not run it."""
+        if backend == "dynamo":
+            with torch.no_grad():
+                set_seed(1234)
+                actual = exported.runtime()(**copy.deepcopy(inputs))
+            self.assertTrue(actual, f"Exported outputs are empty for {label}.")
+            self._check_outputs_close(actual, expected, atol=atol, rtol=rtol)
+            return True
+        if backend == "onnx":
+            actual = exported.runtime()(**inputs)
+            self.assertTrue(actual, f"ONNX outputs are empty for {label}.")
+            self.assertEqual(set(actual.keys()), set(expected.keys()))
+            _assert_values_close(self, actual, expected, atol, rtol)
+            return True
+        if backend == "openvino":
+            runtime = exported.runtime()
+            _assert_openvino_outputs_close(self, runtime, runtime(**inputs), expected, atol, rtol)
+            return True
+        # Building the runner stays inside the tolerance: loading the method is where ExecuTorch reports a
+        # missing kernel or an oversized arena.
+        with _tolerating_executorch_limits(label):
+            outputs = exported.runtime()(**inputs)
+            tensors = {name: tensor for name, tensor in outputs.items() if isinstance(tensor, torch.Tensor)}
+            self.assertEqual(len(tensors), len(expected))
+            _assert_values_close(self, tensors, expected, atol, rtol)
+            return True
+        return False
+
+    def _export_and_compare(
+        self,
+        backend,
+        *,
+        dynamic,
+        atol,
+        rtol,
+        executorch_backend=None,
+        generate=False,
+        multi_token_decode=False,
+        generation_config=None,
+    ):
+        """Export every model class (or its generation components) to `backend` and check each against eager.
+
+        For `generate`, the exported components are then driven through `generate` and checked against eager
+        too (`_maybe_assert_generate_matches_eager`). ExecuTorch traces on CPU: XNNPACK targets CPU, and a CUDA
+        trace surfaces models that build in-`forward` tensors without `device=`.
+        """
+        self._skip_if_not_exportable()
+        skip_kwargs = {"multi_token": multi_token_decode, "generation_config": generation_config} if generate else {}
+        scopes = (backend, executorch_backend) if backend == "executorch" else (backend,)
+        device = "cpu" if backend == "executorch" else torch_device
+
+        for model_class in self.all_generative_model_classes if generate else self.all_model_classes:
+            if any(
+                self._should_skip(model_class, generate=generate, dynamic=dynamic, backend=scope, **skip_kwargs)
+                for scope in scopes
+            ):
+                continue
+            exporter, config = self._exporter_and_config(backend, model_class, dynamic, executorch_backend)
+            if generate:
+                components = self._prepare_export_generate_model_and_inputs(
+                    model_class,
+                    backend,
+                    device=device,
+                    generation_config=generation_config,
+                    multi_token_decode=multi_token_decode,
+                    decoder_writes_cross_cache=exporter.decoder_writes_cross_cache,
+                )
+            else:
+                components = self._prepare_export_model_and_inputs(model_class, backend, device=device)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            exported = {}
+            for name, component in components.items():
+                label = f"{model_class.__name__}/{name}"
+                with self.subTest(label):
+                    output = exporter.export(component.module, component.inputs, config=config)
+                    # Only a component that ran goes on to the generate check.
+                    if self._run_and_compare(
+                        backend, output, component.inputs, eager_outputs[name], label, atol, rtol
+                    ):
+                        exported[name] = output
+
+            if generate:
+                self._maybe_assert_generate_matches_eager(
+                    model_class, components, exported, backend, generation_config, dynamic, multi_token_decode
+                )
+
     # ──────────────────── torch.export tests ─────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
@@ -1490,29 +1595,7 @@ class ExportTesterMixin:
     @disable_hub_kernels
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
-        self._skip_if_not_exportable()
-
-        exporter = DynamoExporter()
-        config = DynamoConfig(dynamic=dynamic)
-
-        for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
-                continue
-
-            components = self._prepare_export_model_and_inputs(model_class, "dynamo")
-            eager_outputs = self._collect_eager_outputs(components)
-
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-
-                    with torch.no_grad():
-                        set_seed(1234)
-                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
-                        self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
-
-                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+        self._export_and_compare("dynamo", dynamic=dynamic, atol=atol, rtol=rtol)
 
     @slow
     @pytest.mark.torch_export_test
@@ -1581,27 +1664,7 @@ class ExportTesterMixin:
     @disable_hub_kernels
     def test_onnx_export(self, dynamic, atol=1e-3, rtol=1e-3):
         """Export each model class to ONNX and verify output names match eager."""
-        self._skip_if_not_exportable()
-
-        for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic, backend="onnx"):
-                continue
-
-            optimize = _onnx_optimize_enabled(model_class, dynamic)
-            exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
-
-            components = self._prepare_export_model_and_inputs(model_class, "onnx")
-            eager_outputs = self._collect_eager_outputs(components)
-
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-                    onnx_outputs = output.runtime()(**inputs)
-                    self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
-                    self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
-                    _assert_values_close(self, onnx_outputs, eager_outputs[name], atol, rtol)
+        self._export_and_compare("onnx", dynamic=dynamic, atol=atol, rtol=rtol)
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1614,43 +1677,7 @@ class ExportTesterMixin:
     @disable_hub_kernels
     def test_executorch_export(self, backend, dynamic, atol=1e-3, rtol=1e-3):
         """Export each model class to ExecuTorch, run it, and verify its outputs match eager."""
-
-        self._skip_if_not_exportable()
-        exporter = ExecutorchExporter()
-
-        for model_class in self.all_model_classes:
-            if any(
-                self._should_skip(model_class, dynamic=dynamic, backend=scope) for scope in ("executorch", backend)
-            ):
-                continue
-
-            # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
-            config = ExecutorchConfig(
-                backend=backend,
-                dynamic=dynamic,
-                partition=_executorch_partition_enabled(model_class, dynamic),
-                partition_exclude=_executorch_partition_exclude(model_class, dynamic),
-            )
-
-            # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
-            # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
-            # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
-            # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
-            # CUDA model, but the suite exercises the canonical CPU-traced path.
-            components = self._prepare_export_model_and_inputs(model_class, "executorch", device="cpu")
-            eager_outputs = self._collect_eager_outputs(components)
-
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-                    # Building the runner stays *inside* the tolerance: loading the method is where
-                    # ExecuTorch reports a missing kernel or an oversized arena.
-                    with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
-                        outputs = output.runtime()(**inputs)
-                        tensors = {n: t for n, t in outputs.items() if isinstance(t, torch.Tensor)}
-                        self.assertEqual(len(tensors), len(eager_outputs[name]))
-                        _assert_values_close(self, tensors, eager_outputs[name], atol, rtol)
+        self._export_and_compare("executorch", dynamic=dynamic, executorch_backend=backend, atol=atol, rtol=rtol)
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -1738,43 +1765,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # positions — diverges by orders of magnitude more, and the id-parity check below still guards it.
     def test_torch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=5e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
-        self._skip_if_not_exportable()
-
-        exporter = DynamoExporter()
-        config = DynamoConfig(dynamic=dynamic)
-
-        for model_class in self.all_generative_model_classes:
-            if self._should_skip(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="dynamo",
-                multi_token=multi_token_decode,
-                generation_config=generation_config,
-            ):
-                continue
-            components = self._prepare_export_generate_model_and_inputs(
-                model_class, "dynamo", generation_config=generation_config, multi_token_decode=multi_token_decode
-            )
-            eager_outputs = self._collect_eager_outputs(components)
-
-            exported = {}
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-
-                    with torch.no_grad():
-                        set_seed(1234)
-                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
-                        self.assertTrue(exported_outputs, "Exported outputs are empty.")
-
-                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
-                    exported[name] = output
-
-            self._maybe_assert_generate_matches_eager(
-                model_class, components, exported, "dynamo", generation_config, dynamic, multi_token_decode
-            )
+        self._export_and_compare(
+            "dynamo",
+            dynamic=dynamic,
+            generate=True,
+            multi_token_decode=multi_token_decode,
+            generation_config=generation_config,
+            atol=atol,
+            rtol=rtol,
+        )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -1788,42 +1787,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @disable_hub_kernels
     def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
-        self._skip_if_not_exportable()
-
-        for model_class in self.all_generative_model_classes:
-            if self._should_skip(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="onnx",
-                multi_token=multi_token_decode,
-                generation_config=generation_config,
-            ):
-                continue
-
-            optimize = _onnx_optimize_enabled(model_class, dynamic)
-            exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize, external_data=False)
-
-            components = self._prepare_export_generate_model_and_inputs(
-                model_class, "onnx", generation_config=generation_config, multi_token_decode=multi_token_decode
-            )
-            eager_outputs = self._collect_eager_outputs(components)
-
-            exported = {}
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-                    onnx_outputs = output.runtime()(**inputs)
-                    self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
-                    self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
-                    _assert_values_close(self, onnx_outputs, eager_outputs[name], atol, rtol)
-                    exported[name] = output
-
-            self._maybe_assert_generate_matches_eager(
-                model_class, components, exported, "onnx", generation_config, dynamic, multi_token_decode
-            )
+        self._export_and_compare(
+            "onnx",
+            dynamic=dynamic,
+            generate=True,
+            multi_token_decode=multi_token_decode,
+            generation_config=generation_config,
+            atol=atol,
+            rtol=rtol,
+        )
 
     @DYNAMIC_EXPORT_PARAMS
     @slow
@@ -1834,25 +1806,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @disable_hub_kernels
     def test_openvino_export(self, dynamic, atol=1e-3, rtol=1e-3):
         """Export each model class to OpenVINO IR and verify output names match eager."""
-        self._skip_if_not_exportable()
-
-        for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
-                continue
-
-            exporter = OpenVINOExporter()
-            config = OpenVINOConfig(dynamic=dynamic)
-
-            components = self._prepare_export_model_and_inputs(model_class, "openvino")
-            eager_outputs = self._collect_eager_outputs(components)
-
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-                    runtime = output.runtime()
-                    ov_outputs = runtime(**inputs)
-                    _assert_openvino_outputs_close(self, runtime, ov_outputs, eager_outputs[name], atol, rtol)
+        self._export_and_compare("openvino", dynamic=dynamic, atol=atol, rtol=rtol)
 
     @GENERATE_EXPORT_PARAMS
     @slow
@@ -1863,44 +1817,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @disable_hub_kernels
     def test_openvino_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
         """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
-        self._skip_if_not_exportable()
-
-        for model_class in self.all_generative_model_classes:
-            if self._should_skip(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="openvino",
-                multi_token=multi_token_decode,
-                generation_config=generation_config,
-            ):
-                continue
-
-            exporter = OpenVINOExporter()
-            config = OpenVINOConfig(dynamic=dynamic)
-
-            components = self._prepare_export_generate_model_and_inputs(
-                model_class,
-                "openvino",
-                generation_config=generation_config,
-                multi_token_decode=multi_token_decode,
-                decoder_writes_cross_cache=exporter.decoder_writes_cross_cache,
-            )
-            eager_outputs = self._collect_eager_outputs(components)
-
-            exported = {}
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-                    runtime = output.runtime()
-                    ov_outputs = runtime(**inputs)
-                    _assert_openvino_outputs_close(self, runtime, ov_outputs, eager_outputs[name], atol, rtol)
-                    exported[name] = output
-
-            self._maybe_assert_generate_matches_eager(
-                model_class, components, exported, "openvino", generation_config, dynamic, multi_token_decode
-            )
+        self._export_and_compare(
+            "openvino",
+            dynamic=dynamic,
+            generate=True,
+            multi_token_decode=multi_token_decode,
+            generation_config=generation_config,
+            atol=atol,
+            rtol=rtol,
+        )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1915,56 +1840,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         self, backend, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3
     ):
         """Export prefill and decode stages to ExecuTorch, run each, and verify they match eager."""
-
-        self._skip_if_not_exportable()
-        exporter = ExecutorchExporter()
-
-        for model_class in self.all_generative_model_classes:
-            if any(
-                self._should_skip(
-                    model_class,
-                    generate=True,
-                    dynamic=dynamic,
-                    backend=scope,
-                    multi_token=multi_token_decode,
-                    generation_config=generation_config,
-                )
-                for scope in ("executorch", backend)
-            ):
-                continue
-
-            # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
-            config = ExecutorchConfig(
-                backend=backend,
-                dynamic=dynamic,
-                partition=_executorch_partition_enabled(model_class, dynamic),
-                partition_exclude=_executorch_partition_exclude(model_class, dynamic),
-            )
-
-            components = self._prepare_export_generate_model_and_inputs(
-                model_class,
-                "executorch",
-                device="cpu",
-                generation_config=generation_config,
-                multi_token_decode=multi_token_decode,
-            )
-            eager_outputs = self._collect_eager_outputs(components)
-
-            exported = {}
-            for name, component in components.items():
-                model, inputs = component.module, component.inputs
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    output = exporter.export(model, inputs, config=config)
-                    # Building the runner stays *inside* the tolerance: loading the method is where
-                    # ExecuTorch reports a missing kernel or an oversized arena.
-                    with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
-                        outputs = output.runtime()(**inputs)
-                        tensors = {n: t for n, t in outputs.items() if isinstance(t, torch.Tensor)}
-                        self.assertEqual(len(tensors), len(eager_outputs[name]))
-                        _assert_values_close(self, tensors, eager_outputs[name], atol, rtol)
-                        # Only a component that ran is handed to the generate drive below.
-                        exported[name] = output
-
-            self._maybe_assert_generate_matches_eager(
-                model_class, components, exported, "executorch", generation_config, dynamic, multi_token_decode
-            )
+        self._export_and_compare(
+            "executorch",
+            dynamic=dynamic,
+            executorch_backend=backend,
+            generate=True,
+            multi_token_decode=multi_token_decode,
+            generation_config=generation_config,
+            atol=atol,
+            rtol=rtol,
+        )
