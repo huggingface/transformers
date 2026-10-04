@@ -13,13 +13,22 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
+import tempfile
 import unittest
 
 import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import (
+    backend_device_count,
+    cleanup,
+    get_cpu_ram_total_gib,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -221,6 +230,43 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class DeepseekV32IntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.offload_dir = None
+        cls.max_memory = None
+
+    @classmethod
+    def get_offload_folder(cls):
+        if cls.offload_dir is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+        return cls.offload_dir.name
+
+    @classmethod
+    def get_max_memory(cls):
+        if cls.max_memory is None:
+            # 70% per-GPU cap reserves headroom for the MergeModulelist buffer while
+            # stacking MoE expert weights in from_pretrained.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                cls.max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                cls.max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
+            else:
+                cls.max_memory = None
+        return cls.max_memory
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_deepseek_v32(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip
 
@@ -229,6 +275,8 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
             dtype=torch.bfloat16,
+            max_memory=self.get_max_memory(),
+            offload_folder=self.get_offload_folder(),
         )
 
         input_text = [
@@ -248,6 +296,8 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
             attn_implementation="eager",
+            max_memory=self.get_max_memory(),
+            offload_folder=self.get_offload_folder(),
         )
 
         with torch.no_grad():
@@ -268,6 +318,8 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
             attn_implementation="eager",
+            max_memory=self.get_max_memory(),
+            offload_folder=self.get_offload_folder(),
         )
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
@@ -308,6 +360,8 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
             attn_implementation="eager",
+            max_memory=self.get_max_memory(),
+            offload_folder=self.get_offload_folder(),
         )
 
         # Left padding: the whole batch is correct.
