@@ -316,6 +316,9 @@ those weights cannot move. This matches the original implementation, which names
   0.25°.
 - `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise; `sdpa` is the default and
   the fastest. Flash Attention is not supported: it cannot take an arbitrary attention mask.
+  Short mesh blocks look like decoding to `flex_attention`; if your torch build pairs its decoding kernel with a
+  Triton release it does not support, pass `kernel_options={"BACKEND": "TRITON"}` (or
+  `{"FORCE_USE_FLEX_ATTENTION": True}` on older torch) to the model or to `generate`.
 - The 1° Mini checkpoints need substantially less memory than the 0.25° checkpoints. Run ensemble members
   sequentially to bound inference memory.
 - Model weights are released by Google DeepMind under CC-BY-4.0, separately from the Apache-2.0 code.
@@ -323,7 +326,8 @@ those weights cannot move. This matches the original implementation, which names
 ## Faster inference with a fused kernel
 
 The mesh transformer's dominant cost is its attention over the banded mesh mask. Passing `use_kernels=True` to
-[`~PreTrainedModel.from_pretrained`] swaps it for a fused Triton kernel loaded from the Hub via the
+[`~PreTrainedModel.from_pretrained`] swaps the attention, and the layer that prepares its mask once per forward, for a
+fused Triton kernel loaded from the Hub via the
 [`kernels`](https://github.com/huggingface/kernels) library, which visits only the tiles of the mask that hold a key. It is
 inference-only and runs on CUDA, ROCm and XPU; on CPU, under autograd, or without the kernel installed the model falls back
 to the PyTorch implementation. Make sure the model is on an accelerator when kernelization happens (e.g. with

@@ -232,7 +232,8 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             )
         projected_senders = self.edge_update.sender_proj(mesh_states)
         chunk_size = self.chunk_size or num_points
-        blocks: list[torch.Tensor] = []
+        # Each finished block is written into one output, so the grid is never held twice.
+        updated = torch.empty_like(grid_states)
         for start in range(0, num_points, chunk_size):
             block = grid_states[:, start : start + chunk_size]
             # The edges are sorted by receiver, three per grid point, so a block of points owns one
@@ -249,9 +250,11 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             )
             aggregated = torch.zeros(block.shape, dtype=torch.float32, device=block.device)
             aggregated.index_add_(1, local_receivers, messages.float())
-            blocks.append(block + self.grid_node_update(self.with_aggregate(block, aggregated), conditioning))
+            updated[:, start : start + block.shape[1]] = block + self.grid_node_update(
+                self.with_aggregate(block, aggregated), conditioning
+            )
         mesh_states = mesh_states + self.mesh_node_update(mesh_states, conditioning)
-        return torch.cat(blocks, dim=1), mesh_states
+        return updated, mesh_states
 
     def with_aggregate(self, receiver_states: torch.Tensor, aggregated: torch.Tensor) -> torch.Tensor:
         """The receiving node's input: its own features next to its summed messages.
@@ -391,12 +394,46 @@ class WeatherNext2Layer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("WeatherNext2AttentionMask")
+class WeatherNext2AttentionMask(nn.Module):
+    """Prepares the shared mesh mask for the selected attention backend, once per forward.
+
+    It calls the mask interface directly rather than `create_bidirectional_mask`, which switches to vmap
+    whenever a custom mask function is passed; the banded one is index-based, and at 0.25 degrees vmap
+    would build index tensors over all 1.3 billion entries of the mask.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    def forward(self, attention_mask, batch_size, dtype):
+        num_blocks, _, block_size, kv_length = attention_mask.shape
+        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS.get(self.config._attn_implementation)
+        return (
+            mask_interface(
+                batch_size=batch_size * num_blocks,
+                q_length=block_size,
+                kv_length=kv_length,
+                mask_function=banded_mask_function(attention_mask),
+                allow_is_causal_skip=False,
+                allow_is_bidirectional_skip=False,
+                dtype=dtype,
+                device=attention_mask.device,
+                use_vmap=False,
+            )
+            if mask_interface is not None
+            else None
+        )
+
+
 class WeatherNext2MeshTransformer(nn.Module):
     """The processor: a stack of pre-norm blocks over the mesh nodes."""
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
         self.config = config
+        self.mask_preparer = WeatherNext2AttentionMask(config)
         self.layers = nn.ModuleList(
             [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -415,23 +452,8 @@ class WeatherNext2MeshTransformer(nn.Module):
         hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
         hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
 
-        # The backend's form of the geometry mask, built once and shared by every layer. This calls
-        # the mask interface directly rather than `create_bidirectional_mask`, which switches to vmap
-        # whenever a custom mask function is passed; the banded one is index-based, and at 0.25
-        # degrees vmap would build index tensors over all 1.3 billion entries of the mask.
-        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS.get(self.config._attn_implementation)
-        if mask_interface is not None:
-            attention_mask = mask_interface(
-                batch_size=batch_size * num_blocks,
-                q_length=block_size,
-                kv_length=kv_length,
-                mask_function=banded_mask_function(attention_mask),
-                allow_is_causal_skip=False,
-                allow_is_bidirectional_skip=False,
-                dtype=hidden_states.dtype,
-                device=attention_mask.device,
-                use_vmap=False,
-            )
+        # Build the backend's geometry mask once and share it across all layers.
+        attention_mask = self.mask_preparer(attention_mask, batch_size, hidden_states.dtype)
 
         for layer in self.layers:
             hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)

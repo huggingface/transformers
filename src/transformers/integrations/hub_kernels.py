@@ -409,12 +409,22 @@ if is_kernels_available():
                 },
             },
             # Inference only: the kernel has no backward. Tested on CUDA and ROCm; XPU builds
-            # but is untested.
+            # but is untested. The mask is prepared for this attention, so map both together.
             "WeatherNext2Attention": {
                 device: {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/weathernext2-banded-attention",
                         layer_name="WeatherNext2Attention",
+                        version=2,
+                    ),
+                }
+                for device in ("cuda", "rocm", "xpu")
+            },
+            "WeatherNext2AttentionMask": {
+                device: {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/weathernext2-banded-attention",
+                        layer_name="WeatherNext2AttentionMask",
                         version=2,
                     ),
                 }
