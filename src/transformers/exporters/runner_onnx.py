@@ -129,7 +129,7 @@ class OnnxModelRunner(ModelRunner):
         specs = (*session.get_inputs(), *session.get_outputs())
         self._element_types = {spec.name: _ort_element_type(spec.type) for spec in specs}
         self._io_dtypes = {spec.name: _ort_to_torch_dtype(spec.type) for spec in specs}
-        self._io_binding, self._shared_outputs, self._cuda_graph, self._binds = None, {}, False, False
+        self._io_binding, self._shared_outputs, self._binds = None, {}, False
         self._buffers: dict[str, torch.Tensor] = {}
         # An input/output without an element type cannot be bound; such a graph keeps the plain `run` path.
         if all(kind is not None for kind in self._element_types.values()):
@@ -140,10 +140,6 @@ class OnnxModelRunner(ModelRunner):
                 paired = "output." + spec.name.removeprefix("input.")
                 if spec.name.startswith("input.") and self._output_shapes.get(paired) == tuple(spec.shape):
                     self._shared_outputs[spec.name] = paired
-            # Gated on the session's own `enable_cuda_graph`: ORT captures whatever the first run binds, so
-            # replay needs the bound pointers to hold still (runner-owned buffers, see `_bound_run`).
-            options = session.get_provider_options().get("CUDAExecutionProvider", {})
-            self._cuda_graph = options.get("enable_cuda_graph") in ("1", 1, True)
             self._binds = True
 
     @staticmethod
@@ -168,24 +164,26 @@ class OnnxModelRunner(ModelRunner):
     _DISABLED_OPTIMIZERS = ["Pad_Fusion"]
 
     @classmethod
-    def from_artifact(cls, artifact, export_metadata=None, device=None, providers=None, **kwargs) -> OnnxModelRunner:
+    def from_artifact(cls, artifact, export_metadata=None, device=None, **kwargs) -> OnnxModelRunner:
         """Open an in-memory `ONNXProgram` as a session, without writing the proto out first."""
         import onnxruntime
 
-        providers = providers or cls._providers_for(device)
         session = onnxruntime.InferenceSession(
-            artifact.model_proto.SerializeToString(), providers=providers, disabled_optimizers=cls._DISABLED_OPTIMIZERS
+            artifact.model_proto.SerializeToString(),
+            providers=cls._providers_for(device),
+            disabled_optimizers=cls._DISABLED_OPTIMIZERS,
         )
         return cls(session, export_metadata=export_metadata, source=artifact, **kwargs)
 
     @classmethod
-    def from_pretrained(cls, path, export_metadata=None, device=None, providers=None, **kwargs) -> OnnxModelRunner:
-        """Open a saved `.onnx` as an ORT session on `device`'s providers, or on `providers` outright."""
+    def from_pretrained(cls, path, export_metadata=None, device=None, **kwargs) -> OnnxModelRunner:
+        """Open a saved `.onnx` as an ORT session on `device`'s providers."""
         import onnxruntime
 
-        providers = providers or cls._providers_for(device)
         return cls(
-            onnxruntime.InferenceSession(str(path), providers=providers, disabled_optimizers=cls._DISABLED_OPTIMIZERS),
+            onnxruntime.InferenceSession(
+                str(path), providers=cls._providers_for(device), disabled_optimizers=cls._DISABLED_OPTIMIZERS
+            ),
             export_metadata=export_metadata,
             source=path,
             **kwargs,
@@ -263,20 +261,9 @@ class OnnxModelRunner(ModelRunner):
         outputs = {}
         for name in list(feed):
             # Assigned back into `feed` so a converted tensor outlives the run (ORT holds only its pointer).
-            on_host = (
-                device_type == "cuda"
-                and not self._cuda_graph
-                and not feed[name].is_floating_point()
-                and name not in self._shared_outputs
-            )
+            on_host = device_type == "cuda" and not feed[name].is_floating_point() and name not in self._shared_outputs
             # Integers bind on host: ORT reads them on its CPU, and a CUDA pointer there gives `CUDA failure 700`.
             tensor = feed[name] = (feed[name].cpu() if on_host else feed[name].to(device)).contiguous()
-            if self._cuda_graph:
-                buffer = self._buffers.get(name)
-                if buffer is None or buffer.shape != tensor.shape or buffer.dtype != tensor.dtype:
-                    buffer = self._buffers[name] = torch.empty_like(tensor)
-                buffer.copy_(tensor)
-                tensor = buffer
             # A rank-0 input binds as `[1]`: ORT would otherwise write into nothing.
             bound_shape = list(tensor.shape) or [1]
             # ORT refuses the null pointer of an empty tensor (a prefill cache entry).
