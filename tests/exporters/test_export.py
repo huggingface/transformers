@@ -17,13 +17,9 @@ import functools
 import importlib.util
 import inspect
 import itertools
-import os
 import re
-import sys
-import tempfile
 import warnings
 from contextlib import contextmanager
-from pathlib import Path
 
 import pytest
 import torch
@@ -73,100 +69,61 @@ from transformers.utils import is_executorch_available
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
-        "VideoMAEForPreTraining": (
-            "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
-            "`mse_loss`. TODO: skip loss when labels aren't provided."
-        ),
+        "VideoMAEForPreTraining": "Computes its loss even with `return_loss=False`, hitting a data-dependent guard in `mse_loss`.",
         "OpenAIPrivacyFilterModel": (
-            "`get_correct_experts_implementation` defaults to `eager` because the model is "
-            "sensitive to accumulation order. Eager experts forward iterates over "
-            "`expert_hit.nonzero()` (data-dependent shape). Users can opt into "
-            "`set_experts_implementation('batched_mm')` to export."
+            "Defaults to eager experts, which loop over `expert_hit.nonzero()` (data-dependent); "
+            "`set_experts_implementation('batched_mm')` exports."
         ),
-        "OpenAIPrivacyFilterForTokenClassification": (
-            "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
-        ),
+        "OpenAIPrivacyFilterForTokenClassification": "Same as `OpenAIPrivacyFilterModel`.",
         "GlmImageModel": (
-            "Vision attention does a data-dependent chunked split (`torch.split(..., lengths.tolist())` "
-            "over `cu_seqlens`), which hits `GuardOnDataDependentSymNode: u0 > 1` — it needs the shared "
-            "vision-attention export patch, and even with it the export runs long (further guards / slow "
-            "symbolic lowering). Not worth the model-specific export support for a diffusers-pipeline "
-            "model. TODO: revisit on demand."
+            "Vision attention splits by `lengths.tolist()` (data-dependent), and even with the varlen patch the "
+            "export runs long."
         ),
         "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
     },
     # Every backend, generate path only.
     "generate": {
         "Blip2ForConditionalGeneration": (
-            "`generate()` delegates to the inner language model without calling top-level "
-            "`forward()`, so `decompose_prefill_decode` can't capture inputs. "
-            "TODO: route generate through top-level `forward()`."
+            "`generate()` calls the inner language model directly, so the top-level `forward` is never captured."
         ),
         "InstructBlipForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
         "InstructBlipVideoForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
         "Kosmos2ForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
         "RecurrentGemmaForCausalLM": (
-            "Stores recurrent/conv state as module attributes (not a `Cache` object); "
-            "`torch.export` can't carry that state between calls. "
-            "TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
+            "Keeps its recurrent state in module attributes rather than a `Cache`, so it can't be carried between "
+            "graph calls."
         ),
         "MoshiForConditionalGeneration": (
-            "Its audio kwargs reach no graph: the dynamo drive dies in `_validate_model_kwargs` (`The "
-            "following model_kwargs are not used by the model: ['moshi_audio_codes', 'user_audio_codes']`) "
-            "and the ONNX one on a device mismatch (`X1 and X2 must have the same device type. X1: cpu X2: "
-            "cuda`) — not the rank mismatch this entry used to claim. Only the *merged* decode, and only "
-            "without a static cache: measured with this lifted, 34 of 36 variants pass and those two fail. "
-            "TODO: carry a model's own per-step audio kwargs through the decomposition, the way "
-            "`PerceptionLMForConditionalGeneration` needs for its video path — the same shape of gap."
+            "Its per-step audio kwargs (`moshi_audio_codes`, `user_audio_codes`) reach no graph. TODO: carry "
+            "model-specific per-step kwargs through the decomposition."
         ),
         "DiaForConditionalGeneration": (
-            "Decodes several audio codebooks at once, so its decoder inputs carry a channel axis "
-            "(`decoder_input_ids` is 3-D) and its `decoder_attention_mask` is shaped to match. The runtime "
-            "builds the decoder's causal mask from the cache — 2-D positions into a `[batch, 1, q, kv]` "
-            "mask — which is the right thing for every other encoder-decoder and the wrong rank here "
-            "(`upper bound and lower bound inconsistent with step sign`). TODO: shape the decoder mask "
-            "from the graph's own declared rank, the way `_mask_feed` already does for mixed attention."
+            "Decodes several codebooks at once (3-D `decoder_input_ids`), so the runtime's 4-D causal decoder "
+            "mask has the wrong rank."
         ),
         "Gemma3nForConditionalGeneration": (
-            "Its text model takes an extra `per_layer_inputs` tensor that the multi-modal decomposition does "
-            "not carry, so the captured call raises `TypeError` on `self.language_model(...)` "
-            "(`modeling_gemma3n.py:2148`) — immediately, on all three backends, before any export runs. The "
-            'old reason here (prefill returning only `logits`, "same shape as Voxtral") no longer applies: '
-            "Voxtral now passes and its entry is gone. Measured with this lifted: 18 of 36 variants pass, 11 "
-            "reach the runtime drive. TODO: let the decomposition carry a model's extra per-layer inputs."
+            "Its text model takes `per_layer_inputs`, which the multi-modal decomposition does not carry "
+            "(`TypeError` on `self.language_model(...)`)."
         ),
         "VibeVoiceForConditionalGeneration": (
-            "Generation uses two forward calls with different input shapes (prefill + noise scheduler); "
-            "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
-            "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
+            "Generation runs two forwards with different input shapes (prefill + noise scheduler), which the "
+            "decomposition can't capture."
         ),
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
-        "Sam2Model": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute "
-            "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
-            "agnostic — the torch.export step itself overruns, so every backend hits it."
-        ),
+        "Sam2Model": "Exporting the Hiera backbone with dynamic H/W exceeds the test timeout.",
         "Sam2VisionModel": (
-            "torch 2.13's constraint solver raises `NotImplementedError` from `solve_univariate_inequality` "
-            "on the Hiera window-partition guard `Eq(s/32 - (s/4)//8, 0)` (a `FloorDiv` in a rational "
-            "equation); tracing itself succeeds. ONNX + ORT also overrun the 1000s timeout at ~7.5 min."
+            "torch's constraint solver raises `NotImplementedError` on Hiera's window-partition guard (`Eq(s/32 - "
+            "(s/4)//8, 0)`)."
         ),
         "HieraForPreTraining": (
-            "The MAE head masks its patches by indexing the embeddings with a boolean mask "
-            "(`hidden_states[positions]`), whose kept count is data-dependent — the number of unmasked "
-            "mask units is not a function of the input shapes. `reroll` then divides the sequence length "
-            "by each stage's stride, so the unbacked count reaches a guard it cannot answer "
-            "(`GuardOnDataDependentSymNode: 416*((u0//416)) < 2`). Static shapes work, and the other three "
-            "Hiera classes work under both — only the pre-training head masks."
+            "The MAE head keeps a data-dependent number of patches, which `reroll` then guards on. Static shapes work."
         ),
         "SeamlessM4TForSpeechToSpeech": (
-            "The Conformer speech encoder is non-causal, so `sdpa_attention_forward` evaluates "
-            "`q_length > 1 and attention_mask is None and is_causal`; under dynamic shapes `q_length > 1` "
-            "is a `SymBool` and Python's `and` returns it as the first falsy operand, so SDPA raises "
-            "`argument 'is_causal' must be bool, not SymBool`. Static shapes work. TODO: handle on the "
-            "exporter side, see https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141"
+            "`q_length > 1 and ... and is_causal` evaluates to a `SymBool`, which SDPA rejects as `is_causal`. "
+            "Static shapes work. TODO: handle on the exporter side, see "
+            "https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141"
         ),
         "SeamlessM4TForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
         "SeamlessM4Tv2ForSpeechToSpeech": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
@@ -175,225 +132,119 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Generate path, dynamic-shape only. Backend-agnostic (it's in the shared decomposition).
     "generate.dynamic": {
         "ReformerModelWithLMHead": (
-            "Carries LSH state as `past_buckets_states` (a list of tuples) plus `num_hashes` / "
-            "`next_sequence_length` kwargs instead of a `Cache`, so the runtime — which feeds "
-            "`past_key_values` / `cache_params` — can't satisfy the exported signature "
-            "(`kwarg keyword mismatch`). TODO: refactor Reformer onto a `Cache` subclass."
+            "Carries LSH state as `past_buckets_states` instead of a `Cache`, so the runtime can't feed the "
+            "exported signature."
         ),
     },
     # Generate path, the *runtime* half only: these export fine, and the export assertions still run —
     # what fails is driving the exported graphs through `generate`.
     "generate.runtime": {
         "KyutaiSpeechToTextForConditionalGeneration": (
-            "Encodes its audio window-by-window inside `prepare_inputs_for_generation` — slicing "
-            "`input_values` by a moving `current_window`, running the codec model with its own "
-            "`encoder_past_key_values` and `padding_cache`, and copying the new tokens in-place — so "
-            "driving the exported graphs takes that model-specific loop, not the generic one (the runtime "
-            "never consumes `input_values`, and the eager side's codec state has no exported counterpart)."
+            "Encodes audio window by window inside `prepare_inputs_for_generation`, a model-specific loop the "
+            "generic runtime doesn't reproduce."
         ),
         "MiniMaxForCausalLM": (
-            "`MiniMaxCache` keeps two state containers: `layers`, which the traced cache fills only for the "
-            "attention layers, and a separate `linear_cache` list for the lightning-attention state. The "
-            "invented-layer half of this is now answerable — the export metadata records which layers the "
-            "traced cache really had, so the extra `LinearAttentionLayer`s `generate` pre-sizes from "
-            "`config.layer_types` can be dropped (measured: doing that leaves the 19 non-generate export "
-            "variants passing). What remains is `linear_cache`: it is not layer-shaped, so "
-            "`materialize_cache_layers` cannot fill it, and driving `generate` walks a `linear_cache` leaf "
-            "path into an empty list (`TypeError: 'NoneType' object is not subscriptable`). TODO: give the "
-            "lightning layers a real `LinearAttentionLayer` (dropping `linear_cache`); a config-aware "
-            "pre-size alone is not enough."
+            "`MiniMaxCache` keeps its lightning-attention state in a separate `linear_cache` list that "
+            "`materialize_cache_layers` can't fill. TODO: move it into real `LinearAttentionLayer`s."
         ),
-        "xLSTMForCausalLM": (
-            "`xLSTMCache` is not a full `Cache`: it keeps its state in `rnn_state` with no `layers` list, and "
-            "lacks API `generate` expects (`is_compileable`), so every step of building and driving it "
-            "surfaces as the next `AttributeError`. TODO: bring the class up to the `Cache` API rather than "
-            "special-case it in the runtime."
-        ),
+        "xLSTMForCausalLM": "`xLSTMCache` lacks the `Cache` API `generate` relies on (`layers`, `is_compileable`).",
         "DeepseekV4ForCausalLM": (
-            "Its HCA/CSA cache layers hold dict-keyed state that the trace bakes into the input tree spec, "
-            "and a fresh cache cannot present it. The dict *keys* do match — `DeepseekV4HCACache` declares "
-            "`compressor` and `DeepseekV4CSACache` adds `indexer` in `__init__` — but their values are "
-            "`None` until the compressor first fires, where the traced spec carries tensors "
-            "(`buffer_kv`/`buffer_gate`/`compressed_kv`/`overlap_*`, 19 leaves), so the leaf *count* differs. "
-            "Those tensors are buffered source tokens and emitted compression entries, i.e. real prefill "
-            "state, so pre-creating them as zeros would feed the window tokens the model never saw; the "
-            "graph is specialized to a mid-compression state (`entry_count: {'compressor': 1, 'indexer': 1}`) "
-            "that its tensor-only write-back cannot advance either. Recording the traced context and "
-            "restoring it onto a built cache was tried and does not help — the leaf count is the blocker, "
-            "not the counters. ExportArtifacts itself passes, and so do the static-cache generate variants."
+            "Its compressor cache state is `None` until the compressor first fires, so a fresh cache has fewer "
+            "pytree leaves than the traced one. The static-cache variants pass."
         ),
         "CsmForConditionalGeneration": (
-            "Generates a *frame* at a time: `input_ids` is `[batch, sequence, codebooks]` and each step runs "
-            "the backbone then the depth decoder to fill the codebooks, so `generate`'s loop cannot append "
-            "the next token (`torch.cat([input_ids, next_tokens[:, None]], dim=-1)` sees 3 dims and 2). "
-            "Driving it needs the model's own two-stage loop, not a generic one; the graphs themselves "
-            "export and match eager (the non-generate variants cover them)."
+            "Generates a frame of codebooks per step (3-D `input_ids`), which needs the model's own two-stage loop."
         ),
         "HiggsAudioV2ForConditionalGeneration": (
-            "Its `prepare_inputs_for_generation` does per-step surgery no generic loop reproduces: it "
-            "counts how many audio ids the cache already holds, masks those out, and in decode drops "
-            "`input_ids` entirely to pass only the last audio-codebook row. The runtime feeds the generic "
-            "text+kwargs step instead, so generation diverges from the first token. ExportArtifacts itself and the "
-            "per-component parity still run."
+            "`prepare_inputs_for_generation` rewrites each step's inputs (audio-id masking, last codebook row "
+            "only), which the generic runtime doesn't reproduce."
         ),
         "XLMWithLMHeadModel": (
-            "Its `prepare_inputs_for_generation` appends a mask token to `input_ids` every step and builds a "
-            "`langs` tensor from `config.lang_id`, so the graph takes a per-step input only that model can "
-            "produce (and a step is one token wider than `generate`'s). ExportArtifacts itself is covered by the "
-            "non-generate variants."
+            "`prepare_inputs_for_generation` appends a mask token and builds `langs` every step, inputs only the "
+            "model can produce."
         ),
         "XLNetLMHeadModel": (
-            "Its `prepare_inputs_for_generation` builds a fresh `perm_mask` and `target_mapping` for every "
-            "step and appends a dummy token, so a decode step is three tokens wide over `mems` rather than "
-            "one over a `Cache`. Those tensors are model-specific per-step inputs the graph declares but no "
-            "generic runner can synthesize. The model is already on the deprecation list in "
-            "`_supports_default_dynamic_cache`; export itself is covered by the non-generate variants."
+            "`prepare_inputs_for_generation` builds `perm_mask` / `target_mapping` and a three-token step over "
+            "`mems` every step."
         ),
-        "BltForCausalLM": (
-            "Reads `past_key_values.self_attention_cache`, i.e. wants an `EncoderDecoderCache` pair, but "
-            "`config.is_encoder_decoder` is False so `generate` builds a plain `DynamicCache`. Handing it a "
-            "pair of fresh `DynamicCache`s gets past the attribute error and then mismatches the input tree "
-            "spec, because the traced pair's halves are not both empty. TODO: derive the pair's shape from "
-            "the trace rather than guessing it."
-        ),
+        "BltForCausalLM": "Expects an `EncoderDecoderCache` pair, while `generate` builds a plain `DynamicCache`.",
         "RwkvForCausalLM": (
-            "Carries its fixed-size state as a plain tensor list under its own `state` kwarg and output "
-            "field — not a `Cache` under `past_key_values`/`cache_params` — so the runtime's cache plumbing "
-            "(runner choice, feed, write-back, propagation through `generate`) has no counterpart: every "
-            "decode step re-picks the prefill graph and trips its baked prompt-length guard. TODO: teach "
-            "`cache_input`/`forward` the `state` kwarg, or port RWKV onto a `Cache` subclass."
+            "Carries its state under its own `state` kwarg rather than a `Cache`, so the runtime's cache handling "
+            "doesn't apply."
         ),
     },
     # The runtime drives these, but not from a *merged* decode — every other variant is served.
     "dynamo.generate.runtime.multi_token": {
         "VoxtralRealtimeForConditionalGeneration": (
-            "Streams its audio alongside the text — `generate` embeds `input_features` once outside the loop "
-            "and hands each step the window its own tokens span — so the runtime drives it through the "
-            "embedder component and a `past_seen * downsample_factor` slice (`_STREAMING_EMBEDDERS`). That "
-            "works for every variant but the merged decode, which folds `downsample_factor` audio rows into "
-            "the feature axis: reshaping a symbolic-length axis into `(n, k)` makes torch decide view-vs-copy "
-            "on whether `n` is 1, so the trace bakes `Ne(frames//4, 1)` and the single-token steps `generate` "
-            "makes violate it (`Guard failed: encoder_inputs_embeds.size()[1] // 4 != 1`). The graph exports "
-            "fine; only the drive trips.\n"
-            "Dynamo only, and not because the other backends serve it better: the guard is a torch-level "
-            "shape assertion that lives in the `ExportedProgram`, and ONNX's lowered graph reshapes from the "
-            "runtime shape instead — measured, its merged decode drives and matches ids. Two fixes were tried "
-            "and measured not to help: making the `inputs_embeds += audio_embeds` broadcast explicit, and "
-            "spelling the reshape's sizes out instead of `-1` (the branch is in "
-            "`_reshape_view_helper_core_alg`, not in how the size is written). The non-merged variants do "
-            "drive, because the split keeps a `prefill` graph whose decode is traced at length 1."
+            "The merged decode folds 4 audio rows into the feature axis, and the reshape bakes `frames // 4 != "
+            "1`, which single-token steps violate. ONNX reshapes at run time and passes."
         ),
     },
     # The runtime drives these, but not from a *merged* decode — every other variant is served.
     "generate.runtime.multi_token": {
         "ClvpForCausalLM": (
-            "Its merged decode graph carries a deferred assert the prompt cannot satisfy. Captured on "
-            "continuation steps only (cache 3, query 2, mask 5), the export derives "
-            "`attention_mask.size()[1] >= 4`; the prompt step is 3 wide, so driving the prompt through that "
-            "same graph trips it. Measured: nothing records it statically — `range_constraints` is empty and "
-            "it is a graph assert — so it is discoverable only by running the exported graph. The export "
-            "itself is fine, and so is the model with a separate prefill graph; it is one-graph mode it "
-            "cannot do. TODO: verify after export that the decode graph serves the prompt and keep the "
-            "prefill when it does not, rather than deciding from the model's shape alone "
-            "(`_needs_prefill_graph`)."
+            "The merged decode, captured on continuation steps, asserts `attention_mask.size()[1] >= 4`, which "
+            "the 3-token prompt fails. TODO: check that the decode graph serves the prompt before dropping the "
+            "prefill graph."
         ),
     },
     "generate.multi_token": {
         "ZayaForCausalLM": (
-            "Its merged decode graph specializes the query axis instead of keeping it symbolic, which is the "
-            "one thing this variant exists to avoid: the decode program comes back with `input_ids` at a "
-            "static `(1, 2)` while `attention_mask` stays `(1, s53)`, so driving it with `generate`'s "
-            "single-token steps trips the input-constraint check (`Guard failed: -1 + input_ids.size()[1] == "
-            "1`). `TORCH_LOGS=+dynamic` traces the specializing guard (`Eq(s64, 2)`, from `expand` / "
-            "`infer_size`) through the router's `router_hidden_states[:, -seq_length:]` "
-            "(`modeling_zaya.py:460`) into the mixer and down to `update_conv_state`, which `copy_`s a "
-            "fixed-`conv_kernel_size` buffer from a slice whose width follows the step. The other hybrids "
-            "(bamba, jamba, lfm2, nemotron_h) share that cache helper and their multi-token variants pass, "
-            "so the router slice is what compounds it here. Fails identically on dynamo and ONNX, and "
-            "predates the metadata work (measured on both). Every other zaya variant passes."
+            "The router's `router_hidden_states[:, -seq_length:]` slice specializes the merged decode's query "
+            "axis to 2."
         ),
-        "ZambaForCausalLM": (
-            "Its hand-copied mixer runs the selective scan per head with the associative path deliberately "
-            "off ('Old model: only when user request it explicitly'), so the sequential scan unrolls and "
-            "bakes the query length. The rest of the family (mamba / falcon_mamba / jamba) traces "
-            "length-generically (the associative scan + its `initial_states`); aligning "
-            "zamba's per-head mixer with mamba's would lift this."
-        ),
+        "ZambaForCausalLM": "Its mixer uses the sequential scan, which unrolls and bakes the query length.",
         "ProphetNetForCausalLM": (
-            'The eager model itself refuses the merged capture: its forward asserts "`use_cache` is only '
-            'supported for `decoder_input_ids` of length 1" (`modeling_prophetnet.py`), so a 2-token '
-            "continuation-from-past cannot even run, let alone trace. The assert is load-bearing, not "
-            "defensive: in that branch `position_ids` is a single `(1, 1)` tensor and both ngram masks are "
-            "`None`, so two new tokens would share a position embedding and not attend to each other. "
-            "Lifting it is a refactor of the ngram mask machinery, and would also unblock prompt-lookup and "
-            "assisted decoding, which hit this same assert today (measured) — so it is not export-only."
+            "The eager forward itself refuses multi-token steps with a cache (`use_cache` only for length-1 "
+            "`decoder_input_ids`)."
         ),
     },
     # ONNX, every variant.
     "onnx": {
         "DFineModel": (
-            "The encoder's `topk` picks the decoder's queries from scores that all tie on the tiny test model "
-            "(every one of its 336 anchors scores the same), and which of them a kernel keeps is arbitrary — "
-            "ORT's `TopK` and torch's CPU and CUDA kernels each pick differently. The decoder is built from that "
-            "pick, so its outputs differ along with the `enc_topk_*` ones, and there is nothing left of it to "
-            "compare. Dynamo, OpenVINO and ExecuTorch happen to agree with eager on the pick, so they still test it."
+            "Every anchor scores the same on the tiny model, so which ones `topk` keeps is arbitrary, and ORT "
+            "picks differently from torch."
         ),
         "DFineForObjectDetection": "Same as `DFineModel`.",
         "Deimv2Model": "Same as `DFineModel`.",
         "Deimv2ForObjectDetection": "Same as `DFineModel`.",
-        "MMGroundingDinoModel": "Same as `DFineModel` — all 340 proposals it ranks score the same on the test model.",
+        "MMGroundingDinoModel": "Same as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same as `DFineModel`.",
-        "RTDetrModel": "Same as `DFineModel` — all 84 anchors score the same on the test model.",
+        "RTDetrModel": "Same as `DFineModel`.",
         "RTDetrForObjectDetection": "Same as `DFineModel`.",
         "RTDetrV2Model": "Same as `DFineModel`.",
         "RTDetrV2ForObjectDetection": "Same as `DFineModel`.",
         "TapasForQuestionAnswering": (
-            "Selects the answer column with an `argmax` over column logits, and on the tiny test model the two "
-            "best columns tie exactly in about a third of the rows; torch and ORT break that tie differently, "
-            "and every cell outside the chosen column then gets `-10000`, so half the logits differ by exactly "
-            "that. The other Tapas heads pick no column and are compared as usual."
+            "The column `argmax` ties on the tiny model and ORT breaks the tie differently, setting every other "
+            "cell to `-10000`."
         ),
         "CHMv2ForDepthEstimation": (
-            "`run_decompositions` retraces through aot_autograd which emits a `detach_(alias(...))` "
-            "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
-            "verified). Torch export works. TODO: file upstream `torch.export` issue."
+            "`run_decompositions` emits a `detach_(alias(...))` pair the functional-graph check rejects. TODO: "
+            "file upstream."
         ),
-        "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
+        "PixioModel": "Lowering exceeds the test timeout.",
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
     },
     # ONNX, generate path only.
     "onnx.generate": {
-        "ReformerModelWithLMHead": (
-            "Chunked local attention exports a Constant idx that exceeds the cached-keys axis "
-            "length under static decode (prefill+1 token, seq=17 vs chunked axis of 16). The same "
-            "computation stays symbolic under dynamic so ORT can't pre-validate it. The other "
-            "three Reformer-local-attn ONNX variants pass."
-        ),
+        "ReformerModelWithLMHead": "Chunked local attention bakes a constant index past the cached-keys axis under static decode.",
     },
     # ONNX, driving the exported graphs through `generate` only — they export and run standalone.
     "onnx.generate.runtime": {
         "ProphetNetForConditionalGeneration": (
-            "Exports and drives fine on dynamo and ExecuTorch; only the ONNX runtime can't feed it. The "
-            "prefill session declares the encoder state as `encoder_last_hidden_state` while the runtime's "
-            "feed carries no encoder entry under that name at all (`Required inputs "
-            "(['encoder_last_hidden_state']) are missing from input feed`), so generation dies on the first "
-            "call. Other encoder-decoders (bart) pass the same variant and dynamo names the same input "
-            "`encoder_outputs_last_hidden_state` and works, so this is prophetnet-specific IO naming on our "
-            "side, not a model limit. TODO: name the encoder input the way the runtime looks it up, then "
-            "drop this skip."
+            "The prefill session names its encoder input `encoder_last_hidden_state`, which the runtime feed "
+            "doesn't provide. TODO: align the naming."
         ),
     },
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {
         "GroundingDinoModel": (
-            "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic "
-            "shapes — `aot_autograd`'s decomposition pipeline emits the detach itself (verified "
-            "by guarding all three modeling-side detaches with `if self.training`). Static works."
+            "Same `detach_(alias(...))` retrace failure as `CHMv2ForDepthEstimation`, under dynamic shapes only."
         ),
         "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
-        "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "BigBirdModel": "Lowering exceeds the test timeout under dynamic shapes.",
         "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
@@ -416,116 +267,53 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Swinv2ForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
         "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
     },
-    # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
-    # `Same ... as` chain for the full description.
+    # ExecuTorch, every variant.
     "executorch": {
         "Qwen3ASRForConditionalGeneration": (
-            "Its `.pte` loads until ExecuTorch fails to allocate a tensor: `getTensorDataPtr() failed: 0x21` "
-            "(`MemoryAllocationFailed`), surfaced as `execute() 0x12`. Not our sizing — the tensor is "
-            "`[64, 128, 32]` and the largest planned one in that program is ~2M elements — and not "
-            "adjustable from here: the Python runtime's `load_method` takes no allocator. The export itself "
-            "is fine (it stopped failing once `dim_order_from_stride` could order a data-dependent stride)."
+            "Loading fails to allocate a tensor (`0x21`), and the Python runtime's `load_method` takes no allocator."
         ),
-        "Siglip2VisionModel": (
-            "`aten::_upsample_bilinear2d_aa.out` refuses its own output at run time: "
-            "`Check failed (out.size(2) == output_size[0])`. The portable kernel checks the extent it was "
-            "handed against the one it computes, and the two disagree once the axis is dynamic."
-        ),
+        "Siglip2VisionModel": "`_upsample_bilinear2d_aa.out` rejects its own output extent once the axis is dynamic.",
         "Siglip2ForImageClassification": "Same `_upsample_bilinear2d_aa` output-extent check as `Siglip2VisionModel`.",
         "JetMoeModel": (
-            "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)`, "
-            "whose sizes come from the gate's `expert_size.tolist()` — unbacked scalars. What rejects them "
-            "is not the memory planner (`_fix_range_constraints` bounds unbacked dims, and the planner "
-            "copes) but EXIR's edge-dialect *arg validator* in `to_edge_transform_and_lower`, which needs a "
-            "concrete int for every `split_with_sizes_copy` size: `InternalError: Could not extract "
-            "specialized integer from data-dependent expression`. Note the failure CI actually reports is "
-            "`IndexError: tuple index out of range` at `modeling_jetmoe.py` — `_patch_unbacked_split` "
-            "intercepts the split first and hands back a 1-tuple that the per-expert loop then indexes. "
-            "The routing can't be precomputed outside the graph (it is recomputed per layer from that "
-            "layer's hidden states), and `@use_experts_implementation` can't host it: every "
-            "`ExpertsInterface` entry is fixed to an MLP signature over `gate_up_proj`/`down_proj`, while "
-            "`JetMoeMoA` straddles `map()`/`reduce()` with attention in between. A verified export-only "
-            "rewrite does exist — the rows are already sorted by expert, so a masked dense pass is the same "
-            "value at static shapes (measured 2.4e-7 against eager) — but it costs `num_experts`x the GEMM "
-            "FLOPs of the split. TODO: land that if JetMoe ever needs to deploy; it would also clear the "
-            "`_can_compile_fullgraph = False` this same `.tolist()` forces. Exports fine on "
-            "torch.export/ONNX (dynamic dim at runtime)."
+            "Routes tokens with a data-dependent `split(expert_size.tolist())`, which EXIR's edge-dialect arg "
+            "validator can't specialize."
         ),
         "JetMoeForCausalLM": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
         "JetMoeForSequenceClassification": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
         "Lfm2VlForConditionalGeneration": (
-            "Its NaViT-style packer sizes the vision stack from the number of patches each image really "
-            "has, so those extents are unbacked, and the trace stops inside torch's own `slice` "
-            "decomposition on a question no reasoning can settle: `GuardOnDataDependentSymNode: Could not "
-            "guard on data-dependent expression u88 < 0` at `_decomp/decompositions.py:782 in "
-            "slice_forward` — the normalization that asks whether the index is negative. This is a *trace* "
-            "failure, not a memory-planning one: it never reaches `to_edge`, and note that unbacked does "
-            "not mean unplannable here, since `_fix_range_constraints` bounds unbacked dims (which is why "
-            "qwen3_asr's `.nonzero()`-packed length exports fine). Measured independent of "
-            "`_patch_unbacked_split` — dropping that patch reproduces the identical guard. dynamo and ONNX "
-            "carry both models under dynamic shapes (measured), decomposing the slice differently. Lifting "
-            "this needs the data dependence gone — the per-image geometry precomputed outside the graph, "
-            "the way the grid VLMs feed `cu_seqlens` / `window_index` — not a change of backend."
+            "Its NaViT packer makes the vision extents unbacked, and torch's `slice` decomposition guards on them "
+            "(`u88 < 0`). TODO: precompute the per-image geometry outside the graph."
         ),
         "Lfm2VlModel": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
-        "MiniCPMV4_6ForConditionalGeneration": (
-            "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`, same `slice_forward` guard "
-            "(measured, at `u84 < 0`)."
-        ),
+        "MiniCPMV4_6ForConditionalGeneration": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
         "MiniCPMV4_6Model": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
-        "FlavaModel": (
-            "The interleaved text/image/multimodal encoder streams make XNNPACK's disjoint-set partitioner "
-            "emit partitions that form a dependency cycle once fused (`Invalid partition, found dependency "
-            "cycles`). The single-stream sub-models (image/text/multimodal/codebook) export fine."
-        ),
+        "FlavaModel": "XNNPACK's partitioner forms a dependency cycle across the interleaved encoder streams.",
         "FlavaForPreTraining": "Same fused-partition dependency cycle as `FlavaModel` (wraps it).",
         "PPDocLayoutV3ForObjectDetection": (
-            "A single detection head applied at every decoder layer and tied to the encoder head is "
-            "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
-            "shared target once and raises `KeyError` on the next copy while stripping delegated params."
+            "Constant dedup duplicates the shared detection head, and `_unsafe_adjust_original_program` raises "
+            "`KeyError` on the second copy."
         ),
         "Deimv2Model": (
-            "Same as the ONNX `DFineModel` entry: the encoder's `topk` picks the decoder's queries from scores "
-            "that all tie on the tiny test model, and which of them a kernel keeps is arbitrary — ExecuTorch's "
-            "pick differs from eager's on the DINOv3 variant, so the decoder is built from other queries."
+            "Same `topk` tie as the ONNX `DFineModel` entry; ExecuTorch picks differently on the DINOv3 variant."
         ),
         "Deimv2ForObjectDetection": "Same as `Deimv2Model`.",
         "PPDocLayoutV2ForObjectDetection": "Same as `Deimv2Model`.",
     },
     "executorch.dynamic": {
-        "Qwen3NextModel": (
-            "The dynamic lowering exceeds the 1000s test timeout even run alone (measured on CPU with ExecuTorch "
-            "1.5.1, one test per process): every class re-traces the gated-delta-rule linear attention and its "
-            "conv state for XNNPACK. The static variant exports and runs."
-        ),
+        "Qwen3NextModel": "The dynamic lowering exceeds the test timeout. The static variant runs.",
         "Qwen3NextForQuestionAnswering": "Same timeout as `Qwen3NextModel`.",
         "Qwen3NextForSequenceClassification": "Same timeout as `Qwen3NextModel`.",
         "Qwen3NextForTokenClassification": "Same timeout as `Qwen3NextModel`.",
-        "Qwen3_5Model": (
-            "Same timeout as `Qwen3NextModel` (it shares the gated-delta-rule layers), and before it the XNNPACK "
-            "delegate refuses one of its partitions at execute time (`CALL_DELEGATE execute failed ... 0x1`)."
-        ),
+        "Qwen3_5Model": "Same timeout as `Qwen3NextModel`.",
         "Qwen3_5ForConditionalGeneration": "Same as `Qwen3_5Model`.",
         "Qwen3_5ForSequenceClassification": "Same as `Qwen3_5Model`.",
         "Qwen3_5ForTokenClassification": "Same as `Qwen3_5Model`.",
-        "OneFormerModel": (
-            "The dynamic lowering exceeds the 1000s test timeout even run alone, after a first class already fails "
-            "in the lowering with `KeyError: 'zero'`. The static variant exports and runs."
-        ),
+        "OneFormerModel": "The dynamic lowering exceeds the test timeout. The static variant runs.",
         "OneFormerForUniversalSegmentation": "Same as `OneFormerModel`.",
-        "MaskFormerForInstanceSegmentation": (
-            "Lowering does not finish: >1000s inside sympy / `symbolic_shapes`, measured on an idle machine "
-            "(so not sweep contention). The time is symbolic-shape reasoning over the graph's dynamic axes, "
-            "not compute."
-        ),
+        "MaskFormerForInstanceSegmentation": "The dynamic lowering exceeds the test timeout in symbolic-shape reasoning.",
         "Qwen3_5ForCausalLM": "Same >1000s symbolic-shape lowering as `MaskFormerForInstanceSegmentation`.",
         "Qwen3NextForCausalLM": "Same >1000s symbolic-shape lowering as `MaskFormerForInstanceSegmentation`.",
-        # Timeouts, not lowering defects: windowed-attention vision stacks re-partition every window on a
-        # symbolic H/W, and the lowering alone outruns the test budget. Measured in the ExecuTorch sweep of
-        # 2026-08-25 (maskformer at the 1000s mark); the rest of the Swin family, `efficientnet` and
-        # `hrm_text` timed out in the sweep before it and share the shape. Skipped rather than re-measured —
-        # a run that only ever ends in a timeout costs the whole budget to tell us nothing.
-        "MaskFormerSwinModel": "Lowering exceeds the test timeout under dynamic shapes.",
+        "MaskFormerSwinModel": "Windowed attention on symbolic H/W: lowering exceeds the test timeout.",
         "MaskFormerSwinBackbone": "Same `timeout` failure as `MaskFormerSwinModel`.",
         "SwinModel": "Same `timeout` failure as `MaskFormerSwinModel`.",
         "SwinBackbone": "Same `timeout` failure as `MaskFormerSwinModel`.",
@@ -541,7 +329,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "EfficientNetForImageClassification": "Same `timeout` failure as `MaskFormerSwinModel`.",
         "HrmTextModel": "Same `timeout` failure as `MaskFormerSwinModel`.",
         "HrmTextForCausalLM": "Same `timeout` failure as `MaskFormerSwinModel`.",
-        "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "Mask2FormerModel": "Lowering exceeds the test timeout under dynamic shapes.",
         "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdForPreTraining": "Same `timeout` failure as `Mask2FormerModel`.",
@@ -556,57 +344,27 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swin2SRModel": (
-            "ExecuTorch plans its arena ahead of time from per-dimension upper bounds, and the windowed "
-            "attention's compound `Mod`/`FloorDiv` extents (window padding plus the cyclic shift) leave "
-            "`ConstraintBasedSymShapeEvalPass` with no bound at all, so each such dim takes the cap floor of "
-            "1024 -- including the ones whose traced value is `window_size ** 2` = 4. The plan comes out at "
-            "466 GiB, dominated by the delegated `window_partition`/`window_reverse` and cosine-attention "
-            "buffers (the latter planned `(13312, 4, 1024, 1024)` against a real `(13312, 4, 4, 4)`), and "
-            "`load_program` dies allocating it -- that request being just *under* the runner's RAM, the OS "
-            "admits it and the worker is OOM-killed rather than raising. Only the ahead-of-time plan is too "
-            "big: `executorch.static` runs end to end, and torch.export and ONNX both pass under dynamic "
-            "shapes because they allocate from the real shapes at run time. Tightening our own caps only "
-            "makes the failure clean (arena 1.7 GiB, load then fails 0x21 on a single tensor). TODO: lift by "
-            "bounding a reshape's factor dims jointly in the planner, or by passing `dynamic_shapes` that "
-            "keep height/width static."
+            "The ahead-of-time arena plan for the windowed attention's unbounded dims comes out at 466 GiB, and "
+            "the worker is OOM-killed. Static shapes run."
         ),
-        "Swin2SRForImageSuperResolution": (
-            "Same 466 GiB windowed-attention arena as `Swin2SRModel` -- its upsampler head adds nothing to the plan."
-        ),
+        "Swin2SRForImageSuperResolution": "Same as `Swin2SRModel`.",
         "TimesformerModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "TimesformerForVideoClassification": "Same `timeout` failure as `Mask2FormerModel`.",
     },
     "executorch.static": {
-        "SplinterForPreTraining": (
-            "`aten::nonzero.out` cannot size its output under a static-shape export: the extent is "
-            "data-dependent, so `resize_tensor` refuses it (`op_nonzero.cpp`). The dynamic variant passes."
-        ),
-        "MusicFlamingoForConditionalGeneration": (
-            "Same data-dependent `aten::nonzero.out` resize as `SplinterForPreTraining`; its audio encoder "
-            "additionally hits XNNPACK declining to propagate shapes (`xnn_status_invalid_parameter`)."
-        ),
-        "MusicFlamingoModel": "Same data-dependent `aten::nonzero.out` resize as `MusicFlamingoForConditionalGeneration`.",
-        "PaddleOCRVLForConditionalGeneration": (
-            "Its image encoder's `aten::view_copy.out` fails `check_view_copy_args` at run time — the view's "
-            "target extent is not the one the planned output carries once the axis is static."
-        ),
+        "SplinterForPreTraining": "`aten::nonzero.out` can't resize its data-dependent output under a static export.",
+        "MusicFlamingoForConditionalGeneration": "Same `nonzero` resize as `SplinterForPreTraining`.",
+        "MusicFlamingoModel": "Same as `MusicFlamingoForConditionalGeneration`.",
+        "PaddleOCRVLForConditionalGeneration": "Its image encoder's `view_copy.out` fails `check_view_copy_args` at run time.",
         "Wav2Vec2BertModel": (
-            "Its conv feature extractor reshapes on the stacked floor-divisions its own stride chain "
-            "produces (`((((s//4)+1)//2)+1)//2 …`), which ExecuTorch's lowering cannot satisfy: "
-            "`RuntimeError: shape '[4*s99, 16, …]' is invalid`. Re-measured — this was recorded as a "
-            "timeout, but it fails outright, well inside the limit."
+            "The conv feature extractor's stacked floor-divisions produce a reshape ExecuTorch rejects (`shape "
+            "... is invalid`)."
         ),
         "Wav2Vec2BertForCTC": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
         "Wav2Vec2BertForSequenceClassification": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
         "Wav2Vec2BertForAudioFrameClassification": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
         "Wav2Vec2BertForXVector": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
-        "GroundingDinoModel": (
-            "Static-shape export raises `KeyError: 'bbox_embed.1.layers.0.weight'`: the per-decoder-layer "
-            "bbox-embed head is shared/tied, so the constant-dedup pass duplicates it and "
-            "`_unsafe_adjust_original_program` deletes the shared target once then KeyErrors on the next "
-            "copy (same shared-detection-head issue as `PPDocLayoutV3ForObjectDetection`). The dynamic "
-            "variant is skipped for `timeout` above."
-        ),
+        "GroundingDinoModel": "Same shared-head `KeyError` as `PPDocLayoutV3ForObjectDetection`.",
         "GroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
@@ -614,53 +372,25 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
 }
 
 
-# ──────────────────────────── ONNX optimization toggles ────────────────────────────
-# Not "skips" — these select whether `onnxscript` optimisation runs for a given model.
-# Same scope-keyed shape as ``EXPORT_SKIPS`` for symmetry.
-
-
-# Model classes whose ExecuTorch export must skip the backend partitioner
-# (`ExecutorchConfig(partition=False)`), keyed by scope like `EXPORT_SKIPS`. XNNPACK's partitioner can claim
-# subgraphs its own compiler then refuses at *method load*, which reads as an unrelated `0x21`/`0x14` when
-# the program is run. An entry here says "this graph lowers, but only to the portable kernels" — the model
-# is still exported and still run, just without delegation, so it keeps real coverage instead of a
-# tolerated load failure.
-#
-# A candidate belongs here only once lowering it undelegated is shown to *run*. The test passing is not
-# enough on its own: a tolerated load failure passes too, so check that the class's
-# `ExecuTorch runtime limitation tolerated` warning is gone as well. An XNNPACK refusal alone proves
-# nothing — the ModernVBert family's vision encoder and sam3_lite_text fail to load with `0x21` whether
-# delegated or not (that code is an arena the plan cannot allocate, not a refusal), and sam3_lite_text goes
-# on to fail at execute with `0x12` once undelegated.
-# Per-op partitioner configs to withhold from XNNPACK, keyed like `EXECUTORCH_DISABLE_PARTITION` and
-# preferred over it: withholding one config leaves that op to the portable kernels and keeps every other op
-# delegated, where disabling the partitioner costs the whole graph its acceleration. An entry belongs here
-# once *removing that one config* is shown to make the program run — measured by re-exporting with each of
-# the 52 configs withheld in turn and keeping the ones that come back with no tolerance warning. Where no
-# single config suffices (univnet and perceiver: all 52 refused individually), the coarse
-# `EXECUTORCH_DISABLE_PARTITION` below is still the only way past.
+# XNNPACK partitioner configs to withhold, keyed by scope like `EXPORT_SKIPS`. XNNPACK can claim a subgraph its
+# own compiler then refuses at method load; withholding that op's config leaves it to the portable kernels and
+# keeps the rest delegated. An entry belongs here once the program runs without it: the test passing is not
+# enough, the class's `ExecuTorch runtime limitation tolerated` warning must be gone too.
 EXECUTORCH_PARTITION_EXCLUDE: dict[str, dict[str, tuple[str, ...]]] = {
     # Dynamic shapes only — the static variants lower and run fully delegated.
     "dynamic": {
-        # The vision encoder's inputs are dynamic on every axis, and XNNPACK gives up propagating shapes
-        # through `unsqueeze_copy` (`Propagating input shapes failed with code:
-        # xnn_status_invalid_parameter`). `_patch_unsqueeze` cannot reach these: they come from
-        # decompositions, below any Python-level patch, so the config has to be withheld instead.
+        # XNNPACK can't propagate shapes through `unsqueeze_copy` on a vision encoder dynamic on every axis.
         "MuseGlimmerForConditionalGeneration": ("UnsqueezeCopyConfig",),
         "MuseGlimmerModel": ("UnsqueezeCopyConfig",),
     },
     # Both shape variants.
     "all": {
-        # Rank-7 activations from the location-variable convolution — `(2, 16, 7, 256, 1, 1, 1)`, past the
-        # 6 dimensions XNNPACK can define. Every config claiming an op that touches them must be withheld.
+        # Rank-7 activations, past the 6 dimensions XNNPACK can define.
         "UnivNetModel": ("CloneDimOrderConfig", "PermuteConfig", "UnsqueezeCopyConfig", "ViewCopyConfig"),
     },
     # Static shapes only — the dynamic variants lower and run fully delegated.
     "static": {
-        # XNNPACK claims `aten.view_copy` and its compiler then refuses the partition it claimed (`0x1` at
-        # method load). Withholding `ViewCopyConfig` alone lets these run; each of the other 51 configs
-        # changes nothing, so it is that op pattern and not the graph. Both families share the GatedDeltaNet
-        # backbone the refusal comes from.
+        # XNNPACK claims `aten.view_copy` in the GatedDeltaNet backbone, then refuses it at method load (`0x1`).
         "Qwen3_5Model": ("ViewCopyConfig",),
         "Qwen3_5TextModel": ("ViewCopyConfig",),
         "Qwen3_5ForCausalLM": ("ViewCopyConfig",),
@@ -680,27 +410,26 @@ EXECUTORCH_PARTITION_EXCLUDE: dict[str, dict[str, tuple[str, ...]]] = {
         "OlmoHybridModel": ("ViewCopyConfig",),
         "OlmoHybridForCausalLM": ("ViewCopyConfig",),
         "PerceiverModel": ("ViewCopyConfig",),
-        # The flow head's rank-heavy activations: XNNPACK cannot define them, and the three configs that
-        # claim the ops touching them have to be withheld together (measured — no smaller set runs).
+        # The flow head's high-rank activations; no smaller set of configs runs.
         "PerceiverForOpticalFlow": ("CloneConfig", "PermuteConfig", "ViewCopyConfig"),
     },
 }
 
 
+# Classes exported without the partitioner (`ExecutorchConfig(partition=False)`), where no single withheld
+# config suffices.
 EXECUTORCH_DISABLE_PARTITION: dict[str, dict[str, str]] = {
-    # Both shape variants: under ExecuTorch 1.5.1 the dynamic one no longer runs delegated either.
+    # Both shape variants.
     "all": {
         "PerceiverForMultimodalAutoencoding": (
-            "The only entry left that no per-op exclusion reaches: withholding all 52 partitioner configs "
-            "still does not get this program running, because what it needs is a kernel ExecuTorch does not "
-            "ship (`aten::rand_like.out`, from the `torch.bernoulli` masking its preprocessor runs at "
-            "inference). Disabling the partitioner turns the delegate's `0x1` into that missing-kernel "
-            "`0x14`, which is tolerated and reported — the honest end state until the kernel exists."
+            "Needs `aten::rand_like.out`, which ExecuTorch doesn't ship; undelegated, it fails with the tolerated "
+            "`0x14`."
         ),
     },
 }
 
 
+# Classes exported without `onnxscript` optimization, keyed by scope like `EXPORT_SKIPS`.
 ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
     # Disable for every variant.
     "all": {
@@ -881,94 +610,6 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-# A line ExecuTorch's C++ side wrote, as opposed to anything else sharing stderr.
-_EXECUTORCH_LOG_LINE = re.compile(r"\[\w+\.cpp:\d+\]")
-# Where each component's ExecuTorch log is written, one file per label. Under `-n auto` every worker shares
-# stderr, so a sweep's log interleaves and cannot be attributed to the test that produced it — which is the
-# whole point of keeping it. A file per label keeps them separable.
-_EXECUTORCH_LOG_DIR = Path(os.environ.get("TRANSFORMERS_EXECUTORCH_LOG_DIR", "executorch_logs"))
-
-
-def _write_executorch_log(label: str, log: str) -> str | None:
-    """Write one component's ExecuTorch log beside the others, and return where it went."""
-    lines = [line for line in log.splitlines(keepends=True) if _EXECUTORCH_LOG_LINE.search(line)]
-    if not lines:
-        return None
-    _EXECUTORCH_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    filename = re.sub(r"[^\w.-]+", "_", label) + ".log"
-    path = _EXECUTORCH_LOG_DIR / filename
-    path.write_text("".join(lines))
-    return str(path)
-
-
-@contextmanager
-def _capturing_executorch_log():
-    """Capture what ExecuTorch writes to stderr, and yield a reader for it.
-
-    ExecuTorch logs from C++ — the operator registry and `method.cpp` write straight to fd 2 — so
-    `contextlib.redirect_stderr`, which only rebinds `sys.stderr`, sees none of it. The fd itself has to be
-    redirected.
-
-    Needs `-s` (`--capture=no`) to see anything: under pytest's own fd capture ExecuTorch emits no log at
-    all — not to this sink and not to pytest's, so a sweep that wants the kernel names in the tolerance
-    warnings has to disable capture. Redirecting to a plain file is otherwise fine; the emptiness is
-    ExecuTorch's, not this redirect's.
-    """
-    sys.stderr.flush()
-    saved = os.dup(2)
-    with tempfile.TemporaryFile("w+b") as sink:
-        os.dup2(sink.fileno(), 2)
-
-        def read_log() -> str:
-            """Read while the redirect is still up: a caller handling the exception has not left the block
-            yet, so the log cannot be handed over only on exit."""
-            sys.stderr.flush()
-            here = sink.tell()
-            sink.seek(0)
-            text = sink.read().decode("utf-8", "replace")
-            sink.seek(here)
-            return text
-
-        try:
-            yield read_log
-        finally:
-            sys.stderr.flush()
-            os.dup2(saved, 2)
-            os.close(saved)
-            sink.seek(0)
-            # Nothing another writer put on stderr is swallowed; ExecuTorch's own lines are held back,
-            # because a tolerated failure files them per label rather than interleaving them into the run.
-            passthrough = sink.read().decode("utf-8", "replace").splitlines(keepends=True)
-            sys.stderr.write("".join(line for line in passthrough if not _EXECUTORCH_LOG_LINE.search(line)))
-
-
-def _executorch_log_detail(log: str) -> str:
-    """The actionable part of an ExecuTorch failure log: which kernel is missing, else its last complaint.
-
-    A bare error code says only which phase failed. The kernel name says whether it is a platform ceiling or
-    something the export should have avoided emitting (a graph reaching lowering with an `argsort` in it asks
-    the portable registry for `aten::sort.values`, which it does not ship, while `aten::topk.values` — the
-    same computation — it does).
-    """
-    missing = re.findall(r"Missing operator: \[\d+\] (\S+)", log) or re.findall(r"kernel '([^']+)' not found", log)
-    if missing:
-        return f"missing kernel(s) {sorted(set(missing))}"
-    complaints = [line.strip() for line in log.splitlines() if re.match(r"\[\w+\.cpp:\d+\]", line.strip())]
-    # Prefer the line that says *why* over the one that says where it gave up: a delegate refusal logs its
-    # `xnn_status_*` first and then a generic `CALL_DELEGATE execute failed` last, and only the first is
-    # actionable.
-    # `method.cpp` dumps one `arg N with type id` line per operand after a kernel failure; they are the
-    # last lines but say nothing about the cause, so they never win.
-    complaints = [line for line in complaints if not re.search(r"arg \d+ with type id", line)]
-    causes = [
-        line for line in complaints if re.search(r"xnn_status|Internal Error|Attempted to resize|Check failed", line)
-    ]
-    # The *first* cause, not the last: a kernel logs the specific complaint
-    # (`tensor_util_portable.cpp: 4 input tensors have different dim orders`) before the wrapper check that
-    # gave up on it (`op_where.cpp: tensors_have_same_dim_order(...)`), and only the first names the reason.
-    return (causes or complaints)[0] if (causes or complaints) else ""
-
-
 @contextmanager
 def _tolerating_executorch_limits(label: str):
     """Swallow only the failures where ExecuTorch itself refuses to run an otherwise valid program — a named
@@ -979,37 +620,19 @@ def _tolerating_executorch_limits(label: str):
     never declared, and a missing input means the decomposition produced a component we cannot feed. A model
     that genuinely needs an exception belongs in `EXPORT_SKIPS`, argued, where it can be seen.
     """
-    with _capturing_executorch_log() as executorch_log:
-        try:
-            yield
-        except (RuntimeError, MemoryError) as error:
-            if not _is_executorch_runtime_limit(error):
-                # A visible failure needs its log too: ExecuTorch's exception carries only the code, while
-                # the kernel and the shapes it refused live in the C++ log this context captured. Dropping it
-                # here left `0x12` (never tolerated, so never written) reported as a bare code.
-                log = executorch_log()
-                detail = _executorch_log_detail(log)
-                written = _write_executorch_log(label, log)
-                if not (detail or written):
-                    raise
-                raise type(error)(
-                    f"{error}\n[executorch] {label}: {detail}" + (f" (full log: {written})" if written else "")
-                ) from error
-            # A tolerated failure still reports the test as passed, so say so — otherwise a green run is
-            # indistinguishable from one where the program actually ran. The log detail is what makes the
-            # warning actionable: the error code alone cannot tell a platform ceiling from an op the export
-            # should not have emitted.
-            log = executorch_log()
-            detail = _executorch_log_detail(log)
-            written = _write_executorch_log(label, log)
-            warnings.warn(
-                f"{label}: ExecuTorch runtime limitation tolerated; this test passes without running the "
-                f"program — add it to `EXECUTORCH_DISABLE_PARTITION` if lowering it undelegated runs "
-                f"instead: {str(error).strip().splitlines()[0]}"
-                + (f" [{detail}]" if detail else "")
-                + (f" (full log: {written})" if written else ""),
-                stacklevel=2,
-            )
+    try:
+        yield
+    except (RuntimeError, MemoryError) as error:
+        if not _is_executorch_runtime_limit(error):
+            raise
+        # A tolerated failure still reports the test as passed, so say so — otherwise a green run is
+        # indistinguishable from one where the program actually ran.
+        warnings.warn(
+            f"{label}: ExecuTorch runtime limitation tolerated; this test passes without running the "
+            f"program — add it to `EXECUTORCH_DISABLE_PARTITION` if lowering it undelegated runs "
+            f"instead: {str(error).strip().splitlines()[0]}",
+            stacklevel=2,
+        )
 
 
 # ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
