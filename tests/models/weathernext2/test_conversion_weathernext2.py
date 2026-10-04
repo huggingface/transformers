@@ -58,6 +58,19 @@ class WeatherNext2ConversionTest(unittest.TestCase):
         np.testing.assert_array_equal(sorted_senders, senders[order])
         np.testing.assert_array_equal(sorted_receivers, receivers[order])
 
+    def test_geometry_rejects_a_grid_the_feature_extractor_cannot_describe(self):
+        """The feature extractor derives its coordinates from the grid's size, so the geometry must be built on that
+        same grid. On a shifted or flipped one the clock forcings would be computed for the wrong longitudes."""
+        config = WeatherNext2Config(mesh_splits=2, grid_latitudes=13, grid_longitudes=24, attention_k_hop=2)
+        grid_lat = np.linspace(-90.0, 90.0, 13)
+        grid_lon = np.arange(24) * 15.0
+        for name, lat, lon in (
+            ("shifted longitudes", grid_lat, grid_lon - 180.0),
+            ("descending latitudes", grid_lat[::-1].copy(), grid_lon),
+        ):
+            with self.subTest(name), self.assertRaisesRegex(ValueError, "feature extractor assumes"):
+                converter.geometry_state_dict(config, lat, lon)
+
     def test_geometry_preserves_grid_coordinates(self):
         config = WeatherNext2Config(mesh_splits=2, grid_latitudes=13, grid_longitudes=24, attention_k_hop=2)
         grid_lat = np.linspace(-90.0, 90.0, 13, dtype=np.float64)

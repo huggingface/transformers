@@ -721,12 +721,21 @@ def geometry_state_dict(
     minutes at 0.25 degrees, and its result is written into the checkpoint so that loading a model
     never has to repeat it.
     """
+    # The feature extractor stores only the grid's size and derives the coordinates from it, latitudes from
+    # -90 to 90 and longitudes from 0 eastwards, notably for the clock forcings. The geometry must be built on
+    # that same grid, or the two disagree about where each grid point is.
+    default_lat = np.linspace(-90.0, 90.0, config.grid_latitudes, dtype=np.float32)
+    default_lon = np.arange(config.grid_longitudes, dtype=np.float32) * (360.0 / config.grid_longitudes)
+    for name, given, expected in (("latitudes", grid_lat, default_lat), ("longitudes", grid_lon, default_lon)):
+        if given is not None and (given.shape != expected.shape or not np.allclose(given, expected, atol=1e-4)):
+            raise ValueError(
+                f"The dataset's {name} are not the grid the feature extractor assumes (evenly spaced latitudes from "
+                "-90 to 90 and longitudes from 0 eastwards); resample the dataset onto that grid first."
+            )
     geometry = build_geometry(
         mesh_splits=config.mesh_splits,
-        grid_lat=np.linspace(-90.0, 90.0, config.grid_latitudes, dtype=np.float32) if grid_lat is None else grid_lat,
-        grid_lon=np.arange(config.grid_longitudes, dtype=np.float32) * (360.0 / config.grid_longitudes)
-        if grid_lon is None
-        else grid_lon,
+        grid_lat=default_lat if grid_lat is None else grid_lat,
+        grid_lon=default_lon if grid_lon is None else grid_lon,
         attention_k_hop=config.attention_k_hop,
         ball_query_radius_fraction=config.ball_query_radius_fraction,
     )
