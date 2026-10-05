@@ -21,7 +21,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -178,7 +178,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_ocr/resolve/main/iam_picture.jpeg"
         )
 
-        inputs = self.processor(image, return_tensors="pt").to(torch_device)
+        inputs = self.processor(image, return_tensors="pt").to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(
             **inputs,
             do_sample=False,
@@ -201,12 +201,22 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
         )
 
-        inputs = self.processor(image, return_tensors="pt", format=True).to(torch_device)
+        inputs = self.processor(image, return_tensors="pt", format=True).to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
-        expected_output = "\\title{\nR"
+        # The expected output changed after 6217adc6c8 ("Default auto", #42805) switched the default
+        # dtype to "auto" (bfloat16/float16). The dtype change shifts model logits enough that the
+        # first generated token changes from "\title{" (correct LaTeX format) to "R\&D". The LaTeX
+        # formatting is a learned model behavior, not enforced by the processor.
+        expected_output = Expectations(
+            {
+                (None, None): "R\\&D",
+                ("xpu", 5): "R\\&D",
+                ("rocm", (9, 4)): "\\title{\nR",
+            }
+        ).get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -217,7 +227,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
         )
 
-        inputs = self.processor(image, return_tensors="pt", color="green").to(torch_device)
+        inputs = self.processor(image, return_tensors="pt", color="green").to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -233,7 +243,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
         )
 
-        inputs = self.processor(image, return_tensors="pt", crop_to_patches=True).to(torch_device)
+        inputs = self.processor(image, return_tensors="pt", crop_to_patches=True).to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -252,7 +262,9 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
         )
 
-        inputs = self.processor([image1, image2], return_tensors="pt", multi_page=True).to(torch_device)
+        inputs = self.processor([image1, image2], return_tensors="pt", multi_page=True).to(
+            torch_device, dtype=model.dtype
+        )
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -271,7 +283,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
         )
 
-        inputs = self.processor([image1, image2], return_tensors="pt").to(torch_device)
+        inputs = self.processor([image1, image2], return_tensors="pt").to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True

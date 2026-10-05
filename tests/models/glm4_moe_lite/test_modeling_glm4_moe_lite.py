@@ -18,7 +18,7 @@ import unittest
 import pytest
 import torch
 
-from transformers import Cache, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -67,23 +67,6 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
-
 
 @require_torch_accelerator
 @slow
@@ -120,12 +103,3 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)

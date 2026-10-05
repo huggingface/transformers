@@ -19,8 +19,6 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import (
@@ -29,7 +27,6 @@ from ...processing_utils import (
     ProcessorMixin,
     Unpack,
 )
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..mistral3.modeling_mistral3 import (
@@ -122,6 +119,9 @@ class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "images_kwargs": {
+            "do_pad": True,
+        },
         "common_kwargs": {
             "return_tensors": "pt",
         },
@@ -129,6 +129,8 @@ class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class LightOnOcrProcessor(ProcessorMixin):
+    valid_processor_kwargs = LightOnOcrProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -157,64 +159,11 @@ class LightOnOcrProcessor(ProcessorMixin):
     def image_token_ids(self) -> list[int]:
         return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[LightOnOcrProcessorKwargs],
-    ) -> BatchFeature:
-        if images is None and text is None:
-            raise ValueError("You must provide either text or images")
-        output_kwargs = self._merge_kwargs(
-            LightOnOcrProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        else:
-            image_inputs = {}
-
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        if image_inputs.get("pixel_values") is not None:
-            image_sizes_iter = iter(image_inputs["image_sizes"])
-            prompt_strings = []
-
-            for sample in text:
-                replace_strings = []
-
-                while self.image_token in sample:
-                    image_height, image_width = next(image_sizes_iter)
-                    num_height_tokens = image_height // self.effective_patch_size
-                    num_width_tokens = image_width // self.effective_patch_size
-                    num_patches = num_height_tokens * num_width_tokens
-
-                    replace_str = self.image_token * num_patches
-                    replace_strings.append(replace_str)
-
-                    sample = sample.replace(self.image_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    replace_str = replace_strings.pop(0)
-                    sample = sample.replace("<placeholder>", replace_str, 1)
-
-                prompt_strings.append(sample)
-        else:
-            prompt_strings = text
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        image_height, image_width = image_inputs["image_sizes"][image_idx]
+        num_height_tokens = image_height // self.effective_patch_size
+        num_width_tokens = image_width // self.effective_patch_size
+        return self.image_token * (num_height_tokens * num_width_tokens)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -291,9 +240,7 @@ class LightOnOcrModel(Mistral3Model):
         # Split features per image based on the effective patch size
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
         split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
-        image_features = torch.split(image_features, split_sizes)
-        image_outputs.pooler_output = image_features
-
+        image_outputs.pooler_output = torch.split(image_features, split_sizes)
         return image_outputs
 
     @can_return_tuple
@@ -308,19 +255,28 @@ class LightOnOcrModel(Mistral3Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LightOnOcrModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
-            ).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -340,7 +296,7 @@ class LightOnOcrModel(Mistral3Model):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 

@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLTextConfig(PreTrainedConfig):
     r"""
@@ -75,6 +75,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     attribute_map = {
         "num_experts": "num_local_experts",
     }
@@ -153,7 +154,8 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+# NOTE: can copy from qwen vision config!
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     r"""
@@ -163,6 +165,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 
     model_type = "minimax_m3_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     default_theta = 10000.0
 
     hidden_size: int = 1280
@@ -181,7 +184,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"

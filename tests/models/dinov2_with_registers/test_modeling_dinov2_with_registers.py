@@ -72,6 +72,7 @@ class Dinov2WithRegistersModelTester:
         num_register_tokens=2,
         mask_ratio=0.5,
         scope=None,
+        use_swiglu_ffn=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -91,6 +92,7 @@ class Dinov2WithRegistersModelTester:
         self.initializer_range = initializer_range
         self.num_register_tokens = num_register_tokens
         self.scope = scope
+        self.use_swiglu_ffn = use_swiglu_ffn
 
         # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -125,6 +127,7 @@ class Dinov2WithRegistersModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             num_register_tokens=self.num_register_tokens,
+            use_swiglu_ffn=self.use_swiglu_ffn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -236,6 +239,12 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     )
 
     test_resize_embeddings = False
+
+    def test_reverse_loading_mapping(self):
+        # Force the SwiGLU MLP: weights_in/weights_out -> gate/up/down is the only MLP path with a converter rule.
+        # Plain fc1/fc2 needs no rule and round-trips via test_save_load on the default config.
+        self.model_tester.use_swiglu_ffn = True
+        super().test_reverse_loading_mapping()
 
     def setUp(self):
         self.model_tester = Dinov2WithRegistersModelTester(self)

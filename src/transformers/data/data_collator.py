@@ -319,14 +319,16 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def numpy_call(self, features):
         label_name = "label" if "label" in features[0] else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0] else None
+
+        no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
+
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
-            features,
+            no_labels_features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
-            return_tensors="np" if labels is None else None,
+            return_tensors="np",
         )
 
         if labels is None:
@@ -335,15 +337,15 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         sequence_length = np.array(batch["input_ids"]).shape[1]
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
-            batch["labels"] = [
+            batch[label_name] = [
                 list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
             ]
         else:
-            batch["labels"] = [
+            batch[label_name] = [
                 [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
             ]
 
-        batch = {k: np.array(v, dtype=np.int64) for k, v in batch.items()}
+        batch[label_name] = np.array(batch[label_name], dtype=np.int64)
         return batch
 
 
@@ -1371,10 +1373,32 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - optionally returns the kwargs contained in FlashAttentionKwargs
     - optionally returns seq_idx indicating which sequence each token belongs to
 
+    Args:
+        return_position_ids (`bool`, *optional*, defaults to `True`):
+            Whether to return `position_ids`, which restart at `position_ids_start` for every flattened sequence.
+        separator_id (`int`, *optional*, defaults to -100):
+            The value used to separate sequences within the concatenated `labels`.
+        return_flash_attn_kwargs (`bool`, *optional*, defaults to `False`):
+            Whether to return the sequence boundary kwargs used by FlashAttention (`cu_seq_lens_q`, `cu_seq_lens_k`,
+            `max_length_q` and `max_length_k`).
+        return_seq_idx (`bool`, *optional*, defaults to `False`):
+            Whether to return `seq_idx`, which indicates the sequence each token belongs to.
+        position_ids_start (`int`, *optional*, defaults to 0):
+            The position id given to the first token of every sequence.
+
     <Tip warning={true}>
 
     Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence.
     Make sure your attention computation is able to handle it!
+
+    </Tip>
+
+    <Tip warning={true}>
+
+    Not every model numbers positions from 0 when computing position ids itself. RoBERTa-like architectures (among
+    them `roberta`, `xlm_roberta`, `camembert`, `mpnet` and `esm` with absolute position embeddings) start at
+    `padding_idx + 1`, which is usually 2. Passing such models the default 0-based `position_ids` silently shifts
+    the position embeddings and degrades their outputs, so set `position_ids_start` accordingly for those models.
 
     </Tip>
     """
@@ -1386,6 +1410,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         separator_id=-100,
         return_flash_attn_kwargs=False,
         return_seq_idx=False,
+        position_ids_start=0,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -1393,6 +1418,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.separator_id = separator_id
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.return_seq_idx = return_seq_idx
+        self.position_ids_start = position_ids_start
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
         self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
         self._py_int_keys = {"max_length_q", "max_length_k"}
@@ -1427,7 +1453,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             else:
                 batch["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
-                batch["position_ids"] += list(range(len(input_ids)))
+                batch["position_ids"] += [self.position_ids_start + i for i in range(len(input_ids))]
             if self.return_seq_idx:
                 batch["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
             if self.return_flash_attn_kwargs:

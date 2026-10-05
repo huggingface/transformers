@@ -235,7 +235,7 @@ class UVDocImageProcessor(TorchvisionBackend):
                           and BGR channel order (suitable for OpenCV visualization)
         """
         image_list = list(original_images)
-        scale = torch.tensor(float(scale), device=prediction.device)
+        scale = torch.full((), float(scale), device=prediction.device)
         results = []
 
         for i, original_image in enumerate(image_list):
@@ -511,6 +511,7 @@ class UVDocBridge(UVDocPreTrainedModel):
     """
 )
 class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
+    config: UVDocBackboneConfig
     has_attentions = False
     base_model_prefix = "backbone"
 

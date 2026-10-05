@@ -36,8 +36,6 @@ from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
-    cached_file,
-    extract_commit_hash,
     find_adapter_config_file,
     hf_api,
     is_kenlm_available,
@@ -45,6 +43,7 @@ from ..utils import (
     is_pyctcdecode_available,
     is_torch_available,
     logging,
+    resolve_revision,
 )
 from ..video_processing_utils import BaseVideoProcessor
 from .any_to_any import AnyToAnyPipeline
@@ -793,9 +792,11 @@ def pipeline(
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `hf auth login`.
-        device (`int` or `str` or `torch.device`):
+        device (`int` or `str` or `torch.device`, *optional*):
             Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
-            pipeline will be allocated.
+            pipeline will be allocated. When left unset, the pipeline is automatically placed on the first available
+            accelerator (CUDA, MPS, XPU, ...) and only falls back to CPU when none is available; the model is moved
+            there for you. Pass `device="cpu"` (or `-1`) to force CPU. Cannot be used together with `device_map`.
         device_map (`str` or `dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically (see
@@ -808,9 +809,10 @@ def pipeline(
 
             </Tip>
 
-        dtype (`str` or `torch.dtype`, *optional*):
-            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
-            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`).
+        dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
+            Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
+            model in the dtype it was saved in. Pass an explicit `torch.float16`, `torch.bfloat16`, `torch.float32`,
+            ... to override it.
         trust_remote_code (`bool`, *optional*, defaults to `False`):
             Whether or not to allow for custom code defined on the Hub in their own modeling, configuration,
             tokenization or even pipeline files. This option should only be set to `True` for repositories you trust
@@ -842,17 +844,16 @@ def pipeline(
         model_kwargs = {}
 
     code_revision = kwargs.pop("code_revision", None)
-    commit_hash = kwargs.pop("_commit_hash", None)
+    kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
     local_files_only = kwargs.get("local_files_only", False)
 
+    requested_revision = revision
     hub_kwargs = {
         "revision": revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
-        "_commit_hash": commit_hash,
         "local_files_only": local_files_only,
     }
-
     if task is None and model is None:
         raise RuntimeError(
             "Impossible to instantiate a pipeline without either a task or a model "
@@ -876,26 +877,21 @@ def pipeline(
         model = str(model)
 
     pretrained_model_name_or_path = None
-    if commit_hash is None:
-        if isinstance(config, str):
-            pretrained_model_name_or_path = config
-        elif config is None and isinstance(model, str):
-            pretrained_model_name_or_path = model
+    if isinstance(config, str):
+        pretrained_model_name_or_path = config
+    elif config is None and isinstance(model, str):
+        pretrained_model_name_or_path = model
 
-        if not isinstance(config, PreTrainedConfig) and pretrained_model_name_or_path is not None:
-            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
-            resolved_config_file = cached_file(
-                pretrained_model_name_or_path,
-                CONFIG_NAME,
-                _raise_exceptions_for_gated_repo=False,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-                cache_dir=model_kwargs.get("cache_dir"),
-                **hub_kwargs,
-            )
-            hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
-        else:
-            hub_kwargs["_commit_hash"] = getattr(config, "_commit_hash", None)
+    if pretrained_model_name_or_path is not None:
+        # Resolve the revision of the model repository once. Everything loaded from that repository below (config,
+        # remote code, weights, and the components that default to it) then uses this immutable commit.
+        hub_kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=model_kwargs.get("cache_dir"),
+        )
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -904,7 +900,6 @@ def pipeline(
         config = AutoConfig.from_pretrained(
             config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
-        hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
@@ -914,7 +909,6 @@ def pipeline(
                 model,
                 token=hub_kwargs["token"],
                 revision=hub_kwargs["revision"],
-                _commit_hash=hub_kwargs["_commit_hash"],
             )
 
             if maybe_adapter_path is not None:
@@ -927,11 +921,18 @@ def pipeline(
                     # model named in the adapter's config from the hub.
                     if not os.path.exists(model) or not os.path.exists(os.path.join(model, CONFIG_NAME)):
                         model = adapter_config["base_model_name_or_path"]
+                        # The revision resolved above belongs to the adapter repository, resolve the base model's.
+                        hub_kwargs["revision"] = resolve_revision(
+                            model,
+                            requested_revision,
+                            token=token,
+                            local_files_only=local_files_only,
+                            cache_dir=model_kwargs.get("cache_dir"),
+                        )
 
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
-        hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -983,10 +984,11 @@ def pipeline(
             f"No model was supplied, defaulted to {model} and revision {revision}.\n"
             "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
-        hub_kwargs["revision"] = revision
+        hub_kwargs["revision"] = resolve_revision(
+            model, revision, token=token, local_files_only=local_files_only, cache_dir=model_kwargs.get("cache_dir")
+        )
         if config is None and isinstance(model, str):
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-            hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
         if "device_map" in model_kwargs:
@@ -1038,8 +1040,6 @@ def pipeline(
             **hub_kwargs,
             **model_kwargs,
         )
-
-    hub_kwargs["_commit_hash"] = model.config._commit_hash
 
     if pipeline_class is None:
         raise RuntimeError("Failed to resolve a pipeline class.")

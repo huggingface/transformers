@@ -47,7 +47,7 @@ def equalize_lengths_and_collate(stats: dict[str, dict[str, str]]) -> dict[str, 
 
 
 def pretty_print_dict(data: dict[str, str], tabs: int = 0) -> None:
-    max_key_length = max([len(key) for key in data.keys()])
+    max_key_length = max(len(key) for key in data.keys())
     for key, value in data.items():
         tabs_str = "  " * tabs
         padded_key = key.ljust(max_key_length + 1, ".")

@@ -250,7 +250,7 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 [`pipeline`] 支持多个模态。例如，视觉问题回答（VQA）任务结合了文本和图像。请随意使用您喜欢的任何图像链接和您想要问关于该图像的问题。图像可以是URL或图像的本地路径。
 
-例如，如果您使用这个[invoice image](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png)：
+例如，如果您使用这个[invoice image](https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png)：
 
 
 ```py
@@ -258,7 +258,7 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
 >>> output = vqa(
-...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
 ...     question="What is the invoice number?",
 ... )
 >>> output[0]["score"] = round(output[0]["score"], 3)

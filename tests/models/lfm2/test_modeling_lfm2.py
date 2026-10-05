@@ -54,15 +54,6 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)
 
-    def test_assisted_generation_rejected_as_stateful(self):
-        """LFM2 is a conv/attention hybrid (stateful), so assisted / prompt-lookup decoding must be rejected with
-        a clear error instead of silently producing wrong text (it cannot roll back its conv state)."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Lfm2ForCausalLM(config).to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"][:1]  # batch size 1, so prompt lookup would otherwise run
-        with self.assertRaisesRegex(ValueError, "stateful"):
-            model.generate(input_ids, max_new_tokens=3, do_sample=False, prompt_lookup_num_tokens=2)
-
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

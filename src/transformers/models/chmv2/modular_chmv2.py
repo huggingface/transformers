@@ -387,8 +387,8 @@ class CHMv2FeaturesToDepth(nn.Module):
         linear = torch.linspace(self.min_depth, scaled_max_depth, n_bins, device=device)
         log = torch.exp(
             torch.linspace(
-                torch.log(torch.tensor(self.min_depth, device=device)),
-                torch.log(torch.tensor(scaled_max_depth, device=device)),
+                torch.log(torch.full((), self.min_depth, device=device)),
+                torch.log(torch.full((), scaled_max_depth, device=device)),
                 n_bins,
                 device=device,
             )
@@ -500,10 +500,6 @@ class CHMv2ForDepthEstimation(CHMv2PreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-        """
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")

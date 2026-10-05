@@ -402,12 +402,7 @@ def convert_transformer_weights(
             head_dim = weights.shape[-1]  # Last dimension is head_dim
         else:
             # Fall back to config-based determination
-            head_dim = (
-                config.global_head_dim
-                if config.layer_types[layer_idx] == "full_attention" and config.global_head_dim
-                else config.head_dim
-            )
-
+            head_dim = config.per_layer_config[layer_idx].head_dim
         # Note: In new format, weights are per-layer (not batched), so no enumerate loop needed
         matrix = weights
 
@@ -435,7 +430,7 @@ def convert_transformer_weights(
             converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
             converted_weights.append(
                 matrix.transpose(1, 0, 2)
-                .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
+                .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
                 .transpose()
             )
         elif path.endswith("attn/q_einsum"):

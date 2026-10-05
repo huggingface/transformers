@@ -22,7 +22,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Optional
+from itertools import accumulate
 
 import numpy as np
 import torch
@@ -33,7 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
@@ -211,9 +211,7 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
 
 
 class Granite4VisionTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Granite4VisionTextConfig, device=None):
+    def __init__(self, config: Granite4VisionTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -224,26 +222,18 @@ class Granite4VisionTextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Granite4VisionTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: Granite4VisionTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -252,22 +242,22 @@ class Granite4VisionTextRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
+        # Disable any outside autocast context if any, to really force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -282,7 +272,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -520,7 +510,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
@@ -529,6 +518,7 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _can_record_outputs = {
         "hidden_states": Granite4VisionTextDecoderLayer,
         "attentions": Granite4VisionTextAttention,
@@ -794,7 +784,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         Overrides the parent to apply downsample_rate to height/width calculations.
         """
         new_image_features = []
-        feature_lens = []
         for image_idx, image_feature in enumerate(image_features):
             if image_feature.shape[0] > 1:
                 base_image_feature = image_feature[0]
@@ -842,9 +831,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                 if image_newline is not None:
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
             new_image_features.append(image_feature)
-            feature_lens.append(image_feature.size(0))
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
-        return new_image_features, feature_lens
+        return new_image_features
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -857,11 +844,10 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -889,7 +875,8 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        kwargs["output_hidden_states"] = True
+        vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
         all_features = []
@@ -902,13 +889,12 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             projected_features = self.layerwise_projectors[projection_idx](selected_feature)
             projected_features = torch.split(projected_features, image_num_patches, dim=0)
 
-            packed_features, _ = self.pack_image_features(
+            packed_features = self.pack_image_features(
                 projected_features,
                 image_sizes,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-
             all_features.append((llm_layer, packed_features))
 
         # Spatial features: extract 4 offset groups from a single vision layer
@@ -921,13 +907,12 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             projected_group = self.spatial_projectors[group_idx](spatial_feature)
             projected_group_split = torch.split(projected_group, image_num_patches, dim=0)
 
-            packed_group, _ = self.pack_image_features(
+            packed_group = self.pack_image_features(
                 projected_group_split,
                 image_sizes,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-
             all_features.append((llm_layer, packed_group))
 
         return Granite4VisionImageFeaturesOutput(
@@ -944,7 +929,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -973,6 +958,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
         r"""
@@ -984,31 +970,38 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Build deepstack injection map and scatter initial image embeddings
-        deepstack_features = None
-        vision_mask = None
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
+                return_dict=True,
             )
 
+        # Build deepstack injection map and scatter initial image embeddings
+        deepstack_features = None
+        vision_mask = None
+        if mm_encoder_outputs.get("image") is not None:
             deepstack_features = {}
-            for idx, (llm_layer_idx, packed_features) in enumerate(image_features.deepstack_features):
-                concat_features = torch.cat(packed_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["image"].deepstack_features):
+                if not isinstance(packed_features, torch.Tensor):
+                    packed_features = torch.cat(packed_features, dim=0)
+                packed_features = packed_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
                     vision_mask = self.get_placeholder_mask(
-                        input_ids, inputs_embeds=inputs_embeds, image_features=concat_features
+                        input_ids, inputs_embeds=inputs_embeds, image_features=packed_features
                     )
                     # Zero out image token positions — deepstack injection will sum features in during forward.
                     inputs_embeds = inputs_embeds.masked_fill(vision_mask, 0.0)
-                deepstack_features[llm_layer_idx] = concat_features
+                deepstack_features[llm_layer_idx] = packed_features
 
         outputs = self.language_model(
             input_ids=None,
@@ -1027,7 +1020,9 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            deepstack_features=image_features.deepstack_features if pixel_values is not None else None,
+            deepstack_features=mm_encoder_outputs["image"].deepstack_features
+            if mm_encoder_outputs.get("image") is not None
+            else None,
         )
 
 
@@ -1068,7 +1063,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -1105,6 +1100,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionCausalLMOutputWithPast:
         r"""
@@ -1112,16 +1108,12 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Granite4VisionForConditionalGeneration
 
@@ -1150,6 +1142,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            mm_encoder_outputs=mm_encoder_outputs,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
@@ -1177,39 +1170,58 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             deepstack_features=outputs.deepstack_features,
         )
 
-    def prepare_inputs_for_generation(
+    def _expand_multimodal_outputs(
         self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_sizes=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+        input_ids: torch.LongTensor,
+        mm_encoder_output: dict,
+        expand_size: int = 1,
+        inputs_embeds: torch.LongTensor | None = None,
+    ) -> dict[str, dict]:
+        # override -> model has only deepstack features with no pooler output
 
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
+        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            if isinstance(inputs, torch.Tensor):
+                return inputs.repeat_interleave(repeat_times, dim=0)
+            else:
+                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
+                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
 
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache)
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
+        image_outputs = mm_encoder_output.get("image")
+        if image_outputs is None or getattr(image_outputs, "deepstack_features", None) is None:
+            return mm_encoder_output
 
-        return model_inputs
+        # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
+        if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
+        else:
+            num_image_tokens_in_text = (input_ids == self.config.image_token_id).sum(-1)
+        num_image_tokens_in_vision = [len(out) for out in image_outputs.deepstack_features[0][1]]
+        num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
+        num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
+
+        # 2. Find offsets to split encoder output into separate groups per text. In a single batch
+        # we might get a text with single image and another with two images, so the most reliable
+        # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
+        offsets = [0] + [i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text]
+
+        # 3. GraniteVision has each deepstack feature as a `tuple(layer_idx, list[torch.Tensor])`
+        # Each deepstack feat is `(total_image_len, dim)` tensor
+        image_outputs.deepstack_features = [
+            (
+                tuple_item[0],
+                [
+                    expanded_feats
+                    for start, end in zip(offsets[:-1], offsets[1:])
+                    for expanded_feats in repeat_tensor_or_list(tuple_item[1][start:end], expand_size)
+                ],
+            )
+            for tuple_item in image_outputs.deepstack_features
+        ]
+
+        return mm_encoder_output
 
 
 __all__ = [

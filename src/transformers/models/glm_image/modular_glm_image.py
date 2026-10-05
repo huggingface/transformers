@@ -13,9 +13,7 @@
 # limitations under the License.
 
 import math
-import warnings
 from collections.abc import Callable
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -31,11 +29,15 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import (
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -50,7 +52,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionModel,
     Glm4vVisionPatchEmbed,
 )
-from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attention_forward
+from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, Glm4vMoeTextRotaryEmbedding, eager_attention_forward
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
@@ -108,6 +110,7 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
     out_hidden_size = AttributeError()
     rms_norm_eps = AttributeError()
     temporal_patch_size = AttributeError()
+    rope_parameters = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
@@ -198,6 +201,10 @@ class GlmImageConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+class GlmImageTextRotaryEmbedding(Glm4vMoeTextRotaryEmbedding):
+    pass
+
+
 class GlmImageVisionMLP(SiglipMLP):
     pass
 
@@ -212,6 +219,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -228,7 +236,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -337,9 +345,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
     input_modalities = ("image", "text")
 
-    def _init_weights(self, module):
-        raise AttributeError("Normal super call")
-
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
@@ -429,14 +434,6 @@ class GlmImageVisionModel(Glm4vVisionModel):
         del self.downsample
         del self.post_layernorm
 
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -453,7 +450,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(pixel_values)
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
@@ -470,9 +467,10 @@ class GlmImageVisionModel(Glm4vVisionModel):
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
             )
 
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
 
 class GlmImageTextModel(Glm4vTextModel):
@@ -667,7 +665,7 @@ class GlmImageModel(Glm4vModel):
     def get_image_tokens(
         self,
         hidden_states: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor,
+        image_grid_thw: torch.LongTensor | None = None,
     ) -> torch.LongTensor:
         """
         Tokenizes image features into discrete tokens with VQVAE module.
@@ -682,44 +680,65 @@ class GlmImageModel(Glm4vModel):
             image_tokens (`torch.LongTensor` of shape `(total_patches,)`):
                 Discrete token indices from the VQVAE codebook.
         """
-        hidden_size = hidden_states.shape[-1]
-        split_sizes = (image_grid_thw.prod(dim=-1)).tolist()
-        hidden_states_list = torch.split(hidden_states, split_sizes, dim=0)
-
         all_image_toks = []
-        for i, hs in enumerate(hidden_states_list):
-            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
-            hs = hs.view(grid_t, grid_h, grid_w, hidden_size)
-            hs = hs.permute(0, 3, 1, 2).contiguous()
-            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs)
+        for hs in hidden_states:
+            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs[None, ...])
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
     def get_video_features(self):
         raise AttributeError("Not needed for GlmImage")
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The number of image inputs per each sample in the batch.
         """
+        if (
+            images_per_sample is not None
+            and image_grid_thw is not None
+            and sum(images_per_sample) == len(image_grid_thw)
+        ):
+            image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
-        vision_outputs.pooler_output = image_embeds
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+
+        reshaped_embeds = []
+        for i, embed in enumerate(image_embeds):
+            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
+            embed = embed.view(grid_t, grid_h, grid_w, -1)
+            # grid-h is always one for images, so we squeeze the extrac dim back in reality
+            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h, grid_w)
+            reshaped_embeds.append(embed.contiguous())
+
+        vision_outputs.pooler_output = reshaped_embeds
 
         return vision_outputs
+
+    def get_image_grids_for_generation(
+        self,
+        images_per_sample: torch.Tensor,
+        image_grid_thw: torch.Tensor,
+    ) -> torch.Tensor:
+        # Process source images (image-to-image mode)
+        # Source images are identified by counting image_end_token_id in input_ids
+        if images_per_sample is not None:
+            grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
+            source_grids_list = [grids[:-1] for grids in grids_per_sample]
+            source_grids = torch.cat(source_grids_list, dim=0)
+        else:
+            # Fallback for batch_size=1: all but last grid are source images
+            source_grids = image_grid_thw[:-1]
+        return source_grids
 
     def get_placeholder_mask(
         self,
@@ -801,59 +820,28 @@ class GlmImageModel(Glm4vModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageModelOutputWithPast:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(total_images_in_batch, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-            Images are packed across all samples in the batch.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        if pixel_values is not None:
-            # Process source images (image-to-image mode)
-            # Source images are identified by counting image_end_token_id in input_ids
-            # Note: We must exclude padding tokens since pad_token_id == image_end_token_id
-            if images_per_sample is not None:
-                grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
-                # Create mask for non-padding tokens (attention_mask=1 means non-padding)
-                # Handle 4D attention mask (from static cache) by extracting diagonal
-                if attention_mask is not None and attention_mask.ndim == 4:
-                    non_pad_mask = torch.diagonal(attention_mask[:, 0], dim1=1, dim2=2)
-                    if non_pad_mask.dtype.is_floating_point:
-                        non_pad_mask = non_pad_mask / torch.finfo(non_pad_mask.dtype).min
-                        non_pad_mask = (1.0 - non_pad_mask).int()
-                    # Only keep columns matching input_ids length
-                    non_pad_mask = non_pad_mask[:, -input_ids.shape[1] :]
-                else:
-                    non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, source_grids, return_dict=True, **kwargs
+            )
 
-                source_grids_list = []
-                is_image_end = input_ids == self.config.image_end_token_id
-                is_non_pad = non_pad_mask == 1
-                num_source_per_sample = (is_image_end & is_non_pad).sum(dim=1).tolist()
-                for sample_idx in range(batch_size):
-                    num_source = num_source_per_sample[sample_idx]
-                    if num_source > 0:
-                        source_grids_list.append(grids_per_sample[sample_idx][:num_source])
-                if len(source_grids_list) == 0:
-                    raise ValueError(
-                        "pixel_values provided but no source images found in input_ids. "
-                        "Ensure input_ids contains image_end_token_id for each source image."
-                    )
-                source_grids = torch.cat(source_grids_list, dim=0)
-            else:
-                # Fallback for batch_size=1: all but last grid are source images
-                source_grids = image_grid_thw[:-1]
-
-            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
-            image_embeds = torch.cat(image_features.pooler_output, dim=0)
-            image_ids = self.get_image_tokens(image_embeds, source_grids)
+        if mm_encoder_outputs.get("image") is not None:
+            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output)
             image_ids = image_ids.view(-1).to(input_ids.device)
             special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
             input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
@@ -913,15 +901,14 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Number of images (including target grids) for each sample in the batch.
         """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, images_per_sample, **kwargs)
 
     def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
@@ -938,16 +925,10 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(total_images_in_batch, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-            Images are packed across all samples in the batch.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
 
@@ -955,7 +936,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GlmImageForConditionalGeneration
 
@@ -992,6 +973,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1003,7 +985,9 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return GlmImageCausalLMOutputWithPast(
             loss=loss,
@@ -1014,164 +998,25 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             rope_deltas=outputs.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        image_grid_thw=None,
-        images_per_sample=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            is_first_iteration=is_first_iteration,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         model_inputs["position_ids"] = None
-        model_inputs["images_per_sample"] = images_per_sample
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-
         return model_inputs
 
-    def _get_image_nums(
-        self,
-        input_ids: torch.LongTensor | None,
-    ) -> torch.Tensor:
-        """
-        Get the number of images for each sample.
-        For GLM-Image, only input_ids allow us to get the number of images.
+    def _prepare_multimodal_encoder_kwargs_for_generation(self, model_kwargs):
+        """Prepares image/video hidden states if model support this modality"""
+        model_kwargs.setdefault("mm_encoder_outputs", {})
+        if "pixel_values" in model_kwargs:
+            if model_kwargs["mm_encoder_outputs"].get("image") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
+            encoder_kwargs = {
+                k: v for k, v in model_kwargs.items() if k in ["pixel_values", "image_grid_thw", "images_per_sample"]
+            }
+            encoder_kwargs["return_dict"] = True
+            model_kwargs["mm_encoder_outputs"]["image"] = self.get_image_features(**encoder_kwargs)
+            model_kwargs.pop("pixel_values")
 
-        Returns:
-            image_counts (`torch.LongTensor` of shape `(batch_size,)`)
-        """
-        is_image = input_ids == self.config.image_start_token_id
-
-        return is_image.sum(dim=1)
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw
-        # pixel_values.shape[0] is sum(seqlen_images for samples)
-        # image_grid_thw.shape[0] is sum(num_images for samples)
-
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        visual_keys = ["pixel_values", "image_grid_thw", "images_per_sample"]
-
-        def _expand_dict_for_generation_visual(dict_to_expand):
-            image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            if image_grid_thw is None:
-                return dict_to_expand
-
-            images_per_sample = model_kwargs.get("images_per_sample", None)
-
-            # Use images_per_sample if available
-            if images_per_sample is not None:
-                image_nums = images_per_sample.tolist()
-            elif input_ids is not None:
-                # Try to infer from image_grid_thw / batch_size
-                batch_size = input_ids.shape[0]
-                total_grids = image_grid_thw.shape[0]
-                if total_grids % batch_size == 0:
-                    grids_per_sample = total_grids // batch_size
-                    image_nums = [grids_per_sample] * batch_size
-                else:
-                    # Cannot evenly distribute grids - fall back to simple repeat_interleave
-                    # This handles test cases where image_grid_thw has (batch_size + 1) rows
-                    dict_to_expand["image_grid_thw"] = image_grid_thw.repeat_interleave(expand_size, dim=0)
-                    if dict_to_expand.get("pixel_values") is not None:
-                        dict_to_expand["pixel_values"] = dict_to_expand["pixel_values"].repeat_interleave(
-                            expand_size, dim=0
-                        )
-                    return dict_to_expand
-            else:
-                image_nums = self._get_image_nums(input_ids).tolist()
-
-            # Get source image counts per sample from image_end_token_id count
-            source_image_nums = (input_ids == self.config.image_end_token_id).sum(dim=1).tolist()
-
-            def _repeat_interleave_samples(x, lengths, repeat_times):
-                samples = torch.split(x, lengths)
-                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-                return result
-
-            for key in dict_to_expand:
-                if key == "pixel_values":
-                    # Split images into samples based on source image counts
-                    if sum(source_image_nums) > 0:
-                        # Split grids by sample to compute pixel counts
-                        grids_per_sample = torch.split(image_grid_thw, image_nums)
-                        all_pixel_counts = image_grid_thw.prod(dim=1)
-                        pixel_counts_per_sample = torch.split(all_pixel_counts, image_nums)
-                        # Build source mask and compute per-sample source pixel counts in one sync
-                        source_pixel_counts = torch.zeros(len(grids_per_sample), device=image_grid_thw.device)
-                        for batch_idx in range(len(grids_per_sample)):
-                            num_source = source_image_nums[batch_idx]
-                            if num_source > 0:
-                                source_pixel_counts[batch_idx] = pixel_counts_per_sample[batch_idx][:num_source].sum()
-                        lengths = source_pixel_counts.to(torch.int64).tolist()
-
-                        dict_to_expand[key] = _repeat_interleave_samples(
-                            dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                        )
-                elif key == "image_grid_thw":
-                    # Expand all grids (source + target) per sample
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=image_nums, repeat_times=expand_size
-                    )
-                elif key == "images_per_sample":
-                    # Simply repeat the counts
-                    if dict_to_expand.get(key) is not None:
-                        dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if (
-                    dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
-                ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
+        return model_kwargs
 
 
 def smart_resize(
@@ -1264,6 +1109,7 @@ class GlmImageProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
+    valid_processor_kwargs = GlmImageProcessorKwargs
     model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
@@ -1314,66 +1160,34 @@ class GlmImageProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        target_h = output_kwargs["images_kwargs"].pop("target_h", None)
-        target_w = output_kwargs["images_kwargs"].pop("target_w", None)
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        if text is None:  # early exit if cond only on image
+            return model_inputs
+
+        target_h = output_kwargs["images_kwargs"].get("target_h")
+        target_w = output_kwargs["images_kwargs"].get("target_w")
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
         is_text_to_image = images is None
 
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
-
-        # Handle text=None case (image-only processing)
-        if text is None:
-            if images is None:
-                raise ValueError("You must provide at least one of `text` or `images`.")
-            return image_inputs
-
-        if not isinstance(text, list):
-            text = [text]
-
-        batch_size = len(text)
-        text = text.copy()  # below lines change text in-place
-
         # Count images per sample by counting image tokens in each text
+        batch_size = len(text) if not isinstance(text, str) else 1
+        text = [text] if isinstance(text, str) else text
         images_per_sample = []
         for i in range(batch_size):
             images_per_sample.append(text[i].count(self.image_token))
 
-        # Replace image tokens with the correct number of placeholder tokens
-        if not is_text_to_image:
-            index = 0
-            for i in range(batch_size):
-                while self.image_token in text[i]:
-                    grid = image_grid_thw[index]
-                    num_image_tokens = int(grid[1] * grid[2])
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
         # Build prompt with target shape and combine grids in a single loop
         # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]
-        # Note: In i2i mode, batches are homogeneous (same number of source images per sample)
+        # Note: In image2image mode, batches are homogeneous (same number of source images per sample)
         num_source_images = images_per_sample[0] if images_per_sample else 0
-
-        # Validate homogeneity for i2i mode
-        if not is_text_to_image and images_per_sample and len(set(images_per_sample)) != 1:
-            raise ValueError(
-                f"In image-to-image mode, all samples must have the same number of source images. "
-                f"Got different counts: {images_per_sample}"
-            )
 
         all_grids = []
         for i in range(batch_size):
-            text[i], token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
-                text[i], height=target_h, width=target_w, is_text_to_image=is_text_to_image
-            )
+            token_h, token_w, prev_h, prev_w = self._get_target_shape(height=target_h, width=target_w)
             # Add source grids for this sample (i2i mode only)
             if not is_text_to_image and num_source_images > 0:
                 start_idx = i * num_source_images
-                all_grids.append(image_grid_thw[start_idx : start_idx + num_source_images])
+                all_grids.append(model_inputs["image_grid_thw"][start_idx : start_idx + num_source_images])
             # Add target grid for this sample
             all_grids.append(
                 self._build_target_image_grid_thw(
@@ -1384,31 +1198,76 @@ class GlmImageProcessor(ProcessorMixin):
                     is_text_to_image=is_text_to_image,
                 )
             )
-        image_inputs["image_grid_thw"] = torch.cat(all_grids, dim=0)
+        model_inputs["image_grid_thw"] = torch.cat(all_grids, dim=0)
 
         # Store images_per_sample for later use (add target images count)
         # Each sample will have: source_images + target_images (typically 2 for t2i, 1 for i2i)
         num_target_grids = 2 if is_text_to_image else 1
-        image_inputs["images_per_sample"] = torch.tensor(
+        model_inputs["images_per_sample"] = torch.tensor(
             [num_source_images + num_target_grids] * batch_size, dtype=torch.long
         )
+        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
-
-    def _build_prompt_with_target_shape(
+    def prepare_inputs_layout(
         self,
-        prompt: str,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[GlmImageImagesKwargs],
+    ):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+
+        processed_text = text
+        if text is not None:
+            processed_text = []
+            target_h = kwargs["images_kwargs"].get("target_h", None)
+            target_w = kwargs["images_kwargs"].get("target_w", None)
+
+            for sample in text:
+                token_h, token_w, prev_token_h, prev_token_w = self._get_target_shape(height=target_h, width=target_w)
+                if images is None:
+                    sample = f"{sample}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.grid_bos_token}{prev_token_h} {prev_token_w}{self.grid_eos_token}{self.bos_token}"
+                else:
+                    sample = f"{sample}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.bos_token}"
+                processed_text.append(sample)
+
+        return images, processed_text, None, None
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[GlmImageImagesKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+        if text is None and images is None:
+            raise ValueError("You must provide at least one of `text` or `images`.")
+
+        # Validate homogeneity for i2i mode
+        images_per_sample = []
+        for i in range(len(text)):
+            images_per_sample.append(text[i].count(self.image_token))
+
+        if images is not None and images_per_sample and len(set(images_per_sample)) != 1:
+            raise ValueError(
+                f"In image-to-image mode, all samples must have the same number of source images. "
+                f"Got different counts: {images_per_sample}"
+            )
+
+    def _process_images(self, images: ImageInput, **kwargs):
+        # Kwargs used only in processor, if we pass them down to image processor it raises an error
+        kwargs.pop("target_h", None)
+        kwargs.pop("target_w", None)
+        return super()._process_images(images, **kwargs)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
+
+    def _get_target_shape(
+        self,
         height: int,
         width: int,
-        is_text_to_image: bool,
     ) -> tuple[str, int, int, int, int]:
         factor = 32
         height = (height // factor) * factor
@@ -1418,13 +1277,7 @@ class GlmImageProcessor(ProcessorMixin):
         ratio = token_h / token_w
         prev_token_h = int(math.sqrt(ratio) * (factor // 2))
         prev_token_w = int(math.sqrt(1 / ratio) * (factor // 2))
-
-        if is_text_to_image:
-            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.grid_bos_token}{prev_token_h} {prev_token_w}{self.grid_eos_token}{self.bos_token}"
-        else:
-            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.bos_token}"
-
-        return expanded_prompt, token_h, token_w, prev_token_h, prev_token_w
+        return token_h, token_w, prev_token_h, prev_token_w
 
     @staticmethod
     def _build_target_image_grid_thw(

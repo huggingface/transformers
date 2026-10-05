@@ -87,7 +87,7 @@ OVIS_ID2LABEL = {
     5: "Sheep", 6: "Cow", 7: "Elephant", 8: "Bear", 9: "Zebra",
     10: "Giraffe", 11: "Poultry", 12: "Giant_panda", 13: "Lizard", 14: "Parrot",
     15: "Monkey", 16: "Rabbit", 17: "Tiger", 18: "Fish", 19: "Turtle",
-    20: "Bicycle", 21: "Motorcycle", 22: "Airplane", 23: "Boat", 24: "Vehical",
+    20: "Bicycle", 21: "Motorcycle", 22: "Airplane", 23: "Boat", 24: "Vehicle",
 }
 
 VIPSEG_ID2LABEL = {

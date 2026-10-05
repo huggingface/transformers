@@ -661,7 +661,7 @@ class TensorBoardCallback(TrainerCallback):
 
 
 def save_model_architecture_to_file(model: Any, output_dir: str):
-    with open(f"{output_dir}/model_architecture.txt", "w+") as f:
+    with open(f"{output_dir}/model_architecture.txt", "w+", encoding="utf-8") as f:
         if isinstance(model, PreTrainedModel):
             print(model, file=f)
         elif is_torch_available() and (
@@ -1069,7 +1069,10 @@ class TrackioCallback(TrainerCallback):
     def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
         if not state.is_world_process_zero or not self._initialized:
             return
-        self._trackio.finish()
+        try:
+            self._trackio.finish()
+        finally:
+            self._initialized = False
         if self._space_id:
             try:
                 self._freeze_space(args, model)
@@ -2515,7 +2518,7 @@ class KubeflowCallback(TrainerCallback):
             return None
 
         try:
-            with open(token_path) as f:
+            with open(token_path, encoding="utf-8") as f:
                 self._cached_token = f.read().strip()
                 self._token_read_time = now
                 return self._cached_token

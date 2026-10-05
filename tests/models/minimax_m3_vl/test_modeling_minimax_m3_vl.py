@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -49,6 +50,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+
+    from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLVisionConfig
+    from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
+        MiniMaxM3VLVisionRotaryEmbedding,
+    )
+    from transformers.vision_utils import get_vision_position_ids
 
 
 if is_vision_available():
@@ -428,7 +435,7 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 )
             self.assertIsNotNone(outputs)
             self.assertIsNotNone(outputs.video_hidden_states)
-            self.assertEqual(outputs.video_hidden_states.shape[0], batch_size * tokens_per_video)
+            self.assertEqual(torch.cat(outputs.video_hidden_states, dim=0).shape[0], batch_size * tokens_per_video)
 
     def test_mismatching_num_video_tokens(self):
         """VLMs must raise when the number of videos doesn't match the number of video tokens in the text."""
@@ -467,6 +474,31 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     video_grid_thw=video_grid_thw,
                 )
 
+    @parameterized.expand([(8, 2), (80, 26)])
+    def test_three_axes_frequency_ladder(self, head_dim, axis_dim):
+        config = MiniMaxM3VLVisionConfig(
+            hidden_size=2 * head_dim,
+            num_attention_heads=2,
+            spatial_merge_size=2,
+            rope_parameters={"rope_type": "axial", "rope_theta": 10000.0},
+        )
+        rotary = MiniMaxM3VLVisionRotaryEmbedding(config)
+
+        positions = get_vision_position_ids(
+            torch.tensor([[2, 2, 2]]),
+            spatial_merge_size=2,
+            include_temporal=True,
+        )
+
+        cosine, sine = rotary(torch.empty(len(positions), head_dim), positions)
+
+        bands = axis_dim // 2
+        frequencies = 10000.0 ** (-torch.arange(bands, dtype=torch.float32) / bands)
+        angles = (positions[..., None] * frequencies).flatten(1).repeat(1, 2)
+
+        torch.testing.assert_close(cosine, angles.cos())
+        torch.testing.assert_close(sine, angles.sin())
+
 
 @slow
 @require_torch
@@ -496,7 +528,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         image_processor = MiniMaxM3VLImageProcessorFast.from_pretrained(self.model_id)
         video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(self.model_id)
-        with open(cached_file(self.model_id, "chat_template.jinja")) as f:
+        with open(cached_file(self.model_id, "chat_template.jinja"), encoding="utf-8") as f:
             chat_template = f.read()
         return MiniMaxM3VLProcessor(
             image_processor=image_processor,
@@ -651,7 +683,6 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         * LEFT padding is therefore the side to use for batched ``generate``: every real token's
           continuation stays anchored to the live slots, so each row decodes coherently.
         """
-        import requests
 
         model = self._load_model()
         processor = self._load_processor()
@@ -695,10 +726,10 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         # Two real, semantically distinct images downloaded from the hub/web (the picsum dog and the
         # canonical COCO two-cats photo), paired with deliberately different-length questions so the
         # batch genuinely needs padding.
-        dog = Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw).convert("RGB")
-        cats = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        dog = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
         ).convert("RGB")
+        cats = load_coco_image("000000039769.jpg").convert("RGB")
         texts = [
             self._prompt(processor, "What animal is this? One word."),
             self._prompt(

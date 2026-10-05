@@ -110,7 +110,7 @@ class FlexOlmoConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-# FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original Olmoe.
+# FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original OlmoE.
 class FlexOlmoRMSNorm(Olmo2RMSNorm):
     pass
 

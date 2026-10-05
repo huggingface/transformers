@@ -233,32 +233,35 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int | N
         return patch_lengths
 
     batch_size = patch_lengths.size(0)
-    processed = []
+    positive = patch_lengths > 0
+    full_chunks = torch.where(positive, patch_lengths // max_patch_length, 0)
+    remainder = torch.where(positive, patch_lengths % max_patch_length, 0)
+    segment_counts = full_chunks + (remainder > 0).to(full_chunks.dtype)
 
-    for seq in patch_lengths:
-        splits = []
-        for length in seq[seq > 0]:
-            length = length.item()
-            full_chunks, remainder = divmod(length, max_patch_length)
-            splits.extend([max_patch_length] * full_chunks)
-            if remainder:
-                splits.append(remainder)
-        processed.append(splits)
+    max_segments_per_patch = int(segment_counts.max().item())
+    if max_segments_per_patch == 0:
+        return torch.zeros((batch_size, 0), dtype=patch_lengths.dtype, device=patch_lengths.device)
 
-    # Find max length to pad to
-    max_len = max(len(splits) for splits in processed)
-    padded = torch.zeros((batch_size, max_len), dtype=patch_lengths.dtype, device=patch_lengths.device)
+    segment_index = torch.arange(max_segments_per_patch, dtype=patch_lengths.dtype, device=patch_lengths.device)
+    full_mask = segment_index < full_chunks.unsqueeze(-1)
+    remainder_mask = (segment_index == full_chunks.unsqueeze(-1)) & (remainder.unsqueeze(-1) > 0)
+    segments = torch.where(
+        full_mask,
+        torch.full_like(segment_index, max_patch_length),
+        torch.zeros_like(segment_index),
+    )
+    segments = torch.where(remainder_mask, remainder.unsqueeze(-1), segments)
 
-    for i, splits in enumerate(processed):
-        if splits:
-            padded[i, : len(splits)] = torch.tensor(splits, dtype=patch_lengths.dtype, device=patch_lengths.device)
+    flat_segments = segments.reshape(batch_size, -1)
+    nonzero = flat_segments > 0
+    packed_mask = torch.arange(flat_segments.shape[1], device=patch_lengths.device) < segment_counts.sum(
+        dim=1
+    ).unsqueeze(-1)
+    packed_segments = torch.zeros_like(flat_segments)
+    packed_segments.masked_scatter_(packed_mask, flat_segments[nonzero])
 
-    # Trim zero columns
-    if (padded != 0).any(dim=0).sum() < padded.shape[1]:
-        last_nonzero = (padded != 0).any(dim=0).nonzero().max().item() + 1
-        padded = padded[:, :last_nonzero]
-
-    return padded
+    max_len = int(segment_counts.sum(dim=1).max().item())
+    return packed_segments[:, :max_len]
 
 
 class BltMLP(MllamaTextMLP):
@@ -276,7 +279,7 @@ class BltRotaryEmbedding(LlamaRotaryEmbedding):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
@@ -354,7 +357,8 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     _supports_attention_backend = False
     _supports_flash_attn = False
     _supports_flex_attn = False
-    _no_split_modules = ["BltTransformerLayer"]
+    _no_split_modules = ["BltTransformerLayer", "BltCrossAttention"]
+    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0),
         "attentions": OutputRecorder(BltSelfAttention, index=1),
@@ -687,7 +691,7 @@ class BltLocalDecoder(BltPreTrainedModel):
                     attention_mask=encoder_attention_mask,
                     **kwargs,
                 )
-                hidden_states = hidden_states + cross_attention_output
+                hidden_states = hidden_states + cross_attention_output.to(hidden_states.device)
             hidden_states = layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
@@ -1115,10 +1119,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

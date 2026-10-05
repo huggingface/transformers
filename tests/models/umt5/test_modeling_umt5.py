@@ -248,6 +248,12 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def setUp(self):
         self.model_tester = UMT5ModelTester(self)
 
+    @unittest.skip(
+        reason="UMT5 always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
     # `src/transformers/data/processors/squad.py` (where this test fails for this model)
     def is_pipeline_test_to_skip(
@@ -347,6 +353,31 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip(reason="UMT5 has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    def test_decoder_causal_mask(self):
+        # Regression test for #49134
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # The common tester uses initializer_factor=0.002, which makes a causality violation
+        # measure ~8e-09 here, i.e. below the tolerance below. Use a realistic scale so the
+        # test can actually fail.
+        config = copy.deepcopy(config)
+        config.initializer_factor = 1.0
+
+        model = UMT5Model(config).to(torch_device).eval()
+
+        input_ids = inputs_dict["input_ids"]
+        decoder_input_ids = inputs_dict["decoder_input_ids"]
+        decoder_input_ids_modified = decoder_input_ids.clone()
+        decoder_input_ids_modified[:, -1] = (decoder_input_ids_modified[:, -1] + 1) % config.vocab_size
+
+        res_orig = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
+        res_mod = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids_modified).last_hidden_state
+
+        self.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
+        )
 
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->UMT5
@@ -496,6 +527,12 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def setUp(self):
         self.model_tester = UMT5EncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UMT5Config, d_model=37)
+
+    @unittest.skip(
+        reason="UMT5 always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()

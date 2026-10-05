@@ -25,7 +25,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
 from ..mixtral.modeling_mixtral import (
@@ -103,7 +103,6 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.mlp
-        self.block_sparse_moe = GraniteMoeMoE(config)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
 
     def forward(
@@ -141,6 +140,11 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeTopKRouter, index=2),
+        "hidden_states": GraniteMoeDecoderLayer,
+        "attentions": GraniteMoeAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -242,11 +246,6 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
         **kwargs,
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -273,6 +272,7 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

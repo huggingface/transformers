@@ -247,7 +247,9 @@ class AudioFlamingo3Model(VoxtralModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -273,6 +275,7 @@ class AudioFlamingo3Model(VoxtralModel):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
+    _keep_in_fp32_modules_strict = AttributeError()
     _tied_weights_keys = None
 
     def __init__(self, config):
@@ -344,20 +347,6 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
-
-    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
 
 
 __all__ = [

@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..gemma4_unified.configuration_gemma4_unified import Gemma4UnifiedTextConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="google/gemma-4-12b-it")
@@ -57,10 +57,10 @@ class Gemma4UnifiedAssistantConfig(PreTrainedConfig):
 
     model_type = "gemma4_unified_assistant"
     sub_configs = {
-        "text_config": Gemma4UnifiedTextConfig,
+        "text_config": AutoConfig,
     }
 
-    text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
+    text_config: PreTrainedConfig | dict[str, Any] | None = None
 
     backbone_hidden_size: int = 3840
     use_ordered_embeddings: bool = False
@@ -70,7 +70,9 @@ class Gemma4UnifiedAssistantConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
+            self.text_config = CONFIG_MAPPING[self.text_config.get("model_type", "gemma4_unified_text")](
+                **self.text_config
+            )
 
         # Assistant reuses the shared kvs across all layers to skip their calculation
         # I.e. it acts as cache shared across the layers

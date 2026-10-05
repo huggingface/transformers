@@ -118,7 +118,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int):
@@ -140,7 +140,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
         bsz, codebooks, seq_len = input_ids.size()
         # Create the position ids from the input token ids.
-        position_ids = (torch.arange(seq_len) + past_key_values_length).to(input_ids.device)
+        position_ids = torch.arange(seq_len, device=input_ids.device) + past_key_values_length
         # expand embeddings if needed
         if seq_len > self.weights.size(0):
             self.make_weights(seq_len, self.embedding_dim)
@@ -1006,12 +1006,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         # - different models have a different cache name expected by the model (default = "past_key_values")
         # - `max_length`, prepared above, is used to determine the maximum cache length
         max_cache_length = generation_config.max_length - 1
-        if (
-            input_ids_length.shape[1] != input_ids_length
-            and model_input_name == "inputs_embeds"
-            and not self.config.is_encoder_decoder
-        ):
-            max_cache_length += input_ids_length.shape[1]
         self._prepare_cache_for_generation(
             generation_config,
             model_kwargs,

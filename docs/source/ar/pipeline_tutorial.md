@@ -236,14 +236,14 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 تدعم [`pipeline`] أكثر من طريقة واحدة. على سبيل المثال، تجمع مهمة الإجابة على الأسئلة المرئية (VQA) بين النص والصورة. لا تتردد في استخدام أي رابط صورة تريده وسؤال تريد طرحه حول الصورة. يمكن أن تكون الصورة عنوان URL أو مسارًا محليًا للصورة.
 
-على سبيل المثال، إذا كنت تستخدم هذه [صورة الفاتورة](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png):
+على سبيل المثال، إذا كنت تستخدم هذه [صورة الفاتورة](https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png):
 
 ```py
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
 >>> output = vqa(
-...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
 ...     question="What is the invoice number?",
 ... )
 >>> output[0]["score"] = round(output[0]["score"], 3)

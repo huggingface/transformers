@@ -193,7 +193,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3",
                     },
                 ],
             }
@@ -258,7 +258,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3",
                         },
                     ],
                 }
@@ -273,7 +273,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_2.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_2.mp3",
                         },
                     ],
                 }
