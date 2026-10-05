@@ -666,11 +666,11 @@ class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
 
 
 class DeepseekOcr2ModelOutputWithPast(LlavaNextModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
@@ -1070,6 +1070,7 @@ class DeepseekOcr2Model(LlavaNextModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1161,6 +1162,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
 
