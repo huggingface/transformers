@@ -72,7 +72,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
                     },
                 ],
             },
@@ -84,7 +84,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_transcription_request_with_language(self):
         processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
         outputs = processor.apply_transcription_request(audio=audio_url, language="English")
 
         for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):
@@ -98,7 +98,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_transcription_request_with_prompt(self):
         processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
         context = "Vocabulary: Quilter, apostle, gospel."
         outputs = processor.apply_transcription_request(audio=audio_url, prompt=context, language="English")
 
@@ -112,7 +112,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Mixed batch: forced-language samples get the prefill, auto-detect samples a bare generation prompt."""
         processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
         outputs = processor.apply_transcription_request(audio=[audio_url, audio_url], language=[None, "zh"])
 
         decoded_auto = processor.tokenizer.decode(outputs["input_ids"][0], skip_special_tokens=False)

@@ -165,10 +165,7 @@ class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = Glm4MoeLiteMoE(config)
-        else:
-            self.mlp = Glm4MoeLiteMLP(config)
+        self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
 
         self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)

@@ -41,7 +41,7 @@ class GetFromCacheTests(unittest.TestCase):
         # Cache should contain at least those three subfolders:
         for subfolder in ["blobs", "refs", "snapshots"]:
             self.assertTrue(os.path.isdir(os.path.join(CACHE_DIR, subfolder)))
-        with open(os.path.join(CACHE_DIR, "refs", "main")) as f:
+        with open(os.path.join(CACHE_DIR, "refs", "main"), encoding="utf-8") as f:
             main_commit = f.read()
         self.assertEqual(archive_file, os.path.join(CACHE_DIR, "snapshots", main_commit, CONFIG_NAME))
         self.assertTrue(os.path.isfile(archive_file))
@@ -68,7 +68,7 @@ class GetFromCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "does not appear to have a file named"):
             _ = cached_file(RANDOM_BERT, "conf")
 
-        with open(os.path.join(CACHE_DIR, "refs", "main")) as f:
+        with open(os.path.join(CACHE_DIR, "refs", "main"), encoding="utf-8") as f:
             main_commit = f.read()
         self.assertTrue(os.path.isfile(os.path.join(CACHE_DIR, ".no_exist", main_commit, "conf")))
 
@@ -147,7 +147,7 @@ class GetFromCacheTests(unittest.TestCase):
             _raise_exceptions_for_connection_errors=False,
         )
         # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file).read())
+        config = json.loads(open(resolved_file, encoding="utf-8").read())
         self.assertEqual(config["hidden_size"], 768)
 
     def test_get_file_from_repo_local(self):

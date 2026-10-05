@@ -146,7 +146,6 @@ class LagunaConfig(PreTrainedConfig):
         super().__post_init__(**kwargs, ignore_keys_at_rope_validation={"sliding_attention", "full_attention"})
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
     def validate_architecture(self):

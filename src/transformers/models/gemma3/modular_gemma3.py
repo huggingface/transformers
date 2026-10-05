@@ -40,7 +40,6 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -272,7 +271,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        self.layer_types = list(set(config.layer_types))
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
@@ -319,18 +318,10 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = (
-            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -639,11 +630,18 @@ def create_masks_for_vision_model(
     # Full attention: OR(causal, blockwise) — use block_sequence_ids directly
     full_mask = create_causal_mask(**mask_kwargs, block_sequence_ids=block_sequence_ids)
 
+    # The sliding mask must be sized against a `sliding_attention` layer, but layer 0 may not be one
+    # and `create_causal_mask` defaults to the first `full_attention` layer, which has a different kv_length.
+    if getattr(past_key_values, "is_sliding", None) and True in past_key_values.is_sliding:
+        sliding_layer_idx = past_key_values.is_sliding.index(True)
+    else:
+        sliding_layer_idx = 0
+
     # We need to manually pad the sequence IDs for the sliding mask
     # as it's passed as an `or_mask_function` which bypasses internal padding.
     early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
         **mask_kwargs,
-        layer_idx=0,
+        layer_idx=sliding_layer_idx,
     )
     if early_exit:
         padded_block_sequence_ids = block_sequence_ids
@@ -659,6 +657,7 @@ def create_masks_for_vision_model(
         **mask_kwargs,
         or_mask_function=blockwise_overlay(padded_block_sequence_ids),
         and_mask_function=sliding_window_overlay(config.sliding_window),
+        layer_idx=sliding_layer_idx,
     )
 
     return {
@@ -699,10 +698,14 @@ class Gemma3Model(PaliGemmaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
@@ -716,9 +719,12 @@ class Gemma3Model(PaliGemmaModel):
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -750,7 +756,7 @@ class Gemma3Model(PaliGemmaModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return Gemma3ModelOutputWithPast(
@@ -758,15 +764,11 @@ class Gemma3Model(PaliGemmaModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    # Fix: https://github.com/huggingface/transformers/issues/40564
-    accepts_loss_kwargs = False
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -781,7 +783,8 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -793,7 +796,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
@@ -838,8 +841,9 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -849,25 +853,9 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
-                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
-            else:
-                shift_logits = shift_logits.contiguous()
-                shift_labels = shift_labels.contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-
-            flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
-            flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(flat_logits, flat_labels)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Gemma3CausalLMOutputWithPast(
             loss=loss,
@@ -877,6 +865,9 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def _update_model_kwargs_for_generation(self, **super_kwargs):
+        raise AttributeError("PaliGemma's token_type_ids mark its prefix, Gemma3's mark image spans!")
 
     def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(

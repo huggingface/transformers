@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import http.client
 import logging
 import os
 import sys
@@ -228,11 +229,40 @@ class GithubRequestTest(unittest.TestCase):
             github_request("https://api.github.com/x", token="t")
         self.assertEqual(mock.call_count, 1)
 
-    def test_network_error_fails_hard(self):
-        self._patch_request(gh.urllib.error.URLError("connection reset"))
+    def test_connection_error_is_wrapped_as_url_error(self):
+        # ConnectionError (and subclasses) are OSError, not urllib.error.URLError — _request must
+        # normalize them so callers see a single consistent exception type.
+        with patch("urllib.request.urlopen", side_effect=ConnectionResetError("reset")):
+            with self.assertRaises(gh.urllib.error.URLError):
+                gh._request("https://api.github.com/x", {})
+
+    def test_remote_disconnected_is_wrapped_as_url_error(self):
+        # The concrete error seen in CI: RemoteDisconnected is a ConnectionResetError subclass.
+        exc = http.client.RemoteDisconnected("Remote end closed connection without response")
+        with patch("urllib.request.urlopen", side_effect=exc):
+            with self.assertRaises(gh.urllib.error.URLError):
+                gh._request("https://api.github.com/x", {})
+
+    def test_network_error_retries_then_fails(self):
+        # All attempts raise URLError → exhausts max_retries → raises RuntimeError.
+        mock = self._patch_request(gh.urllib.error.URLError("connection reset"))
         with self.assertRaises(RuntimeError) as ctx:
-            github_request("https://api.github.com/x", token="t")
+            github_request("https://api.github.com/x", token="t", max_retries=3)
         self.assertIn("connection reset", str(ctx.exception))
+        self.assertEqual(mock.call_count, 3)
+
+    def test_connection_error_retries_then_succeeds(self):
+        # _request normalizes ConnectionError subclasses (e.g. RemoteDisconnected) into URLError
+        # before they reach github_request. The mock raises URLError to simulate that — transient
+        # error on attempt 1, success on attempt 2.
+        mock = self._patch_request(
+            [
+                gh.urllib.error.URLError("connection reset"),
+                _response(200, body='{"ok": true}'),
+            ]
+        )
+        self.assertEqual(github_request("https://api.github.com/x", token="t"), {"ok": True})
+        self.assertEqual(mock.call_count, 2)
 
     def test_rate_limit_is_retried_then_succeeds(self):
         mock = self._patch_request(

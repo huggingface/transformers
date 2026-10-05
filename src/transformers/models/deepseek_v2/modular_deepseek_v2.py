@@ -25,7 +25,6 @@ from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.generic import maybe_autocast
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -96,7 +95,7 @@ class DeepseekV2Config(LlamaConfig):
         "num_experts": "n_routed_experts",
     }
 
-    vocab_size: int = 32000
+    vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 11008
     num_hidden_layers: int = 32
@@ -224,14 +223,9 @@ class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
-            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
-            freqs_cis = freqs_cis * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
+        freqs_cis = freqs_cis * self.attention_scaling
 
         return freqs_cis
 
@@ -273,12 +267,22 @@ class DeepseekV2Attention(nn.Module):
 
         self.is_causal = True
 
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = DeepseekV2RMSNorm(self.q_lora_rank)
-            self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+        self.q_proj = (
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+        )
+        self.q_a_proj = (
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
+        self.q_a_layernorm = DeepseekV2RMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_b_proj = (
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,

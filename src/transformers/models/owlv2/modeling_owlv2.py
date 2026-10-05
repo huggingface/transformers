@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-from torch import Tensor, nn
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -31,17 +31,12 @@ from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
-    is_vision_available,
     logging,
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
-
-
-if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
 
 
 logger = logging.get_logger(__name__)
@@ -98,74 +93,6 @@ class Owlv2Output(ModelOutput):
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
-
-
-# Copied from transformers.loss.loss_for_object_detection._upcast
-def _upcast(t: Tensor) -> Tensor:
-    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
-    if t.is_floating_point():
-        return t if t.dtype in (torch.float32, torch.float64) else t.float()
-    else:
-        return t if t.dtype in (torch.int32, torch.int64) else t.int()
-
-
-# Copied from transformers.loss.loss_for_object_detection.box_area
-def box_area(boxes: Tensor) -> Tensor:
-    """
-    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
-
-    Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
-            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
-            < x2` and `0 <= y1 < y2`.
-
-    Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
-    """
-    boxes = _upcast(boxes)
-    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-
-
-# Copied from transformers.loss.loss_for_object_detection.box_iou
-def box_iou(boxes1, boxes2):
-    area1 = box_area(boxes1)
-    area2 = box_area(boxes2)
-
-    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
-    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter
-
-    iou = inter / union
-    return iou, union
-
-
-# Copied from transformers.loss.loss_for_object_detection.generalized_box_iou
-def generalized_box_iou(boxes1, boxes2):
-    """
-    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
-
-    Returns:
-        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
-    """
-    # degenerate boxes gives inf / nan results
-    # so do an early check
-    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
-        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
-    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
-        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
-    iou, union = box_iou(boxes1, boxes2)
-
-    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
-
-    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
-    area = width_height[:, :, 0] * width_height[:, :, 1]
-
-    return iou - (area - union) / area
 
 
 @auto_docstring(
@@ -798,7 +725,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2VisionModel
 
@@ -939,7 +866,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2Model
 
@@ -1285,7 +1212,6 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return (image_embeds, vision_outputs)
 
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.embed_image_query
     def embed_image_query(
         self,
         query_image_features: torch.FloatTensor,
@@ -1294,39 +1220,11 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     ) -> torch.FloatTensor:
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map, interpolate_pos_encoding)
-        pred_boxes_as_corners = center_to_corners_format(pred_boxes)
 
-        # Loop over query images
-        best_class_embeds = []
-        best_box_indices = []
-        pred_boxes_device = pred_boxes_as_corners.device
-
-        for i in range(query_image_features.shape[0]):
-            each_query_box = torch.tensor([[0, 0, 1, 1]], device=pred_boxes_device)
-            each_query_pred_boxes = pred_boxes_as_corners[i]
-            ious, _ = box_iou(each_query_box, each_query_pred_boxes)
-
-            # If there are no overlapping boxes, fall back to generalized IoU
-            if torch.all(ious[0] == 0.0):
-                ious = generalized_box_iou(each_query_box, each_query_pred_boxes)
-
-            # Use an adaptive threshold to include all boxes within 80% of the best IoU
-            iou_threshold = torch.max(ious) * 0.8
-
-            selected_inds = (ious[0] >= iou_threshold).nonzero()
-            if selected_inds.numel():
-                selected_embeddings = class_embeds[i][selected_inds.squeeze(1)]
-                mean_embeds = torch.mean(class_embeds[i], axis=0)
-                mean_sim = torch.einsum("d,id->i", mean_embeds, selected_embeddings)
-                best_box_ind = selected_inds[torch.argmin(mean_sim)]
-                best_class_embeds.append(class_embeds[i][best_box_ind])
-                best_box_indices.append(best_box_ind)
-
-        if best_class_embeds:
-            query_embeds = torch.stack(best_class_embeds)
-            box_indices = torch.stack(best_box_indices)
-        else:
-            query_embeds, box_indices = None, None
+        # No query box is given, so use the box with the highest objectness as the query
+        objectness_logits = self.objectness_predictor(query_image_features)
+        box_indices = objectness_logits.argmax(dim=-1, keepdim=True)
+        query_embeds = torch.gather(class_embeds, 1, box_indices[..., None].expand(-1, -1, class_embeds.shape[-1]))
 
         return query_embeds, box_indices, pred_boxes
 
@@ -1345,7 +1243,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
@@ -1377,19 +1275,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.938 at location [327.31, 54.94, 547.39, 268.06]
-        Detected similar object with confidence 0.959 at location [5.78, 360.65, 619.12, 366.39]
-        Detected similar object with confidence 0.902 at location [2.85, 360.01, 627.63, 380.8]
-        Detected similar object with confidence 0.985 at location [176.98, -29.45, 672.69, 182.83]
-        Detected similar object with confidence 1.0 at location [6.53, 14.35, 624.87, 470.82]
-        Detected similar object with confidence 0.998 at location [579.98, 29.14, 615.49, 489.05]
-        Detected similar object with confidence 0.985 at location [206.15, 10.53, 247.74, 466.01]
-        Detected similar object with confidence 0.947 at location [18.62, 429.72, 646.5, 457.72]
-        Detected similar object with confidence 0.996 at location [523.88, 20.69, 586.84, 483.18]
-        Detected similar object with confidence 0.998 at location [3.39, 360.59, 617.29, 499.21]
-        Detected similar object with confidence 0.969 at location [4.47, 449.05, 614.5, 474.76]
-        Detected similar object with confidence 0.966 at location [31.44, 463.65, 654.66, 471.07]
-        Detected similar object with confidence 0.924 at location [30.93, 468.07, 635.35, 475.39]
+        Detected similar object with confidence 1.0 at location [341.76, 22.77, 640.65, 370.25]
+        Detected similar object with confidence 1.0 at location [6.59, 51.43, 329.05, 476.77]
         ```"""
         # Compute feature maps for the input and query images
         query_feature_map = self.image_embedder(
@@ -1448,7 +1335,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch

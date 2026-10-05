@@ -20,7 +20,7 @@ from parameterized import parameterized
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
@@ -39,12 +39,12 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "openbmb/MiniCPM-V-4_6"
     tiny_model_id = "hf-internal-testing/tiny-processor-minicpmv4_6"
 
-    video_text_kwargs_max_length = 600
-    video_text_kwargs_override_max_length = 550
-    video_unstructured_max_length = 600
+    videos_text_kwargs_max_length = 600
+    videos_text_kwargs_override_max_length = 550
+    videos_unstructured_max_length = 600
     # Default 76 is too small: MiniCPM expands <image> to ~70 tokens, then with surrounding text tokens
     # we exceed 76, truncation cuts through image tokens, and _check_special_mm_tokens raises a mismatch error.
-    image_unstructured_max_length = 100
+    images_unstructured_max_length = 100
 
     @classmethod
     def _setup_image_processor(cls):
@@ -58,7 +58,6 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         # Default scale_resolution=448 with max_slice_nums=9 produces >14 KB per frame.
         # Use scale_resolution=64 with max_slice_nums=1; shape assertions in
-        # test_apply_chat_template_video_frame_sampling are updated to match.
         return video_processor_class.from_pretrained(cls.tiny_model_id, scale_resolution=64, max_slice_nums=1)
 
     @classmethod
@@ -66,11 +65,20 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
 
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": -1, "output_length": 224},
+            {"num_frames": None, "fps": 18, "expected_dim": -1, "output_length": 224},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": -1, "output_length": 2464},
+            {"do_sample_frames": False, "expected_dim": -1, "output_length": 2464},
+        ]
+
     def test_image_processing(self):
         """Test that the processor correctly handles image inputs."""
         processor = self.get_processor()
         text = self.prepare_text_inputs(modalities=["image"])
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(text=text, images=image_input, return_tensors="pt")
 
         self.assertIn("pixel_values", inputs)
@@ -84,7 +92,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Test that the processor correctly handles video inputs."""
         processor = self.get_processor()
         text = self.prepare_text_inputs(modalities=["video"])
-        video_input = self.prepare_video_inputs()
+        video_input = self.prepare_videos_inputs()
         inputs = processor(text=text, videos=video_input, do_sample_frames=False, return_tensors="pt")
 
         self.assertIn("pixel_values_videos", inputs)
@@ -152,7 +160,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Test that use_image_id is correctly routed through _merge_kwargs."""
         processor = self.get_processor()
         text = f"{self.image_token}Describe."
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs_with_id = processor(text=text, images=image_input, use_image_id=True, return_tensors="pt")
         inputs_without_id = processor(text=text, images=image_input, use_image_id=False, return_tensors="pt")
@@ -263,109 +271,6 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
-
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"num_frames": num_frames, "fps": None},
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
-
-        # Load with `fps` arg
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"fps": fps, "num_frames": None},
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # 1 frame is inferred from input video's length and FPS, so can be hardcoded
-        # (224 = 56*56/14 with scale_resolution=64; was 14112 = 392*504/14 at default scale_resolution=448)
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 224)
-
-        # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            processor_kwargs={
-                "do_sample_frames": False,
-                "fps": fps,
-                "return_tensors": "pt",
-            },
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # 2464 = 11 frames * 224 per frame (56*56/14); was 155232 = 11 * 14112 at default scale_resolution=448
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 2464)
-
-        # Load without any arg should load the whole video
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # 224 per frame (56*56/14 at scale_resolution=64); was 14112 = 392*504/14 at scale_resolution=448
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 224)
-
-        # Load video as a list of frames (i.e. images).
-        # NOTE: each frame should have same size because we assume they come from one video
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": [
-                url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-                )
-            ]
-            * 2,
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            do_sample_frames=False,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # 448 = 2 frames * 224 per frame (56*56/14 at scale_resolution=64, no slicing);
-        # was 203392 = 2 frames * (source 15680 + 6 slices * 14336) at scale_resolution=448
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 448)
 
     @require_torch
     def test_apply_chat_template_tool_calls_no_content(self):

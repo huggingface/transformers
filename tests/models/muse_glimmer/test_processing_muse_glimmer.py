@@ -14,10 +14,6 @@
 
 import unittest
 
-from tokenizers import Tokenizer
-from tokenizers.models import WordLevel
-from tokenizers.pre_tokenizers import Whitespace
-
 from transformers import MuseGlimmerProcessor
 from transformers.testing_utils import require_torch, require_vision
 
@@ -49,29 +45,7 @@ VOCAB = {
 @require_torch
 class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MuseGlimmerProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = Tokenizer(WordLevel(vocab=VOCAB, unk_token="<|unk|>"))
-        tokenizer.pre_tokenizer = Whitespace()
-        return tokenizer_class(
-            tokenizer_object=tokenizer,
-            unk_token="<|unk|>",
-            pad_token="<|finetune_right_pad|>",
-            bos_token="<|begin_of_text|>",
-            eos_token="<|end_of_text|>",
-            # adjacent runs of these carry no whitespace, so they must split as added tokens
-            additional_special_tokens=[
-                "<|patch|>",
-                "<|video|>",
-                "<|vid_start|>",
-                "<|vid_end|>",
-                "<|vid_frame_separator|>",
-                "<|image_start|>",
-                "<|image_end|>",
-            ],
-        )
+    model_id = "meta-models/Muse-Glimmer-30B"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -84,13 +58,19 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # `replace_video_token` needs the metadata to write one timestamp per temporal group
         return video_processor_class(max_video_frame_tokens=40, do_sample_frames=False, return_metadata=True)
 
-    @unittest.skip("The processor consumes `video_metadata`, so its output cannot be equal to the raw one")
-    def test_video_processor_defaults(self):
-        pass
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 140},
+            {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 140},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 840},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 840},
+            {"expected_dim": 0, "output_length": 840},
+        ]
 
     def test_image_boundary_tokens(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         text = f"{processor.image_token}lower{processor.image_token}upper"
 
         inputs = processor(text=text, images=images)
@@ -110,3 +90,7 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs.input_ids[0].count(processor.image_start_token_id), 2)
         self.assertEqual(inputs.input_ids[0].count(processor.image_end_token_id), 2)
         self.assertEqual(inputs.input_ids[0].count(processor.image_token_id), sum(num_tokens))
+
+    @unittest.skip("Doesn't work with model's jinja templte. Let know Quentin and maybe ask Meta if needs to be fixed")
+    def test_apply_chat_template_tool_calls_no_content(self):
+        pass

@@ -235,14 +235,14 @@ Utiliser un [`pipeline`] pour les tâches de NLP est pratiquement identique.
 
 Le [`pipeline`] prend en charge plus d'une modalité. Par exemple, une tâche de réponse à des questions visuelles (VQA) combine texte et image. N'hésitez pas à utiliser n'importe quel lien d'image que vous aimez et une question que vous souhaitez poser à propos de l'image. L'image peut être une URL ou un chemin local vers l'image.
 
-Par exemple, si vous utilisez cette [image de facture](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png) :
+Par exemple, si vous utilisez cette [image de facture](https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png) :
 
 ```py
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
 >>> output = vqa(
-...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
 ...     question="What is the invoice number?",
 ... )
 >>> output[0]["score"] = round(output[0]["score"], 3)

@@ -202,13 +202,15 @@ class Gemma4Processor(ProcessorMixin):
 
         return f"{self.boa_token}{self.audio_token * int(mask.sum())}{self.eoa_token}"
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
             audio_lengths (`list[int]`, *optional*):
                 The lengths of audio inputs in number of samples. Used to dynamically
                 compute per-audio token counts.
@@ -245,6 +247,31 @@ class Gemma4Processor(ProcessorMixin):
 
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Gemma4ProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
+            pooling_kernel_size = (
+                videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
+            )
+            max_soft_tokens = videos_kwargs.get("max_soft_tokens", None) or self.video_processor.max_soft_tokens
+
+            max_patches = max_soft_tokens * pooling_kernel_size**2
+
+            num_video_tokens = []
+            for num_frames, height, width in video_sizes:
+                target_h, target_w = get_aspect_ratio_preserving_size(
+                    height=height,
+                    width=width,
+                    patch_size=patch_size,
+                    max_patches=max_patches,
+                    pooling_kernel_size=pooling_kernel_size,
+                )
+                patch_height = target_h // patch_size
+                patch_width = target_w // patch_size
+                num_video_tokens.append(num_frames * (patch_height * patch_width // pooling_kernel_size**2))
+            vision_data.update({"num_video_tokens": num_video_tokens})
 
         if audio_lengths is not None:
             # Dynamically compute per-audio token counts from sample lengths.

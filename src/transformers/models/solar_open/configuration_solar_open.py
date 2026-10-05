@@ -89,10 +89,5 @@ class SolarOpenConfig(PreTrainedConfig):
     default_theta = 1_000_000.0
     head_dim: int = 128
 
-    def __post_init__(self, **kwargs):
-        kwargs.setdefault("partial_rotary_factor", 1.0)
-        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["SolarOpenConfig"]

@@ -19,14 +19,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from collections.abc import Callable
-from typing import Any
 
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -40,6 +37,7 @@ from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
+    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -75,15 +73,67 @@ class Exaone4_5_PatchEmbed(nn.Module):
 
 
 class Exaone4_5_VisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def __init__(self, config: Exaone4_5_VisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_axial_rope_parameters(
+        config: Exaone4_5_VisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -475,12 +525,6 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config_class = Exaone4_5_Config
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Exaone4_5_VisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
     config: Exaone4_5_VisionConfig
@@ -505,8 +549,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
             in_channels=config.in_channels,
             embed_dim=config.hidden_size,
         )
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Exaone4_5_VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Exaone4_5_VisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Exaone4_5_VisionBlock(config) for _ in range(config.depth)])
         self.merger = Exaone4_5_PatchMerger(
             dim=config.out_hidden_size,
@@ -517,29 +560,11 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
 
         self.post_init()
 
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb
-
-    def get_window_index(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in v5.11. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        window_index, cu_window_seqlens = get_vision_window_index(
-            grid_thw,
-            spatial_merge_size=self.spatial_merge_size,
-            window_size=self.window_size,
-            patch_size=self.patch_size,
-        )
-        return window_index, cu_window_seqlens.tolist()
+    def permute_input_for_window_attn(self, input_tensor: torch.Tensor, window_index: torch.Tensor, seq_len: int):
+        input_tensor = input_tensor.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        input_tensor = input_tensor[window_index, :, :]
+        input_tensor = input_tensor.reshape(seq_len, -1)
+        return input_tensor
 
     @merge_with_config_defaults
     @capture_outputs
@@ -572,16 +597,12 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
 
         seq_len, _ = hidden_states.size()
-        hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-        hidden_states = hidden_states[window_index, :, :]
-        hidden_states = hidden_states.reshape(seq_len, -1)
+        hidden_states = self.permute_input_for_window_attn(hidden_states, window_index, seq_len=seq_len)
 
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-        rotary_pos_emb = rotary_pos_emb[window_index, :, :]
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = tuple(
+            self.permute_input_for_window_attn(freq, window_index, seq_len=seq_len) for freq in position_embeddings
+        )
 
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
@@ -636,8 +657,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = video_embeds
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
         return vision_outputs
 
@@ -653,8 +673,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = image_embeds
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
         return vision_outputs
 
@@ -713,31 +732,50 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        # Differ from Qwen: EXAONE 4.5 vision encoder uses 2D rotary positional embeddings (2D-RoPE)
+        # Differ from Qwen: vision encoder uses 2D rotary positional embeddings (2D-RoPE)
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
@@ -822,6 +860,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -861,6 +900,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -881,131 +921,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def _get_image_nums_and_video_nums(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Returns per-sample counts of image and video placeholder tokens.
-
-        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
-        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
-        computed directly from `input_ids`.
-        """
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-
-        if inputs_embeds is not None:
-            image_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            video_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-        else:
-            image_mask = input_ids == image_token_id
-            video_mask = input_ids == video_token_id
-
-        image_nums = torch.sum(image_mask, dim=1)
-        video_nums = torch.sum(video_mask, dim=1)
-
-        return image_nums, video_nums
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
-        # pixel_values.shape[0] is sum(seqlen_images for samples)
-        # image_grid_thw.shape[0] is sum(num_images for samples)
-
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
-
-        def _expand_dict_for_generation_visual(dict_to_expand):
-            image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            video_grid_thw = model_kwargs.get("video_grid_thw", None)
-            image_nums, video_nums = self._get_image_nums_and_video_nums(
-                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
-            )
-
-            def _repeat_interleave_samples(x, lengths, repeat_times):
-                samples = torch.split(x, lengths)
-                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-                return result
-
-            for key in dict_to_expand:
-                if key == "pixel_values":
-                    # split images into samples
-                    samples = torch.split(image_grid_thw, list(image_nums))
-                    # compute the sequence length of images for each sample
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "image_grid_thw":
-                    # get the num of images for each sample
-                    lengths = list(image_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "pixel_values_videos":
-                    samples = torch.split(video_grid_thw, list(video_nums))
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "video_grid_thw":
-                    lengths = list(video_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "second_per_grid_ts":
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
-                    )
-            return dict_to_expand
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if key == "position_ids" and dict_to_expand[key].ndim == 3:
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
-                elif (
-                    dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
-                ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)

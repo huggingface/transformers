@@ -29,18 +29,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    torch_compilable_check,
-)
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -183,26 +175,27 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
 
 
 class Kimi_K25VisionRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Kimi_K25VisionConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
+    def __init__(self, config: Kimi_K25VisionConfig):
+        super().__init__()
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
+    def compute_axial_rope_parameters(
         config: Kimi_K25VisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
@@ -216,11 +209,6 @@ class Kimi_K25VisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -228,21 +216,26 @@ class Kimi_K25VisionRotaryEmbedding(nn.Module):
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        position_ids_expanded = position_ids.transpose(0, 1)[..., None].float()  # (positions, 2, 1)
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :].float().expand(position_ids_expanded.shape[0], 2, -1).to(x.device)
-        )  # (positions, 2, freq_dim)
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).transpose(1, 2).flatten(1)
-            emb = torch.cat([freqs, freqs], dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
         return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        # interleave within the head dim for WH
+        freq_wh = freq.transpose(1, 2).flip(-1).flatten(1)
+        return torch.cat([freq_wh, freq_wh], dim=-1)
 
 
 class Kimi_K25VisionMLP(nn.Module):
@@ -475,6 +468,7 @@ def get_vision_temporal_merge_index(
     return torch.cat(rows, dim=0)
 
 
+@auto_docstring
 class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
     config: Kimi_K25VisionConfig
     input_modalities = ("image", "video")
@@ -535,7 +529,6 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
-        position_ids = position_ids.transpose(0, 1).flip(0)  # (2, positions)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
@@ -582,6 +575,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Kimi_K25Model(Kimi_K25PreTrainedModel):
     def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
@@ -611,6 +605,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_outputs
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -620,8 +615,6 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -680,25 +673,44 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kimi_K25ModelOutputWithPast:
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             multimodal_mask = (input_ids == self.config.image_token_id) | (input_ids == self.config.video_token_id)
             llm_input_ids = input_ids.clone()
             llm_input_ids[multimodal_mask] = 0
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -721,6 +733,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         )
 
 
+@auto_docstring
 class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
@@ -775,6 +788,7 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         pixel_values_videos: torch.Tensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kimi_K25CausalLMOutputWithPast:
         r"""
@@ -826,6 +840,7 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..qwen2.configuration_qwen2 import Qwen2Config
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="thisisiron/Ovis2-1B-hf")
@@ -75,7 +75,7 @@ class Ovis2Config(PreTrainedConfig):
     """
 
     model_type = "ovis2"
-    sub_configs = {"text_config": Qwen2Config, "vision_config": Ovis2VisionConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": Ovis2VisionConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -92,9 +92,9 @@ class Ovis2Config(PreTrainedConfig):
             self.vision_config = Ovis2VisionConfig(num_visual_indicator_tokens=len(self.visual_indicator_token_ids))
 
         if isinstance(self.text_config, dict):
-            self.text_config = Qwen2Config(**self.text_config)
+            self.text_config = CONFIG_MAPPING[self.text_config.get("model_type", "qwen2")](**self.text_config)
         elif self.text_config is None:
-            self.text_config = Qwen2Config()
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
         super().__post_init__(**kwargs)
 

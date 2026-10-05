@@ -84,6 +84,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         }
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
 
+        # trf-ignore: TRF051 (warning only, `timm` owns its own attention dispatch)
         if self.config._attn_implementation == "eager":
             # `timm` resolves the attention implementation on its own, there is no model level API to change it yet
             logger.warning_once(

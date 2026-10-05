@@ -559,7 +559,7 @@ def main():
                 )
 
                 # save vocab dict to be loaded into tokenizer
-                with open(vocab_file, "w") as file:
+                with open(vocab_file, "w", encoding="utf-8") as file:
                     json.dump(vocab_dict, file)
 
         tokenizer_kwargs = {
@@ -803,6 +803,8 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+    trainer.end()
 
     return results
 

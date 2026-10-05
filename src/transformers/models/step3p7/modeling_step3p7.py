@@ -35,14 +35,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    torch_compilable_check,
-    torch_int,
-)
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -50,26 +43,27 @@ from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7Visi
 
 
 class Step3p7VisionRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Step3p7VisionConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
+    def __init__(self, config: Step3p7VisionConfig):
+        super().__init__()
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
+    def compute_axial_rope_parameters(
         config: Step3p7VisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
@@ -83,11 +77,6 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -95,14 +84,25 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (position_ids[..., None].float() * self.inv_freq.to(x.device)).flatten(-2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
-        sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
         return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_hw = freq.flatten(1)
+        return torch.cat((freq_hw, freq_hw), dim=-1)
 
 
 class Step3p7VisionMLP(nn.Module):
@@ -335,6 +335,7 @@ class Step3p7VisionEmbeddings(nn.Module):
         return embeddings
 
 
+@auto_docstring
 class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
@@ -351,9 +352,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Step3p7VisionEmbeddings):
-            module.register_buffer(
-                "position_ids", torch.arange(module.num_positions).expand((1, -1)), persistent=False
-            )
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, Step3p7VisionEncoderLayer):
             nn.init.constant_(module.lambda_1, module.config.layer_scale_init_value)
             nn.init.constant_(module.lambda_2, module.config.layer_scale_init_value)
@@ -380,6 +379,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
 
 
+@auto_docstring
 class Step3p7VisionModel(Step3p7PreTrainedModel):
     """Vision encoder: patch embeddings → 2-D RoPE transformer layers → conv downsampler.
 
@@ -418,7 +418,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         # temporal/merge dims: t=1, spatial_merge_size=1) broadcasts across the whole batch, since
         # every image in `pixel_values` shares the same (grid_h, grid_w).
         grid_thw = torch.tensor([[1, grid_h, grid_w]], device=hidden_state.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1).unsqueeze(0)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
         position_embeddings = self.rotary_emb(hidden_state, position_ids)
         for layer in self.layers:
             hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
@@ -431,13 +431,12 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
 
 
 class Step3p7RotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Step3p7Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        self.layer_types = list(set(config.layer_types))
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
@@ -454,7 +453,6 @@ class Step3p7RotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Step3p7Config, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -488,18 +486,10 @@ class Step3p7RotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = (
-            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -527,16 +517,18 @@ class Step3p7RMSNorm(nn.Module):
 
 
 class Step3p7MLP(nn.Module):
-    def __init__(self, config, intermediate_size=None, swiglu_limit=None):
+    def __init__(self, config, layer_idx, is_shared_expert=False):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.intermediate_size = config.share_expert_dim if is_shared_expert else config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps layers 43-44 (bound 16) via `swiglu_limits_shared`;
+        # a `0.0` entry or no list at all means "no clamp", hence the `or float("inf")`.
+        self.limit = (config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0) or float("inf")
 
     def forward(self, x) -> torch.Tensor:
         gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
@@ -564,7 +556,7 @@ class Step3p7Experts(nn.Module):
     ) -> torch.Tensor:
         final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]
@@ -607,13 +599,12 @@ class Step3p7TopKRouter(nn.Module):
 class Step3p7SparseMoeBlock(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps the routed experts on layers 43-44 (bound 7) via
+        # `swiglu_limits`; a `0.0` entry or no list at all means "no clamp".
         swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
-        self.shared_experts = Step3p7MLP(
-            config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
-        )
+        self.shared_experts = Step3p7MLP(config, layer_idx, is_shared_expert=True)
         self.routed_scaling_factor = config.moe_router_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -762,12 +753,10 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         self.self_attn.config = config
         self.attention_type = config.layer_types[layer_idx]
 
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
-        self.mlp = (
-            Step3p7SparseMoeBlock(config, layer_idx)
-            if config.mlp_layer_types[layer_idx] == "sparse"
-            else Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
-        )
+        # CODEPATH: on stepfun-ai/Step-3.7-Flash `moe_layers_enum` marks layers 3-44 `"sparse"` and 0-2
+        # `"dense"`; a config without it is all-sparse and never builds the dense branch.
+        mlp_class = Step3p7SparseMoeBlock if config.mlp_layer_types[layer_idx] == "sparse" else Step3p7MLP
+        self.mlp = mlp_class(config, layer_idx)
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -835,6 +824,9 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Step3p7RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        # CODEPATH: stepfun-ai/Step-3.7-Flash sets `num_nextn_predict_layers=3`, so its weights carry
+        # three trailing MTP layers that this branch filters out of the plain (non-MTP) load. A
+        # checkpoint without MTP layers leaves the field at 0 and skips it.
         if config.num_nextn_predict_layers:
             # Checkpoints append `num_nextn_predict_layers` MTP layers; ignore them as unexpected keys
             # on regular load. Matches loosely on `layers.<N>.` (not anchored to this model's module
@@ -1043,6 +1035,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7ModelOutputWithPast:
         r"""
@@ -1051,16 +1044,21 @@ class Step3p7Model(Step3p7PreTrainedModel):
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
         """
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
-            ).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -1079,7 +1077,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features,
+            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
         )
 
 
@@ -1169,6 +1167,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7CausalLMOutputWithPast:
         r"""
@@ -1187,6 +1186,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

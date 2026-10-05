@@ -147,6 +147,3 @@ visualizer("UN Chief says there is no military solution in Syria")
 
 [[autodoc]] NllbTokenizer
 
-## NllbTokenizerFast
-
-[[autodoc]] NllbTokenizerFast
