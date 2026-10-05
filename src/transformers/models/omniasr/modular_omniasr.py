@@ -247,7 +247,7 @@ class OmniASRForCTC(ParakeetForCTC):
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
-        self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
+        self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
         del self.encoder
 
     # same as ParakeetForCTC but with `input_values` instead of `input_features` as we use audio values directly

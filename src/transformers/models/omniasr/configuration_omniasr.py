@@ -139,21 +139,6 @@ class OmniASRCTCConfig(PreTrainedConfig):
         self.initializer_range = self.audio_config.initializer_range
         super().__post_init__(**kwargs)
 
-    @classmethod
-    def from_audio_config(cls, audio_config: OmniASRAudioConfig, **kwargs):
-        r"""
-        Instantiate a [`OmniASRCTCConfig`] (or a derived class) from omniASR audio model configuration.
-
-        Returns:
-            [`OmniASRCTCConfig`]: An instance of a configuration object
-        """
-
-        return cls(audio_config=audio_config.to_dict(), **kwargs)
-
-    @property
-    def hidden_size(self):
-        return self.audio_config.hidden_size
-
 
 @auto_docstring(checkpoint="bezzam/omniasr-llm-300m-v2")
 @strict

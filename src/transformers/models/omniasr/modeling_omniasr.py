@@ -471,7 +471,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel, GenerationMixin):
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-        self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
+        self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
         self.audio_tower = AutoModel.from_config(config.audio_config)
 
         self.post_init()
