@@ -296,14 +296,7 @@ PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_alias
 
 _MIGRATION_GUIDE_URL = "https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md#pipelines"
 
-# Removed tasks whose models can be loaded by the replacement pipeline. Redirected with a warning.
-DEPRECATED_TASKS = {
-    "image-to-text": "image-text-to-text",
-}
 
-# Removed tasks with no replacement: models tagged with them generally can't be loaded by the suggested
-# pipeline (e.g. T5/BART summarizers or extractive QA models under `text-generation`), so we raise instead
-# with specifi error.
 REMOVED_TASKS = {
     "text2text-generation": "Use the `text-generation` pipeline with a chat model instead.",
     "summarization": "Use the `text-generation` pipeline with a chat model instead.",
@@ -321,7 +314,7 @@ def _resolve_deprecated_task(task: str) -> str:
     in `REMOVED_TASKS`.
     """
     if task in DEPRECATED_TASKS:
-        warnings.warn(
+        warnings.warn_once(
             f"The task {task} has been removed and has been replaced by {DEPRECATED_TASKS[task]}. The pipeline"
             f" will be instantiated with the new task name.",
             UserWarning,
