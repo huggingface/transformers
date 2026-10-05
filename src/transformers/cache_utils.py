@@ -1403,7 +1403,7 @@ class Cache:
 
         return keys, values
 
-    def get_conv_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor:
+    def get_conv_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
         """Returns the conv state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
         Raises if the layer is not a linear attention layer."""
         layer = self.layers[layer_idx]
