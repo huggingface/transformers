@@ -557,14 +557,12 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # Check that something is actually quantized
 
+    @require_optimum_quanto
     def test_quantized_cache_config_is_not_mutated(self):
         """
         Tests that `generate` does not consume the entries of the `cache_config` it is given, which would silently
         change the cache of any subsequent call sharing that dict.
         """
-        if not is_optimum_quanto_available():
-            self.skipTest("Quanto is not available")
-
         inputs = self.tokenizer(["The cat"], return_tensors="pt").to(self.model.device)
         cache_config = {"backend": "quanto", "nbits": 4, "q_group_size": 16, "residual_length": 4}
         expected_cache_config = cache_config.copy()
