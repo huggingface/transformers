@@ -31,6 +31,7 @@ from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
+from transformers.cli.serving.systemone import SystemOneHandler
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
@@ -579,12 +580,14 @@ class TestAppRoutes(unittest.TestCase):
         cls.completion_handler = MagicMock(spec=CompletionHandler)
         cls.response_handler = MagicMock(spec=ResponseHandler)
         cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
+        cls.systemone_handler = MagicMock(spec=SystemOneHandler)
         cls.app = build_server(
             cls.model_manager,
             cls.chat_handler,
             cls.completion_handler,
             cls.response_handler,
             cls.transcription_handler,
+            systemone_handler=cls.systemone_handler,
             generation_state=GenerationState(),
         )
         cls.transport = httpx.ASGITransport(app=cls.app)
@@ -1895,6 +1898,7 @@ class TestCBWorkerDeadServerIntegration(unittest.TestCase):
             completion_handler=MagicMock(),
             response_handler=MagicMock(),
             transcription_handler=MagicMock(),
+            systemone_handler=MagicMock(spec=SystemOneHandler),
             generation_state=generation_state,
         )
 
