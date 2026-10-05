@@ -96,7 +96,7 @@ class OnnxModelRunner(ModelRunner):
 
         # Mutated inputs (cache leaves, a merged decode's `attention_mask`) carry an `input.` prefix; stripping
         # it recovers the kwarg name.
-        self._session_names, self._input_dtypes, self.input_shapes, self._cache_paths = {}, {}, {}, {}
+        self._session_names, self._cache_paths = {}, {}
         for spec in session.get_inputs():
             # The whole dotted name: a dict of masks declares one input per entry (`attention_mask.full_attention`).
             kwarg_name = spec.name.removeprefix("input.")
@@ -107,20 +107,16 @@ class OnnxModelRunner(ModelRunner):
                 # Keyed by path: `None` recurrent states make the cache's leaves a subset of the graph's inputs.
                 self._cache_paths.setdefault(kwarg, {})[exposed] = path.split(".") if path else []
             self._session_names[exposed] = spec.name
-            # ORT rejects a feed whose dtype differs from the declared one (bool vs float masks).
-            self._input_dtypes[exposed] = _ort_to_torch_dtype(spec.type)
-            # The declared shape: sizes a cache entry the model has not created yet.
-            self.input_shapes[exposed] = tuple(spec.shape)
         self.input_names = tuple(self._session_names)
-        # Session name -> the caller-side name `input_shapes` is keyed by.
-        self._exposed_names = {session: exposed for exposed, session in self._session_names.items()}
 
         # io-binding avoids a device copy per input/output on CUDA, and on CPU lets a cache pair share one
         # buffer. Not `onnxruntime.transformers.CudaSession`: CUDA-only and it raises on `bfloat16`.
-        self._output_shapes = {spec.name: tuple(spec.shape) for spec in session.get_outputs()}
         specs = (*session.get_inputs(), *session.get_outputs())
         self._element_types = {spec.name: _ort_element_type(spec.type) for spec in specs}
+        # By session name. ORT rejects a feed whose dtype differs from the declared one (bool vs float masks); the
+        # declared shapes size a cache entry the model has not created yet, and the output buffers.
         self._io_dtypes = {spec.name: _ort_to_torch_dtype(spec.type) for spec in specs}
+        self._shapes = {spec.name: tuple(spec.shape) for spec in specs}
         self._io_binding, self._shared_outputs = None, {}
         # An input/output without an element type cannot be bound; such a graph keeps the plain `run` path.
         if all(kind is not None for kind in self._element_types.values()):
@@ -129,7 +125,7 @@ class OnnxModelRunner(ModelRunner):
             # longer than its input, so it is left unshared.
             for spec in session.get_inputs():
                 paired = "output." + spec.name.removeprefix("input.")
-                if spec.name.startswith("input.") and self._output_shapes.get(paired) == tuple(spec.shape):
+                if spec.name.startswith("input.") and self._shapes.get(paired) == tuple(spec.shape):
                     self._shared_outputs[spec.name] = paired
 
     @staticmethod
@@ -206,16 +202,17 @@ class OnnxModelRunner(ModelRunner):
                 if entry is None:
                     shape = [
                         batch if axis == 0 or not isinstance(dim, int) else dim
-                        for axis, dim in enumerate(self.input_shapes.get(name, ()))
+                        for axis, dim in enumerate(self._shapes.get(name, ()))
                     ]
-                    entry = torch.zeros(*shape, dtype=self._input_dtypes.get(name) or self.dtype)
+                    entry = torch.zeros(*shape, dtype=self._io_dtypes.get(name) or self.dtype)
                 kwargs[name] = entry.detach()
         for name in [n for n, v in kwargs.items() if not isinstance(v, torch.Tensor)]:
             kwargs.update({f"{name}.{leaf}": t for leaf, t in get_leaf_tensors(kwargs.pop(name)).items()})
-        return {
-            self._session_names.get(name, name): tensor.detach().to(self._input_dtypes.get(name) or tensor.dtype)
-            for name, tensor in kwargs.items()
-        }
+        feed = {}
+        for name, tensor in kwargs.items():
+            session_name = self._session_names.get(name, name)
+            feed[session_name] = tensor.detach().to(self._io_dtypes.get(session_name) or tensor.dtype)
+        return feed
 
     def _host_run(self, feed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Run the session by value, through host arrays."""
@@ -230,13 +227,12 @@ class OnnxModelRunner(ModelRunner):
         device, known_axes = self.device, {}
         device_type, device_index = device.type, device.index or 0
         for name, tensor in feed.items():
-            for axis, dim in enumerate(self.input_shapes.get(self._exposed_names.get(name, name), ())):
+            for axis, dim in enumerate(self._shapes.get(name, ())):
                 if isinstance(dim, str) and axis < tensor.dim():
                     known_axes[dim] = tensor.shape[axis]
 
         resolved = {
-            name: tuple(_resolved_axis(dim, known_axes) for dim in declared)
-            for name, declared in self._output_shapes.items()
+            name: tuple(_resolved_axis(dim, known_axes) for dim in self._shapes[name]) for name in self._output_names
         }
         self._io_binding.clear_binding_inputs()
         self._io_binding.clear_binding_outputs()
@@ -274,7 +270,7 @@ class OnnxModelRunner(ModelRunner):
         # `get_outputs()` follows bind order.
         bound_order = list(outputs)
         ort_allocated = []
-        for name in self._output_shapes:
+        for name in self._output_names:
             if name in self._shared_outputs.values():
                 continue
             bound_order.append(name)

@@ -20,7 +20,7 @@
 - **Cross-backend patches**: the ones more than one backend needs (`bucketize`, the cumulative reductions, the
   Mamba scan).
 - **Tensor utilities**: `get_leaf_tensors`, `cast_leaf_tensors`, `duplicate_leaf_tensors`, `runner_feed`, and
-  `prepare_for_export` (attention / experts implementation, output flags, precomputed inputs).
+  `prepare_for_export` (rejects labels, pops output flags, precomputes data-dependent inputs).
 
 Taking a model apart is `decompose.py`'s, the modules it wraps a model in are `components.py`'s, and the inputs
 a model would have computed for itself are `precompute.py`'s.

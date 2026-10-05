@@ -630,7 +630,7 @@ class ExportedModel:
 
     @property
     def device(self) -> torch.device:
-        return torch.device(self.runner.device)
+        return self.runner.device
 
     @property
     def dtype(self) -> torch.dtype:

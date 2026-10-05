@@ -204,7 +204,7 @@ def register_export_input_preparer(*markers: str):
 
 
 @register_export_input_preparer("image_sizes")
-def _prepare_image_sizes_as_ints(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+def _prepare_image_sizes_as_ints(config: Any, inputs: dict[str, Any]) -> None:
     """Replace a tensor `image_sizes` with a list of `(h, w)` int-tuples.
 
     Encoders crop by it (`image_sizes[i] // patch_size` in Pixtral); as a tensor those bounds become unbacked.
@@ -319,9 +319,9 @@ def _prepare_omni_audio_inputs(config: Any, inputs: dict[str, Any]) -> None:
     n_window = _find_config_attr(config, "n_window")
     n_window_infer = _find_config_attr(config, "n_window_infer")
 
-    chunk_and_pad_features = getattr(module, "chunk_and_pad_features")
-    get_audio_cu_seqlens = getattr(module, "get_audio_cu_seqlens")
-    get_valid_indices = getattr(module, "get_valid_indices")
+    chunk_and_pad_features = module.chunk_and_pad_features
+    get_audio_cu_seqlens = module.get_audio_cu_seqlens
+    get_valid_indices = module.get_valid_indices
 
     padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, n_window)
     inputs["padded_feature"] = padded_feature
@@ -332,7 +332,7 @@ def _prepare_omni_audio_inputs(config: Any, inputs: dict[str, Any]) -> None:
     else:
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
-        inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
+        inputs["pool_indices"] = module.get_pool_indices(feature_lens)
     inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], config, kwargs=inputs)
 
 

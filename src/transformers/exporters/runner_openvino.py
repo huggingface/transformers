@@ -16,9 +16,6 @@ if is_openvino_available():
     import openvino
 
 
-_DEFAULT_OV_DEVICE = "AUTO"
-
-
 class OpenVINOModelRunner(ModelRunner):
     """`ModelRunner` backed by a compiled `openvino.Model` and one infer request.
 
@@ -28,7 +25,7 @@ class OpenVINOModelRunner(ModelRunner):
 
     def __init__(self, ov_model, export_metadata=None, device=None, ov_config=None):
         self._model = ov_model
-        self._device_name = _DEFAULT_OV_DEVICE if device is None else _ov_device_name(device)
+        self._device_name = "AUTO" if device is None else _ov_device_name(device)
         # The CPU plugin quantizes a state-held cache to `u8` by default; pin it to the graph's precision.
         self._ov_config = {"KV_CACHE_PRECISION": _graph_precision(ov_model), **(ov_config or {})}
         self._compiled = openvino.compile_model(ov_model, self._device_name, self._ov_config)
@@ -43,7 +40,7 @@ class OpenVINOModelRunner(ModelRunner):
         self._scalar_states = frozenset(info.variable_id for info in infos if info.data_shape.rank.get_length() == 0)
         # What each variable holds, read here rather than off `state.state`, which copies the variable out.
         self._state_types = {info.variable_id: info.data_type for info in infos}
-        self._state_length = 0
+        self.state_length = 0
         self.export_metadata = ExportMetadata.from_dict(export_metadata)
         self.input_names = tuple(
             leaf_name(name) for port in self._compiled.inputs for name in [_port_name(port)] if name != "beam_idx"
@@ -118,8 +115,7 @@ class OpenVINOModelRunner(ModelRunner):
             )
             for index, port in enumerate(self._compiled.outputs)
         }
-        if query_length:
-            self._state_length += query_length
+        self.state_length += query_length
         return outputs
 
     def state_tensors(self, paths=None) -> dict[str, torch.Tensor]:
@@ -140,17 +136,12 @@ class OpenVINOModelRunner(ModelRunner):
         shared = {path: tensor.cpu() for path, tensor in leaves.items() if path in self.state_paths}
         if shared:
             self._prime_state(shared)
-            self._state_length = length
-
-    @property
-    def state_length(self) -> int:
-        """How much of the sequence the plugin's variables hold."""
-        return self._state_length
+            self.state_length = length
 
     def reset_state(self) -> None:
         """Start a new sequence: zero the variables and the length that tracks them."""
         self._request.reset_state()
-        self._state_length = 0
+        self.state_length = 0
 
     def _prime_state(self, leaves: dict) -> None:
         """Write cache leaves fed directly (a component call, `adopt_state`) into their variables."""
@@ -238,9 +229,11 @@ def _ov_device_name(device) -> str:
     device = torch.device(device)
     if device.type == "cpu":
         return "CPU"
-    if device.type in ("xpu", "gpu"):
+    if device.type == "xpu":
         return "GPU" if device.index is None else f"GPU.{device.index}"
-    raise ValueError(f"OpenVINO has no plugin for `{device.type}`; it runs on CPU, GPU (Intel) or NPU.")
+    raise ValueError(
+        f"OpenVINO has no plugin for `{device.type}`; pass `cpu` or `xpu` (Intel GPU), or no device for `AUTO`."
+    )
 
 
 def _port_name(port) -> str:

@@ -18,11 +18,6 @@ from enum import Enum
 from os import PathLike
 from typing import Any
 
-from ..utils import logging
-
-
-logger = logging.get_logger(__name__)
-
 
 class ExportFormat(Enum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""

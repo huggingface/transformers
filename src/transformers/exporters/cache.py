@@ -128,8 +128,6 @@ def resize_to_traced_lengths(cache, lengths: dict[int, int]) -> None:
 
     The graph's input spec pins those sizes; re-deriving them from the prompt (as `generate` does) would not fit.
     """
-    if not lengths:
-        return
     layers = _self_attention_layers(cache)
     for index, length in lengths.items():
         if index < len(layers) and getattr(layers[index], "max_cache_len", None) not in (None, length):

@@ -159,8 +159,7 @@ class ExportMetadata:
     @property
     def num_user_outputs(self) -> int | None:
         """How many returned leaves are the model's own, before a backend's appended mutated inputs."""
-        count = self.raw.get("num_user_outputs")
-        return count if isinstance(count, int) else None
+        return self.raw.get("num_user_outputs")
 
     @property
     def dtype(self) -> torch.dtype | None:
@@ -177,14 +176,12 @@ class ExportMetadata:
     @property
     def constant_inputs(self) -> dict[str, Any]:
         """Declared inputs that carry no tensor (e.g. a `None` mask slot), with their values."""
-        constants = self.raw.get("constant_inputs")
-        return constants if isinstance(constants, dict) else {}
+        return self.raw.get("constant_inputs") or {}
 
     @property
     def kwargs(self) -> dict[str, dict]:
         """The traced kwargs under the model forward's own names."""
-        kwargs = self.raw.get("kwargs")
-        return kwargs if isinstance(kwargs, dict) else {}
+        return self.raw.get("kwargs") or {}
 
     def kwarg_class(self, name: str) -> type | None:
         """The class a container kwarg was traced as, imported (which also registers it as a pytree node)."""

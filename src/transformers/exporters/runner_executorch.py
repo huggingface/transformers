@@ -63,7 +63,6 @@ class ExecutorchModelRunner(ModelRunner):
         recorded_user_outputs = self.export_metadata.num_user_outputs
         num_user_outputs = total_outputs if recorded_user_outputs is None else recorded_user_outputs
         self._user_output_indices = range(total_outputs - num_user_outputs, total_outputs)
-        self._session_input_names = set(self.input_names)
         # Matched exactly so two caches whose names share a prefix cannot claim each other's leaves.
         self._cache_names = {
             cache_input: [name for name in self.input_names if re.fullmatch(rf"{re.escape(cache_input)}_\d+", name)]
@@ -111,7 +110,7 @@ class ExecutorchModelRunner(ModelRunner):
             # Pytree leaves by underscore-joined path, else by position (`image_0`) for containers flattened by index.
             for index, (leaf, tensor) in enumerate(leaves.items()):
                 by_path = f"{name}_{leaf.replace('.', '_')}"
-                kwargs[by_path if by_path in self._session_input_names else f"{name}_{index}"] = tensor
+                kwargs[by_path if by_path in self.input_names else f"{name}_{index}"] = tensor
         # A slot recorded as a constant takes that value whatever the feed carries: the program baked it.
         constants = self.export_metadata.constant_inputs
         feed = tuple(
