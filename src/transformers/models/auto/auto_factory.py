@@ -230,7 +230,8 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            cls.register(config.__class__, model_class, exist_ok=True)
+            if not has_local_code:
+                cls.register(config.__class__, model_class, exist_ok=True)
             model_class.register_for_auto_class(auto_class=cls)
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
@@ -386,7 +387,8 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            cls.register(config.__class__, model_class, exist_ok=True)
+            if not has_local_code:
+                cls.register(config.__class__, model_class, exist_ok=True)
             model_class.register_for_auto_class(auto_class=cls)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
