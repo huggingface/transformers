@@ -1568,12 +1568,7 @@ class ProcessorMixin(PushToHubMixin):
                         },
                     }
                 ```
-            7) Recommended: processor attributes have lowest priority.
-                ```python
-                processor = MyProcessor(..., text_kwargs={"padding": "max_length"})
-                ```
-
-                Defaults can be registered as class variables and have lower priority than kwargs passed at initialization time:
+            7) Recommended: processor attributes have lowest priority. Defaults can be registered as class variables:
                 ```python
                 class MyProcessor(ProcessorMixin):
                     text_kwargs = {
