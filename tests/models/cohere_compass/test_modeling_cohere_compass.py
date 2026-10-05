@@ -336,3 +336,37 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
         self.assertEqual(output.logits.shape[:2], input_ids.shape)
+
+    def test_input_modalities(self):
+        config = self.model_tester.get_config()
+        model = CohereCompassForConditionalGeneration(config)
+        self.assertIn("video", model.input_modalities)
+        self.assertIn("image", model.input_modalities)
+        self.assertIn("text", model.input_modalities)
+        base_model = CohereCompassModel(config)
+        self.assertIn("video", base_model.input_modalities)
+        self.assertIn("image", base_model.input_modalities)
+        self.assertIn("text", base_model.input_modalities)
+
+    def test_prepare_multimodal_encoder_kwargs_video(self):
+        config = self.model_tester.get_config()
+        model = CohereCompassForConditionalGeneration(config).to(torch_device).eval()
+        vision_config = config.vision_config
+        grid_t, grid_h, grid_w = 1, 2, 2
+        num_patches = grid_t * grid_h * grid_w
+        patch_dim = (
+            vision_config.in_channels
+            * vision_config.temporal_patch_size
+            * vision_config.patch_size
+            * vision_config.patch_size
+        )
+        pixel_values_videos = torch.randn(num_patches, patch_dim, device=torch_device)
+        video_grid_thw = torch.tensor([[grid_t, grid_h, grid_w]], device=torch_device)
+        model_kwargs = {
+            "pixel_values_videos": pixel_values_videos,
+            "video_grid_thw": video_grid_thw,
+        }
+        prepared = model._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
+        self.assertNotIn("pixel_values_videos", prepared)
+        self.assertIn("mm_encoder_outputs", prepared)
+        self.assertIn("video", prepared["mm_encoder_outputs"])
