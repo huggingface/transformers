@@ -51,6 +51,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
+    from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLVisionConfig
+    from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
+        MiniMaxM3VLVisionRotaryEmbedding,
+    )
+    from transformers.vision_utils import get_vision_position_ids
+
 
 if is_vision_available():
     from PIL import Image
@@ -467,6 +473,31 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     pixel_values_videos=pixel_values_videos,
                     video_grid_thw=video_grid_thw,
                 )
+
+    @parameterized.expand([(8, 2), (80, 26)])
+    def test_three_axes_frequency_ladder(self, head_dim, axis_dim):
+        config = MiniMaxM3VLVisionConfig(
+            hidden_size=2 * head_dim,
+            num_attention_heads=2,
+            spatial_merge_size=2,
+            rope_parameters={"rope_type": "axial", "rope_theta": 10000.0},
+        )
+        rotary = MiniMaxM3VLVisionRotaryEmbedding(config)
+
+        positions = get_vision_position_ids(
+            torch.tensor([[2, 2, 2]]),
+            spatial_merge_size=2,
+            include_temporal=True,
+        )
+
+        cosine, sine = rotary(torch.empty(len(positions), head_dim), positions)
+
+        bands = axis_dim // 2
+        frequencies = 10000.0 ** (-torch.arange(bands, dtype=torch.float32) / bands)
+        angles = (positions[..., None] * frequencies).flatten(1).repeat(1, 2)
+
+        torch.testing.assert_close(cosine, angles.cos())
+        torch.testing.assert_close(sine, angles.sin())
 
 
 @slow

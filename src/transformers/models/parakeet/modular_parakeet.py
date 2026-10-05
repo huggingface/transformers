@@ -34,7 +34,6 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -72,20 +71,18 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: ParakeetEncoderConfig, device=None):
+    def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device)
+        inv_freq = self.compute_default_relative_positional_parameters(config)
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig, device=None) -> torch.Tensor:
+    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig) -> torch.Tensor:
         base = 10000.0
         inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
-        return inv_freq.to(device)
+        return inv_freq
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
@@ -96,11 +93,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         )
         position_ids_expanded = position_ids[None, None, :].float()
 
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             sin = freqs.sin()
