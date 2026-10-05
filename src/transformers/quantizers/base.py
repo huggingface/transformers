@@ -133,6 +133,22 @@ class HfQuantizer(ABC):
         """
         return False
 
+    def get_param_materialization_device(
+        self,
+        model: "PreTrainedModel",
+        param_name: str,
+        target_device,
+        target_dtype: "torch.dtype | None" = None,
+        needs_quantization: bool = False,
+    ):
+        """Return the device used to materialize the checkpoint tensor for ``param_name``.
+
+        This hook runs before conversion ops and before any ``tensor.to(device=...)`` in the
+        generic state-dict loading path. Quantization backends can override it to stage source
+        tensors on a different device (e.g. CPU) to control peak device memory during loading.
+        """
+        return target_device
+
     def validate_environment(self, *args, **kwargs):
         """
         This method is used to potentially check for potential conflicts with arguments that are

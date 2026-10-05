@@ -14,6 +14,7 @@
 import copy
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -243,6 +244,68 @@ class DummyRoot(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_quantizable_params_stage_on_cpu_before_target_device_materialization(self):
+        class _RecordingQuantize:
+            def __init__(self):
+                self.calls = []
+
+            def convert(self, input_dict, full_layer_name=None, missing_keys=None, target_device=None, **kwargs):
+                value = next(iter(input_dict.values()))
+                value = value[0] if isinstance(value, list) else value
+                self.calls.append((full_layer_name, value.device.type, str(target_device)))
+                if missing_keys is not None:
+                    missing_keys.discard(full_layer_name)
+                return {}
+
+        class _Quantizer:
+            pre_quantized = False
+
+            def __init__(self):
+                self.quant_op = _RecordingQuantize()
+
+            def param_needs_quantization(self, _model, param_name, **kwargs):
+                return param_name.endswith("q_proj.weight")
+
+            def get_quantize_ops(self):
+                return self.quant_op
+
+            def get_param_materialization_device(
+                self,
+                _model,
+                _param_name,
+                target_device,
+                target_dtype=None,
+                needs_quantization=False,
+            ):
+                return "cpu" if needs_quantization else target_device
+
+        model = DummyRoot(PreTrainedConfig(), with_mlp=False)
+        state_dict = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        quantizer = _Quantizer()
+
+        materialization_calls = []
+
+        def _fake_materialize_copy(tensor, device=None, dtype=None):
+            materialization_calls.append(str(device))
+            tensor = tensor[...]
+            if dtype is not None:
+                tensor = tensor.to(dtype=dtype)
+            return tensor
+
+        with patch("transformers.core_model_loading._materialize_copy", side_effect=_fake_materialize_copy):
+            convert_and_load_state_dict_in_model(
+                model,
+                state_dict,
+                LoadStateDictConfig(device_map={"": "xpu"}, hf_quantizer=quantizer),
+            )
+
+        self.assertIn("cpu", materialization_calls)
+        self.assertIn("xpu", materialization_calls)
+
+        self.assertTrue(quantizer.quant_op.calls)
+        self.assertTrue(all(src_device == "cpu" for _, src_device, _ in quantizer.quant_op.calls))
+        self.assertTrue(all(target_device == "xpu" for _, _, target_device in quantizer.quant_op.calls))
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 
