@@ -118,7 +118,7 @@ class DynamoExporter(HfExporter):
             apply_patches("dynamo"),
             reset_model_state(model),
             patch_model_config(model, output_flags),
-            patch_forward_signature(model, sample_inputs),
+            patch_forward_signature(model, sample_inputs, output_flags),
         ):
             exported_program: ExportedProgram = torch.export.export(
                 model,
@@ -158,16 +158,19 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
 
 
 @contextmanager
-def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
-    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
+def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any], output_flags: dict[str, Any]):
+    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`, passing the
+    `output_flags` the config does not declare (`patch_model_config` applies the rest) as fixed values.
 
     With `**kwargs` in the signature, `torch.export` builds a `combined_args` bundle that mismatches the
     `dynamic_shapes` dict.
     """
     original_forward = model.forward
+    config = getattr(model, "config", None)
+    baked = {flag: value for flag, value in output_flags.items() if value is not None and not hasattr(config, flag)}
 
     def _flat_forward(**kwargs):
-        return original_forward(**kwargs)
+        return original_forward(**kwargs, **baked)
 
     _flat_forward.__signature__ = inspect.Signature(
         [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]

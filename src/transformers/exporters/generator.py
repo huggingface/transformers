@@ -584,7 +584,6 @@ class ExportedGenerator(GenerationMixin):
         encoder_outputs=None,
         cache_params=None,
         image_sizes=None,
-        logits_to_keep=None,
         **kwargs,
     ):
         # Empty cache runs the prefill runner, otherwise decode (the same object without a prefill graph).
@@ -598,9 +597,6 @@ class ExportedGenerator(GenerationMixin):
         text = feed[text_input(runner)]
         if position_ids is not None and "position_ids" in runner.input_names:
             feed["position_ids"] = position_ids
-        # Declaring it makes `generate` supply it; unfed, the graph runs the LM head over the whole prompt.
-        if logits_to_keep is not None and "logits_to_keep" in runner.input_names:
-            feed["logits_to_keep"] = logits_to_keep
         if encoder_outputs is not None and any(n.startswith("encoder_outputs") for n in runner.input_names):
             feed["encoder_outputs"] = encoder_outputs
         feed.update(self._step_kwargs(runner, kwargs, feed, text.shape[1]))

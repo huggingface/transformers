@@ -302,8 +302,8 @@ def decompose_prefill_decode(
             "for this architecture."
         )
 
-    # `logits_to_keep` is kept: without it the graph outputs full `[batch, tokens, vocab]` logits (311 MB
-    # for a 512-token Qwen3 prompt) when generation reads only the last row.
+    # `logits_to_keep` is kept, and baked into the graph at export: without it the graph outputs full
+    # `[batch, tokens, vocab]` logits (311 MB for a 512-token Qwen3 prompt) when generation reads only the last row.
     prefill_inputs = calls[0]
     decode_inputs = (
         _merge_decode_calls(calls[first_decode:num_new_tokens], streamed=streamed_kwarg)

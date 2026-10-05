@@ -700,9 +700,10 @@ def prepare_for_export(
 ) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
     """Configure model and inputs for export, mutating both in place.
 
-    Rejects label inputs, pops output flags (`use_cache`, `return_dict`, ...) into the returned
-    `output_flags` for the trace to apply onto `model.config`, precomputes data-dependent inputs, and
-    moves input tensors to the model's device. Returns `(model, inputs, output_flags)`.
+    Rejects label inputs, pops output flags (`use_cache`, `return_dict`, ..., and an int `logits_to_keep`, which
+    the trace specializes anyway) into the returned `output_flags` for the trace to fix rather than take as
+    inputs, precomputes data-dependent inputs, and moves input tensors to the model's device. Returns
+    `(model, inputs, output_flags)`.
     """
     for label_key in ("labels", "future_values"):
         value = inputs.pop(label_key, None)
@@ -723,6 +724,8 @@ def prepare_for_export(
         )
 
     output_flags = {flag: inputs.pop(flag) for flag in _OUTPUT_FLAGS if flag in inputs}
+    if isinstance(inputs.get("logits_to_keep"), int):
+        output_flags["logits_to_keep"] = inputs.pop("logits_to_keep")
 
     # `torch.export` records `None` kwargs as placeholders the caller must then pass back. Only dropped when
     # the default is `None` too, so omitting it can't switch the traced path.

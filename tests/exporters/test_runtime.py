@@ -165,7 +165,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                         attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                         position_ids=positions[None],
                         past_key_values=past_key_values,
-                        logits_to_keep=decode_inputs["logits_to_keep"],
                     )
                 self.assertEqual(out["logits"].shape[:2], (1, 1))
 
@@ -195,7 +194,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                     attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                     position_ids=positions[None],
                     past_key_values=past_key_values,
-                    logits_to_keep=decode_inputs["logits_to_keep"],
                 )
 
         self.assertEqual(int(past_key_values.get_seq_length()), 0)
@@ -339,7 +337,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         )
 
         def assisted_generate(runtime, draft_runtime):
-            # Count the draft's steps, keeping the signature `generate` reads (`logits_to_keep`)
+            # Count the draft's steps, keeping the signature `generate` reads
             forward = draft_runtime.forward
             calls = []
             draft_runtime.forward = functools.wraps(forward)(lambda **kwargs: calls.append(1) or forward(**kwargs))

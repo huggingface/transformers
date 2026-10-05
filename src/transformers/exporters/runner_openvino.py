@@ -209,7 +209,7 @@ def _as_port_tensor(value, element_type):
     if isinstance(value, openvino.Tensor):
         return value
     wanted = element_type.to_dtype() if element_type.is_static() else value.dtype
-    # `asarray` rather than `ascontiguousarray`, which turns a rank-0 scalar (`logits_to_keep`) into `[1]`.
+    # `asarray` rather than `ascontiguousarray`, which turns a rank-0 scalar into `[1]`.
     array = np.asarray(value, dtype=wanted)
     return openvino.Tensor(array if array.flags.c_contiguous else array.copy(), shared_memory=True)
 
