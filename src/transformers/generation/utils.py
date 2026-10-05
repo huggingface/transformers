@@ -2137,13 +2137,14 @@ class GenerationMixin(ContinuousMixin):
             return None
         num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
-        if tp_size > 1:
-            layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
-            if any(heads % tp_size for heads in layer_heads):
-                # The model cannot be evenly sharded by head
-                return None
-            # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
-            num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
+        if tp_size == 1:
+            return num_heads, head_dim
+        layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
+        if any(heads % tp_size for heads in layer_heads):
+            # The model cannot be evenly sharded by head
+            return None
+        # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
+        num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
         return num_heads, head_dim
 
     def _prepare_static_cache(
