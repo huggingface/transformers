@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from dataclasses import dataclass
 from pathlib import Path
 
 from ..generation import GenerationConfig, GenerationMixin
@@ -93,7 +92,7 @@ _TEXT_KWARGS = frozenset(
 )
 
 
-@dataclass
+@dataclasses.dataclass
 class Modality:
     """Routes one input modality (image / video / audio) of an `ExportedGenerator`.
 
@@ -118,7 +117,7 @@ class Modality:
         return self.spec.component.removesuffix("_encoder")
 
 
-@dataclass
+@dataclasses.dataclass
 class StreamingEmbedder:
     """A modality embedded once before the decode loop, fed to each step as a window of the result
     (`stride` embedded rows per token)."""
@@ -173,16 +172,13 @@ class _ExportedEncoder:
 # Input-role derivations only the generation loop needs; kept off `ModelRunner` so runners stay task-agnostic.
 
 
+# A per-layer (deepstack) feature output of a vision graph.
+_DEEPSTACK_OUTPUT = re.compile(r".*image_features\.\d+")
+
+
 def text_input(runner) -> str:
     """The graph's text input: `"decoder_input_ids"`, `"inputs_embeds"` or `"input_ids"`."""
     return next((n for n in ("decoder_input_ids", "inputs_embeds") if n in runner.input_names), "input_ids")
-
-
-def mask_inputs(runner) -> tuple[str, ...]:
-    """The graph's attention-mask input name(s) — several for mixed full/sliding attention."""
-    return tuple(
-        n for n in runner.input_names if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
-    )
 
 
 class ExportedGenerator(GenerationMixin):
@@ -230,7 +226,6 @@ class ExportedGenerator(GenerationMixin):
         self._prefill_runner = runners.get("prefill", decode)
         # Scatter applies only when the decode graph (decoder-only VLMs) or the encoder graph (florence2) takes
         # embeddings; otherwise run as a plain generator even if an embed graph was exported.
-        # An encoder taking `inputs_embeds` means features scatter in front of the text encoder (florence2).
         encoder_takes_embeds = encoder is not None and "inputs_embeds" in encoder.input_names
         takes_embeds = text_input(decode) == "inputs_embeds" or encoder_takes_embeds
         self._text_embed = runners["embed_tokens"] if "embed_tokens" in runners and takes_embeds else None
@@ -349,7 +344,7 @@ class ExportedGenerator(GenerationMixin):
             consumed = consumed | {"mm_token_type_ids"}
         super()._validate_model_kwargs({k: v for k, v in model_kwargs.items() if k not in consumed})
 
-    def _supports_default_dynamic_cache(self) -> bool:  # noqa: D401 (instance form: reads the prototype)
+    def _supports_default_dynamic_cache(self) -> bool:
         """Whether `generate` should build a `DynamicCache`, read off the traced cache input.
 
         Recurrent-only models (mamba, rwkv) keep fixed-size states and `DynamicCache.get_seq_length` fails on
@@ -457,7 +452,12 @@ class ExportedGenerator(GenerationMixin):
     def _mask_feed(self, runner, attention_mask, position_ids, cache_len):
         """Feed the graph's mask input(s), rebuilding the causal mask where `generate` dropped one as
         redundant but the graph still takes a tensor."""
-        masks = mask_inputs(runner)
+        # Several for mixed full/sliding attention.
+        masks = tuple(
+            n
+            for n in runner.input_names
+            if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
+        )
         # Mixed-attention models (nemotron_h, jamba) build their per-type mask dict inside forward.
         mask_ranks = runner.export_metadata.mask_ranks
         if mask_ranks and not isinstance(attention_mask, dict):
@@ -528,7 +528,8 @@ class ExportedGenerator(GenerationMixin):
         embedded = self._merge_modalities(text_ids, merge_kwargs)
         primary, *extra = embedded
         feed = {text_input(runner): embedded[primary]}
-        feed.update({name: embedded[name] for name in extra if name in runner.input_names})
+        # `declares`: flattening backends declare only a dict's leaves (deepstack features on ONNX).
+        feed.update({name: embedded[name] for name in extra if runner.declares(name, embedded[name])})
         return feed
 
     def _step_kwargs(self, runner, kwargs: dict, feed: dict, query_length: int) -> dict:
@@ -660,10 +661,7 @@ class ExportedGenerator(GenerationMixin):
                 or modality.kind in encoded
                 or all(model_kwargs.get(key) is None for key in feature_keys)
                 or getattr(self.config, f"{modality.kind}_token_id", None) is None
-                or any(
-                    re.fullmatch(r".*image_features\.\d+", name)
-                    for name in modality.runner.export_metadata.output_names
-                )
+                or any(_DEEPSTACK_OUTPUT.fullmatch(name) for name in modality.runner.export_metadata.output_names)
             ):
                 continue
             features = self._modality_features(modality, model_kwargs, inputs_tensor).flatten(0, -2)
@@ -688,20 +686,20 @@ class ExportedGenerator(GenerationMixin):
             tower_input = modality.runner.input_names[0]
             feed[tower_input] = flatten_anyres_patches(self.config, feed[tower_input], image_sizes)
         outputs = modality.runner(**feed)
+        features = next(iter(outputs.values()))
+        if not packs_anyres:
+            return features
         per_layer = {
             int(name.rsplit(".", 1)[-1]): tensor
             for name, tensor in outputs.items()
-            if re.fullmatch(r".*image_features\.\d+", name)
+            if _DEEPSTACK_OUTPUT.fullmatch(name)
         }
-        if packs_anyres and per_layer:
+        if per_layer:
             return {
                 layer: pack_anyres_features(self.config, tensor, image_sizes, outputs)
                 for layer, tensor in sorted(per_layer.items())
             }
-        features = next(iter(outputs.values()))
-        if packs_anyres:
-            features = pack_anyres_features(self.config, features, image_sizes, outputs)
-        return features
+        return pack_anyres_features(self.config, features, image_sizes, outputs)
 
     def _merge_modalities(self, input_ids, kwargs) -> dict[str, torch.Tensor]:
         """Embed `input_ids` and scatter each present modality's features into its placeholder rows.

@@ -576,15 +576,13 @@ def decompose_multimodal(
             tower_inputs = {
                 "pixel_values": flatten_anyres_patches(
                     model.config, feature_inputs["pixel_values"], feature_inputs["image_sizes"]
-                )
-            }
-            tower_inputs.update(
-                {
+                ),
+                **{
                     key: feature_inputs[key]
                     for key in ("vision_feature_layer", "vision_feature_select_strategy")
                     if key in feature_inputs
-                }
-            )
+                },
+            }
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
@@ -632,31 +630,37 @@ def _needs_prefill_graph(model, components: dict, *, cross_written_without_promp
     )
 
 
-def _cross_writing_encoder(encoder, writers: dict, encoder_inputs: dict, components: dict):
-    """A `CrossAttentionEncoder` that reproduces this model's cross cache, or `None` if it cannot.
+def _fold_cross_cache_into_encoder(model, components: dict, writers: dict) -> dict:
+    """Let the encoder component write the decoder's cross-attention cache, when that buys the prompt graph.
 
-    Replay is not always separable (t5gemma2 merges self- and cross-attention), so the result is checked
-    against the cache the model itself filled.
+    If a prompt graph is needed anyway, it keeps writing the cache: it was traced filling an empty one. Replay
+    is not always separable (t5gemma2 merges self- and cross-attention), so the result is checked against the
+    cache the model itself filled.
     """
+    encoder = components.get("encoder")
+    if not writers or encoder is None:
+        return components
+    if _needs_prefill_graph(model, components, cross_written_without_prompt=True):
+        return components
     captured = components["decode"].inputs.get("past_key_values")
     layers = getattr(getattr(captured, "cross_attention_cache", None), "layers", [])
     if not layers:
-        return None
+        return components
     # Copies: the check may write in place into tensors the decode component is exported with.
     copied = {
         index: writer._replace(args=copy.deepcopy(writer.args), kwargs=copy.deepcopy(writer.kwargs))
         for index, writer in writers.items()
     }
-    component = CrossAttentionEncoder(encoder, copied).eval()
+    module = CrossAttentionEncoder(encoder.module, copied).eval()
     try:
         with torch.no_grad():
-            produced = component(**copy.deepcopy(encoder_inputs))
+            produced = module(**copy.deepcopy(encoder.inputs))
     except Exception:
         logger.warning_once(
-            f"{type(encoder).__name__} cannot compute the decoder's cross-attention cache on its own, so the "
-            "export keeps a separate prompt graph to write it."
+            f"{type(encoder.module).__name__} cannot compute the decoder's cross-attention cache on its own, so "
+            "the export keeps a separate prompt graph to write it."
         )
-        return None
+        return components
     for index, layer in enumerate(layers):
         for kind, expected in (("keys", layer.keys), ("values", layer.values)):
             actual = produced.get(f"cross_{kind}_{index}")
@@ -664,25 +668,11 @@ def _cross_writing_encoder(encoder, writers: dict, encoder_inputs: dict, compone
                 continue
             if actual is None or actual.shape != expected.shape or not torch.allclose(actual, expected, atol=1e-5):
                 logger.warning_once(
-                    f"{type(encoder).__name__} reproduces the decoder's cross-attention cache incorrectly at "
-                    f"layer {index}, so the export keeps a separate prompt graph to write it."
+                    f"{type(encoder.module).__name__} reproduces the decoder's cross-attention cache incorrectly "
+                    f"at layer {index}, so the export keeps a separate prompt graph to write it."
                 )
-                return None
-    return component
-
-
-def _fold_cross_cache_into_encoder(model, components: dict, writers: dict) -> dict:
-    """Let the encoder component write the decoder's cross-attention cache, when that buys the prompt graph.
-
-    If a prompt graph is needed anyway, it keeps writing the cache: it was traced filling an empty one.
-    """
-    encoder = components.get("encoder")
-    if not writers or encoder is None:
-        return components
-    if _needs_prefill_graph(model, components, cross_written_without_prompt=True):
-        return components
-    module = _cross_writing_encoder(encoder.module, writers, encoder.inputs, components)
-    return components if module is None else {**components, "encoder": replace(encoder, module=module)}
+                return components
+    return {**components, "encoder": replace(encoder, module=module)}
 
 
 def _write_cross_cache_in_decoder(components: dict) -> tuple[dict, bool]:
@@ -764,16 +754,16 @@ def _capture_generation(
     return components, {name: list(calls) for name, calls in live.items() if calls}, cross_writers
 
 
-def _streaming_embedder(model, inputs) -> Component | None:
-    """The pre-loop embedder of a model whose modality advances with the text (`_STREAMING_EMBEDDERS`)."""
+def _streaming_embedder(model, inputs) -> dict[str, Component]:
+    """`{component: embedder}` for a model whose modality advances with the text (`_STREAMING_EMBEDDERS`), else `{}`."""
     spec = streaming_embedder_spec(model.config)
     if spec is None or inputs.get(spec.source) is None:
-        return None
+        return {}
     try:
         module = model.base_model.get_submodule(spec.path)
     except AttributeError:
-        return None
-    return Component(module, {spec.source: inputs[spec.source]})
+        return {}
+    return {spec.component: Component(module, {spec.source: inputs[spec.source]})}
 
 
 def _embedded_inputs(call_inputs: dict, components: dict) -> dict:
@@ -832,8 +822,7 @@ def decompose_for_generation(
         # The decode component serves the text stack; keeping `text_decoder` would duplicate its parameters.
         split.pop("text_decoder", None)
         components.update(split)
-        if (embedder := _streaming_embedder(model, inputs)) is not None:
-            components[streaming_embedder_spec(model.config).component] = embedder
+        components.update(_streaming_embedder(model, inputs))
 
     cross_written_by_decoder = False
     if multi_token_decode and decoder_writes_cross_cache:
