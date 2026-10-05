@@ -494,7 +494,7 @@ class ZambaMambaMixer(nn.Module):
         gate = gate.reshape(batch_size, self.n_mamba_heads, self.mamba_head_dim, seq_len).transpose(0, 1)
 
         if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
 
         # 2. Convolution sequence transformation

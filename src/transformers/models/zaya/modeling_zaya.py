@@ -224,7 +224,7 @@ class ZayaCCAProjection(nn.Module):
         qk_states = qk_states.transpose(1, 2)
         use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states[0]
+            cached_qk_states = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
             qk_states = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             qk_states = F.pad(qk_states, (self.conv_kernel_size, 0))

@@ -1412,9 +1412,7 @@ class Cache:
                 f"Cannot get conv state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
             )
         if not layer.is_conv_states_initialized[state_idx]:
-            raise ValueError(
-                f"Cannot get conv state {state_idx} for layer {layer_idx} because it is not initialized."
-            )
+            raise ValueError(f"Cannot get conv state {state_idx} for layer {layer_idx} because it is not initialized.")
         return layer.conv_states[state_idx]
 
     def update_conv_state(
