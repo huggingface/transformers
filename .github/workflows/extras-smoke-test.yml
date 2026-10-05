@@ -182,7 +182,7 @@ jobs:
 
       - name: Send Slack notification
         if: env.SLACK_MESSAGE != ''
-        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
