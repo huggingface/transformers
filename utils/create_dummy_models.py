@@ -138,6 +138,7 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
 config_class_to_model_tester_map = {
     "Qwen3_5Config": "Qwen3_5VisionText2TextModelTester",
     "Qwen3_5MoeConfig": "Qwen3_5MoeVisionText2TextModelTester",
+    "Qwen4ExpConfig": "Qwen4ExpVisionText2TextModelTester",
     "InstructBlipConfig": "InstructBlipForConditionalGenerationDecoderOnlyModelTester",
     "InstructBlipVideoConfig": "InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester",
     "MllamaConfig": "MllamaVisionText2TextModelTester",
@@ -226,6 +227,12 @@ CONFIGS_WITHOUT_PROCESSOR = {
 }
 
 
+# Configs whose Hub checkpoint has not yet been publicly released.
+# Processor building is skipped; tiny models are still created from default config values.
+UNRELEASED_CHECKPOINTS = {
+    "MiniCPMV4_7Config",  # openbmb/MiniCPM-V-4.7 not yet released
+}
+
 # Checkpoints for some configs are only available on hub PRs or in subfolders.
 # TODO: a better long-term handle for revisions and subfolders.
 CHECKPOINT_REVISIONS = {
@@ -237,12 +244,6 @@ CHECKPOINT_REVISIONS = {
     "VideoPrismVisionConfig": "refs/pr/4",  # google/videoprism-base-f16r288
 }
 
-# Fallback checkpoints for configs whose primary checkpoint is not yet released.
-# The fallback must be a compatible publicly-accessible checkpoint (e.g. a previous
-# model version) so that the processor can be built and the tiny model created.
-CHECKPOINT_OVERRIDES = {
-    "MiniCPMV4_7Config": "openbmb/MiniCPM-V-4.6",  # 4.7 processor is backward-compatible with 4.6
-}
 
 CHECKPOINT_SUBFOLDERS = {
     "GlmImageConfig": "processor",
@@ -424,26 +425,6 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             flush=True,
         )
         logger.error(f"{e.__class__.__name__}: {e}")
-
-    # If the primary checkpoint failed and we have a fallback, try it once.
-    if processor is None and config_class.__name__ in CHECKPOINT_OVERRIDES:
-        fallback = CHECKPOINT_OVERRIDES[config_class.__name__]
-        try:
-            _t0 = time.time()
-            print(
-                f"[build_processor] retry  {processor_class.__name__}.from_pretrained({fallback!r}) (override)",
-                flush=True,
-            )
-            processor = processor_class.from_pretrained(fallback)
-            print(
-                f"[build_processor] OK  {processor_class.__name__} (override) in {time.time() - _t0:.1f}s", flush=True
-            )
-        except Exception as e:
-            print(
-                f"[build_processor] FAIL {processor_class.__name__} (override) in {time.time() - _t0:.1f}s — {e.__class__.__name__}: {e}",
-                flush=True,
-            )
-            logger.error(f"{e.__class__.__name__}: {e}")
 
     # Try to get a new processor class from checkpoint. This is helpful for a checkpoint without necessary file to load
     # processor while `processor_class` is an Auto class. For example, `sew` has `Wav2Vec2Processor` in
@@ -1613,7 +1594,7 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
         fill_result_with_error(result, error, trace, models_to_create)
 
     if len(result["processor"]) == 0:
-        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR:
+        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR and config_class.__name__ not in UNRELEASED_CHECKPOINTS:
             error = f"No processor could be built for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
@@ -1649,7 +1630,7 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
     #     p.save_pretrained(processor_output_folder)
 
     if len(processors) == 0:
-        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR:
+        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR and config_class.__name__ not in UNRELEASED_CHECKPOINTS:
             error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
@@ -1693,7 +1674,11 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
         # `text_config` (e.g. CanaryConfig.get_text_config() returns decoder_config, and
         # GraniteSpeech5CTCConfig.get_text_config() returns encoder_config). This keeps
         # validate_architecture happy when vocab_size is overridden from the tokenizer.
-        _text_conf = tiny_config.get_text_config()
+        # Skip if get_text_config() raises (e.g. multiple valid text sub-configs → ambiguous).
+        try:
+            _text_conf = tiny_config.get_text_config()
+        except ValueError:
+            _text_conf = tiny_config
         if (
             _text_conf is not tiny_config
             and _text_conf is not getattr(tiny_config, "text_config", None)
