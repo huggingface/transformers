@@ -21,8 +21,10 @@ that hold only a config: the export precompute and the runtime driving a saved a
 
 from __future__ import annotations
 
+import functools
 import importlib
 import inspect
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -51,7 +53,8 @@ if is_torch_available():
 def _find_config_attr(config: Any, name: str) -> Any | None:
     """First non-`None` `name` on `config` or any of its (recursive) `sub_configs`.
 
-    A value the modeling code derives should be exposed as a config `@property` (`num_grid_per_side`)."""
+    A value only the modeling code sets (`num_grid_per_side`) is read off the vision tower instead
+    (`_vision_tower_attr`)."""
     value = getattr(config, name, None)
     if value is not None:
         return value
@@ -60,6 +63,36 @@ def _find_config_attr(config: Any, name: str) -> Any | None:
         if sub is not None and (value := _find_config_attr(sub, name)) is not None:
             return value
     return None
+
+
+@functools.lru_cache(maxsize=8)
+def _meta_vision_tower(config_class: type, config_json: str):
+    """The tower `config_class` configures, built on the meta device from its JSON (configs aren't hashable)."""
+    from ..modeling_utils import PreTrainedModel
+
+    modeling = importlib.import_module(config_class.__module__.replace(".configuration_", ".modeling_"))
+    for candidate in vars(modeling).values():
+        if (
+            isinstance(candidate, type)
+            and issubclass(candidate, PreTrainedModel)
+            and candidate.config_class is config_class
+        ):
+            with torch.device("meta"):
+                return candidate._from_config(config_class.from_dict(json.loads(config_json)))
+    return None
+
+
+def _vision_tower_attr(config: Any, name: str) -> Any | None:
+    """`name` as the vision tower (or the first of its submodules that sets it) holds it, else off the config.
+
+    Read off the module because the modeling code sets some of these in `__init__` rather than the config."""
+    vision_config = _find_config_attr(config, "vision_config")
+    tower = _meta_vision_tower(type(vision_config), vision_config.to_json_string()) if vision_config else None
+    if tower is not None:
+        value = next((getattr(m, name) for m in tower.modules() if getattr(m, name, None) is not None), None)
+        if value is not None:
+            return value
+    return _find_config_attr(config, name)
 
 
 def _resolve_modeling_module(config: Any):
@@ -190,23 +223,22 @@ def _prepare_grid_thw_vision_inputs(config: Any, inputs: dict[str, Any]) -> None
     Optional helpers are gated by a config attribute or by the modeling module defining the helper.
     """
     grid_thw = inputs["grid_thw"]
-    spatial_merge_size = _find_config_attr(config, "spatial_merge_size")
+    # The tower's own value: an encoder that runs un-merged and defers the merge (kimi_k25) holds 1.
+    spatial_merge_size = _vision_tower_attr(config, "spatial_merge_size")
     if spatial_merge_size is None:
         # Video-Llama-3 carries per-image merge sizes as an input tensor.
         spatial_merge_size = inputs.get("merge_sizes", 1)
-    # An encoder that resamples its position grid before merging (kimi_k25) works at patch resolution.
-    resample_merge_size = 1 if _find_config_attr(config, "resample_before_merge") is True else spatial_merge_size
 
     module = _resolve_modeling_module(config)
-    merge_temporal = _find_config_attr(config, "merge_temporal_attention") is True
+    merge_temporal = _vision_tower_attr(config, "merge_temporal_attention") is True
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
         grid_thw, config, merge_temporal=merge_temporal, kwargs=inputs
     )
-    include_temporal = _find_config_attr(config, "include_temporal_position_ids") is True
-    inputs["position_ids"] = get_vision_position_ids(grid_thw, resample_merge_size, include_temporal=include_temporal)
+    include_temporal = _vision_tower_attr(config, "include_temporal_position_ids") is True
+    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
-    window_size = _find_config_attr(config, "window_size")
-    patch_size = _find_config_attr(config, "patch_size")
+    window_size = _vision_tower_attr(config, "window_size")
+    patch_size = _vision_tower_attr(config, "patch_size")
     if window_size is not None and patch_size is not None:
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size, window_size, patch_size
@@ -215,17 +247,17 @@ def _prepare_grid_thw_vision_inputs(config: Any, inputs: dict[str, Any]) -> None
             inputs["cu_window_seqlens"], config, kwargs=inputs, kwarg_name="max_window_seqlen"
         )
 
-    num_grid_per_side = _find_config_attr(config, "num_grid_per_side")
+    num_grid_per_side = _vision_tower_attr(config, "num_grid_per_side")
     if num_grid_per_side is not None:
-        mode = _find_config_attr(config, "interpolation_mode") or "bilinear"
-        padding = _find_config_attr(config, "interpolation_padding") or "border"
-        align_corners = _find_config_attr(config, "interpolation_align_corners") is True
+        mode = _vision_tower_attr(config, "interpolation_mode") or "bilinear"
+        padding = _vision_tower_attr(config, "interpolation_padding") or "border"
+        align_corners = _vision_tower_attr(config, "interpolation_align_corners") is True
         inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side,
             mode=mode,
             align_corners=align_corners,
-            spatial_merge_size=resample_merge_size,
+            spatial_merge_size=spatial_merge_size,
             padding=padding,
         )
 

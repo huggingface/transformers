@@ -591,10 +591,9 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.num_grid_per_side
-        self.interpolation_align_corners = config.interpolation_align_corners
-        self.interpolation_mode = config.interpolation_mode
-        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
+        self.num_grid_per_side = int(self.num_positions**0.5)
+        self.interpolation_align_corners = True
+        self.interpolation_mode = "bilinear"
 
     def forward(
         self,
@@ -621,7 +620,7 @@ class PaddleOCRVisionEmbeddings(nn.Module):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.resample_merge_size,
+            spatial_merge_size=1,
             kwargs=kwargs,
         )
         pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
@@ -822,6 +821,8 @@ class PaddleOCRVisionEncoder(nn.Module):
         self.layers = nn.ModuleList([PaddleOCRVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
         self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(config)
+        # Positions run un-merged; the merge is deferred to the projector.
+        self.spatial_merge_size = 1
 
     # Ignore copy
     @can_return_tuple
@@ -845,7 +846,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         """
         # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
-        position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = inputs_embeds

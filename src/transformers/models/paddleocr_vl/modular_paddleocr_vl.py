@@ -282,15 +282,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     image_size: int = 384
     patch_size: int = 14
     spatial_merge_size: int = 2
-    interpolation_mode: str = "bilinear"
-    interpolation_align_corners: bool = True
-    resample_before_merge: bool = True
     rope_parameters: dict | None = None
-
-    @property
-    def num_grid_per_side(self) -> int:
-        """Side length of the square learned position grid (`num_positions = (image_size // patch_size) ** 2`)."""
-        return self.image_size // self.patch_size
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -493,10 +485,9 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.num_grid_per_side
-        self.interpolation_align_corners = config.interpolation_align_corners
-        self.interpolation_mode = config.interpolation_mode
-        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
+        self.num_grid_per_side = int(self.num_positions**0.5)
+        self.interpolation_align_corners = True
+        self.interpolation_mode = "bilinear"
 
     def interpolate_pos_encoding(self, **super_kwargs):
         raise NotImplementedError("Not needed - positions are interpolated in `forward`")
@@ -526,7 +517,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.resample_merge_size,
+            spatial_merge_size=1,
             kwargs=kwargs,
         )
         pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
@@ -554,6 +545,8 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(config)
+        # Positions run un-merged; the merge is deferred to the projector.
+        self.spatial_merge_size = 1
 
     @can_return_tuple
     @auto_docstring
@@ -576,7 +569,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         """
         # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
-        position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = inputs_embeds

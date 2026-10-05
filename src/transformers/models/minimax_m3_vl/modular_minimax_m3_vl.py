@@ -189,9 +189,6 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     patch_size: int = 14
     temporal_patch_size: int = 2
     spatial_merge_size: int = 2
-    # This encoder's rotary embedding rotates T/H/W, so `vision_utils.get_vision_position_ids` must
-    # prepend a temporal column
-    include_temporal_position_ids: bool = True
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-05
     attention_dropout: float = 0.0
@@ -895,6 +892,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.rotary_emb = MiniMaxM3VLVisionRotaryEmbedding(config)
+        self.include_temporal_position_ids = True
         self.post_init()
 
     @merge_with_config_defaults
@@ -912,7 +910,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         position_ids = get_vision_position_ids(
             grid_thw,
             self.config.spatial_merge_size,
-            include_temporal=self.config.include_temporal_position_ids,
+            include_temporal=self.include_temporal_position_ids,
             kwargs=kwargs,
         )
         position_embeddings = self.rotary_emb(embeds, position_ids)
