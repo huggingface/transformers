@@ -799,9 +799,23 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
+    """
+    Enables a bidirectional mask within the sliding window.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        """A token can attend to any other token if their absolute distance is within
+        the (exclusive) sliding window size (distance < sliding_window)."""
+        return abs(q_idx - kv_idx) < sliding_window
+
+    return inner_mask
+
+
 @auto_docstring
 class Step3p7TextModel(Step3p7PreTrainedModel):
     config: Step3p7TextConfig
+    input_modalities = ("text",)
     _can_record_outputs = {
         "hidden_states": Step3p7DecoderLayer,
         "attentions": Step3p7Attention,
@@ -858,7 +872,9 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
+        # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -866,14 +882,19 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            mask_creation_functions = {
-                "full_attention": lambda: create_causal_mask(**mask_kwargs),
-                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-            }
-            causal_mask_mapping = {}
-            for layer_type in set(self.config.layer_types):
-                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+            sliding_mask_kwargs = mask_kwargs.copy()
 
+            if self.config.use_bidirectional_attention:
+                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
+                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
+
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
+            }
+
+        # embed positions
         hidden_states = inputs_embeds
         position_embeddings = {}
         for layer_type in set(self.config.layer_types):
@@ -893,7 +914,7 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=past_key_values,
         )
 
 
