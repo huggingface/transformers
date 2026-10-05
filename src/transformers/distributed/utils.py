@@ -148,9 +148,9 @@ class TransformersDeviceMesh:
     If one were ever added, the relationship would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
     (efsdp = fsdp * tp / (ep * etp))
 
-    When ep_size == tp_size, efsdp and fsdp are the same axis, same size and same rank groups.
+    When ep_size == tp_size, efsdp == fsdp (given the relationship efsdp = fsdp * tp / ep), thus same axis, same size and same groups of ranks.
     In that case experts could reuse the dense mesh's fsdp axis.
-    When ep_size != tp_size, the two axes group different ranks, so experts need their own efsdp axis.
+    When ep_size != tp_size, egsdp != fsdp, so we can't reuse the same mesh as they don't have the same groups of ranks
 
     Regarding ep value, We decide to default it to node width (8 on most machines) so all-to-all never leaves the node.
     - On a single node, ep == fsdp * tp thus efsdp = 1, the axis does nothing.
