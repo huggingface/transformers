@@ -59,6 +59,8 @@ if is_torch_available():
         MixtralForCausalLM,
         PreTrainedConfig,
         QuantizedCache,
+        Qwen3VLConfig,
+        Qwen3VLForConditionalGeneration,
         StaticCache,
         convert_and_export_with_cache,
         pipeline,
@@ -365,6 +367,39 @@ class CacheTest(unittest.TestCase):
         cache = out.past_key_values
         self.assertIsInstance(cache, StaticCache)
         self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 8])
+
+    def test_chunked_prefill_multi_axis_position_ids(self):
+        """
+        Regression test for #49318: models with multi-axis rope position ids, such as Qwen3-VL's `(4, batch, seq)`.
+        The chunked prefill sliced each chunk's position ids on their second dim, the batch on such models, so the
+        second chunk had no rows. It must slice the last dim, the sequence, and match an unchunked prefill.
+        """
+        config = Qwen3VLConfig(
+            text_config={
+                "hidden_size": 32,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 2,
+                "head_dim": 16,
+                "num_hidden_layers": 2,
+                "intermediate_size": 64,
+                "vocab_size": 99,
+                "rope_parameters": {"rope_type": "default", "mrope_section": [2, 3, 3], "mrope_interleaved": True},
+            },
+            vision_config={
+                "depth": 1,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_heads": 2,
+                "out_hidden_size": 32,
+            },
+        )
+        model = Qwen3VLForConditionalGeneration(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        generation_kwargs = {"max_new_tokens": 2, "do_sample": False, "cache_implementation": "static"}
+
+        expected = model.generate(inputs, **generation_kwargs)
+        out = model.generate(inputs, **generation_kwargs, prefill_chunk_size=2)
+        self.assertTrue(torch.equal(out, expected))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
