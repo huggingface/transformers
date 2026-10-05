@@ -137,16 +137,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         try:
             original_batch_size = self.model_tester.batch_size
             self.model_tester.batch_size = batch_size
-            # Some old multimodal testers are composed of separate classes for vision/text (e.g. kosmos2, pix2struct)
-            if hasattr(self.model_tester, "text_model_tester") and hasattr(self.model_tester, "vision_model_tester"):
-                self.model_tester.text_model_tester.batch_size = batch_size
-                self.model_tester.vision_model_tester.batch_size = batch_size
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         finally:
             self.model_tester.batch_size = original_batch_size
-            if hasattr(self.model_tester, "text_model_tester") and hasattr(self.model_tester, "vision_model_tester"):
-                self.model_tester.text_model_tester.batch_size = original_batch_size
-                self.model_tester.vision_model_tester.batch_size = original_batch_size
 
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
