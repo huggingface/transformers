@@ -15,6 +15,7 @@
 
 import importlib
 import os
+import re
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
@@ -655,9 +656,23 @@ class AutoImageProcessor:
                 if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
                     image_processor_auto_map = config.auto_map["AutoImageProcessor"]
             except ValueError:
-                # Config loading failed (unrecognized model_type, invalid config, etc.)
-                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
-                pass
+                # Config loading failed; infer model_type from image-processor config or
+                # checkpoint name.
+                if config is None and not is_timm_config_dict(config_dict):
+                    model_type = config_dict.get("model_type", None)
+                    if model_type is None:
+                        for token in re.split(r"[-_/]", str(pretrained_model_name_or_path).split("/")[-1]):
+                            if token in IMAGE_PROCESSOR_MAPPING_NAMES:
+                                model_type = token
+                                break
+                    if model_type in IMAGE_PROCESSOR_MAPPING_NAMES:
+                        image_processor_class = _load_class_with_fallback(
+                            IMAGE_PROCESSOR_MAPPING_NAMES[model_type], None
+                        )
+                        if image_processor_class is not None:
+                            return image_processor_class.from_pretrained(
+                                pretrained_model_name_or_path, *inputs, **kwargs
+                            )
 
         # Derive base_class_name from image_processor_type
         is_legacy_fast = False
