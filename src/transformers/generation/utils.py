@@ -1119,12 +1119,13 @@ class GenerationMixin(ContinuousMixin):
         def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
             # Tensor of size [bs, seqlen, dim] where `bs` is number of images in this text sample
             # Each text can have 1+ images associated with it
-            # Inteleaving on first dim does the same thing as `input_ids.repeat_interlave` in leading batch dim!
+            # Each expanded text sample needs the whole image group: [A, B] -> [A, B, A, B].
+            # Interleaving individual images would give [A, A, B, B] and break the placeholder order.
             if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
+                return inputs.repeat((repeat_times,) + (1,) * (inputs.ndim - 1))
             else:
                 # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
-                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
+                return list(inputs) * repeat_times
 
         for modality in ["image", "video"]:
             modalily_outputs = mm_encoder_output.get(modality)
@@ -2307,7 +2308,10 @@ class GenerationMixin(ContinuousMixin):
                     "cache, please open an issue and tag @zucchini-nlp."
                 )
 
-            cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
+            # Copied, as `generate` may be called several times with the same `cache_config`, whose keys are consumed
+            cache_config = (
+                copy.deepcopy(generation_config.cache_config) if generation_config.cache_config is not None else {}
+            )
             cache_config.setdefault("config", self.config.get_text_config(decoder=True))
             backend = cache_config.pop("backend", "quanto")
             model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
