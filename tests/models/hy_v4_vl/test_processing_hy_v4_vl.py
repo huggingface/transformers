@@ -120,6 +120,8 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def prepare_images_inputs(self, batch_size=None, nested=False):
         images = [Image.new("RGB", (64, 32), color=(10 + i, 20, 30)) for i in range(batch_size or 1)]
+        if batch_size is None:
+            return images[0]
         return [[image] for image in images] if nested else images
 
     def prepare_videos_inputs(self, batch_size=None):
@@ -138,7 +140,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_processor_text_has_no_visual(self):
         # The mixin's final chat-template example otherwise fetches a Hub image.
-        with patch("transformers.image_processing_base.load_image", return_value=self.prepare_images_inputs()[0]):
+        with patch("transformers.image_processing_base.load_image", return_value=self.prepare_images_inputs()):
             super().test_processor_text_has_no_visual()
 
     def test_text_only_and_padding(self):

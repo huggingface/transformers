@@ -21,7 +21,6 @@ import itertools
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -30,6 +29,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...distributed.utils import is_dtensor
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -253,6 +253,8 @@ def eager_attention_forward(
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     else:
+        if is_dtensor(sinks):
+            sinks = sinks.to_local()
         sinks = sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
         combined_logits = torch.cat([attn_weights, sinks], dim=-1)
         combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
@@ -565,7 +567,7 @@ class HYV4VLHyperConnection(nn.Module):
 
     def __init__(self, config: HYV4VLConfig):
         super().__init__()
-        self.hc_mult = config.hc_mult  # number of streams, refered as N below
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
@@ -577,7 +579,7 @@ class HYV4VLHyperConnection(nn.Module):
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Independent HC implementation with forced fp32 application"""
         # Key difference is to force fp32 in any case
-        device_type = hidden_streams.device.type if hidden_streams.device.type != "mps" else "cpu"
+        device_type = hidden_streams.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = hidden_streams.flatten(2).float()
             # Norm as residual
@@ -610,7 +612,7 @@ class HYV4VLHyperHead(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
-        device_type = x.device.type if x.device.type != "mps" else "cpu"
+        device_type = x.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = x.flatten(2).float()
             # Norm as residual
@@ -804,16 +806,12 @@ class HYV4VLVisionPatchEmbed(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, sequence_len, -1).squeeze(0)
 
-        start = 0
-        image_embeddings_list = []
+        position_embeddings_list = []
         for t, h, w in grid_thw:
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings_list.append(image_embeddings + position_embedding)
-            start = end
+            position_embeddings_list.append(self.interpolate_pos_encoding(embeddings, h, w).squeeze(0).repeat(t, 1))
+        position_embeddings = torch.concat(position_embeddings_list, dim=0)
 
-        return torch.concat(image_embeddings_list, dim=0).unsqueeze(0)
+        return (embeddings + position_embeddings).unsqueeze(0)
 
 
 class HYV4VLVisionPatchMerger(nn.Module):
@@ -1105,7 +1103,7 @@ class HYV4VLRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
@@ -1185,7 +1183,7 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             causal_mask_mapping = {
-                "deepseek_sparse_attention": create_causal_mask(
+                "indexed_attention": create_causal_mask(
                     config=self.config,
                     inputs_embeds=inputs_embeds,
                     attention_mask=attention_mask,
@@ -1222,7 +1220,7 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
                 "position_ids": position_ids,
                 "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
-            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -1233,7 +1231,7 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping["deepseek_sparse_attention"],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -1532,22 +1530,41 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | HYV4VLModelOutputWithPast:
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1650,6 +1667,7 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | HYV4VLCausalLMOutputWithPast:
         r"""
@@ -1693,6 +1711,7 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -1759,122 +1778,37 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
 
         return position_ids
 
-    def _get_image_nums_and_video_nums(
+    def _expand_multimodal_outputs(
         self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
-        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-
-        Returns:
-            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
-            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
-        """
-        # No shared `vision_start_token_id`: each image or video is one contiguous run of placeholder tokens
-        token_ids = (self.config.image_token_id, self.config.video_token_id)
-        if inputs_embeds is None:
-            masks = [input_ids == token_id for token_id in token_ids]
-        else:
-            embeds = self.get_input_embeddings()(torch.tensor(token_ids, device=inputs_embeds.device))
-            masks = [(inputs_embeds == embed).all(-1) for embed in embeds]
-        image_nums, video_nums = (
-            (mask & ~nn.functional.pad(mask[:, :-1], (1, 0), value=False)).sum(dim=1) for mask in masks
-        )
-        return image_nums, video_nums
-
-    def _expand_inputs_for_generation(
-        self,
+        input_ids: torch.LongTensor,
+        mm_encoder_output: dict,
         expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
-        # pixel_values.shape[0] is sum(seqlen_images for samples)
-        # image_grid_thw.shape[0] is sum(num_images for samples)
-
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
-
-        def _expand_dict_for_generation_visual(dict_to_expand):
-            image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            video_grid_thw = model_kwargs.get("video_grid_thw", None)
-            image_nums, video_nums = self._get_image_nums_and_video_nums(
-                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
-            )
-
-            def _repeat_interleave_samples(x, lengths, repeat_times):
-                samples = torch.split(x, lengths)
-                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-                return result
-
-            for key in dict_to_expand:
-                if key == "pixel_values":
-                    # split images into samples
-                    samples = torch.split(image_grid_thw, list(image_nums))
-                    # compute the sequence length of images for each sample
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "image_grid_thw":
-                    # get the num of images for each sample
-                    lengths = list(image_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "pixel_values_videos":
-                    samples = torch.split(video_grid_thw, list(video_nums))
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "video_grid_thw":
-                    lengths = list(video_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "second_per_grid_ts":
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
-                    )
-            return dict_to_expand
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if key == "position_ids" and dict_to_expand[key].ndim == 3:
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
-                elif (
-                    dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
-                ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> dict:
+        for modality in ("image", "video"):
+            outputs = mm_encoder_output.get(modality)
+            if outputs is None or outputs.pooler_output is None:
+                continue
+            token_id = getattr(self.config, f"{modality}_token_id")
+            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
+                token_embed = self.get_input_embeddings()(
+                    torch.tensor(token_id, device=inputs_embeds.device, dtype=torch.long)
+                )
+                counts = (inputs_embeds == token_embed).all(-1).sum(-1)
+            else:
+                counts = (input_ids == token_id).sum(-1)
+            sample_ends = set(itertools.accumulate(counts.tolist()))
+            features = outputs.pooler_output
+            feature_ends = itertools.accumulate(feature.shape[0] for feature in features)
+            offsets = [0] + [index + 1 for index, end in enumerate(feature_ends) if end in sample_ends]
+            # Repeat the whole sample's visual sequence, not each image independently.
+            outputs.pooler_output = [
+                feature
+                for start, end in zip(offsets[:-1], offsets[1:])
+                for _ in range(expand_size)
+                for feature in features[start:end]
+            ]
+        return mm_encoder_output
 
 
 __all__ = [

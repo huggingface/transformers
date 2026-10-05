@@ -35,15 +35,17 @@ if is_vision_available():
 
 class HYV4VLImageProcessingTester(ImageProcessingTester):
     def __init__(self, parent):
-        self.parent = parent
-        self.batch_size = 3
-        self.num_channels = 3
-        self.min_resolution = 32
-        self.max_resolution = 64
-        self.patch_size = 16
-        self.temporal_patch_size = 1
-        self.merge_size = 2
-        self.size = {"shortest_edge": 1024, "longest_edge": 1024}
+        super().__init__(
+            parent=parent,
+            batch_size=3,
+            num_channels=3,
+            min_resolution=32,
+            max_resolution=64,
+            patch_size=16,
+            temporal_patch_size=1,
+            merge_size=2,
+            size={"shortest_edge": 1024, "longest_edge": 1024},
+        )
 
     def prepare_image_processor_dict(self):
         return {
@@ -66,10 +68,7 @@ class HYV4VLImageProcessingTester(ImageProcessingTester):
 @require_torchvision
 class HYV4VLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
     test_cast_dtype = True
-
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = HYV4VLImageProcessingTester(self)
+    image_processor_tester_class = HYV4VLImageProcessingTester
 
     @property
     def image_processor_dict(self):

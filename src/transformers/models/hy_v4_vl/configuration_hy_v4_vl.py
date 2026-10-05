@@ -117,7 +117,7 @@ class HYV4VLTextConfig(PreTrainedConfig):
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.gate_proj": "colwise",
-        "layers.*.self_attn.sinks": "colwise_local",
+        "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -200,7 +200,7 @@ class HYV4VLTextConfig(PreTrainedConfig):
                 self.num_hidden_layers - 1, 0
             )
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
         if self.indexer_types is None:
             self.indexer_types = [
                 "full" if layer_idx == 0 or (layer_idx - 1) % 4 == 0 else "shared"

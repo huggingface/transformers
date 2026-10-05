@@ -16,12 +16,14 @@
 import copy
 import tempfile
 import unittest
+from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from parameterized import parameterized
 
 from transformers import HYV4VLConfig, HYV4VLTextConfig, HYV4VLVisionConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
 
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -40,6 +42,79 @@ if is_torch_available():
         HYV4VLTextModel,
         HYV4VLVisionTransformer,
     )
+
+
+def _check_sharded_attention_sinks(rank, rendezvous):
+    import torch.distributed as dist
+    from torch.distributed.device_mesh import init_device_mesh
+    from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
+
+    from transformers.distributed.tensor_parallel import apply_tensor_parallelism
+    from transformers.models.hy_v4_vl.modeling_hy_v4_vl import eager_attention_forward
+
+    torch.cuda.set_device(rank)
+    device = torch.device("cuda", rank)
+    dist.init_process_group(
+        "nccl", init_method=rendezvous, rank=rank, world_size=2, device_id=device, timeout=timedelta(seconds=120)
+    )
+    try:
+        mesh = init_device_mesh("cuda", (2,))
+        for dtype in (torch.float32, torch.bfloat16):
+            torch.manual_seed(17)
+            query, key, value = [torch.randn(1, 4, 3, 8, device=device, dtype=dtype) for _ in range(3)]
+            reference_sinks = torch.nn.Parameter(torch.linspace(-1, 1, 4, device=device))
+            module = torch.nn.Module()
+            module.num_key_value_groups = 1
+            module.sinks = torch.nn.Parameter(reference_sinks.detach().clone())
+            module.tp_plan = {"sinks": "colwise"}
+            apply_tensor_parallelism(module, mesh)
+            module.other = torch.nn.Parameter(distribute_tensor(torch.ones(4, device=device), mesh, [Replicate()]))
+            sink, other = module.sinks, module.other
+            assert isinstance(sink, DTensor) and sink.placements == (Shard(0),)
+            head_slice = slice(rank * 2, (rank + 1) * 2)
+            torch.testing.assert_close(sink.to_local(), reference_sinks[head_slice], atol=0, rtol=0)
+
+            mask = torch.full((1, 1, 3, 3), torch.finfo(dtype).min, device=device, dtype=dtype).triu(1)
+            scores = query @ key.transpose(-1, -2) * 8**-0.5 + mask
+            combined = torch.cat([scores, reference_sinks.view(1, -1, 1, 1).expand(1, -1, 3, 1)], dim=-1)
+            weights = (combined - combined.max(-1, keepdim=True).values).softmax(-1)[..., :-1].to(dtype)
+            expected = (weights @ value).transpose(1, 2).contiguous()
+            expected.float().square().sum().backward()
+
+            original_cat = torch.cat
+
+            def checked_cat(*args, **kwargs):
+                assert module.sinks is sink and module.other is other
+                assert module.state_dict(keep_vars=True)["sinks"] is sink
+                return original_cat(*args, **kwargs)
+
+            with patch("torch.cat", side_effect=checked_cat):
+                actual, _ = eager_attention_forward(
+                    module, query[:, head_slice], key[:, head_slice], value[:, head_slice], mask, scaling=8**-0.5
+                )
+            torch.testing.assert_close(actual, expected[:, :, head_slice], atol=0, rtol=0)
+            actual.float().square().sum().backward()
+            torch.testing.assert_close(sink.grad.to_local(), reference_sinks.grad[head_slice], atol=1e-6, rtol=1e-5)
+            assert torch.isfinite(sink.grad.to_local()).all() and sink.grad.to_local().abs().sum() > 0
+            assert module.sinks is sink and module.other is other
+            assert sink.placements == (Shard(0),) and other.placements == (Replicate(),)
+            torch.testing.assert_close(sink.full_tensor(), reference_sinks, atol=0, rtol=0)
+            with torch.no_grad():
+                repeated, _ = eager_attention_forward(
+                    module, query[:, head_slice], key[:, head_slice], value[:, head_slice], mask, scaling=8**-0.5
+                )
+            torch.testing.assert_close(repeated, actual, atol=0, rtol=0)
+            assert module.sinks is sink
+    finally:
+        dist.destroy_process_group()
+
+
+@require_torch_multi_gpu
+class HYV4VLSinkTensorParallelTest(unittest.TestCase):
+    def test_sharded_sinks_forward_backward_without_parameter_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            rendezvous = (Path(directory) / "rendezvous").as_uri()
+            torch.multiprocessing.spawn(_check_sharded_attention_sinks, args=(rendezvous,), nprocs=2, join=True)
 
 
 class HYV4VLVisionText2TextModelTester(VLMModelTester):
@@ -386,6 +461,17 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                         rtol=1e-5,
                     )
 
+    def test_eager_attention_without_sinks(self):
+        from transformers.models.hy_v4_vl.modeling_hy_v4_vl import eager_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 1
+        query, key, value = [torch.randn(1, 2, 3, 8, device=torch_device) for _ in range(3)]
+        expected_weights = (query @ key.transpose(-1, -2) * 8**-0.5).softmax(-1)
+        actual, weights = eager_attention_forward(module, query, key, value, None, scaling=8**-0.5)
+        torch.testing.assert_close(weights, expected_weights)
+        torch.testing.assert_close(actual, (expected_weights @ value).transpose(1, 2))
+
     def test_mixed_loss_and_visual_gradients(self):
         config = self.model_tester.get_config()
         inputs = self.model_tester.prepare_multimodal_inputs((1, 4, 6), (2, 4, 4))
@@ -399,7 +485,11 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(outputs.loss, expected_loss)
         self.assertTrue(torch.isfinite(outputs.loss))
         outputs.loss.backward()
-        for parameter in (model.lm_head.weight, model.model.vision_tower.patch_merger.image_newline):
+        for parameter in (
+            model.lm_head.weight,
+            model.model.vision_tower.patch_merger.image_newline,
+            model.model.language_model.layers[0].self_attn.sinks,
+        ):
             self.assertIsNotNone(parameter.grad)
             self.assertTrue(torch.isfinite(parameter.grad).all())
             self.assertGreater(parameter.grad.abs().sum().item(), 0)
@@ -537,8 +627,12 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         model = HYV4VLForConditionalGeneration(config).to(torch_device).eval()
         inputs = self.model_tester.prepare_multimodal_inputs((1, 4, 6), (2, 4, 4))
         with (
-            patch.object(model.model, "get_image_features", wraps=model.model.get_image_features) as image_features,
-            patch.object(model.model, "get_video_features", wraps=model.model.get_video_features) as video_features,
+            patch.object(
+                model.model, "get_image_features", autospec=True, side_effect=model.model.get_image_features
+            ) as image_features,
+            patch.object(
+                model.model, "get_video_features", autospec=True, side_effect=model.model.get_video_features
+            ) as video_features,
             torch.no_grad(),
         ):
             generated = model.generate(**inputs, max_new_tokens=3, min_new_tokens=3, do_sample=False)
@@ -614,6 +708,18 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         if use_inputs_embeds:
             with torch.no_grad():
                 inputs["inputs_embeds"] = model.get_input_embeddings()(inputs.pop("input_ids"))
+        with torch.no_grad():
+            inputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs)
+        expected_features = {}
+        for modality in ("image", "video"):
+            features = inputs["mm_encoder_outputs"][modality].pooler_output
+            expected_features[modality] = []
+            start = 0
+            for row in rows:
+                count = len(row.get(f"{modality}_grid_thw", []))
+                for _ in range(expand_size):
+                    expected_features[modality].extend(features[start : start + count])
+                start += count
         expanded_ids, expanded = model._expand_inputs_for_generation(expand_size=expand_size, **inputs)
         self.assertIs(expanded["past_key_values"], inputs["past_key_values"])
         self.assertEqual(expanded["past_key_values"].get_seq_length(), 0)
@@ -634,8 +740,12 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         # Qwen2-VL leaves the cached deltas at the original batch size and broadcasts them lazily.
         self.assertIs(model.model.rope_deltas, rope_deltas)
         for key in ("pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"):
-            expected = torch.cat([row[key] for row in rows if key in row for _ in range(expand_size)])
-            torch.testing.assert_close(expanded[key], expected, rtol=0, atol=0)
+            self.assertNotIn(key, expanded)
+        for modality, expected in expected_features.items():
+            actual = expanded["mm_encoder_outputs"][modality].pooler_output
+            self.assertEqual(len(actual), len(expected))
+            for actual_feature, expected_feature in zip(actual, expected):
+                torch.testing.assert_close(actual_feature, expected_feature, rtol=0, atol=0)
         if expand_size == 1:
             for key, value in inputs.items():
                 self.assertIs(expanded_ids if key == "input_ids" else expanded[key], value)

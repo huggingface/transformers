@@ -22,6 +22,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...distributed.utils import is_dtensor
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -119,7 +120,7 @@ class HYV4VLTextConfig(HYV4Config):
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.gate_proj": "colwise",
-        "layers.*.self_attn.sinks": "colwise_local",
+        "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -293,6 +294,8 @@ def eager_attention_forward(
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     else:
+        if is_dtensor(sinks):
+            sinks = sinks.to_local()
         sinks = sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
         combined_logits = torch.cat([attn_weights, sinks], dim=-1)
         combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
@@ -350,7 +353,7 @@ class HYV4VLTextModel(HYV4Model):
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             causal_mask_mapping = {
-                "deepseek_sparse_attention": create_causal_mask(
+                "indexed_attention": create_causal_mask(
                     config=self.config,
                     inputs_embeds=inputs_embeds,
                     attention_mask=attention_mask,
@@ -558,6 +561,7 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | HYV4VLCausalLMOutputWithPast:
         r"""
@@ -601,6 +605,7 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -629,22 +634,37 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             rope_deltas=outputs.rope_deltas,
         )
 
-    def _get_image_nums_and_video_nums(
+    def _expand_multimodal_outputs(
         self,
-        input_ids: torch.LongTensor | None,
+        input_ids: torch.LongTensor,
+        mm_encoder_output: dict,
+        expand_size: int = 1,
         inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # No shared `vision_start_token_id`: each image or video is one contiguous run of placeholder tokens
-        token_ids = (self.config.image_token_id, self.config.video_token_id)
-        if inputs_embeds is None:
-            masks = [input_ids == token_id for token_id in token_ids]
-        else:
-            embeds = self.get_input_embeddings()(torch.tensor(token_ids, device=inputs_embeds.device))
-            masks = [(inputs_embeds == embed).all(-1) for embed in embeds]
-        image_nums, video_nums = (
-            (mask & ~nn.functional.pad(mask[:, :-1], (1, 0), value=False)).sum(dim=1) for mask in masks
-        )
-        return image_nums, video_nums
+    ) -> dict:
+        for modality in ("image", "video"):
+            outputs = mm_encoder_output.get(modality)
+            if outputs is None or outputs.pooler_output is None:
+                continue
+            token_id = getattr(self.config, f"{modality}_token_id")
+            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
+                token_embed = self.get_input_embeddings()(
+                    torch.tensor(token_id, device=inputs_embeds.device, dtype=torch.long)
+                )
+                counts = (inputs_embeds == token_embed).all(-1).sum(-1)
+            else:
+                counts = (input_ids == token_id).sum(-1)
+            sample_ends = set(itertools.accumulate(counts.tolist()))
+            features = outputs.pooler_output
+            feature_ends = itertools.accumulate(feature.shape[0] for feature in features)
+            offsets = [0] + [index + 1 for index, end in enumerate(feature_ends) if end in sample_ends]
+            # Repeat the whole sample's visual sequence, not each image independently.
+            outputs.pooler_output = [
+                feature
+                for start, end in zip(offsets[:-1], offsets[1:])
+                for _ in range(expand_size)
+                for feature in features[start:end]
+            ]
+        return mm_encoder_output
 
 
 @auto_docstring

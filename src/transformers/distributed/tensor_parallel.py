@@ -367,28 +367,6 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         return module
 
 
-class LocalShardParallel(TensorParallelLayer):
-    """Expose a module's own sharded parameters as local shards while its forward runs.
-
-    Installed on the owner of a `colwise_local` parameter. Such parameters (e.g. learned per-head attention sinks) are
-    read directly in the owner's forward next to activations that sharded projections already return as local heads,
-    so the owner must see the matching local shard rather than a `DTensor`.
-    """
-
-    def should_use_local_tensors(self, module):
-        return True
-
-
-class ColwiseLocalParallel(ColwiseParallel):
-    """Colwise sharding for a bare parameter consumed directly in the owning module's forward.
-
-    The parameter is sharded like `colwise` (so each rank keeps the slice matching its heads), and the owning module
-    gets a [`LocalShardParallel`] forward wrapper so that the shard is used as a plain local tensor.
-    """
-
-    owner_style = LocalShardParallel()
-
-
 class AllReduceParallel(TensorParallelLayer):
     """All-reduce a module's partial forward output across the TP mesh."""
 
@@ -953,7 +931,6 @@ class ParallelInterface(GeneralInterface):
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
-            "colwise_local": ColwiseLocalParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
@@ -1034,7 +1011,6 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
-        owner_style = None
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
             style_name = _get_parameter_plan(parameter_name=full, plan=tp_plan, is_weight=True)
@@ -1042,7 +1018,6 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
-                owner_style = owner_style or getattr(style, "owner_style", None)
 
         # Install the input/output transforms required by this module's TP style.
         style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)
@@ -1052,9 +1027,6 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
-        elif owner_style is not None:
-            # Bare sharded parameters (e.g. `colwise_local`) need their owner to read the local shard.
-            owner_style.install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
@@ -144,6 +145,15 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         output = processor(frames, input_data_format="channels_last", return_tensors="pt")
         self.assertEqual(output.pixel_values_videos.shape, (24, 768))
         self.assertEqual(output.video_grid_thw.tolist(), [[3, 2, 4]])
+
+    def test_rgb_conversion_is_handled_before_preprocess(self):
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        video = torch.randint(0, 256, (3, 3, 32, 64), device=torch_device, dtype=torch.uint8)
+        with patch.object(processor, "convert_to_rgb", wraps=processor.convert_to_rgb) as convert:
+            output = processor(video, input_data_format="channels_first", do_convert_rgb=True, return_tensors="pt")
+        self.assertEqual(convert.call_count, 1)
+        self.assertEqual(output.video_grid_thw.tolist(), [[3, 2, 4]])
+        self.assertTrue(output.pixel_values_videos.isfinite().all())
 
     def test_whole_clip_budget(self):
         processor = self.fast_video_processing_class(
