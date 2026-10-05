@@ -697,8 +697,6 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_gpu
     @require_kernels
     def test_use_kernels(self):
-        if not isinstance(tdt_loss, torch.nn.Module):
-            self.skipTest("Hub kernels are disabled (USE_HUB_KERNELS)")
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_loss()
         self.model_tester.create_and_check_use_kernels(*config_and_inputs)
 
