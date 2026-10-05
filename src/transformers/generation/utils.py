@@ -37,7 +37,7 @@ from ..cache_utils import (
 )
 from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
-from ..distributed.tensor_parallel import _get_parameter_tp_plan
+from ..distributed.tensor_parallel import get_kv_heads_per_rank
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
     check_python_requirements,
@@ -371,6 +371,17 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
     if num_steps == 0:
         return (input_ids, *recorded)
     return (input_ids[..., :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
+
+
+def _move_to_device(value, device: torch.device):
+    """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto `device`."""
+    if isinstance(value, torch.Tensor):
+        return value.to(device)
+    if isinstance(value, dict):
+        return {k: _move_to_device(v, device) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_move_to_device(v, device) for v in value)
+    return value
 
 
 class StopCheck:
@@ -773,14 +784,7 @@ class GenerationMixin(ContinuousMixin):
         # the generation loop's growing-tensor bookkeeping stays off-device.
         input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds
         if self.device.type != "meta" and input_tensor is not None and input_tensor.device != self.device:
-            for key, value in model_inputs.items():
-                if isinstance(value, torch.Tensor):
-                    model_inputs[key] = value.to(self.device)
-                # Tensors nested in a dict, such as the masks keyed by layer type
-                elif isinstance(value, dict):
-                    model_inputs[key] = {
-                        k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in value.items()
-                    }
+            model_inputs = _move_to_device(model_inputs, self.device)
 
         return model_inputs
 
@@ -2139,21 +2143,11 @@ class GenerationMixin(ContinuousMixin):
             return None
         num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
-        if tp_size == 1:
-            return num_heads, head_dim
-        key_param_name = next((name for name, _ in self.named_parameters() if name.endswith("k_proj.weight")), None)
-        if key_param_name is None:
-            # No key projection: unknown whether the plan shards the heads
-            return None
-        if _get_parameter_tp_plan(key_param_name, self.tp_plan) != "colwise":
-            # Unsharded heads: no plan, a gathered output, or experts only
-            return num_heads, head_dim
-        layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
-        if any(heads % tp_size for heads in layer_heads):
-            # The model cannot be evenly sharded by head
-            return None
-        # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
-        num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
+        if tp_size > 1:
+            num_heads = get_kv_heads_per_rank(self.tp_plan, num_heads, tp_size)
+            if num_heads is None:
+                # The model cannot be evenly sharded by head
+                return None
         return num_heads, head_dim
 
     def _prepare_static_cache(

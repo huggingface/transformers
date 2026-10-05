@@ -89,6 +89,22 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
+# Projections whose output holds the attention keys, fused or not
+_KEY_PROJECTIONS = ("k_proj", "qkv_proj", "query_key_value")
+
+
+def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], tp_size: int) -> int | list[int] | None:
+    """Returns the KV heads each rank holds under `tp_plan`, or `None` if they cannot be evenly sharded."""
+    if not any(key.rsplit(".", 1)[-1] in _KEY_PROJECTIONS and style == "colwise" for key, style in tp_plan.items()):
+        # Unsharded heads: no plan, a gathered output, or experts only
+        return num_heads
+    layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
+    if any(heads % tp_size for heads in layer_heads):
+        return None
+    # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
+    return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
+
+
 @contextlib.contextmanager
 def _use_local_dtensor_params(module):
     # Kernels as DeepGEMM require local tensors rather than DTensors.

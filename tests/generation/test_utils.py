@@ -3410,17 +3410,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         top-level ones. With a compileable cache, the attention mask is such a dict, keyed by layer type, when the
         config has `layer_types`.
         """
-        config = AutoConfig.for_model(
-            "qwen3",
-            vocab_size=99,
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-Gemma3ForCausalLM").to(
+            torch_device
         )
-        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+        config = model.config
         input_ids = torch.randint(1, config.vocab_size, (1, 8))
         # Left padding: without it, sdpa skips the mask and the dict only holds `None`
         attention_mask = torch.ones_like(input_ids)
