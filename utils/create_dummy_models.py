@@ -1658,6 +1658,17 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
             # `save_pretrained -> from_pretrained` work.
             if hasattr(tiny_config, "text_config_dict"):
                 tiny_config.text_config_dict[k] = v
+        # Also propagate to the sub-config returned by get_text_config() when it differs from
+        # `text_config` (e.g. CanaryConfig.get_text_config() returns decoder_config, and
+        # GraniteSpeech5CTCConfig.get_text_config() returns encoder_config). This keeps
+        # validate_architecture happy when vocab_size is overridden from the tokenizer.
+        _text_conf = tiny_config.get_text_config()
+        if (
+            _text_conf is not tiny_config
+            and _text_conf is not getattr(tiny_config, "text_config", None)
+            and hasattr(_text_conf, k)
+        ):
+            setattr(_text_conf, k, v)
 
     if result["warnings"]:
         logger.warning(result["warnings"][0][0])
