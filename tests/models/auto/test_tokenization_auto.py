@@ -469,6 +469,48 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertEqual(tokenizer2.vocab_size, 12)
 
+    def test_auto_tokenizer_custom_vocab_txt_not_overridden_by_tokenizer_json(self):
+        """Regression test for #48967.
+
+        Models fine-tuned with a custom/extended vocabulary stored in vocab.txt should load
+        their vocabulary from that file, not from the upstream tokenizer.json (which may
+        contain the base model's smaller vocabulary). AutoTokenizer must respect the custom
+        vocab.txt when tokenizer_config.json specifies tokenizer_class="BertTokenizer".
+        """
+        # Start from the base BERT tokenizer (small dummy, 12 tokens in vocab.txt).
+        base_tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
+        self.assertIsInstance(base_tokenizer, BertTokenizer)
+        base_vocab_size = base_tokenizer.vocab_size  # 12
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save the base tokenizer (writes tokenizer.json + vocab.txt + tokenizer_config.json).
+            base_tokenizer.save_pretrained(tmp_dir)
+
+            # Simulate a model that was fine-tuned with a custom, *larger* vocabulary by
+            # writing an extended vocab.txt with additional tokens while leaving the original
+            # tokenizer.json unchanged (as happens when the hub repo still has the upstream
+            # base tokenizer.json but an updated vocab.txt).
+            custom_tokens = [f"[CUSTOM_{i}]" for i in range(5)]
+            vocab_file_path = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file_path, encoding="utf-8") as f:
+                existing_vocab_lines = f.readlines()
+            with open(vocab_file_path, "w", encoding="utf-8") as f:
+                f.writelines(existing_vocab_lines)
+                for token in custom_tokens:
+                    f.write(token + "\n")
+
+            # Reload via AutoTokenizer — it must pick up the extended vocab.txt, not
+            # the unchanged tokenizer.json (which still has the original 12-token vocab).
+            tokenizer_reloaded = AutoTokenizer.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(tokenizer_reloaded, BertTokenizer)
+        self.assertEqual(
+            tokenizer_reloaded.vocab_size,
+            base_vocab_size + len(custom_tokens),
+            "AutoTokenizer must load the extended vocab.txt rather than the tokenizer.json "
+            "when a custom/extended vocabulary is present (regression for issue #48967).",
+        )    
+
     def test_auto_tokenizer_from_local_folder_mistral_detection(self):
         """See #42374 and #45444 for reference, ensuring proper mistral detection on local tokenizers"""
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
