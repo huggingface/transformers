@@ -184,22 +184,24 @@ jobs:
         if: env.SLACK_MESSAGE != ''
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c
         with:
-          channel-id: ${{ env.SLACK_CHANNEL_ID }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           payload: |
             {
+              "channel": ${{ toJSON(env.SLACK_CHANNEL_ID) }},
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ env.SLACK_TITLE }}"
+                    "text": ${{ toJSON(env.SLACK_TITLE) }}
                   }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "${{ env.SLACK_MESSAGE }}"
+                    "text": ${{ toJSON(env.SLACK_MESSAGE) }}
                   }
                 },
                 {
@@ -214,5 +216,3 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
