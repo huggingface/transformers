@@ -79,9 +79,6 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
         feed-forward modules.
     hidden_expansion (`float`, *optional*, defaults to 1.0):
         Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-    hidden_size (`int`, *optional*, defaults to 256):
-        Dimension of the decoder layers, excluding the hybrid encoder. Also readable as `d_model`, the name used by
-        the RT-DETR lineage this model descends from.
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries.
     decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
@@ -101,14 +98,17 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
         Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
         Whether to disable custom kernels.
-    num_coords (`int`, *optional*, defaults to 10):
-        Size of the box parameterization predicted by the bbox heads. PP-DocLayoutV4 regresses a four point
-        quadrilateral encoded as `[center_x, center_y, dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4]` in sigmoid space,
-        where the corner offsets are shifted by `+0.5`. Only `10` is supported.
     global_pointer_head_size (`int`, *optional*, defaults to 64):
         The size of the global pointer head.
     gp_dropout_value (`float`, *optional*, defaults to 0.1):
         The dropout probability in the global pointer head.
+    hidden_size (`int`, *optional*, defaults to 256):
+        Dimension of the decoder layers, excluding the hybrid encoder. Also readable as `d_model`, the name used by
+        the RT-DETR lineage this model descends from.
+    num_coords (`int`, *optional*, defaults to 10):
+        Size of the box parameterization predicted by the bbox heads. PP-DocLayoutV4 regresses a four point
+        quadrilateral encoded as `[center_x, center_y, dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4]` in sigmoid space,
+        where the corner offsets are shifted by `+0.5`. Only `10` is supported.
     s2r_steps (`int`, *optional*, defaults to 3):
         Number of propagation steps used to approximate the transitive closure of the successor matrix.
     s2r_damping (`float`, *optional*, defaults to 0.5):
@@ -291,22 +291,22 @@ class PPDocLayoutV4S2RFusion(nn.Module):
 class PPDocLayoutV4SuccessorOrderHead(nn.Module):
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
-        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.proj = nn.ModuleList([nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)])
         self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.global_pointer(self.proj(hidden_states))
+        return self.global_pointer(self.proj[-1](hidden_states))
 
 
 class PPDocLayoutV4RelativeOrderHead(nn.Module):
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
-        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.proj = nn.ModuleList([nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)])
         self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
         self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
 
     def forward(self, hidden_states: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
-        relative_logits = self.global_pointer(self.proj(hidden_states))
+        relative_logits = self.global_pointer(self.proj[-1](hidden_states))
         return self.s2r_fusion(relative_logits, successor_logits)
 
 
@@ -340,10 +340,11 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
             init.constant_(module.output_proj.bias, 0.0)
 
         elif isinstance(module, (PPDocLayoutV4Model, PPDocLayoutV4Decoder)):
-            class_head = module.enc_score_head if isinstance(module, PPDocLayoutV4Model) else module.class_embed
+            class_heads = [module.enc_score_head] if isinstance(module, PPDocLayoutV4Model) else module.class_embed
             prior_prob = self.config.initializer_bias_prior_prob
-            init.xavier_uniform_(class_head.weight)
-            init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
+            for class_head in class_heads:
+                init.xavier_uniform_(class_head.weight)
+                init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
@@ -427,10 +428,12 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
                 for _ in range(config.decoder_layers)
             ]
         )
-        # Only the bbox head runs per layer, to refine the reference points handed to the next one. PaddleDetection
-        # also carries a class and a reading order head per layer for its auxiliary losses, but scores the last layer
-        # alone, so a single head of each is enough here and the conversion keeps only the last layer's weights.
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
+        # Keep every layer's classification and reading order projection weights for checkpoint compatibility.
+        # Earlier layers are only used for auxiliary training losses in PaddleDetection and are unused here:
+        # training is not supported, and inference scores only the last layer.
+        self.class_embed = nn.ModuleList(
+            [nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
         self.successor_order_head = PPDocLayoutV4SuccessorOrderHead(config)
         self.relative_order_head = PPDocLayoutV4RelativeOrderHead(config)
 
@@ -501,7 +504,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
 
         # PP-DocLayoutV3 scores every layer from inside the loop, on hidden states passed through a `norm` first.
         # PP-DocLayoutV4 has no such norm and scores the last layer only.
-        logits = self.class_embed(hidden_states)
+        logits = self.class_embed[-1](hidden_states)
         valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
         # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
         successor_order_logits = self.successor_order_head(valid_query)

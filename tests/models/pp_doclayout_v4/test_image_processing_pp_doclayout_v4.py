@@ -16,7 +16,7 @@ import unittest
 from types import SimpleNamespace
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_scipy, require_torch, require_vision
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
@@ -102,6 +102,7 @@ def _dummy_outputs(num_queries=8, num_labels=25):
     )
 
 
+@require_scipy
 @require_torch
 @require_vision
 class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):

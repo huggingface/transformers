@@ -55,9 +55,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         feed-forward modules.
     hidden_expansion (`float`, *optional*, defaults to 1.0):
         Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-    hidden_size (`int`, *optional*, defaults to 256):
-        Dimension of the decoder layers, excluding the hybrid encoder. Also readable as `d_model`, the name used by
-        the RT-DETR lineage this model descends from.
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries.
     decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
@@ -77,14 +74,17 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
         Whether to disable custom kernels.
-    num_coords (`int`, *optional*, defaults to 10):
-        Size of the box parameterization predicted by the bbox heads. PP-DocLayoutV4 regresses a four point
-        quadrilateral encoded as `[center_x, center_y, dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4]` in sigmoid space,
-        where the corner offsets are shifted by `+0.5`. Only `10` is supported.
     global_pointer_head_size (`int`, *optional*, defaults to 64):
         The size of the global pointer head.
     gp_dropout_value (`float`, *optional*, defaults to 0.1):
         The dropout probability in the global pointer head.
+    hidden_size (`int`, *optional*, defaults to 256):
+        Dimension of the decoder layers, excluding the hybrid encoder. Also readable as `d_model`, the name used by
+        the RT-DETR lineage this model descends from.
+    num_coords (`int`, *optional*, defaults to 10):
+        Size of the box parameterization predicted by the bbox heads. PP-DocLayoutV4 regresses a four point
+        quadrilateral encoded as `[center_x, center_y, dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4]` in sigmoid space,
+        where the corner offsets are shifted by `+0.5`. Only `10` is supported.
     s2r_steps (`int`, *optional*, defaults to 3):
         Number of propagation steps used to approximate the transitive closure of the successor matrix.
     s2r_damping (`float`, *optional*, defaults to 0.5):

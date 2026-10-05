@@ -27,6 +27,7 @@ from transformers import (
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
+    require_scipy,
     require_torch,
     require_vision,
     slow,
@@ -126,6 +127,50 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_auxiliary_heads_are_preserved_but_unused(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = PPDocLayoutV4ForObjectDetection(config).to(torch_device).eval()
+        decoder = model.model.decoder
+        heads = (decoder.class_embed, decoder.successor_order_head.proj, decoder.relative_order_head.proj)
+        for head_list in heads:
+            self.assertEqual(len(head_list), config.decoder_layers)
+
+        with torch.no_grad():
+            expected = model(**inputs_dict)
+            for head_list in heads:
+                for head in head_list[:-1]:
+                    head.weight.fill_(float("nan"))
+                    head.bias.fill_(float("nan"))
+            actual = model(**inputs_dict)
+
+        for name in ("logits", "pred_boxes", "relative_order_logits", "successor_order_logits"):
+            torch.testing.assert_close(getattr(actual, name), getattr(expected, name))
+
+    def test_convert_all_decoder_heads(self):
+        from transformers.models.pp_doclayout_v4.convert_pp_doclayout_v4_to_hf import convert_state_dict
+
+        model = PPDocLayoutV4ForObjectDetection(self.model_tester.get_config())
+        expected = model.state_dict()
+        linear_modules = {name for name, module in model.named_modules() if isinstance(module, torch.nn.Linear)}
+        head_names = {
+            "class_embed": "dec_score_head",
+            "successor_order_head.proj": "dec_roor_order_head",
+            "relative_order_head.proj": "dec_order_head",
+        }
+        paddle_state_dict = {}
+        for name, tensor in expected.items():
+            key = name.removeprefix("model.")
+            for target, source in head_names.items():
+                key = key.replace(f"decoder.{target}.", f"transformer.{source}.")
+            if name.endswith(".weight") and name.rsplit(".", 1)[0] in linear_modules:
+                tensor = tensor.T
+            paddle_state_dict[key] = tensor.numpy().copy()
+
+        converted = convert_state_dict(paddle_state_dict, model)
+        self.assertEqual(converted.keys(), expected.keys())
+        for name, tensor in expected.items():
+            torch.testing.assert_close(converted[name], tensor)
+
     @unittest.skip(reason="PPDocLayoutV4 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
@@ -200,6 +245,7 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
 
 
+@require_scipy
 @require_torch
 @require_vision
 @slow

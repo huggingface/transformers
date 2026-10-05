@@ -385,22 +385,22 @@ class PPDocLayoutV4S2RFusion(nn.Module):
 class PPDocLayoutV4SuccessorOrderHead(nn.Module):
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
-        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.proj = nn.ModuleList([nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)])
         self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.global_pointer(self.proj(hidden_states))
+        return self.global_pointer(self.proj[-1](hidden_states))
 
 
 class PPDocLayoutV4RelativeOrderHead(nn.Module):
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
-        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.proj = nn.ModuleList([nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)])
         self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
         self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
 
     def forward(self, hidden_states: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
-        relative_logits = self.global_pointer(self.proj(hidden_states))
+        relative_logits = self.global_pointer(self.proj[-1](hidden_states))
         return self.s2r_fusion(relative_logits, successor_logits)
 
 
@@ -444,10 +444,11 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
             init.constant_(module.output_proj.bias, 0.0)
 
         elif isinstance(module, (PPDocLayoutV4Model, PPDocLayoutV4Decoder)):
-            class_head = module.enc_score_head if isinstance(module, PPDocLayoutV4Model) else module.class_embed
+            class_heads = [module.enc_score_head] if isinstance(module, PPDocLayoutV4Model) else module.class_embed
             prior_prob = self.config.initializer_bias_prior_prob
-            init.xavier_uniform_(class_head.weight)
-            init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
+            for class_head in class_heads:
+                init.xavier_uniform_(class_head.weight)
+                init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
@@ -1164,10 +1165,12 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
                 for _ in range(config.decoder_layers)
             ]
         )
-        # Only the bbox head runs per layer, to refine the reference points handed to the next one. PaddleDetection
-        # also carries a class and a reading order head per layer for its auxiliary losses, but scores the last layer
-        # alone, so a single head of each is enough here and the conversion keeps only the last layer's weights.
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
+        # Keep every layer's classification and reading order projection weights for checkpoint compatibility.
+        # Earlier layers are only used for auxiliary training losses in PaddleDetection and are unused here:
+        # training is not supported, and inference scores only the last layer.
+        self.class_embed = nn.ModuleList(
+            [nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
 
         self.num_queries = config.num_queries
         self.successor_order_head = PPDocLayoutV4SuccessorOrderHead(config)
@@ -1246,7 +1249,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
 
         # PP-DocLayoutV3 scores every layer from inside the loop, on hidden states passed through a `norm` first.
         # PP-DocLayoutV4 has no such norm and scores the last layer only.
-        logits = self.class_embed(hidden_states)
+        logits = self.class_embed[-1](hidden_states)
         valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
         # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
         successor_order_logits = self.successor_order_head(valid_query)
@@ -1276,12 +1279,6 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
         Stacked intermediate reference points (refined quads of each layer of the decoder).
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
-        Classification logits of the last decoder layer.
-    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise relative reading order logits, after the optional S2R fusion.
-    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise direct successor (ROOR) logits.
     init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
         Initial quad reference points sent through the Transformer decoder.
     enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
@@ -1294,6 +1291,12 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
         Quad logits of every encoder proposal.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+        Classification logits of the last decoder layer.
+    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise relative reading order logits, after the optional S2R fusion.
+    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise direct successor (ROOR) logits.
     """
 
     last_hidden_state: torch.FloatTensor | None = None
@@ -1589,12 +1592,6 @@ class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
         offsets are shifted by `+0.5`. Use
         [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] to retrieve the unnormalized corners and their
         enclosing boxes.
-    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise relative reading order logits, after the optional S2R fusion. A positive `relative_order_logits[i, j]`
-        means query `i` is read before query `j`.
-    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise direct successor (ROOR) logits. A positive `successor_order_logits[i, j]` means query `j` directly
-        follows query `i`.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -1613,6 +1610,12 @@ class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
         Quad logits of every encoder proposal.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
+    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise relative reading order logits, after the optional S2R fusion. A positive `relative_order_logits[i, j]`
+        means query `i` is read before query `j`.
+    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise direct successor (ROOR) logits. A positive `successor_order_logits[i, j]` means query `j` directly
+        follows query `i`.
     """
 
     logits: torch.FloatTensor | None = None
