@@ -27,6 +27,7 @@ from huggingface_hub import delete_repo, snapshot_download
 from huggingface_hub.errors import HfHubHTTPError
 
 from transformers import (
+    AutoConfig,
     AutomaticSpeechRecognitionPipeline,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -153,6 +154,110 @@ class CommonPipelineTest(unittest.TestCase):
 
         self.assertIsInstance(text_classifier, TextClassificationPipeline)
         self.assertEqual(type(text_classifier.tokenizer).__name__, "BertTokenizer")
+
+    @require_torch
+    def test_pipeline_code_revision_offline(self):
+        from transformers import BertConfig, BertForSequenceClassification
+        from transformers.models.bert.tokenization_bert import BertTokenizer
+
+        config = BertConfig(
+            vocab_size=99,
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=16,
+        )
+        model = BertForSequenceClassification(config).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as f:
+                f.write("[PAD]\n[UNK]\n[CLS]\n[SEP]\n[MASK]\n")
+            tokenizer = BertTokenizer(vocab_file)
+            tokenizer.save_pretrained(tmp_dir)
+
+            test_rev = "0" * 40
+
+            # 1. Spelling 1: top-level code_revision kwarg propagates to loaders
+            with (
+                mock.patch.object(AutoConfig, "from_pretrained", wraps=AutoConfig.from_pretrained) as spy_config,
+                mock.patch.object(
+                    AutoModelForSequenceClassification,
+                    "from_pretrained",
+                    wraps=AutoModelForSequenceClassification.from_pretrained,
+                ) as spy_model,
+            ):
+                pipe_kwarg = pipeline("text-classification", model=tmp_dir, tokenizer=tmp_dir, code_revision=test_rev)
+                self.assertIsInstance(pipe_kwarg, TextClassificationPipeline)
+                self.assertEqual(spy_config.call_args[1].get("code_revision"), test_rev)
+                self.assertEqual(spy_model.call_args[1].get("code_revision"), test_rev)
+                out_kwarg = pipe_kwarg("hello")
+                self.assertIsNotNone(out_kwarg)
+
+            # 2. Spelling 2: model_kwargs={"code_revision": ...} propagates to loaders
+            with (
+                mock.patch.object(AutoConfig, "from_pretrained", wraps=AutoConfig.from_pretrained) as spy_config,
+                mock.patch.object(
+                    AutoModelForSequenceClassification,
+                    "from_pretrained",
+                    wraps=AutoModelForSequenceClassification.from_pretrained,
+                ) as spy_model,
+            ):
+                pipe_model_kwarg = pipeline(
+                    "text-classification",
+                    model=tmp_dir,
+                    tokenizer=tmp_dir,
+                    model_kwargs={"code_revision": test_rev},
+                )
+                self.assertIsInstance(pipe_model_kwarg, TextClassificationPipeline)
+                self.assertEqual(spy_config.call_args[1].get("code_revision"), test_rev)
+                self.assertEqual(spy_model.call_args[1].get("code_revision"), test_rev)
+                out_model_kwarg = pipe_model_kwarg("hello")
+                self.assertEqual(nested_simplify(out_kwarg), nested_simplify(out_model_kwarg))
+
+            # 3. Explicit / preloaded config with model_kwargs code_revision
+            preloaded_config = AutoConfig.from_pretrained(tmp_dir)
+            with mock.patch.object(
+                AutoModelForSequenceClassification,
+                "from_pretrained",
+                wraps=AutoModelForSequenceClassification.from_pretrained,
+            ) as spy_model:
+                pipe_preloaded = pipeline(
+                    "text-classification",
+                    model=tmp_dir,
+                    config=preloaded_config,
+                    tokenizer=tmp_dir,
+                    model_kwargs={"code_revision": test_rev},
+                )
+                self.assertIsInstance(pipe_preloaded, TextClassificationPipeline)
+                self.assertEqual(spy_model.call_args[1].get("code_revision"), test_rev)
+
+            # 4. Duplicate-pin rejection: different pins
+            with self.assertRaises(ValueError) as ctx_diff:
+                pipeline(
+                    "text-classification",
+                    model=tmp_dir,
+                    tokenizer=tmp_dir,
+                    code_revision="a" * 40,
+                    model_kwargs={"code_revision": "b" * 40},
+                )
+            self.assertIn("cannot use both", str(ctx_diff.exception).lower())
+
+            # 5. Duplicate-pin rejection: same pins
+            with self.assertRaises(ValueError) as ctx_same:
+                pipeline(
+                    "text-classification",
+                    model=tmp_dir,
+                    tokenizer=tmp_dir,
+                    code_revision="a" * 40,
+                    model_kwargs={"code_revision": "a" * 40},
+                )
+            self.assertIn("cannot use both", str(ctx_same.exception).lower())
+
+            # 6. No-pin control
+            pipe_no_pin = pipeline("text-classification", model=tmp_dir, tokenizer=tmp_dir)
+            self.assertIsInstance(pipe_no_pin, TextClassificationPipeline)
 
     def test_check_task(self):
         task = get_task("openai-community/gpt2")
