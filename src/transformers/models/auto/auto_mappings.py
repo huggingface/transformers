@@ -1199,6 +1199,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("sam3_video", "Sam3VideoProcessor"),
         ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
+        ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
         ("siglip2", "Siglip2Processor"),
         ("smolvlm", "SmolVLMProcessor"),
