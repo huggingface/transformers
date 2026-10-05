@@ -620,6 +620,62 @@ class TestAppRoutes(unittest.TestCase):
 
 @slow
 @require_serve
+class TestSystemOneEndpoint(ServeIntegrationTestCase):
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    def setUp(self):
+        super().setUp()
+        self.body = {
+            "model": self.MODEL,
+            "state": "Our integration has been failing for 3 days and we are losing sales!",
+            "questions": {
+                "team": {
+                    "type": "choice",
+                    "instructions": "Which team handles this?",
+                    "criteria": {"billing": None, "technical": "Bugs or integration problems"},
+                },
+                "urgency": {
+                    "type": "score",
+                    "instructions": "How urgent is this ticket?",
+                    "criteria": ["low", "medium", "high"],
+                },
+                "upset": {"type": "noul", "instructions": "Is the customer upset?"},
+            },
+        }
+
+    def test_response_format(self):
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["model"], self.MODEL)
+        answers = data["answers"]
+        self.assertEqual(set(answers), {"team", "urgency", "upset"})
+        self.assertEqual(answers["team"]["type"], "choice")
+        self.assertEqual(answers["urgency"]["type"], "score")
+        self.assertEqual(answers["upset"]["type"], "noul")
+        self.assertEqual(answers["urgency"]["legend"], {"0": "low", "1": "medium", "2": "high"})
+        self.assertAlmostEqual(sum(answers["team"]["probabilities"].values()), 1.0, places=5)
+        self.assertAlmostEqual(sum(answers["urgency"]["probabilities"].values()), 1.0, places=5)
+        self.assertGreater(data["usage"]["input_tokens"], 0)
+        self.assertEqual(data["usage"]["output_tokens"], 0)
+
+    def test_decision_with_text(self):
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
+        self.assertEqual(response.status_code, 200)
+        answers = response.json()["answers"]
+        self.assertEqual(answers["team"]["choice"], "technical")
+        self.assertGreater(answers["urgency"]["score"], 1)
+        self.assertGreater(answers["upset"]["noul"], 0.5)
+
+    def test_invalid_question(self):
+        self.body["questions"]["team"]["criteria"] = {}
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("criteria", response.json()["detail"][0]["loc"])
+
+
+@slow
+@require_serve
 class TestChatCompletion(ServeIntegrationTestCase):
     """Integration tests for /v1/chat/completions with a real model."""
 
