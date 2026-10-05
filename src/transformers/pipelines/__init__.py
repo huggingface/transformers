@@ -313,13 +313,13 @@ def _resolve_deprecated_task(task: str) -> str:
     Redirects tasks listed in `DEPRECATED_TASKS` to their replacement and raises an explicit error for tasks listed
     in `REMOVED_TASKS`.
     """
-    if task in DEPRECATED_TASKS:
-        warnings.warn_once(
-            f"The task {task} has been removed and has been replaced by {DEPRECATED_TASKS[task]}. The pipeline"
+    if task == "image-to-text":
+        logger.warning_once(
+            f"The task `{task}` has been removed and has been replaced by `image-text-to-text`. The pipeline"
             f" will be instantiated with the new task name.",
             UserWarning,
         )
-        return DEPRECATED_TASKS[task]
+        return "image-text-to-text"
 
     # Parametrized translation tasks such as "translation_en_to_fr" were removed along with "translation"
     removed_task = "translation" if task.startswith("translation_") else task
