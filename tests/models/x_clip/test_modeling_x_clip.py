@@ -253,7 +253,7 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             config.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

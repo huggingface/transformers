@@ -295,7 +295,7 @@ class GPTJModelTester:
     ):
         model = GPTJForCausalLM(config)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         model.to(torch_device)
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -475,9 +475,9 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         for checkpointing in [True, False]:
             model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
             if checkpointing:
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
             else:
-                model.gradient_checkpointing_disable()
+                model.activation_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             # The dog is a man's best friend. It is a loyal companion, and it is a friend

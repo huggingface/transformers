@@ -327,9 +327,9 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         def loss_and_grads(checkpointing):
             model.zero_grad(set_to_none=True)
             if checkpointing:
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": False})
             else:
-                model.gradient_checkpointing_disable()
+                model.activation_checkpointing_disable()
             model.train()
             loss = model(**inputs).logits.float().mean()
             loss.backward()

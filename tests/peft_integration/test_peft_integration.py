@@ -442,7 +442,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 frozen_output = model.get_input_embeddings()(dummy_input)
                 self.assertTrue(frozen_output.requires_grad is False)
 
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
 
                 # Since here we attached the hook, the input should have requires_grad to set
                 # properly

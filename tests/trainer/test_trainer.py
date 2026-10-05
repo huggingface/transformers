@@ -523,7 +523,7 @@ class TrainerGradientCheckpointingTest(TestCasePlus):
             trainer = get_regression_trainer(
                 per_device_train_batch_size=1,
                 learning_rate=0.1,
-                gradient_checkpointing=True,
+                activation_checkpointing=True,
                 output_dir=tmp_dir,
             )
             previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
