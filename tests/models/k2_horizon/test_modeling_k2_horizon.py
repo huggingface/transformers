@@ -106,6 +106,11 @@ class K2HorizonModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertIs(type(restored), K2HorizonConfig)
         self.assertEqual(restored.rope_parameters, config.rope_parameters)
 
+    def test_output_router_logits_from_config(self):
+        # The common tester is dense and has no routers, so run the check on a sparse configuration.
+        self.model_tester = K2HorizonModelTester(self, num_experts=4, num_experts_per_tok=2, moe_intermediate_size=16)
+        super().test_output_router_logits_from_config()
+
     def test_native_auto_classes_with_remote_code_metadata(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         # Published checkpoints retain these entries after native support is added.
