@@ -157,7 +157,8 @@ class WatermarkDetector:
         num_tokens_scored_batch = np.zeros(batch_size)
         green_token_count_batch = np.zeros(batch_size)
         for batch_idx in range(ngram_tensors.shape[0]):
-            # Tensors are hashed by identity; use integer tuples to count equal ngrams together.
+            # Tensor keys are hashed by identity, so equal token windows need integer tuple keys.
+            # Scoring still needs tensors with the input dtype and device.
             frequencies_table = collections.Counter(tuple(ngram) for ngram in ngram_tensors[batch_idx].tolist())
             ngram_to_watermark_lookup = {}
             for ngram_example in frequencies_table:

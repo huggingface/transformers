@@ -33,44 +33,32 @@ class WatermarkDetectorTest(unittest.TestCase):
     @parameterized.expand(
         [
             (
-                f"{seeding_scheme}_width_{context_width}_ignore_repeated_{ignore_repeated_ngrams}",
-                seeding_scheme,
+                f"width_{context_width}_ignore_repeated_{ignore_repeated_ngrams}",
                 context_width,
                 ignore_repeated_ngrams,
                 1 if ignore_repeated_ngrams else num_windows,
             )
-            for seeding_scheme, context_width, num_windows in [
-                ("lefthash", 1, 9),
-                ("lefthash", 2, 8),
-                ("selfhash", 1, 10),
-                ("selfhash", 2, 9),
-            ]
+            for context_width, num_windows in [(1, 9), (2, 8)]
             for ignore_repeated_ngrams in (True, False)
         ]
     )
-    def test_identical_tokens(self, name, seeding_scheme, context_width, ignore_repeated_ngrams, expected_count):
-        result = self._check_num_tokens_scored(
-            seeding_scheme, context_width, [3] * 10, ignore_repeated_ngrams, expected_count
-        )
+    def test_identical_tokens_lefthash(self, name, context_width, ignore_repeated_ngrams, expected_count):
+        self._check_identical_tokens("lefthash", context_width, ignore_repeated_ngrams, expected_count)
 
-        # Use a separate processor for green membership; the greenlist depends on the device.
-        watermark_config = WatermarkingConfig(
-            greenlist_ratio=0.25, seeding_scheme=seeding_scheme, context_width=context_width
-        )
-        reference_processor = WatermarkLogitsProcessor(
-            vocab_size=128, device=torch_device, **watermark_config.to_dict()
-        )
-        prefix = torch.tensor([3] * context_width, dtype=torch.long, device=torch_device)
-        greenlist_ids = reference_processor._get_greenlist_ids(prefix)
-        expected_green_count = expected_count if 3 in greenlist_ids else 0
-        self.assertEqual(result.num_green_tokens[0], expected_green_count)
-
-        ratio = watermark_config.greenlist_ratio
-        expected_z_score = (expected_green_count - ratio * expected_count) / math.sqrt(
-            expected_count * ratio * (1 - ratio)
-        )
-        self.assertAlmostEqual(result.z_score[0], expected_z_score, places=7)
-        self.assertEqual(bool(result.prediction[0]), expected_z_score > 3.0)
+    @parameterized.expand(
+        [
+            (
+                f"width_{context_width}_ignore_repeated_{ignore_repeated_ngrams}",
+                context_width,
+                ignore_repeated_ngrams,
+                1 if ignore_repeated_ngrams else num_windows,
+            )
+            for context_width, num_windows in [(1, 10), (2, 9)]
+            for ignore_repeated_ngrams in (True, False)
+        ]
+    )
+    def test_identical_tokens_selfhash(self, name, context_width, ignore_repeated_ngrams, expected_count):
+        self._check_identical_tokens("selfhash", context_width, ignore_repeated_ngrams, expected_count)
 
     @parameterized.expand(
         [
@@ -111,6 +99,30 @@ class WatermarkDetectorTest(unittest.TestCase):
     )
     def test_num_tokens_scored_selfhash(self, name, context_width, tokens, ignore_repeated_ngrams, table_count):
         self._check_num_tokens_scored("selfhash", context_width, tokens, ignore_repeated_ngrams, table_count)
+
+    def _check_identical_tokens(self, seeding_scheme, context_width, ignore_repeated_ngrams, expected_count):
+        result = self._check_num_tokens_scored(
+            seeding_scheme, context_width, [3] * 10, ignore_repeated_ngrams, expected_count
+        )
+
+        # Use a separate processor for green membership; the greenlist depends on the device.
+        watermark_config = WatermarkingConfig(
+            greenlist_ratio=0.25, seeding_scheme=seeding_scheme, context_width=context_width
+        )
+        reference_processor = WatermarkLogitsProcessor(
+            vocab_size=128, device=torch_device, **watermark_config.to_dict()
+        )
+        prefix = torch.tensor([3] * context_width, dtype=torch.long, device=torch_device)
+        greenlist_ids = reference_processor._get_greenlist_ids(prefix)
+        expected_green_count = expected_count if 3 in greenlist_ids else 0
+        self.assertEqual(result.num_green_tokens[0], expected_green_count)
+
+        ratio = watermark_config.greenlist_ratio
+        expected_z_score = (expected_green_count - ratio * expected_count) / math.sqrt(
+            expected_count * ratio * (1 - ratio)
+        )
+        self.assertAlmostEqual(result.z_score[0], expected_z_score, places=7)
+        self.assertEqual(bool(result.prediction[0]), expected_z_score > 3.0)
 
     def _check_num_tokens_scored(self, seeding_scheme, context_width, tokens, ignore_repeated_ngrams, table_count):
         # Count Python integer windows independently of the detector.
