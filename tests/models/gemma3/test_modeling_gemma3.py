@@ -226,12 +226,16 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
     @parameterized.expand([(2, False), (3, False), (2, True), (3, True)])
     def test_generate_preserves_multi_image_groups(self, expand_size, do_sample):
+        """Compare expanded preencoded image groups with independently expanded raw-image inputs."""
         set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
-            # The zero-initialized projector would make different images indistinguishable.
-            model.model.multi_modal_projector.mm_input_projection_weight.normal_(std=0.02)
+            # Gemma3 initializes this projector to zero, so all images would have identical features.
+            # Nonzero weights are needed to detect incorrect image ordering, not just shape mismatches.
+            model.model.multi_modal_projector.mm_input_projection_weight.normal_(
+                std=config.text_config.initializer_range
+            )
         inputs = {
             key: inputs_dict[key][:2].reshape(1, -1) for key in ["input_ids", "attention_mask", "token_type_ids"]
         }

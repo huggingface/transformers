@@ -1111,7 +1111,10 @@ class GenerationMixin(ContinuousMixin):
         inputs_embeds: torch.LongTensor | None = None,
     ) -> dict[str, dict]:
         def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            # Repeat the complete image group for each expanded text sample.
+            # Tensor of size [bs, seqlen, dim] where `bs` is number of images in this text sample
+            # Each text can have 1+ images associated with it
+            # Each expanded text sample needs the whole image group: [A, B] -> [A, B, A, B].
+            # Interleaving individual images would give [A, A, B, B] and break the placeholder order.
             if isinstance(inputs, torch.Tensor):
                 return inputs.repeat((repeat_times,) + (1,) * (inputs.ndim - 1))
             else:

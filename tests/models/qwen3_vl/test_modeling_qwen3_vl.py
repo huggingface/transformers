@@ -309,39 +309,31 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
 
     @parameterized.expand([(2, False), (3, False), (2, True), (3, True)])
     def test_generate_preserves_multi_image_groups(self, expand_size, do_sample):
+        """Check image-group expansion against an independently expanded mixed-image batch."""
         set_seed(42)
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Qwen3VLForConditionalGeneration(config).to(torch_device).eval()
-        input_ids = torch.tensor(
+        # Adapt the fixture's one-image rows to zero/one/two images, including a two-patch image.
+        input_ids = inputs["input_ids"]
+        input_ids[input_ids == config.vision_end_token_id] = 7
+        input_ids[0, :2] = 7
+        input_ids[1, 2] = config.vision_end_token_id
+        input_ids[2, :7] = torch.tensor(
             [
-                [7] * 9,
-                [config.vision_start_token_id, config.image_token_id, config.vision_end_token_id] + [7] * 6,
-                [
-                    config.vision_start_token_id,
-                    config.image_token_id,
-                    config.image_token_id,
-                    config.vision_end_token_id,
-                    config.vision_start_token_id,
-                    config.image_token_id,
-                    config.vision_end_token_id,
-                    7,
-                    7,
-                ],
+                config.vision_start_token_id,
+                config.image_token_id,
+                config.image_token_id,
+                config.vision_end_token_id,
+                config.vision_start_token_id,
+                config.image_token_id,
+                config.vision_end_token_id,
             ],
             device=torch_device,
         )
-        patch_width = (
-            config.vision_config.in_channels
-            * config.vision_config.temporal_patch_size
-            * config.vision_config.patch_size**2
-        )
-        inputs = {
-            "input_ids": input_ids,
-            "attention_mask": torch.ones_like(input_ids),
-            "mm_token_type_ids": (input_ids == config.image_token_id).long(),
-            "pixel_values": floats_tensor([4, patch_width]),
-            "image_grid_thw": torch.tensor([[1, 1, 1], [1, 1, 2], [1, 1, 1]], device=torch_device),
-        }
+        inputs["attention_mask"].fill_(1)
+        inputs["mm_token_type_ids"] = (input_ids == config.image_token_id).long()
+        inputs["pixel_values"] = torch.cat([inputs["pixel_values"], inputs["pixel_values"][:1]], dim=0)
+        inputs["image_grid_thw"][1, 2] = 2
         reference_inputs = {
             key: inputs[key].repeat_interleave(expand_size, dim=0)
             for key in ["input_ids", "attention_mask", "mm_token_type_ids"]
