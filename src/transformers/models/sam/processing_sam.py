@@ -16,12 +16,12 @@ Processor class for SAM.
 """
 
 from copy import deepcopy
-from typing import Union, Unpack
+from typing import Union
 
 import numpy as np
 
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
 
