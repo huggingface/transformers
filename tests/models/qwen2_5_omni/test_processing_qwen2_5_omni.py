@@ -105,7 +105,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         Tests that sub-processor is called correctly when passing each modality input to the processor.
         This test verifies that processor(single_modality_data) produces the same output as subprocessor(single_modality_data).
         """
-        # override to pop processor-only keys from `merged_kwargs`
         parameterized_config = MODALITY_TEST_SPECS[modality]
         attributes = self.processor_class.get_attributes()
         component_key = self.get_subprocessor_name(modality, attributes)
@@ -128,9 +127,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **kwargs,
         )
         kwargs = merged_kwargs[f"{modality}_kwargs"]
-        kwargs.pop("seconds_per_chunk", None)  # pop, used only in `processor.__call__`
-        kwargs.pop("use_audio_in_video", None)
-        kwargs.pop("position_id_per_seconds", None)
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:

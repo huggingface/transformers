@@ -27,17 +27,23 @@ from ...utils import (
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
+    logging,
 )
 from ...utils.import_utils import requires
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
     from .modeling_omdet_turbo import OmDetTurboObjectDetectionOutput
 
 
+# Kept here for BC. Identical to TextKwargs once deprecated arguments are removed.
 class OmDetTurboTextKwargs(TextKwargs, total=False):
     """
     task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
+        Deprecated, pass directly as `task` to [`OmDetTurboProcessor.__call__`] instead.
         The detection task description(s) to encode. If not provided, a default task description is generated
         from the `text` input (e.g., "Detect {text}."). Can be a single string, a list of strings (one per image),
         or pre-tokenized input. The task description guides the model on what objects to detect in the images.
@@ -179,7 +185,6 @@ class OmDetTurboProcessor(ProcessorMixin):
         "truncation": True,
         "max_length": 77,
         "return_token_type_ids": False,
-        "task": None,
     }
 
     def __init__(self, image_processor, tokenizer):
@@ -190,8 +195,15 @@ class OmDetTurboProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: list[str] | list[list[str]] | None = None,
+        task: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
+            The detection task description(s) to encode. If not provided, a default task description is generated
+            from the `text` input (e.g., "Detect {text}."). Can be a single string, a list of strings (one per image),
+            or pre-tokenized input. The task description guides the model on what objects to detect in the images.
+        """
         if images is None or text is None:
             raise ValueError("You have to specify both `images` and `text`")
 
@@ -206,7 +218,15 @@ class OmDetTurboProcessor(ProcessorMixin):
         if not (len(text) and isinstance(text[0], (list, tuple))):
             text = [text]
 
-        task = output_kwargs["text_kwargs"].pop("task", None)
+        if "task" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `task` in `text_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+
+        # "text_kwargs" has priority for backwards compatibility
+        task = output_kwargs["text_kwargs"].pop("task", task)
         if task is None:
             task = [f"Detect {', '.join(text_single)}." for text_single in text]
         elif not isinstance(task, (list, tuple)):

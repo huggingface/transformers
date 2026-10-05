@@ -26,14 +26,21 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 from ...utils.import_utils import requires
 
 
+logger = logging.get_logger(__name__)
+
+
+# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
 class GlmImageImagesKwargs(ImagesKwargs, total=False):
     """
     target_h (`int`):
+        Deprecated, use [`GlmImageProcessorKwargs.target_h`] instead.
         Height of the target image to be generated.
     target_w (`int`):
+        Deprecated, use [`GlmImageProcessorKwargs.target_w`] instead.
         Width of the target image to be generated.
     """
 
@@ -42,7 +49,17 @@ class GlmImageImagesKwargs(ImagesKwargs, total=False):
 
 
 class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    target_h (`int`, *optional*, defaults to `1152`):
+        Height of the target image to be generated.
+    target_w (`int`, *optional*, defaults to `768`):
+        Width of the target image to be generated.
+    """
+
     images_kwargs: GlmImageImagesKwargs
+
+    target_h: int
+    target_w: int
 
 
 @requires(backends=("torch",))
@@ -61,11 +78,9 @@ class GlmImageProcessor(ProcessorMixin):
 
     valid_processor_kwargs = GlmImageProcessorKwargs
 
-    images_kwargs = {
-        "target_h": 1152,
-        "target_w": 768,
-    }
     model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
+    target_h: int = 1152
+    target_w: int = 768
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
@@ -114,12 +129,21 @@ class GlmImageProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        for key in ("target_h", "target_w"):
+            if key in output_kwargs["images_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `images_kwargs` is deprecated "
+                    "and will be removed in a future version. "
+                    "Pass it directly to the processor instead."
+                )
+
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         if text is None:  # early exit if cond only on image
             return model_inputs
 
-        target_h = output_kwargs["images_kwargs"].get("target_h")
-        target_w = output_kwargs["images_kwargs"].get("target_w")
+        # "images_kwargs" has priority for backwards compatibility
+        target_h = output_kwargs["images_kwargs"].get("target_h", output_kwargs["target_h"])
+        target_w = output_kwargs["images_kwargs"].get("target_w", output_kwargs["target_w"])
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
         is_text_to_image = images is None
 
@@ -166,15 +190,16 @@ class GlmImageProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[GlmImageImagesKwargs],
+        **kwargs: Unpack[GlmImageProcessorKwargs],
     ):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
         processed_text = text
         if text is not None:
             processed_text = []
-            target_h = kwargs["images_kwargs"].get("target_h", None)
-            target_w = kwargs["images_kwargs"].get("target_w", None)
+            # "images_kwargs" has priority for backwards compatibility
+            target_h = kwargs["images_kwargs"].get("target_h", kwargs["target_h"])
+            target_w = kwargs["images_kwargs"].get("target_w", kwargs["target_w"])
 
             for sample in text:
                 token_h, token_w, prev_token_h, prev_token_w = self._get_target_shape(height=target_h, width=target_w)
@@ -190,7 +215,7 @@ class GlmImageProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[GlmImageImagesKwargs],
+        **kwargs: Unpack[GlmImageProcessorKwargs],
     ):
         super().validate_inputs(images=images, text=text)
         if text is None and images is None:
@@ -206,12 +231,6 @@ class GlmImageProcessor(ProcessorMixin):
                 f"In image-to-image mode, all samples must have the same number of source images. "
                 f"Got different counts: {images_per_sample}"
             )
-
-    def _process_images(self, images: ImageInput, **kwargs):
-        # Kwargs used only in processor, if we pass them down to image processor it raises an error
-        kwargs.pop("target_h", None)
-        kwargs.pop("target_w", None)
-        return super()._process_images(images, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2

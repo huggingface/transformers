@@ -19,13 +19,12 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import make_flat_list_of_images
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.import_utils import torch_compilable_check
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import make_batched_videos
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
@@ -768,21 +767,6 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
         "return_tensors": "pt",
     }
     return_mm_token_type_ids = True
-
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[MiniCPMV4_7ProcessorKwargs],
-    ):
-        kwargs = self._merge_kwargs(
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
-            **kwargs,
-        )
-        # `use_image_id` is an image-only setting, so it must not leak into the video branch.
-        kwargs["videos_kwargs"].pop("use_image_id", None)
-        return super().__call__(images=images, text=text, videos=videos, **kwargs)
 
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)

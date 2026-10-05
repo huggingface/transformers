@@ -28,16 +28,21 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ImageGuidedObjectDetectionOutput, Owlv2ObjectDetectionOutput
 
 
+# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
 class Owlv2ImagesKwargs(ImagesKwargs, total=False):
     """
     query_images (`ImageInput`, *optional*):
+        Deprecated, pass directly as `query_images` to [`Owlv2Processor.__call__`] instead.
         Query images to use for image-guided object detection. When provided, these images serve as visual queries
         to find similar objects in the main `images`. The query images override any text prompts, and the model
         performs image-to-image matching instead of text-to-image matching.
@@ -71,9 +76,15 @@ class Owlv2Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        query_images: ImageInput | None = None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
     ) -> BatchFeature:
         r"""
+        query_images (`ImageInput`, *optional*):
+            Query images to use for image-guided object detection. When provided, these images serve as visual queries
+            to find similar objects in the main `images`. The query images override any text prompts, and the model
+            performs image-to-image matching instead of text-to-image matching.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
@@ -87,7 +98,15 @@ class Owlv2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        query_images = output_kwargs["images_kwargs"].pop("query_images", None)
+        if "query_images" in output_kwargs["images_kwargs"]:
+            logger.warning_once(
+                "Passing `query_images` in `images_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+
+        # "images_kwargs" has priority for backwards compatibility
+        query_images = output_kwargs["images_kwargs"].pop("query_images", query_images)
         return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:

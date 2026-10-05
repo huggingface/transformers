@@ -264,7 +264,7 @@ class GotOcr2Processor(ProcessorMixin):
 
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
-        box = box if box is not None else [None]
+        box = [None] if box is None else box
         format_output = kwargs["text_kwargs"].pop("format")
         crop_to_patches = kwargs["images_kwargs"].get("crop_to_patches")
         images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)

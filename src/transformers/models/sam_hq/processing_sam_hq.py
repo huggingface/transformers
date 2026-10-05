@@ -23,11 +23,13 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import auto_docstring, is_torch_available
+from ...utils import auto_docstring, is_torch_available, logging
 
 
 if is_torch_available():
     import torch
+
+logger = logging.get_logger(__name__)
 
 NestedList = list[Union[float | int | None, "NestedList"]]
 
@@ -38,17 +40,17 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
         Ground truth segmentation maps to process alongside the input images. These maps are used for training
         or evaluation purposes and are resized and normalized to match the processed image dimensions.
     input_points (`NestedList`, *optional*):
-        Deprecated, use [`SamHQProcessorKwargs.input_points`] instead.
+        Deprecated, pass directly as `input_points` to [`SamHQProcessor.__call__`] instead.
         Input points for prompt-based segmentation. Should be a nested list with structure
         `[image_level, object_level, point_level, [x, y]]` where each point is specified as `[x, y]` coordinates
         in the original image space. Points are normalized to the target image size before being passed to the model.
     input_labels (`NestedList`, *optional*):
-        Deprecated, use [`SamHQProcessorKwargs.input_labels`] instead.
+        Deprecated, pass directly as `input_labels` to [`SamHQProcessor.__call__`] instead.
         Labels for the input points, indicating whether each point is a foreground (1) or background (0) point.
         Should be a nested list with structure `[image_level, object_level, point_level]`. Must have the same
         structure as `input_points` (excluding the coordinate dimension).
     input_boxes (`NestedList`, *optional*):
-        Deprecated, use [`SamHQProcessorKwargs.input_boxes`] instead.
+        Deprecated, pass directly as `input_boxes` to [`SamHQProcessor.__call__`] instead.
         Bounding boxes for prompt-based segmentation. Should be a nested list with structure
         `[image_level, box_level, [x1, y1, x2, y2]]` where each box is specified as `[x1, y1, x2, y2]` coordinates
         in the original image space. Boxes are normalized to the target image size before being passed to the model.
@@ -76,18 +78,6 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
 
 class SamHQProcessorKwargs(ProcessingKwargs, total=False):
     """
-    input_points (`NestedList`, *optional*):
-        Input points for prompt-based segmentation. Should be a nested list with structure
-        `[image_level, object_level, point_level, [x, y]]` where each point is specified as `[x, y]` coordinates
-        in the original image space. Points are normalized to the target image size before being passed to the model.
-    input_labels (`NestedList`, *optional*):
-        Labels for the input points, indicating whether each point is a foreground (1) or background (0) point.
-        Should be a nested list with structure `[image_level, object_level, point_level]`. Must have the same
-        structure as `input_points` (excluding the coordinate dimension).
-    input_boxes (`NestedList`, *optional*):
-        Bounding boxes for prompt-based segmentation. Should be a nested list with structure
-        `[image_level, box_level, [x1, y1, x2, y2]]` where each box is specified as `[x1, y1, x2, y2]` coordinates
-        in the original image space. Boxes are normalized to the target image size before being passed to the model.
     point_pad_value (`int`, *optional*, defaults to `None`):
         The value used for padding input points when batching sequences of different lengths. This value marks
         padded positions and is preserved during coordinate normalization to distinguish real points from padding.
@@ -95,9 +85,6 @@ class SamHQProcessorKwargs(ProcessingKwargs, total=False):
 
     images_kwargs: SamHQImagesKwargs
 
-    input_points: "NestedList | torch.Tensor | None"
-    input_labels: "NestedList | int | torch.Tensor | None"
-    input_boxes: "NestedList | torch.Tensor | None"
     point_pad_value: int | None
 
 
@@ -120,17 +107,42 @@ class SamHQProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput | None = None,
+        input_points: "NestedList | torch.Tensor | None" = None,
+        input_labels: "NestedList | int | torch.Tensor | None" = None,
+        input_boxes: "NestedList | torch.Tensor | None" = None,
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        input_points (`NestedList`, *optional*):
+            Input points for prompt-based segmentation. Should be a nested list with structure
+            `[image_level, object_level, point_level, [x, y]]` where each point is specified as `[x, y]` coordinates
+            in the original image space. Points are normalized to the target image size before being passed to the model.
+        input_labels (`NestedList`, *optional*):
+            Labels for the input points, indicating whether each point is a foreground (1) or background (0) point.
+            Should be a nested list with structure `[image_level, object_level, point_level]`. Must have the same
+            structure as `input_points` (excluding the coordinate dimension).
+        input_boxes (`NestedList`, *optional*):
+            Bounding boxes for prompt-based segmentation. Should be a nested list with structure
+            `[image_level, box_level, [x1, y1, x2, y2]]` where each box is specified as `[x1, y1, x2, y2]` coordinates
+            in the original image space. Boxes are normalized to the target image size before being passed to the model.
+        """
         output_kwargs = self._merge_kwargs(
             tokenizer_init_kwargs={},
             **kwargs,
         )
 
+        for key in ("input_points", "input_labels", "input_boxes", "point_pad_value"):
+            if key in output_kwargs["images_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `images_kwargs` is deprecated "
+                    "and will be removed in a future version. "
+                    "Pass it directly to the processor instead."
+                )
+
         # "images_kwargs" has priority for backwards compatibility
-        input_points = output_kwargs["images_kwargs"].pop("input_points", output_kwargs.get("input_points", None))
-        input_labels = output_kwargs["images_kwargs"].pop("input_labels", output_kwargs.get("input_labels", None))
-        input_boxes = output_kwargs["images_kwargs"].pop("input_boxes", output_kwargs.get("input_boxes", None))
+        input_points = output_kwargs["images_kwargs"].pop("input_points", input_points)
+        input_labels = output_kwargs["images_kwargs"].pop("input_labels", input_labels)
+        input_boxes = output_kwargs["images_kwargs"].pop("input_boxes", input_boxes)
         point_pad_value = output_kwargs["images_kwargs"].pop(
             "point_pad_value", output_kwargs.get("point_pad_value", None)
         )

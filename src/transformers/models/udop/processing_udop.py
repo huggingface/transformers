@@ -27,7 +27,17 @@ from ...utils import auto_docstring
 logger = logging.get_logger(__name__)
 
 
+# Kept here for BC. Identical to TextKwargs once deprecated arguments are removed.
 class UdopTextKwargs(TextKwargs, total=False):
+    """
+    boxes (`list[list[int]]`, `list[list[list[int]]]`, *optional*):
+        Deprecated, pass directly as `boxes` to [`UdopProcessor.__call__`] instead.
+        Word-level bounding boxes normalized to the range [0, 1000].
+    word_labels (`list[int]`, `list[list[int]]`, *optional*):
+        Deprecated, pass directly as `word_labels` to [`UdopProcessor.__call__`] instead.
+        Word-level integer labels for token classification tasks.
+    """
+
     word_labels: list[int] | list[list[int]] | None
     boxes: list[list[int]] | list[list[list[int]]] | None
 
@@ -67,16 +77,33 @@ class UdopProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        boxes: list[list[int]] | list[list[list[int]]] | None = None,
+        word_labels: list[int] | list[list[int]] | None = None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        boxes (`list[list[int]]`, `list[list[list[int]]]`, *optional*):
+            Word-level bounding boxes normalized to the range [0, 1000].
+        word_labels (`list[int]`, `list[list[int]]`, *optional*):
+            Word-level integer labels for token classification tasks.
+        """
         # verify input
         output_kwargs = self._merge_kwargs(
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        boxes = output_kwargs["text_kwargs"].pop("boxes", None)
-        word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
+        for key in ("boxes", "word_labels"):
+            if key in output_kwargs["text_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated "
+                    "and will be removed in a future version. "
+                    "Pass it directly to the processor instead."
+                )
+
+        # "text_kwargs" has priority for backwards compatibility
+        boxes = output_kwargs["text_kwargs"].pop("boxes", boxes)
+        word_labels = output_kwargs["text_kwargs"].pop("word_labels", word_labels)
         text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
         return_overflowing_tokens = output_kwargs["text_kwargs"].get("return_overflowing_tokens", False)
         return_offsets_mapping = output_kwargs["text_kwargs"].get("return_offsets_mapping", False)

@@ -25,7 +25,13 @@ logger = logging.get_logger(__name__)
 
 
 class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    """
+    use_image_id (`bool`, *optional*):
+        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
+        each image placeholder. If unset, defaults to the image processor's `use_image_id`.
+    """
+
+    use_image_id: bool | None
 
 
 @auto_docstring
@@ -43,6 +49,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
     images_kwargs = {
         "return_tensors": "pt",
     }
+    use_image_id: bool | None = None
 
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
@@ -70,7 +77,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[MiniCPMV4_6ProcessorKwargs],
     ):
         # MiniCPM needs to override `__call__` due to `_prepend_local_ids`, i.e. we add local image id inside text
         # Current `replace_image_tokens` API assumes that each image-placeholder doesn't depend on the other!
@@ -81,7 +88,16 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
-        use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", None)
+
+        if "use_image_id" in merged_kwargs["images_kwargs"]:
+            logger.warning_once(
+                "Passing `use_image_id` in `images_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+
+        # "images_kwargs" has priority for backwards compatibility
+        use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", merged_kwargs["use_image_id"])
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
 
         processed_images = processed_videos = {}
