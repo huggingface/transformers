@@ -143,21 +143,36 @@ class WatermarkDetector:
         # Expensive re-seeding and sampling is cached.
         self._get_ngram_score_cached = lru_cache(maxsize=max_cache_size)(self._get_ngram_score)
 
-    def _get_ngram_score(self, prefix: torch.LongTensor, target: int):
+    def _get_ngram_score(self, prefix: tuple[int, ...] | torch.LongTensor, target: int):
+        if isinstance(prefix, tuple):
+            prefix = torch.tensor(prefix, device=self.processor.device, dtype=torch.long)
         greenlist_ids = self.processor._get_greenlist_ids(prefix)
         return target in greenlist_ids
 
     def _score_ngrams_in_passage(self, input_ids: torch.LongTensor):
-        batch_size, seq_length = input_ids.shape
+        batch_size = input_ids.shape[0]
         selfhash = int(self.processor.seeding_scheme == "selfhash")
         n = self.processor.context_width + 1 - selfhash
-        indices = torch.arange(n).unsqueeze(0) + torch.arange(seq_length - n + 1).unsqueeze(1)
-        ngram_tensors = input_ids[:, indices]
 
         num_tokens_scored_batch = np.zeros(batch_size)
         green_token_count_batch = np.zeros(batch_size)
-        for batch_idx in range(ngram_tensors.shape[0]):
-            frequencies_table = collections.Counter(ngram_tensors[batch_idx])
+        for batch_idx in range(batch_size):
+            row = input_ids[batch_idx]
+            if self.bos_token_id is not None and len(row) > 0 and row[0] == self.bos_token_id:
+                row = row[1:]
+
+            seq_length = row.shape[0]
+            if seq_length - self.processor.context_width < 1:
+                raise ValueError(
+                    f"Must have at least `1` token to score after the first "
+                    f"min_prefix_len={self.processor.context_width} tokens required by the seeding scheme."
+                )
+
+            indices = torch.arange(n).unsqueeze(0) + torch.arange(seq_length - n + 1).unsqueeze(1)
+            ngram_tensors = row[indices]
+
+            ngram_examples = [tuple(ngram.tolist()) for ngram in ngram_tensors]
+            frequencies_table = collections.Counter(ngram_examples)
             ngram_to_watermark_lookup = {}
             for ngram_example in frequencies_table:
                 prefix = ngram_example if selfhash else ngram_example[:-1]
@@ -209,16 +224,6 @@ class WatermarkDetector:
                     if `return_dict=True` otherwise a `np.ndarray`.
 
         """
-
-        # Let's assume that if one batch start with `bos`, all batched also do
-        if input_ids[0, 0] == self.bos_token_id:
-            input_ids = input_ids[:, 1:]
-
-        if input_ids.shape[-1] - self.processor.context_width < 1:
-            raise ValueError(
-                f"Must have at least `1` token to score after the first "
-                f"min_prefix_len={self.processor.context_width} tokens required by the seeding scheme."
-            )
 
         num_tokens_scored, green_token_count = self._score_ngrams_in_passage(input_ids)
         z_score = self._compute_z_score(green_token_count, num_tokens_scored)

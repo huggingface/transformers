@@ -3681,6 +3681,68 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(detection_out_watermarked.prediction.tolist(), [True])
         self.assertListEqual(detection_out.prediction.tolist(), [False])
 
+    def test_watermark_detector_ignore_repeated_ngrams(self):
+        args = {
+            "bias": 2.0,
+            "context_width": 1,
+            "seeding_scheme": "selfhash",
+            "greenlist_ratio": 0.25,
+            "hashing_key": 15485863,
+        }
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        detector_dedup = WatermarkDetector(
+            model_config=config,
+            device="cpu",
+            watermarking_config=args,
+            ignore_repeated_ngrams=True,
+        )
+        detector_no_dedup = WatermarkDetector(
+            model_config=config,
+            device="cpu",
+            watermarking_config=args,
+            ignore_repeated_ngrams=False,
+        )
+
+        # Repetitive input tokens (4-token sequence repeated twice: 8 tokens total)
+        repetitive_tokens = torch.tensor([[10, 20, 30, 40, 10, 20, 30, 40]])
+
+        out_dedup = detector_dedup(repetitive_tokens, return_dict=True)
+        out_no_dedup = detector_no_dedup(repetitive_tokens, return_dict=True)
+
+        # Deduplicated score should count unique n-grams (4 unique 2-grams), whereas no_dedup scores all 7 windows
+        self.assertLess(out_dedup.num_tokens_scored[0], out_no_dedup.num_tokens_scored[0])
+        self.assertEqual(out_dedup.num_tokens_scored[0], 4)
+
+    def test_watermark_detector_mixed_bos_batch_order_independence(self):
+        args = {
+            "bias": 2.0,
+            "context_width": 1,
+            "seeding_scheme": "selfhash",
+            "greenlist_ratio": 0.25,
+            "hashing_key": 15485863,
+        }
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        config.bos_token_id = 50
+        detector = WatermarkDetector(model_config=config, device="cpu", watermarking_config=args)
+
+        # Row A starts with BOS (50), Row B does not start with BOS
+        row_a = [50, 10, 20, 30, 40]
+        row_b = [15, 25, 35, 45, 55]
+
+        batch_ab = torch.tensor([row_a, row_b])
+        batch_ba = torch.tensor([row_b, row_a])
+
+        out_ab = detector(batch_ab, return_dict=True)
+        out_ba = detector(batch_ba, return_dict=True)
+
+        # Row A score should be identical regardless of batch order
+        self.assertEqual(out_ab.num_tokens_scored[0], out_ba.num_tokens_scored[1])
+        self.assertEqual(out_ab.num_green_tokens[0], out_ba.num_green_tokens[1])
+
+        # Row B score should be identical regardless of batch order
+        self.assertEqual(out_ab.num_tokens_scored[1], out_ba.num_tokens_scored[0])
+        self.assertEqual(out_ab.num_green_tokens[1], out_ba.num_green_tokens[0])
+
     """Check the mean bias inserted by the watermarking algorithm."""
 
     @slow
