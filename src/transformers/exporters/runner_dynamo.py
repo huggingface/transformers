@@ -44,6 +44,10 @@ class DynamoModelRunner(ModelRunner):
     @classmethod
     def from_pretrained(cls, path, export_metadata=None, device=None, **kwargs) -> DynamoModelRunner:
         """Load a saved `.pt2` and unlift it."""
+        from .exporter_dynamo import register_cache_pytrees_for_model
+
+        # Loading rebuilds the input spec, which names the cache classes; a fresh process has none registered.
+        register_cache_pytrees_for_model()
         exported_program = torch.export.load(str(path))
         return cls.from_artifact(exported_program, export_metadata=export_metadata, device=device, **kwargs)
 

@@ -598,7 +598,11 @@ def _pytree_unflatten(values, context: Any) -> Any:
 
 
 def register_pytree_node(object_cls: type):
-    """Register a class (e.g. `StaticCache`) as a torch.export pytree node."""
+    """Register a class (e.g. `StaticCache`) as a torch.export pytree node.
+
+    A class keeps the first flattener registered for it, so this does not mix with `export_with_dynamic_cache`
+    (`integrations/executorch.py`), which registers its own for `DynamicCache`, in the same process.
+    """
     try:
         torch.utils._pytree.register_pytree_node(
             object_cls,
@@ -629,10 +633,12 @@ def is_cache_object(value: Any) -> bool:
     return is_cache_class(type(value))
 
 
-def register_cache_pytrees_for_model(model: PreTrainedModel):
-    """Register all relevant cache types as pytree nodes for torch.export."""
+def register_cache_pytrees_for_model(model: PreTrainedModel | None = None):
+    """Register every `Cache` subclass as a pytree node for torch.export, plus `model`'s own cache classes."""
     for cache_type in _iter_subclasses(Cache):
         register_pytree_node(cache_type)
+    if model is None:
+        return
 
     # Per-model caches not inheriting from Cache
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
