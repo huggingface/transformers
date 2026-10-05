@@ -463,8 +463,9 @@ def _maybe_sym_constant(sym: Any) -> Any:
 
 
 def _flatten_to_context(obj: Any, tensors: list) -> Any:
-    """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
-    # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
+    """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`.
+
+    Builtins match by exact type, so their subclasses fall through to the generic object cases."""
     if obj is None or type(obj) in (bool, int, float, str):
         return obj
     if type(obj) is list:
@@ -472,7 +473,6 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if type(obj) is dict:
         return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
 
-    # --- Torch objects ---
     if isinstance(obj, torch.Tensor):
         idx = len(tensors)
         tensors.append(obj)
@@ -495,11 +495,9 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         tensors.append(obj)
         return {"_t": "sym", "i": idx}
 
-    # --- Python types ---
     if isinstance(obj, type):
         return {"_t": "type", "p": _class_to_path(obj)}
 
-    # --- Generic Python objects (by structural category) ---
     cls = type(obj)
     if isinstance(obj, dict):  # dict subclasses (OrderedDict, etc.)
         return {
@@ -537,7 +535,6 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
 
 def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
     """Reconstruct an object from its JSON-native context, substituting tensor index markers."""
-    # --- Pure Python / JSON-native ---
     if ctx is None or type(ctx) in (bool, int, float, str):
         return ctx
     if type(ctx) is list:
@@ -545,38 +542,27 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
     if type(ctx) is dict and "_t" not in ctx:
         return {k: _unflatten_from_context(v, tensors) for k, v in ctx.items()}
 
-    # --- Torch objects ---
     t = ctx["_t"]
-    if t == "tensor":
+    if t in ("tensor", "sym"):
         return tensors[ctx["i"]]
-    if t == "layout":
-        return getattr(torch, ctx["n"])
-    if t == "dtype":
+    if t in ("dtype", "layout"):
         return getattr(torch, ctx["n"])
     if t == "device":
         return torch.device(ctx["s"])
     if t == "size":
         return torch.Size(ctx["v"])
-    if t == "sym":
-        return tensors[ctx["i"]]
-
-    # --- Python types ---
+    cls = _path_to_class(ctx["p"])
     if t == "type":
-        return _path_to_class(ctx["p"])
-
-    # --- Generic Python objects ---
+        return cls
     if t == "map":
-        cls = _path_to_class(ctx["p"])
         return cls({k: _unflatten_from_context(v, tensors) for k, v in ctx["v"].items()})
     if t == "seq":
-        cls = _path_to_class(ctx["p"])
         items = [_unflatten_from_context(i, tensors) for i in ctx["v"]]
         try:
             return cls(items)  # tuple, list subclass, set, frozenset, etc.
         except TypeError:
             return cls(*items)  # NamedTuple (requires positional args)
     if t == "obj":
-        cls = _path_to_class(ctx["p"])
         instance = cls.__new__(cls)
         for k, v in ctx["s"].items():
             instance.__dict__[k] = _unflatten_from_context(v, tensors)
