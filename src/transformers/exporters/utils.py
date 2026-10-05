@@ -748,7 +748,9 @@ def _merge_step_masks(masks: list[Any]) -> Any:
     if last_mask is None:
         return None
     if isinstance(last_mask, dict):
-        return {key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask}
+        # Keep the dict type in order to support generic heterogeneous models, which use an
+        # `AttentionMasksByLayerIdx` dict
+        return type(last_mask)({key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask})
     if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
         return torch.cat(masks, dim=2)
     return last_mask

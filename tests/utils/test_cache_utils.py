@@ -69,6 +69,7 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
+        NoCacheLayer,
         StaticLayer,
         StaticSlidingWindowLayer,
     )
@@ -219,17 +220,18 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
         self.assertEqual(layers[3].max_cache_len, 48)
 
+    @parameterized.expand([("linear_attention", LinearAttentionLayer), ("no_cache", NoCacheLayer)])
     @require_torch_accelerator
-    def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
+    def test_offloaded_cache_prefetches_across_layers_that_are_not_offloaded(self, _, interleaved_layer_cls):
         """
-        Regression test for offloaded caches on hybrid (attention + linear-attention) models. Attention layers are
-        offloaded to CPU after their `update` and must be prefetched back before the next decoding step. The prefetch
-        has to skip the interleaved linear-attention layers (which never go through the offloading `update` path) and
-        target the next attention layer; otherwise the offloaded KV stays on CPU and the next `update` fails with a
-        cpu/accelerator device mismatch.
+        Regression test for offloaded caches on hybrid (attention + linear-attention) models and on models with
+        `NoCacheLayer`s. Attention layers are offloaded to CPU after their `update` and must be prefetched back before
+        the next decoding step. The prefetch has to skip the interleaved linear-attention layers and `NoCacheLayer`s
+        (which never go through the offloading `update` path) and target the next attention layer; otherwise the
+        offloaded KV stays on CPU and the next `update` fails with a cpu/accelerator device mismatch.
         """
-        # Hybrid layout: an attention layer every 4 layers, linear-attention layers in between (as in e.g. Qwen3.5).
-        layers = [DynamicLayer() if layer_idx % 4 == 3 else LinearAttentionLayer() for layer_idx in range(8)]
+        # An attention layer every 4 layers, other layers in between (as in e.g. Qwen3.5).
+        layers = [DynamicLayer() if layer_idx % 4 == 3 else interleaved_layer_cls() for layer_idx in range(8)]
         attention_indices = [3, 7]
         cache = Cache(layers=layers, offloading=True, offload_only_non_sliding=False)
 
@@ -344,6 +346,14 @@ class CacheTest(unittest.TestCase):
                 # The indexer has to stay in step with the main states, else `topk` indices computed over it go out
                 # of bounds of the (shorter) key length downstream.
                 self.assertEqual(layer.update_indexer(indexer_keys).shape[1], 5)
+
+    def test_no_cache_layer_rejects_writes(self):
+        cache = Cache(layers=[DynamicLayer(), NoCacheLayer()])
+        states = torch.rand(1, 4, 2, 8, device=torch_device)
+        cache.update(states, states, layer_idx=0)
+
+        with self.assertRaisesRegex(RuntimeError, "`update` was called on a `NoCacheLayer`"):
+            cache.update(states, states, layer_idx=1)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):

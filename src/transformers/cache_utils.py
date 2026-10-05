@@ -1239,6 +1239,57 @@ class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, 
         StaticSlidingWindowLayer.reorder_cache(self, beam_idx)
 
 
+class NoCacheLayer:
+    """
+    A cache layer that holds nothing, for a layer with no modules that write to the cache, e.g. a layer of a
+    generic heterogeneous model after its skips removed all of them. It isn't a `CacheLayerMixin`, so `Cache` methods that
+    default to layer 0 use the first attention layer instead, and it's a no-op in the methods that `Cache` runs on all
+    its layers.
+    """
+
+    is_compileable = True
+    is_croppable = True
+    supports_early_init = False
+    keys = None
+    values = None
+
+    def __init__(self, **kwargs):
+        pass
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}"
+
+    def update(self, *args, **kwargs):
+        raise RuntimeError(
+            "`update` was called on a `NoCacheLayer`, but this layer does not hold any cache, as it is used for layers "
+            "in which no module writes to the cache."
+        )
+
+    def get_max_length(self) -> int:
+        return -1
+
+    def offload(self):
+        pass
+
+    def prefetch(self):
+        pass
+
+    def reset(self) -> None:
+        pass
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        pass
+
+    def crop(self, tokens_to_remove: int) -> None:
+        pass
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        pass
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        pass
+
+
 # Mappings from layer_type to layer cache class
 DYNAMIC_LAYER_TYPE_MAPPING = {
     "full_attention": DynamicLayer,
@@ -1259,6 +1310,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # we don't need
     "moe": LinearAttentionLayer,
     "mlp": LinearAttentionLayer,
+    "no_cache": NoCacheLayer,
 }
 # Same but for StaticCache
 STATIC_LAYER_TYPE_MAPPING = {
@@ -1279,6 +1331,7 @@ STATIC_LAYER_TYPE_MAPPING = {
     # we don't need
     "moe": LinearAttentionLayer,
     "mlp": LinearAttentionLayer,
+    "no_cache": NoCacheLayer,
 }
 
 
@@ -1340,14 +1393,15 @@ class Cache:
     def prefetch(self, layer_idx: int, only_non_sliding: bool = True):
         """
         Prefetch the next offloaded layer on its device, starting at `layer_idx` and circling back to the beginning
-        if needed. Linear-attention layers are never offloaded and are skipped, as are sliding layers when
-        `only_non_sliding`. Note that we use a non-default stream for this, to avoid blocking.
+        if needed. Linear-attention layers and `NoCacheLayer`s are never offloaded and are skipped, as are sliding
+        layers when `only_non_sliding`. Note that we use a non-default stream for this, to avoid blocking.
         """
         # Whether each layer is offloaded, hence worth prefetching: linear-attention layers never go through the
-        # offloading `update` path, and sliding layers are skipped when `only_non_sliding` (kept resident).
+        # offloading `update` path, `NoCacheLayer`s hold nothing, and sliding layers are skipped when `only_non_sliding`
+        # (kept resident).
         is_offloaded = [
-            not is_linear and not (only_non_sliding and is_sliding)
-            for is_linear, is_sliding in zip(self.is_linear, self.is_sliding)
+            not is_linear and not (only_non_sliding and is_sliding) and not isinstance(layer, NoCacheLayer)
+            for layer, is_linear, is_sliding in zip(self.layers, self.is_linear, self.is_sliding)
         ]
         try:
             # Try to find the next offloaded layer, starting at `layer_idx`
@@ -1515,7 +1569,7 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
+                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__}, which "
                     "does not track sequence length."
                 )
             try:
@@ -1524,7 +1578,7 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers."
+                    "LinearAttention layers or `NoCacheLayer`s."
                 )
 
         return self.layers[layer_idx].get_seq_length()
@@ -1591,7 +1645,7 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
+                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__}, which "
                     "does not track sequence length."
                 )
             try:
@@ -1600,7 +1654,7 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_mask_sizes` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers."
+                    "LinearAttention layers or `NoCacheLayer`s."
                 )
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
@@ -1743,6 +1797,14 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     num_kv_shared_layers = getattr(config, "num_kv_shared_layers", None)
     if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
         layer_types = layer_types[:-num_kv_shared_layers]
+
+    # Support generic heterogeneous modeling: when skips remove every module of a layer that receives the cache,
+    # the layer gets a `NoCacheLayer`
+    if config.generic_heterogeneous_modeling_applied:
+        layer_types = [
+            "no_cache" if layer_idx in config.cache_receivers_skipped_layers else layer_type
+            for layer_idx, layer_type in enumerate(layer_types)
+        ]
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
@@ -1965,15 +2027,17 @@ class QuantizedCache(Cache):
 
         config = config.get_text_config(decoder=True)
         layer_types, _ = get_layer_types_and_kwargs(config)
-        invalid_layer_types = set(layer_types) - {"full_attention"}
+        invalid_layer_types = set(layer_types) - {"full_attention", "no_cache"}
         if len(invalid_layer_types) > 0:
             raise ValueError(
                 "`QuantizedCache` is only supported for models with only full attention layers. We found the following invalid layer "
                 f"types: {invalid_layer_types}"
             )
         layers = [
-            layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
-            for _ in range(config.num_hidden_layers)
+            NoCacheLayer()
+            if layer_type == "no_cache"
+            else layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
+            for layer_type in layer_types
         ]
         super().__init__(layers=layers)
 
