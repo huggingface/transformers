@@ -143,7 +143,7 @@ class WatermarkDetector:
         # Expensive re-seeding and sampling is cached.
         self._get_ngram_score_cached = lru_cache(maxsize=max_cache_size)(self._get_ngram_score)
 
-    def _get_ngram_score(self, prefix: tuple[int, ...] | torch.LongTensor, target: int):
+    def _get_ngram_score(self, prefix: Union[tuple, torch.LongTensor], target: int):
         if isinstance(prefix, tuple):
             prefix = torch.tensor(prefix, device=self.processor.device, dtype=torch.long)
         greenlist_ids = self.processor._get_greenlist_ids(prefix)
