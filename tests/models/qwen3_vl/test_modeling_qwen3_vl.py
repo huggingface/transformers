@@ -309,7 +309,7 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
 
     @parameterized.expand([(2, False), (3, False), (2, True), (3, True)])
     def test_generate_preserves_multi_image_groups(self, expand_size, do_sample):
-        """Check image-group expansion against an independently expanded mixed-image batch."""
+        """Check image-group expansion against an independently expanded mixed-image batch. FIXME @raushan"""
         set_seed(42)
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Qwen3VLForConditionalGeneration(config).to(torch_device).eval()

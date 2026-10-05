@@ -1118,6 +1118,7 @@ class GenerationMixin(ContinuousMixin):
             if isinstance(inputs, torch.Tensor):
                 return inputs.repeat((repeat_times,) + (1,) * (inputs.ndim - 1))
             else:
+                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
                 return list(inputs) * repeat_times
 
         for modality in ["image", "video"]:
