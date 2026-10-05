@@ -33,7 +33,6 @@ import contextlib
 import functools
 import math
 import operator
-import re
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -75,7 +74,6 @@ if is_executorch_available():
     )
     from executorch.backends.xnnpack.utils.utils import get_input_node
     from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
-    from executorch.exir.dialects._ops import ops as exir_ops
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.passes.memory_planning_pass import MemoryPlanningPass
     from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
@@ -112,7 +110,9 @@ class ExecutorchExporter(DynamoExporter):
     artifact_suffix = ".pte"
 
     required_packages = ["torch", "executorch"]
-    tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
+    # 1.5.0 serializes non-finite constants (`-inf` padding) for flatc itself.
+    min_versions = {**DynamoExporter.min_versions, "executorch": "1.5.0"}
+    tested_versions = {"torch": "2.13.0", "executorch": "1.5.1"}
 
     def export_artifact(
         self,
@@ -197,10 +197,16 @@ def canonicalize_size_one_dim_orders(executorch_program) -> None:
                 tensor.dim_order = type(dim_order)(range(len(sizes)))
 
 
-def _backed_var_to_val(shape_env) -> dict:
-    """`shape_env.backed_var_to_val`, falling back to `var_to_val` on older torch."""
-    values = getattr(shape_env, "backed_var_to_val", None)
-    return shape_env.var_to_val if values is None else values
+def _shape_env(exported_program: ExportedProgram):
+    """The `ShapeEnv` the program was traced with, off its first fake tensor; `None` for a fully static one."""
+    return next(
+        (
+            val.fake_mode.shape_env
+            for node in exported_program.graph_module.graph.nodes
+            if isinstance(val := node.meta.get("val"), torch.Tensor) and hasattr(val, "fake_mode")
+        ),
+        None,
+    )
 
 
 def _contiguous_nonzero(input):
@@ -232,20 +238,13 @@ def keep_backed_symbols_symbolic(exported_program: ExportedProgram):
     memory plan bakes in ("Attempted to resize a static tensor", 0x12). Unbacked resolution and
     symbol-to-symbol unification still go through (blocking them breaks data-dependent sizes).
     """
-    shape_env = next(
-        (
-            val.fake_mode.shape_env
-            for node in exported_program.graph_module.graph.nodes
-            if isinstance(val := node.meta.get("val"), torch.Tensor) and hasattr(val, "fake_mode")
-        ),
-        None,
-    )
+    shape_env = _shape_env(exported_program)
     if shape_env is None:
         yield
         return
     original = shape_env._set_replacement
 
-    backed_values = _backed_var_to_val(shape_env)
+    backed_values = shape_env.backed_var_to_val
 
     def selective(symbol, replacement, *args, **kwargs):
         if symbol in backed_values and getattr(replacement, "is_number", False):
@@ -549,7 +548,7 @@ def _compare_assuming_nonempty(left, right) -> int:
             return int(side)
         expression = node.expr
         shape_env = getattr(node, "shape_env", None)
-        hints = _backed_var_to_val(shape_env) if shape_env is not None else {}
+        hints = shape_env.backed_var_to_val if shape_env is not None else {}
         ranges = getattr(shape_env, "var_to_range", {})
 
         def stand_in(symbol):
@@ -738,34 +737,6 @@ def _patch_avg_pool2d(original):
     return patch
 
 
-@register_patch(
-    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
-)
-def _patch_remove_empty_tensors_from_cat(_original):
-    """``PruneEmptyTensorsPass.remove_empty_tensors_from_cat`` that keeps unbacked-size inputs.
-
-    The original's ``numel() != 0`` raises ``GuardOnDataDependentSymNode`` on sizes like ``74 * u176``.
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_true
-
-    def patch(self, graph_module, cat_node):
-        pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
-        cat_node.args = (pruned,) + cat_node.args[1:]
-        if not pruned:
-            cat_tensor = cat_node.meta["val"]
-            with graph_module.graph.inserting_after(cat_node):
-                full_like = graph_module.graph.create_node(
-                    "call_function",
-                    target=exir_ops.edge.aten.full.default,
-                    args=(tuple(cat_tensor.shape), 0),
-                    kwargs={"dtype": cat_tensor.dtype},
-                )
-                full_like.meta = cat_node.meta
-                cat_node.replace_all_uses_with(full_like)
-
-    return patch
-
-
 @register_patch("executorch", "torch.nn.functional.pad")
 def _patch_pad(original):
     """Split a negative pad into a crop plus a non-negative pad ("Padding values must be non-negative", 0x12)."""
@@ -942,8 +913,8 @@ def _patch_expand(original):
 def _patch_eval_upper_bound(original):
     """Constraint-based bound, clamped to ``max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)``.
 
-    The original returns ``int_oo`` for compound or unbacked-sum expressions, and huge finite bounds for
-    floordiv ratios (Swin windows), overflowing the planner (``mem_offset does not fit in 64 bits``).
+    The original's finite bounds for compound expressions and floordiv ratios (Swin windows) can be huge,
+    overflowing the planner (``mem_offset does not fit in 64 bits``).
     """
 
     def patch(maybe_symint):
@@ -955,7 +926,7 @@ def _patch_eval_upper_bound(original):
         if not isinstance(hint, int) and isinstance(result, int) and result <= _MAX_UNBOUNDED_PRODUCT:
             return result
         cap = max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR) if isinstance(hint, int) else _MAX_DIM_FLOOR
-        return min(result, cap) if isinstance(result, int) else cap
+        return min(result, cap)
 
     return patch
 
@@ -1167,38 +1138,6 @@ def _patch_prelu_check_constraints(original):
     return patch
 
 
-# Delimiter lookarounds match bare literals only, never quoted strings.
-_JSON_NONFINITE_SUBS = (
-    (re.compile(r"(?<=[:\[,\s])-Infinity(?=[,\]}\s])"), "-inf"),
-    (re.compile(r"(?<=[:\[,\s])Infinity(?=[,\]}\s])"), "inf"),
-    (re.compile(r"(?<=[:\[,\s])NaN(?=[,\]}\s])"), "nan"),
-)
-
-
-@register_patch(
-    "executorch",
-    "executorch.backends.xnnpack.serialization.xnnpack_graph_serialize._flatc_compile",
-)
-def _patch_flatc_compile_nonfinite(original):
-    """Rewrite JSON ``-Infinity``/``Infinity``/``NaN`` to flatbuffers' ``-inf``/``inf``/``nan`` before ``flatc``.
-
-    ``flatc`` otherwise fails with ``cannot parse value starting with: -`` (``-inf`` padding values).
-    """
-
-    def patch(output_dir, schema_path, json_path):
-        with open(json_path, encoding="utf-8") as f:
-            data = f.read()
-        fixed = data
-        for pattern, repl in _JSON_NONFINITE_SUBS:
-            fixed = pattern.sub(repl, fixed)
-        if fixed != data:
-            with open(json_path, "w", encoding="utf-8") as f:
-                f.write(fixed)
-        return original(output_dir, schema_path, json_path)
-
-    return patch
-
-
 @register_patch("executorch.xnnpack", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
 def _patch_squeeze_node_visitors(original):
     """Swap the squeeze/unsqueeze visitors for subclasses that skip the strict reshape check.
@@ -1304,13 +1243,9 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
     # `range_constraints` feeds torch.export verifiers, `var_to_range` ExecuTorch's sym_shape_eval_pass.
     range_dicts = [exported_program._range_constraints]
     var_to_val = {}
-    for node in exported_program.graph_module.graph.nodes:
-        val = node.meta.get("val")
-        if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
-            shape_env = val.fake_mode.shape_env
-            range_dicts.append(shape_env.var_to_range)
-            var_to_val = _backed_var_to_val(shape_env)
-            break
+    if (shape_env := _shape_env(exported_program)) is not None:
+        range_dicts.append(shape_env.var_to_range)
+        var_to_val = shape_env.backed_var_to_val
 
     floor = _dim_floor(len({sym for rd in range_dicts for sym, vr in rd.items() if isinstance(vr.upper, IntInfinity)}))
 
