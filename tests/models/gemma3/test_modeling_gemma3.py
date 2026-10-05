@@ -218,6 +218,53 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
 
+    @parameterized.expand([(2, False), (3, False), (2, True), (3, True)])
+    def test_generate_preserves_multi_image_groups(self, expand_size, do_sample):
+        """Compare expanded preencoded image groups with independently expanded raw-image inputs."""
+        set_seed(42)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        with torch.no_grad():
+            # Gemma3 initializes this projector to zero, so all images would have identical features.
+            # Nonzero weights are needed to detect incorrect image ordering, not just shape mismatches.
+            model.model.multi_modal_projector.mm_input_projection_weight.normal_(
+                std=config.text_config.initializer_range
+            )
+
+        # Create input with two images per sample from inputs where each sample has only one image
+        inputs = {
+            key: inputs_dict[key][:2].reshape(1, -1) for key in ["input_ids", "attention_mask", "token_type_ids"]
+        }
+        inputs["pixel_values"] = inputs_dict["pixel_values"][:2]
+        reference_inputs = {
+            key: inputs[key].repeat_interleave(expand_size, dim=0)
+            for key in ["input_ids", "attention_mask", "token_type_ids"]
+        }
+        reference_inputs["pixel_values"] = inputs["pixel_values"].repeat(expand_size, 1, 1, 1)
+        generation_kwargs = {
+            "max_new_tokens": 1,
+            "eos_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        with torch.no_grad():
+            reference = model.generate(**reference_inputs, do_sample=False, **generation_kwargs)
+            image_outputs = model.get_image_features(pixel_values=inputs.pop("pixel_values"), return_dict=True)
+            self.assertFalse(torch.equal(image_outputs.pooler_output[0], image_outputs.pooler_output[1]))
+
+            expected_image_features = image_outputs.pooler_output.repeat(expand_size, 1, 1)
+            inputs["mm_encoder_outputs"] = {"image": image_outputs}
+            outputs = model.generate(
+                **inputs,
+                num_beams=1 if do_sample else expand_size,
+                num_return_sequences=expand_size,
+                do_sample=do_sample,
+                **generation_kwargs,
+            )
+        # Image ouptut are expanded in-place as we passed it to generation with beam-search
+        torch.testing.assert_close(image_outputs.pooler_output, expected_image_features, rtol=0, atol=0)
+        torch.testing.assert_close(outputs.logits[0], reference.logits[0], rtol=1e-4, atol=1e-5)
+
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
