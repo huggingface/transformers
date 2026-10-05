@@ -29,7 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling
 from ...utils.generic import maybe_autocast
 from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4DecoderLayer,
@@ -70,6 +70,8 @@ class HYV4Config(PreTrainedConfig):
         Hidden dimension of each DSA indexer head.
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of DSA indexer heads.
+    index_chunk_size (`int`, *optional*, defaults to 256):
+        Chunk size along the query dimension for the indexer scores (DSA). `None` disables chunking.
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
         most recent full indexer in the same forward request.
@@ -155,6 +157,7 @@ class HYV4Config(PreTrainedConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 16
+    index_chunk_size: int | None = 256
     indexer_types: list[str] | None = None
     hc_mult: int = 4
     hc_magnitude: float = 2.0
@@ -235,26 +238,34 @@ class HYV4Indexer(DeepseekV32Indexer):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         # Apply softmax scale later
         weights = (
             self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
             * (self.n_heads**-0.5)
             * self.softmax_scale
         )
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
-
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        chunk_size = self.config.index_chunk_size
+        if is_torchdynamo_compiling() or not chunk_size:
+            windows = [slice(None)]
         else:
-            index_scores = index_scores + attention_mask
+            windows = [slice(start, start + chunk_size) for start in range(0, seq_len, chunk_size)]
+        topk_indices = []
+        for window in windows:
+            scores = torch.matmul(q[:, window].float(), k.transpose(-1, -2).float().unsqueeze(1))
+            scores = F.relu(scores)
 
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+            # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+            index_scores = torch.matmul(weights[:, window].unsqueeze(-2), scores).squeeze(-2)
+
+            # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+            if attention_mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~attention_mask[:, window], float("-inf"))
+            else:
+                index_scores = index_scores + attention_mask[:, window]
+
+            topk = min(self.index_topk, index_scores.shape[-1])
+            topk_indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
+        return torch.cat(topk_indices, dim=1)  # [B, S, topk]
 
 
 class HYV4Attention(GlmMoeDsaAttention):

@@ -24,7 +24,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
@@ -59,6 +59,8 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    index_chunk_size (`int`, *optional*, defaults to 256):
+        Chunk size along the query dimension for the indexer scores (DSA). `None` disables chunking.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
@@ -175,21 +177,29 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
-
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        chunk_size = self.config.index_chunk_size
+        if is_torchdynamo_compiling() or not chunk_size:
+            windows = [slice(None)]
         else:
-            index_scores = index_scores + attention_mask
+            windows = [slice(start, start + chunk_size) for start in range(0, seq_len, chunk_size)]
+        topk_indices = []
+        for window in windows:
+            scores = torch.matmul(q[:, window].float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+            scores = F.relu(scores)
 
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+            # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+            index_scores = torch.matmul(weights[:, window].unsqueeze(-2), scores).squeeze(-2)
+
+            # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+            if attention_mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~attention_mask[:, window], float("-inf"))
+            else:
+                index_scores = index_scores + attention_mask[:, window]
+
+            topk = min(self.index_topk, index_scores.shape[-1])
+            topk_indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
+        return torch.cat(topk_indices, dim=1)  # [B, S, topk]
 
 
 class GlmMoeDsaAttention(AXK1Attention):

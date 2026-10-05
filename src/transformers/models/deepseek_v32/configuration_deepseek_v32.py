@@ -37,6 +37,8 @@ class DeepseekV32Config(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 64):
         Number of heads for the indexer projections (DSA).
+    index_chunk_size (`int`, *optional*, defaults to 256):
+        Chunk size along the query dimension for the indexer scores (DSA). `None` disables chunking.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
 
@@ -120,6 +122,7 @@ class DeepseekV32Config(PreTrainedConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 64
+    index_chunk_size: int | None = 256
     mlp_bias: bool = False
     head_dim: int = 64
     first_k_dense_replace: int = 3

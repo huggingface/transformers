@@ -71,6 +71,8 @@ class AXK2Config(DeepseekV32Config):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of heads for the indexer projections (DSA).
+    index_chunk_size (`int`, *optional*, defaults to 256):
+        Chunk size along the query dimension for the indexer scores (DSA). `None` disables chunking.
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
