@@ -79,6 +79,7 @@ else:
             ("qwen3_5_moe", "Qwen3VLProcessor"),
             ("qwen3_vl_moe", "Qwen3VLProcessor"),
             ("qwen4_exp", "Qwen3VLProcessor"),
+            ("qwen4_exp_text", "Qwen3VLProcessor"),
             ("sam3_lite_text", "Sam3Processor"),
             ("sew", "Wav2Vec2Processor"),
             ("sew-d", "Wav2Vec2Processor"),

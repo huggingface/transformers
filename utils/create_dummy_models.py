@@ -210,10 +210,13 @@ configs_requiring_too_exotic_dependency = {
 # These are excluded from the "no processor found" error checks.
 CONFIGS_WITHOUT_PROCESSOR = {
     "AutoformerConfig",
+    "MuseGlimmerAssistantConfig",  # embedding-input sub-model; checkpoint is private
     "PatchTSMixerConfig",
     "PatchTSTConfig",
     "PI0Config",
     "PPLCNetV3Config",
+    "PPLCNetV4Config",  # vision backbone; checkpoint not yet released
+    "Qwen4ExpVisionConfig",  # vision-only sub-config; no text processor needed
     "TimesFmConfig",
     "TimesFm2_5Config",
     "TimmBackboneConfig",
@@ -231,6 +234,13 @@ CHECKPOINT_REVISIONS = {
     "Phi4MultimodalConfig": "refs/pr/70",
     "VideoPrismConfig": "refs/pr/2",  # google/videoprism-lvt-base-f16r288
     "VideoPrismVisionConfig": "refs/pr/4",  # google/videoprism-base-f16r288
+}
+
+# Fallback checkpoints for configs whose primary checkpoint is not yet released.
+# The fallback must be a compatible publicly-accessible checkpoint (e.g. a previous
+# model version) so that the processor can be built and the tiny model created.
+CHECKPOINT_OVERRIDES = {
+    "MiniCPMV4_7Config": "openbmb/MiniCPM-V-4.6",  # 4.7 processor is backward-compatible with 4.6
 }
 
 CHECKPOINT_SUBFOLDERS = {
@@ -413,6 +423,24 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             flush=True,
         )
         logger.error(f"{e.__class__.__name__}: {e}")
+
+    # If the primary checkpoint failed and we have a fallback, try it once.
+    if processor is None and config_class.__name__ in CHECKPOINT_OVERRIDES:
+        fallback = CHECKPOINT_OVERRIDES[config_class.__name__]
+        try:
+            _t0 = time.time()
+            print(
+                f"[build_processor] retry  {processor_class.__name__}.from_pretrained({fallback!r}) (override)",
+                flush=True,
+            )
+            processor = processor_class.from_pretrained(fallback)
+            print(f"[build_processor] OK  {processor_class.__name__} (override) in {time.time() - _t0:.1f}s", flush=True)
+        except Exception as e:
+            print(
+                f"[build_processor] FAIL {processor_class.__name__} (override) in {time.time() - _t0:.1f}s — {e.__class__.__name__}: {e}",
+                flush=True,
+            )
+            logger.error(f"{e.__class__.__name__}: {e}")
 
     # Try to get a new processor class from checkpoint. This is helpful for a checkpoint without necessary file to load
     # processor while `processor_class` is an Auto class. For example, `sew` has `Wav2Vec2Processor` in
