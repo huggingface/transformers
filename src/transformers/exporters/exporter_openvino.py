@@ -1218,23 +1218,6 @@ def _fix_index_put_as_where(gm, node):
 # Reversibly swap torch ops the OV frontend can't lower, via `@register_patch("openvino", path)`.
 
 
-@register_patch("openvino", "torch.nn.functional.layer_norm")
-def _patch_layer_norm(original):
-    """Substitute identity ``weight``/``bias`` when either is ``None``.
-
-    OV refuses the ``torch::None`` constant of an unwired optional (Chameleon).
-    """
-
-    def patch(input, normalized_shape, weight=None, bias=None, eps=1e-5):
-        if weight is None:
-            weight = torch.ones(normalized_shape, dtype=input.dtype, device=input.device)
-        if bias is None:
-            bias = torch.zeros(normalized_shape, dtype=input.dtype, device=input.device)
-        return original(input, normalized_shape, weight, bias, eps)
-
-    return patch
-
-
 @register_patch("openvino", "torch.nn.functional.interpolate")
 def _patch_interpolate(original):
     """Carry ``antialias=True`` resampling into the graph as explicit weights.
@@ -1307,68 +1290,6 @@ def _patch_sdpa(original):
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         # OV returns the uniform average for a fully-masked row; torch's fused kernels write zeros.
         return zero_fully_masked_rows(attn_output, attn_mask) if masked else attn_output
-
-    return patch
-
-
-@register_patch("openvino", "torch.matmul", "torch.Tensor.matmul")
-def _patch_matmul(original):
-    """Flatten a two-axis batch before ``MatMul``.
-
-    OV folds leading axes into one batch per operand and refuses m-rope's ``[sections, batch, ...]`` matmul.
-    """
-
-    def patch(input, other, **kwargs):
-        batched = (
-            isinstance(other, torch.Tensor)
-            and input.dim() == 4
-            and other.dim() == 4
-            and input.shape[:2] == other.shape[:2]
-        )
-        if not batched:
-            return original(input, other, **kwargs)
-        leading = input.shape[:2]
-        product = original(input.flatten(0, 1), other.flatten(0, 1), **kwargs)
-        return product.unflatten(0, leading)
-
-    return patch
-
-
-@register_patch("openvino", "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLTextModel._deepstack_process")
-def _patch_qwen3vl_deepstack(original):
-    """Rewrite qwen3-vl deepstack injection without data-dependent boolean-mask indexing.
-
-    Uses ``cumsum`` + ``index_select`` and a ``float(mask)`` multiply.
-    """
-
-    def patch(self, hidden_states, visual_pos_masks, visual_embeds):
-        visual_embeds = visual_embeds.to(hidden_states.dtype)
-        batch, seq_len, dim = hidden_states.shape
-        flat_mask = visual_pos_masks.reshape(-1)
-        indices = torch.clamp(torch.cumsum(flat_mask.long(), dim=0) - 1, min=0)
-        full_visual = torch.index_select(visual_embeds, 0, indices).reshape(batch, seq_len, dim)
-        return hidden_states + full_visual * flat_mask.to(hidden_states.dtype).reshape(batch, seq_len, 1)
-
-    return patch
-
-
-@register_patch(
-    "openvino",
-    "transformers.models.wavlm.modeling_wavlm.WavLMPreTrainedModel._get_feature_vector_attention_mask",
-    "transformers.models.data2vec.modeling_data2vec_audio.Data2VecAudioPreTrainedModel._get_feature_vector_attention_mask",
-)
-def _patch_feature_vector_attention_mask(original):
-    """Build the downsampled attention mask as ``arange(seq) < output_lengths`` instead of a scatter.
-
-    OV can't convert the original's ``aten.index_put`` (``SequenceMark``).
-    """
-
-    def patch(self, feature_vector_length, attention_mask, add_adapter=None):
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-        positions = torch.arange(feature_vector_length, device=attention_mask.device)
-        return positions.unsqueeze(0) < output_lengths.unsqueeze(1)
 
     return patch
 
@@ -1683,24 +1604,20 @@ def _patch_rfft(original):
     return patch
 
 
-def _dft(input, n, dim):
-    """1-D DFT as a twiddle matmul; OV translates no ``aten._fft_c2c``."""
-    if n is None:
-        n = input.shape[dim]
-    k = torch.arange(n, device=input.device, dtype=torch.float32)
-    angles = -2.0 * torch.pi * k.view(-1, 1) * k / n
-    twiddle = torch.complex(angles.cos(), angles.sin())
-    x = input if torch.is_complex(input) else input.to(torch.complex64)
-    out = x.movedim(dim, -1) @ twiddle.T
-    return out.movedim(-1, dim)
-
-
 @register_patch("openvino", "torch.fft.fft")
 def _patch_fft(original):
-    """``torch.fft.fft`` lowers to an ``aten._fft_c2c`` OV's frontend can't translate."""
+    """``torch.fft.fft`` as a twiddle matmul: it lowers to an ``aten._fft_c2c`` OV's frontend can't translate."""
 
     def patch(input, n=None, dim=-1, norm=None):
-        return _dft(input, n, dim)
+        if n is None:
+            n = input.shape[dim]
+        k = torch.arange(n, device=input.device, dtype=torch.float32)
+        angles = -2.0 * torch.pi * k.view(-1, 1) * k / n
+        twiddle = torch.complex(angles.cos(), angles.sin())
+        x = input if torch.is_complex(input) else input.to(torch.complex64)
+        out = (x.movedim(dim, -1) @ twiddle.T).movedim(-1, dim)
+        scale = {None: 1.0, "backward": 1.0, "ortho": n**-0.5, "forward": 1.0 / n}[norm]
+        return out if scale == 1.0 else out * scale
 
     return patch
 
@@ -1851,40 +1768,6 @@ def _convert_empty_permuted(context):
     return [ov_ops.broadcast(zero, size).output(0)]
 
 
-def _convert_index_add(context):
-    """Convert ``aten.index_add`` as a sum-reduced ``ScatterElementsUpdate``.
-
-    OV's translator expects 5 inputs and fails when ``alpha`` is defaulted (t5gemma, speecht5).
-    """
-    data = context.get_input(0)
-    dim = int(context.get_values_from_const_input(1))
-    index = context.get_input(2)
-    source = context.get_input(3)
-    # Fold a non-default ``alpha`` (FX input 4) into ``source``.
-    if context.get_input_size() > 4 and context.get_input(4).get_node().get_type_name() == "Constant":
-        alpha = context.get_values_from_const_input(4)
-        if alpha != 1:
-            source = ov_ops.multiply(
-                source, ov_ops.convert(ov_ops.constant(np.array(alpha)), source.get_element_type())
-            )
-    # Broadcast the 1-D index to ``source``'s shape along ``dim``.
-    src_shape = ov_ops.shape_of(source, output_type="i64")
-    ndim = source.get_partial_shape().rank.get_length()
-    ones = [1] * ndim
-    ones[dim] = -1
-    index_reshaped = ov_ops.reshape(
-        ov_ops.convert(index, "i64"),
-        ov_ops.constant(np.array(ones, dtype=np.int64)),
-        special_zero=False,
-    )
-    index_bcast = ov_ops.broadcast(index_reshaped, src_shape)
-    return [
-        ov_ops.scatter_elements_update(
-            data, index_bcast, source, ov_ops.constant(np.int64(dim)), reduction="sum"
-        ).output(0)
-    ]
-
-
 def _convert_view_as_real(context):
     """Identity: ``_convert_complex`` already represents complex tensors as ``[..., 2]`` real."""
     return [context.get_input(0)]
@@ -1903,15 +1786,6 @@ def _convert_conj(context):
             axis=-1,
         ).output(0)
     ]
-
-
-def _convert_bitwise_not(context):
-    """Convert ``aten.bitwise_not`` to ``LogicalNot`` on a boolean view.
-
-    OV's own translator leaves a ``torch.sym_float`` call on the dynamic dims behind (deformable_detr).
-    """
-    data = context.get_input(0)
-    return [ov_ops.logical_not(ov_ops.convert(data, "boolean")).output(0)]
 
 
 def _convert_layer_norm(context):
@@ -1952,20 +1826,6 @@ def _convert_to_copy(context):
     return [ov_ops.convert(data, dtype).output(0)]
 
 
-def _convert_bmm(context):
-    """Translate ``aten.bmm``, shielding softmax-fed ones from OV's SDPA fusion.
-
-    The fusion mis-shapes ``bmm -> softmax -> bmm`` with batch and heads flattened (SpeechT5's relative-position
-    attention). A runtime-dependent ``Reshape(x, ShapeOf(x))`` no-op blocks it and is cleaned up later.
-    """
-    a, b = context.get_input(0), context.get_input(1)
-    product = ov_ops.matmul(a, b, transpose_a=False, transpose_b=False)
-    if a.get_node().get_type_name() != "Softmax":
-        return [product.output(0)]
-    identity = ov_ops.reshape(product, ov_ops.shape_of(product, output_type="i64"), special_zero=False)
-    return [identity.output(0)]
-
-
 def _convert_sdpa(context):
     """Convert ``aten.scaled_dot_product_attention``, casting integer masks to boolean.
 
@@ -1994,6 +1854,20 @@ def _convert_sdpa(context):
         scale = np.array(head_dim.get_length() ** -0.5).astype(q.get_element_type().to_dtype())
         kwargs["scale"] = ov_ops.constant(scale, q.get_element_type())
     return [ov_ops.scaled_dot_product_attention(q, k, v, **kwargs).output(0)]
+
+
+def _convert_bmm(context):
+    """Translate ``aten.bmm``, shielding softmax-fed ones from OV's SDPA fusion.
+
+    The fusion mis-shapes ``bmm -> softmax -> bmm`` with batch and heads flattened (SpeechT5's relative-position
+    attention). A runtime-dependent ``Reshape(x, ShapeOf(x))`` no-op blocks it and is cleaned up later.
+    """
+    a, b = context.get_input(0), context.get_input(1)
+    product = ov_ops.matmul(a, b, transpose_a=False, transpose_b=False)
+    if a.get_node().get_type_name() != "Softmax":
+        return [product.output(0)]
+    identity = ov_ops.reshape(product, ov_ops.shape_of(product, output_type="i64"), special_zero=False)
+    return [identity.output(0)]
 
 
 def _convert_complex(context):
@@ -2072,7 +1946,6 @@ if is_openvino_available():
             ConversionExtension("aten._grouped_mm.default", _convert_grouped_mm),
             ConversionExtension("transformers.grouped_mm_fallback.default", _convert_grouped_mm),
             ConversionExtension("aten.empty_permuted.default", _convert_empty_permuted),
-            ConversionExtension("aten.index_add.default", _convert_index_add),
             ConversionExtension("aten.bmm.default", _convert_bmm),
             ConversionExtension("aten.complex.default", _convert_complex),
             ConversionExtension("aten.view_as_real.default", _convert_view_as_real),
@@ -2081,7 +1954,6 @@ if is_openvino_available():
             ConversionExtension("aten.layer_norm.default", _convert_layer_norm),
             ConversionExtension("aten.scaled_dot_product_attention.default", _convert_sdpa),
             ConversionExtension("torch_attn._varlen_attn.default", _convert_varlen_attn),
-            ConversionExtension("aten.bitwise_not.default", _convert_bitwise_not),
             # SymInt builtins — see comment block above.
             ConversionExtension("<built-in function add>", _convert_sym_binop(ov_ops.add)),
             ConversionExtension("<built-in function sub>", _convert_sym_binop(ov_ops.subtract)),

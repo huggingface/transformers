@@ -34,8 +34,6 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 from typing import Sequence as TypingSequence  # noqa: UP035  # onnxscript.script classifies attrs via typing.Sequence
 
-import numpy as np
-
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import ExportFormat, OnnxConfig
@@ -249,22 +247,6 @@ def _patch_rms_norm_forward(original):
     return patch
 
 
-@register_patch("onnx", "onnxscript.onnx_opset._impl.opset13.Opset13.Constant")
-def _patch_opset13_constant(original):
-    """Substitute `op.Constant(value_ints=[])` with an explicit empty INT64 tensor.
-
-    onnxscript's `aten_index_put` can pass an empty `value_ints`, which `onnx_ir` warns has an ambiguous type.
-    """
-
-    def patch(self, *args, **kwargs):
-        if kwargs.get("value_ints") == []:
-            kwargs.pop("value_ints")
-            kwargs["value"] = onnx_ir.tensor(np.array([], dtype=np.int64))
-        return original(self, *args, **kwargs)
-
-    return patch
-
-
 @register_patch("onnx", "onnxscript.optimizer.optimize_ir")
 def _patch_optimize_ir(original):
     """Skip constant-folding `Resize` nodes during onnxscript optimization.
@@ -407,49 +389,6 @@ def _patch_masked_var(original):
         if not keepdim:
             denom = denom.squeeze()
         return var / denom.clamp(min=1.0)
-
-    return patch
-
-
-@register_patch("onnx", "torch.Tensor.masked_scatter")
-def _patch_masked_scatter(original):
-    """Cumsum-gather-where strategy for masked_scatter (avoids ScatterND ORT failures)."""
-
-    def patch(self, mask, source):
-        mask = mask.expand_as(self)
-        flat_mask = mask.reshape(-1)
-        positions = (flat_mask.to(torch.int64).cumsum(0) - 1).clamp(min=0)
-        gathered = source.reshape(-1)[positions]
-        return torch.where(flat_mask, gathered, self.reshape(-1)).reshape(self.shape)
-
-    return patch
-
-
-@register_patch("onnx", "torch.roll")
-def _patch_roll(original):
-    """Replace `torch.roll(input, shifts, dims)` with explicit `narrow + cat` shifts.
-
-    The `roll` lowering can emit an empty `Shape(start, end)`, and ORT rejects the downstream `Slice` with
-    `ShapeInferenceError` (Gemma4-Unified).
-    """
-
-    def patch(input, shifts, dims=None):
-        if isinstance(shifts, int) and isinstance(dims, int):
-            shifts = (shifts,)
-            dims = (dims,)
-        elif not (isinstance(shifts, (tuple, list)) and isinstance(dims, (tuple, list)) and len(shifts) == len(dims)):
-            return original(input, shifts, dims)
-
-        out = input
-        for shift, dim in zip(shifts, dims):
-            length = out.size(dim)
-            shift = shift % length if length > 0 else 0
-            if shift == 0:
-                continue
-            front = out.narrow(dim, length - shift, shift)
-            back = out.narrow(dim, 0, length - shift)
-            out = torch.cat([front, back], dim=dim)
-        return out
 
     return patch
 
