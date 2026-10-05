@@ -216,6 +216,8 @@ CONFIGS_WITHOUT_PROCESSOR = {
     "PI0Config",
     "PPLCNetV3Config",
     "PPLCNetV4Config",  # vision backbone; checkpoint not yet released
+    "Qwen4ExpConfig",  # checkpoint not yet publicly released
+    "Qwen4ExpTextConfig",  # text-only sub-config; checkpoint not yet publicly released
     "Qwen4ExpVisionConfig",  # vision-only sub-config; no text processor needed
     "TimesFmConfig",
     "TimesFm2_5Config",
