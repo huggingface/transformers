@@ -105,6 +105,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section"}
+    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.0001
 
     def __post_init__(self, **kwargs):

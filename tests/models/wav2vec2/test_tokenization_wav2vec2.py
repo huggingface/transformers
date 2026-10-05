@@ -511,3 +511,21 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
             self.assertEqual(tokenizer.target_lang, "ita")
             check_tokenizer(tokenizer, check_ita_first=True)
+
+    def test_set_target_lang_drops_stale_added_tokens(self):
+        # Regression test: set_target_lang removes conflicting entries from `_added_tokens_decoder` but used to
+        # leave them in the `_added_tokens_encoder` cache, so encoding the removed token returned an id that
+        # decodes to an unrelated vocabulary token.
+        nested_vocab = {"eng": {"<pad>": 0, "a": 1, "b": 2}, "spa": {"<pad>": 0, "c": 1, "d": 2, "e": 3}}
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, "vocab.json"), "w", encoding="utf-8") as f:
+                json.dump(nested_vocab, f)
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(tempdir, target_lang="eng")
+
+        tokenizer.add_tokens(["<xx>"])
+        conflicting_id = tokenizer._added_tokens_encoder["<xx>"]
+        tokenizer.vocab["spa"]["f"] = conflicting_id
+        tokenizer.set_target_lang("spa")
+        self.assertNotIn("<xx>", tokenizer._added_tokens_encoder)
+        self.assertNotIn(conflicting_id, tokenizer._added_tokens_decoder)
+        self.assertEqual(tokenizer._added_tokens_encoder, tokenizer.added_tokens_encoder)

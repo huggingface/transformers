@@ -275,6 +275,15 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    image_like_kwargs = {
+        "description": """
+    Developer flag for additional image like inputs that will also be preprocessed. Only use this if
+    passing the inputs as kwarg doesn't work. For example, `preprocess(images, masks=masks)` is the
+    preferred option but results in argument priority issues for some models. In those cases
+    `preprocess(images, image_like_inputs={"masks": masks})` can be used instead.
+    """
+    }
+
     # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
     __kwargs__ = {
         "description": """
@@ -2198,6 +2207,16 @@ class ModelArgs:
     Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
     `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
     hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+    """,
+        "shape": None,
+    }
+
+    mm_encoder_outputs = {
+        "description": """
+    Dict where keys are supported modalities and values are encoded outputs for that modality. Each encoded output is a tuple
+    that consists of (`pooler_output`, *optional*: `last_hidden_states`, *optional*: `hidden_states`, *optional*: `attentions`)
+    `pooler_output` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+    multimmodal features of the encoder merged into text embeddings.
     """,
         "shape": None,
     }

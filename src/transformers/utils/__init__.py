@@ -112,6 +112,7 @@ from .import_utils import (
     check_torch_load_is_safe,
     direct_transformers_import,
     enable_tf32,
+    get_device_type,
     get_torch_version,
     is_accelerate_available,
     is_apex_available,

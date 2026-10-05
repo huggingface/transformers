@@ -705,6 +705,8 @@
         title: GraniteMoeSWA
       - local: model_doc/granite_swa
         title: GraniteSWA
+      - local: model_doc/gte
+        title: GTE
       - local: model_doc/helium
         title: Helium
       - local: model_doc/herbert
@@ -825,6 +827,8 @@
         title: Nemotron
       - local: model_doc/nemotron_h
         title: NemotronH
+      - local: model_doc/nemotron_h_omni
+        title: NemotronH Omni
       - local: model_doc/nllb
         title: NLLB
       - local: model_doc/nllb-moe

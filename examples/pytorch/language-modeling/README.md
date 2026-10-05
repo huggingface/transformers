@@ -35,7 +35,7 @@ the tokenization). The loss here is that of causal language modeling.
 ```bash
 python run_clm.py \
     --model_name_or_path openai-community/gpt2 \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
@@ -65,7 +65,7 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 
 ```bash
 python run_clm_no_trainer.py \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --model_name_or_path openai-community/gpt2 \
     --output_dir /tmp/test-clm
@@ -80,7 +80,7 @@ We're using the raw WikiText-2 (no tokens were replaced before the tokenization)
 ```bash
 python run_fim.py \
     --model_name_or_path gpt2 \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
@@ -112,7 +112,7 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 ```bash
 python run_fim_no_trainer.py \
     --model_name_or_path gpt2 \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --model_name_or_path gpt2 \
     --fim_rate 0.5 \
@@ -134,7 +134,7 @@ converge slightly slower (over-fitting takes more epochs).
 ```bash
 python run_mlm.py \
     --model_name_or_path FacebookAI/roberta-base \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
@@ -164,7 +164,7 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 
 ```bash
 python run_mlm_no_trainer.py \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --model_name_or_path FacebookAI/roberta-base \
     --output_dir /tmp/test-mlm
@@ -194,7 +194,7 @@ Here is how to fine-tune XLNet on wikitext-2:
 ```bash
 python run_plm.py \
     --model_name_or_path=xlnet/xlnet-base-cased \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \

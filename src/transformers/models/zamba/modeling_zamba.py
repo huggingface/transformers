@@ -42,7 +42,8 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
-    is_tracing,
+    is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
 )
 from ...utils.output_capturing import capture_outputs
 from .configuration_zamba import ZambaConfig
@@ -337,7 +338,12 @@ def mamba_selective_scan(
         scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
         ssm_state = all_states[:, -1]
 
-    elif use_associative_scan and associative_scan is not None and is_tracing(hidden_states):
+    elif (
+        use_associative_scan
+        and associative_scan is not None
+        # There is no onnx translation for this op so we rely on the normal sequential path then
+        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+    ):
 
         def combine_fn(left, right):
             a_left, b_left = left
@@ -406,6 +412,12 @@ class ZambaMambaMixer(nn.Module):
 
     def __init__(self, config: ZambaConfig, layer_idx):
         super().__init__()
+        if not config.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
         self.config = config
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
@@ -429,7 +441,6 @@ class ZambaMambaMixer(nn.Module):
         self.activation = config.hidden_mamba_act
         self.act = ACT2FN[config.hidden_mamba_act]
 
-        self.use_fast_kernels = config.use_mamba_kernels
         self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
