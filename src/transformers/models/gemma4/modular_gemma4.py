@@ -48,7 +48,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from ..gemma3.modeling_gemma3 import (
@@ -802,14 +802,9 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
         return super().compute_axial_rope_parameters(config, device, **kwargs)
 
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids_expanded = position_ids[..., None].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded @ inv_freq_expanded
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
