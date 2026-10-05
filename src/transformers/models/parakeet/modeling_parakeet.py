@@ -82,8 +82,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[:, None].float() * self.inv_freq.to(hidden_states.device, torch.float)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
         # The attention layers expect a batch dimension on the positional embeddings
         freqs = freqs.expand(hidden_states.shape[0], -1, -1)
         sin = freqs.sin()

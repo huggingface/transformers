@@ -215,8 +215,7 @@ class Llama4TextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[..., None].float() * self.inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
         freqs_cis = freqs_cis * self.attention_scaling
 

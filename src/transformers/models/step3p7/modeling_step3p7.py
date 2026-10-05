@@ -486,8 +486,7 @@ class Step3p7RotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[..., None].float() * inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * attention_scaling
         sin = emb.sin() * attention_scaling

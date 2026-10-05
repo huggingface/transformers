@@ -198,8 +198,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         inv_freq = getattr(self, "inv_freq")
         attention_scaling = getattr(self, "attention_scaling")
 
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[..., None].float() * inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * attention_scaling
         sin = emb.sin() * attention_scaling
@@ -1058,8 +1057,7 @@ class EvollaRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[..., None].float() * self.inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling

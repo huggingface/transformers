@@ -63,8 +63,7 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config)
         mscale = attention_scaling if mscale is None else mscale
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[..., None].float() * inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * mscale
         sin = emb.sin() * mscale

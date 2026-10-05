@@ -121,8 +121,7 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
         # the doubled dim and `rotate_half` is local and obvious.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[..., None].float() * inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * attention_scaling
         sin = freqs.sin() * attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)

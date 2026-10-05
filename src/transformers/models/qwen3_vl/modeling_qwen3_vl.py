@@ -399,8 +399,7 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
         # In contrast to other models, Qwen3VLText has different position ids for the grids
         # So position_ids is broadcast to (3, bs, positions) and freqs has shape (3, bs, positions, dim // 2)
         position_ids = position_ids.expand(3, -1, -1)
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
-        freqs = position_ids[..., None].float() * self.inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
 

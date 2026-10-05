@@ -291,9 +291,8 @@ class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
 
         # One row of positions per M-RoPE axis: (num_axes, bs, positions)
         position_ids = position_ids.expand(2, -1, -1)
-        # Broadcast multiply rather than a matmul, so neither TF32 nor autocast can lower its precision
         # (2, batch, seq_len, rotary_dim // 2)
-        freqs = position_ids[..., None].float() * inv_freq.to(x.device, torch.float)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * attention_scaling
         sin = freqs.sin() * attention_scaling
 
