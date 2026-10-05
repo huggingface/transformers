@@ -436,7 +436,9 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
                 flush=True,
             )
             processor = processor_class.from_pretrained(fallback)
-            print(f"[build_processor] OK  {processor_class.__name__} (override) in {time.time() - _t0:.1f}s", flush=True)
+            print(
+                f"[build_processor] OK  {processor_class.__name__} (override) in {time.time() - _t0:.1f}s", flush=True
+            )
         except Exception as e:
             print(
                 f"[build_processor] FAIL {processor_class.__name__} (override) in {time.time() - _t0:.1f}s — {e.__class__.__name__}: {e}",
