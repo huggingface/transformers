@@ -1658,6 +1658,9 @@ The model scores the allowed answers in one batched forward pass without generat
 
 Send a model, the state to evaluate, and questions keyed by name:
 
+<hfoptions id="systemone-http">
+<hfoption id="curl">
+
 ```shell
 curl http://localhost:8000/v1/systemone \
   -H "Content-Type: application/json" \
@@ -1680,17 +1683,65 @@ curl http://localhost:8000/v1/systemone \
   }'
 ```
 
+</hfoption>
+<hfoption id="TypeSafe (TypeScript)">
+
+Install the [TypeSafe SDK](https://github.com/typesafe-ai/typesafe-sdk-js) for Node.js 20 or newer:
+
+```shell
+npm install @typesafe-ai/sdk
+```
+
+Set `baseURL` to the server root; the SDK adds `/v1/systemone`. The SDK requires an API key, but a placeholder works with the local server.
+
+```typescript
+import { choice, noul, score, TypeSafeClient } from "@typesafe-ai/sdk";
+
+const client = new TypeSafeClient({
+  baseURL: "http://localhost:8000",
+  apiKey: "<random_string>",
+});
+
+const response = await client.systemOne({
+  model: "Qwen/Qwen2.5-1.5B-Instruct",
+  state: "Our integration has been failing for 3 days and we are losing sales!",
+  questions: {
+    team: choice("Which team handles this?", {
+      billing: null,
+      technical: "Bugs or integration problems",
+    }),
+    urgency: score("How urgent is this ticket?", ["low", "medium", "high"]),
+    upset: noul("Is the customer upset?"),
+  },
+});
+
+console.log(response.answers.team.choice);
+console.log(response.answers.urgency.score);
+console.log(response.answers.upset.noul);
+```
+
+The client prints the selected team, urgency score, and probability that the customer is upset. For example:
+
+```shell
+technical
+1.6739138662815094
+0.851952850818634
+```
+
+</hfoption>
+</hfoptions>
+
 Answers use the same question names. For example:
 
 ```json
 {
   "model": "Qwen/Qwen2.5-1.5B-Instruct",
   "answers": {
-    "team": {"type": "choice", "choice": "technical", "probabilities": {"billing": 0.001, "technical": 0.999}, "confidence": 0.998},
-    "urgency": {"type": "score", "score": 1.98, "legend": {"0": "low", "1": "medium", "2": "high"}, "probabilities": {"0": 0.001, "1": 0.02, "2": 0.979}, "confidence": 0.967},
-    "upset": {"type": "noul", "noul": 0.82}
+    "team": {"type": "choice", "choice": "technical", "probabilities": {"billing": 0.000006962256520637311, "technical": 0.999993085861206}, "confidence": 0.9999861717224121},
+    "urgency": {"type": "score", "score": 1.6739138662815094, "legend": {"0": "low", "1": "medium", "2": "high"}, "probabilities": {"0": 0.0031353600788861513, "1": 0.31981542706489563, "2": 0.6770492196083069}, "confidence": 0.5108707791659981},
+    "upset": {"type": "noul", "noul": 0.851952850818634}
   },
-  "usage": {"input_tokens": 190, "output_tokens": 0}
+  "usage": {"input_tokens": 213, "output_tokens": 0}
 }
 ```
 
@@ -1705,6 +1756,8 @@ Answers use the same question names. For example:
 For vision-capable models, add an `images` array with up to four `data:image/...;base64,...` URLs. Every question receives the same images. The model's processor and chat template must support images; remote image URLs are not accepted.
 
 ### Decision configuration
+
+Decision models do not yet share a standard for storing prompts, answer labels, and calibration settings. These vary across model implementations, so `--decision-config` lets you provide them explicitly. Models with custom decision heads still require a compatible implementation; this file only configures prompt formatting and next-token scoring.
 
 By default, questions use a fallback prompt and the model's chat template with thinking disabled. Answer labels are `A`–`Z` for choices and scores, and `Yes`/`No` for booleans. Probabilities are the softmax over these labels at temperature 1.
 
