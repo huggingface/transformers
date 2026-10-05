@@ -722,7 +722,7 @@ class FalconH1Mixer(nn.Module):
 
         if use_precomputed_states:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
