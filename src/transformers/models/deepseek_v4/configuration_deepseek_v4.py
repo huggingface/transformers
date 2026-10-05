@@ -112,21 +112,16 @@ class DeepseekV4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        # V4 ships EP only (no `base_model_tp_plan` — the runtime picks one plan or
-        # the other, never both, and V4 is MoE so EP is the only sensible config).
-        # MoE parallelism: route on the gate, run the routed experts as a grouped-GEMM
-        # kernel sharded along the expert axis, and wrap the experts module with
-        # `moe_tp_experts` so its output gets all-reduced across ranks. Same shape as
-        # gpt-oss. Main attention stays replicated: V4 is shared-KV MQA + a CSA / HCA
-        # compressor branch — both broadcast a single KV head across all attention
-        # heads via `repeat_kv`, so colwise-sharding `q_b_proj` would leave KV
-        # replicated and `repeat_kv` would no longer match the rank-local query head
-        # count. The shared MLP also stays replicated — it's small and not worth
-        # sharding. The Lightning Indexer is the one carve-out: its keys are
-        # replicated (own compressor at index_head_dim fed by replicated
-        # hidden_states), so head-sharding is well-formed; `q_b_proj` and the
-        # `scorer.weights_proj` go colwise, and the `scorer` output is all-reduced
-        # so every rank sees the same `index_scores` and picks the same top-k.
+        # EP-only by default, same shape as gpt-oss: route on the gate, run the
+        # routed experts as a grouped-GEMM kernel sharded along the expert axis,
+        # and wrap the experts module with `moe_tp_experts` so its output gets
+        # all-reduced across ranks. Attention stays replicated (V4 is shared-KV
+        # MQA + a CSA / HCA compressor branch — both broadcast a single KV head
+        # across all attention heads via `repeat_kv`, so colwise-sharding
+        # `q_b_proj` would leave KV replicated and `repeat_kv` would no longer
+        # match the rank-local query head count). The shared MLP also stays
+        # replicated — it's small and not worth TP-ing. There's deliberately
+        # no `base_model_tp_plan` for V4: we don't ship a pure-TP plan, only EP.
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
