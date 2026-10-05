@@ -287,9 +287,7 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
 class FineGrainedInputScales(_FineGrainedOp):
     """A calibrated checkpoint's ``input_scale`` in the layout the module holds: one value per
     quantized module, so a MoE brings one per expert, the gate|up pair reducing to their max since
-    both halves read the same rows. The NVFP4 gate_up global collapses to ONE value — its rows are
-    the hidden states, quantized once before routing. A static activation scale IS the
-    quantization scale, with no block level to absorb an inflated one, so it stays per-expert."""
+    both halves read the same rows."""
 
     def convert(self, input_dict, full_layer_name=None, **kwargs):
         values = []
@@ -299,8 +297,7 @@ class FineGrainedInputScales(_FineGrainedOp):
         stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
         # a scale is a magnitude, so the reduce is over absolute values
         per_expert = stacked.reshape(stacked.shape[0], -1).abs().amax(dim=1)
-        one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")  # the NVFP4 global only
-        return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
+        return {full_layer_name: per_expert.contiguous()}
 
     @property
     def reverse_op(self) -> ConversionOps:

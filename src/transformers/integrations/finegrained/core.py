@@ -19,6 +19,7 @@ moved onto these modules by `finegrained_conversions`.
 from __future__ import annotations
 
 import functools
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -586,18 +587,18 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
         up_rows = (2 if self.has_gate else 1) * self.intermediate_dim
         storage = (format_spec, scale_dtype, scale_group, swizzled)
-        # gate_up takes ONE activation global — its rows are the pre-routing hidden states,
-        # quantized once before routing; down's rows belong to an expert each
-        gate_up_globals, down_globals = 1, self.num_experts
         self._register_projection(
-            self.gate_up_name, up_rows, self.hidden_dim, 2 if self.has_gate else 1, gate_up_globals, storage
+            self.gate_up_name, up_rows, self.hidden_dim, 2 if self.has_gate else 1, self.num_experts, storage
         )
-        self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, 1, down_globals, storage)
+        self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, 1, self.num_experts, storage)
 
         # the model's per-expert output norm, filled by the swap
         self.post_expert_norm = None
         self.has_post_expert_norm = False
         self.post_expert_norm_name = None
+
+        # optimization knob, set by `register_shared_gate_up_input_globals`: one gate_up activation global
+        self.register_buffer("shared_gate_up_input_global", None, persistent=False)
 
     def _register_projection(self, proj, rows, in_dim, min_scale_out, input_globals, storage):
         """One expert projection: the packed weight and its scale grid, then the slots a
@@ -669,11 +670,16 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             final_hidden_states.index_add_(0, token_idx, weighted_out.to(final_hidden_states.dtype))
         return final_hidden_states.to(hidden_states.dtype)
 
+    def _projection_operands(self, proj: str) -> dict[str, torch.Tensor | None]:
+        """``proj``'s tensors by slot, with the gate_up's shared activation global where one is set."""
+        operands = {slot: getattr(self, f"{proj}{slot}") for slot in self._projection_slots}
+        if proj == self.gate_up_name and self.shared_gate_up_input_global is not None:
+            operands["_input_global_scale"] = self.shared_gate_up_input_global
+        return operands
+
     def expert_linear(self, input: torch.Tensor, proj: str, expert_idx: int) -> torch.Tensor:
         """One expert's ``proj`` as a dense linear, over that expert's slice of the projection's operands."""
-        weight, scale, weight_global, input_global, activation_scale, bias = (
-            getattr(self, f"{proj}{slot}") for slot in self._projection_slots
-        )
+        weight, scale, weight_global, input_global, activation_scale, bias = self._projection_operands(proj).values()
         weight = weight[expert_idx]
         # one expert's slice of a swizzled stack is the `(1, ...)` artifact `matmul_2d` reads
         scale = scale[expert_idx : expert_idx + 1] if scale.ndim == 5 else scale[expert_idx]
@@ -681,8 +687,8 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         weight_global, activation_scale, bias = (
             operand[expert_idx] if operand is not None else None for operand in (weight_global, activation_scale, bias)
         )
-        # gate_up holds ONE input global, its rows being quantized pre-routing; down one per expert
-        if input_global is not None and proj == "down_proj":
+        # one per expert, or one shared by all
+        if input_global is not None and input_global.numel() > 1:
             input_global = input_global[expert_idx : expert_idx + 1]
 
         return finegrained_linear(
@@ -733,9 +739,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         return {
             **{
-                f"{kernel_proj}{slot}": getattr(self, f"{held_proj}{slot}")
+                f"{kernel_proj}{slot}": operand
                 for kernel_proj, held_proj in (("gate_up_proj", self.gate_up_name), ("down_proj", "down_proj"))
-                for slot in self._projection_slots
+                for slot, operand in self._projection_operands(held_proj).items()
             },
             # a supported activation NAME is fused into the gate_up epilogue; any other callable
             # leaves that GEMM plain and runs on the host between the two
@@ -786,6 +792,33 @@ def assert_modules_are_quantized(model: nn.Module) -> None:
                     "weight — this checkpoint does not quantize it. Name the module in the "
                     "quantization config's `modules_to_not_convert` to leave it as it is."
                 )
+
+
+def register_shared_gate_up_input_globals(model: nn.Module) -> None:
+    """Share the gate_up's NVFP4 activation global across experts, as the max of their calibrated ones, so
+    its rows quantize once per token before routing and the GEMM gathers them. Per-expert globals, the
+    calibration exactly, quantize per routed row (top_k times the rows), which the GEMM then reads
+    materialized: 3-11% slower on a GLM NVFP4 MoE layer at prefill, the most at small batches. Decode is
+    unaffected. A max never clips, but experts below it lose block-scale precision.
+
+    ``TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL`` turns it on and picks the experts the max
+    runs over under expert parallelism: ``global`` all of them, so the numerics do not depend on the EP
+    size, or ``rank`` this rank's, a tighter global. Unset keeps every expert's own."""
+    scope = os.environ.get("TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL")
+    if scope is None:
+        return
+    if scope not in ("global", "rank"):
+        raise ValueError(
+            f"TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL takes `global` or `rank`, got {scope!r}"
+        )
+    for module in model.modules():
+        if not isinstance(module, FineGrainedExperts):
+            continue
+        input_global = getattr(module, f"{module.gate_up_name}_input_global_scale")
+        if input_global is not None:
+            if hasattr(input_global, "full_tensor"):  # sharded over experts
+                input_global = input_global.full_tensor() if scope == "global" else input_global.to_local()
+            module.shared_gate_up_input_global = input_global.detach().amax().reshape(1)
 
 
 def disable_deepgemm_on_multi_device(model: nn.Module) -> None:

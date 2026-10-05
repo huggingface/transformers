@@ -25,6 +25,7 @@ from .core import (
     disable_deepgemm_on_multi_device,
     finegrained_linear,
     load_finegrained_kernel,
+    register_shared_gate_up_input_globals,
     replace_with_finegrained_embedding,
     replace_with_finegrained_layer,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "FineGrainedLinear",
     "assert_modules_are_quantized",
     "disable_deepgemm_on_multi_device",
+    "register_shared_gate_up_input_globals",
     "finegrained_linear",
     "load_finegrained_kernel",
     "replace_with_finegrained_embedding",

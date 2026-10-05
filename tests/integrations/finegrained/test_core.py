@@ -247,12 +247,10 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         def style(name):
             return _get_parameter_tp_plan(f"layers.3.mlp.experts.{name}", plan)
 
-        for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_weight_global_scale"):
-            self.assertEqual(style(name), "grouped_gemm", name)
-        for name in ("down_proj_scale_inv", "down_proj_bias", "down_proj_input_global_scale"):
-            self.assertEqual(style(name), "grouped_gemm", name)
-        # one per-tensor value for the pre-routing hidden states: replicated, so no entry of its own
-        self.assertEqual(style("gate_up_proj_input_global_scale"), "moe_tp_experts")
+        for proj in ("gate_up_proj", "down_proj"):
+            for name in (proj, f"{proj}_scale_inv", f"{proj}_weight_global_scale", f"{proj}_input_global_scale"):
+                self.assertEqual(style(name), "grouped_gemm", name)
+        self.assertEqual(style("down_proj_bias"), "grouped_gemm")
         self.assertEqual(plan["layers.*.self_attn.q_proj"], "colwise")
 
     def test_intra_expert_entries_follow_the_projection_axis(self):

@@ -254,9 +254,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 if projection not in ("gate_up_proj", "up_proj", "down_proj"):
                     continue
                 if style == "grouped_gemm":
-                    companions = ["_scale_inv", "_bias", "_weight_global_scale", "_activation_scale"]
-                    if projection == "down_proj":
-                        companions.append("_input_global_scale")
+                    companions = [
+                        "_bias",
+                        "_scale_inv",
+                        "_weight_global_scale",
+                        "_input_global_scale",
+                        "_activation_scale",
+                    ]
                     for suffix in companions:
                         updated_plan.setdefault(f"{key}{suffix}", style)
                     continue

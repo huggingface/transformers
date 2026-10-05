@@ -3,6 +3,7 @@ global scales); then one class per scheme that loads a checkpoint in that scheme
 through the real quantizer onto a dummy model, checks what the modules hold, and saves it back —
 with each scheme's quirks. Pure torch: no kernel is loaded and no GPU is needed."""
 
+import os
 import re
 import unittest
 from types import SimpleNamespace
@@ -570,6 +571,34 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         experts.holds_interleaved_gate_up = False
         self.assertIs(op.convert({key: stacked}, model=model, full_layer_name=key)[key], stacked)
 
+    def test_shared_gate_up_input_global_follows_the_env_var(self):
+        """`TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL` shares the gate_up's activation global
+        as the max over experts; the down and the per-expert parameters keep the checkpoint's values."""
+        from transformers.integrations.finegrained.core import register_shared_gate_up_input_globals
+
+        for env, expected in (
+            ({}, None),
+            ({"TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL": "global"}, 4.0),
+        ):
+            model, experts = self._experts("nvfp4")
+            with torch.no_grad():
+                experts.gate_up_proj_input_global_scale.copy_(torch.tensor([1.0, 4.0, 2.0, 3.0]))
+            with mock.patch.dict(os.environ, env):
+                register_shared_gate_up_input_globals(model)
+            gate_up_global = experts._projection_operands("gate_up_proj")["_input_global_scale"]
+            if expected is None:
+                self.assertIsNone(experts.shared_gate_up_input_global)
+                self.assertIs(gate_up_global, experts.gate_up_proj_input_global_scale)
+            else:
+                torch.testing.assert_close(gate_up_global, torch.tensor([expected]))
+            down_global = experts._projection_operands("down_proj")["_input_global_scale"]
+            self.assertIs(down_global, experts.down_proj_input_global_scale)
+            self.assertEqual(experts.gate_up_proj_input_global_scale.numel(), 4)
+        model, _ = self._experts("nvfp4")
+        with mock.patch.dict(os.environ, {"TRANSFORMERS_FINEGRAINED_SHARED_GATE_UP_ACTIVATION_GLOBAL": "node"}):
+            with self.assertRaises(ValueError):
+                register_shared_gate_up_input_globals(model)
+
     def test_interleave_op_follows_the_layer_it_fills(self):
         """Unquantized experts in a mixed checkpoint keep their stacked rows, on load and on save."""
         from transformers.integrations.finegrained.conversions import FineGrainedInterleaveGateUp
@@ -716,10 +745,8 @@ class FineGrainedGlobalScaleOpsTest(unittest.TestCase):
         torch.testing.assert_close(out[targets[0]], torch.tensor([1.0, 2.0]))
         torch.testing.assert_close(out[targets[1]], torch.tensor([5.0 * 3.0, 6.0 * 2.0]))
 
-    def test_activation_global_is_one_value_for_the_gate_up_and_per_expert_for_the_down(self):
-        """The gate_up quantizes the hidden states once, BEFORE routing, so its calibrated
-        `input_scale` reduces to one value; the down's rows are per expert, so its stays per
-        expert — the requant epilogue normalizes each row by its own expert's value."""
+    def test_activation_global_is_per_expert_for_both_projections(self):
+        """Each expert keeps its calibrated `input_scale`, the gate|up pair reducing to their max."""
         from transformers.integrations.finegrained.conversions import FineGrainedInputScales
 
         up = FineGrainedInputScales().convert(
@@ -729,7 +756,7 @@ class FineGrainedGlobalScaleOpsTest(unittest.TestCase):
             },
             full_layer_name="mlp.experts.gate_up_proj_input_global_scale",
         )["mlp.experts.gate_up_proj_input_global_scale"]
-        torch.testing.assert_close(up, torch.tensor([3.0]))
+        torch.testing.assert_close(up, torch.tensor([2.0, 3.0]))
         down = FineGrainedInputScales().convert(
             {"mlp.experts.*.down_proj.input_scale": torch.tensor([1.0, 4.0])},
             full_layer_name="mlp.experts.down_proj_input_global_scale",

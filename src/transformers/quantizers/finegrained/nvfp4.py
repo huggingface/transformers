@@ -28,6 +28,7 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
     * the packed E2M1 weights, which need a uint8 -> int8 BITCAST (`copy_` would convert and
       corrupt anything >= 128) and a `.weight` source that cannot swallow
       `weight_scale` / `weight_scale_2`.
+    * the activation globals, whose gate_up ones may be shared across experts after loading.
     """
 
     @property
@@ -41,6 +42,13 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
             r"\.(k_proj\.k|v_proj\.v)_scale$"
         }
         super()._process_model_before_weight_loading(model, **kwargs)
+
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        from ...integrations.finegrained import register_shared_gate_up_input_globals
+
+        model = super()._process_model_after_weight_loading(model, **kwargs)
+        register_shared_gate_up_input_globals(model)
+        return model
 
     def get_weight_conversions(self):
         return self._nvfp4_conversions() if self.pre_quantized else []
