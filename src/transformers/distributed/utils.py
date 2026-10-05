@@ -76,7 +76,10 @@ DISTRIBUTED_BACKEND_MAP = {
 
 def get_distributed_backend(device_type: str) -> str | None:
     """Return the `torch.distributed` backend for `device_type`, or `None` if it has no dedicated one."""
-    return DISTRIBUTED_BACKEND_MAP.get(device_type)
+    dist_backend = DISTRIBUTED_BACKEND_MAP.get(device_type)
+    if dist_backend is None:
+        raise ValueError(f"No distributed backend found for device type '{device_type}'")
+    return dist_backend
 
 
 def _ensure_torch_distributed(device_type: str | None = None):
