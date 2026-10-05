@@ -231,7 +231,7 @@ class FalconH1Mixer(BambaMixer):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if use_precomputed_states and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
