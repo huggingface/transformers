@@ -96,7 +96,7 @@ class XGLMTokenizer(TokenizersBackend):
         #  {"type": "Replace", "pattern": {"Regex": " {2,}"}, "content": " "}]}
         normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
 
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:  # empty bytes (b"") from protobuf is falsy; skip if absent
             normalizers_.insert(0, normalizers.Precompiled(_spm_precompiled_charsmap))
 
         self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
@@ -126,3 +126,4 @@ class XGLMTokenizer(TokenizersBackend):
 
 
 __all__ = ["XGLMTokenizer"]
+
