@@ -25,9 +25,6 @@ from ...utils import auto_docstring
 @strict
 class LongcatFlashConfig(PreTrainedConfig):
     r"""
-    num_layers (`int`, *optional*, defaults to 28):
-        Number of decoder layers. Each holds two attention sublayers, so
-        `num_hidden_layers` is always derived as `2 * num_layers`.
     ffn_hidden_size (`int`, *optional*, defaults to 12288):
         Dimension of the MLP representations.
     qk_head_dim (`int`, *optional*):
@@ -38,6 +35,9 @@ class LongcatFlashConfig(PreTrainedConfig):
         Number of zero experts (identity function) to add to the expert pool.
     expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
         Hidden size of individual expert FFN layers.
+    num_layers (`int`, *optional*, defaults to 28):
+        Number of decoder layers. Each holds two attention sublayers, so
+        `num_hidden_layers` is always derived as `2 * num_layers`.
 
     ```python
     >>> from transformers import LongcatFlashModel, LongcatFlashConfig
