@@ -6129,7 +6129,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 any(potential_name in name for potential_name in possible_rope_attributes)
                 # skip if module doesn't accept config - old API/model
                 and (
-                    len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                    len(params := list(inspect.signature(module.__init__).parameters.values())) >= 1
                     and params[0].name == "config"
                 )
                 # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
@@ -6200,7 +6200,7 @@ class ModelTesterMixin(ExportTesterMixin):
             text_config,
             {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor},
         )
-        original_rope = rope_class(config=text_config, device=torch_device)
+        original_rope = rope_class(config=text_config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short, **kwargs)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -6217,7 +6217,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        linear_scaling_rope = rope_class(config=text_config, device=torch_device)
+        linear_scaling_rope = rope_class(config=text_config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, **kwargs)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -6239,7 +6239,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        ntk_scaling_rope = rope_class(config=text_config, device=torch_device)
+        ntk_scaling_rope = rope_class(config=text_config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, **kwargs)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -6273,7 +6273,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        yarn_scaling_rope = rope_class(config=text_config, device=torch_device)
+        yarn_scaling_rope = rope_class(config=text_config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, **kwargs)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
