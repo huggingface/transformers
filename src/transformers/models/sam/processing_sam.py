@@ -105,9 +105,9 @@ class SamProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         segmentation_maps: ImageInput | None = None,
-        input_points: NestedList | torch.Tensor | None = None,
-        input_labels: NestedList | int | torch.Tensor | None = None,
-        input_boxes: NestedList | torch.Tensor | None = None,
+        input_points: "NestedList | torch.Tensor | None" = None,
+        input_labels: "NestedList | int | torch.Tensor | None" = None,
+        input_boxes: "NestedList | torch.Tensor | None" = None,
         **kwargs: Unpack[SamProcessorKwargs],
     ) -> BatchEncoding:
         r"""
