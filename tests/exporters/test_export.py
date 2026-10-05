@@ -37,6 +37,7 @@ from transformers.exporters.utils import (
     get_leaf_tensors,
     module_device,
     module_dtype,
+    patch_attributes,
     precompute_export_inputs,
 )
 from transformers.testing_utils import (
@@ -54,16 +55,9 @@ from transformers.utils import is_executorch_available
 
 
 # ──────────────────────────── skip lists ────────────────────────────
-#
-# A single mapping ``EXPORT_SKIPS[scope][model_class_name] = reason`` drives every skip.
-# ``scope`` is a dotted path that narrows from broad (``"all"`` — every backend, every variant)
-# to specific (``"onnx.generate"``, ``"onnx.dynamic"``, ``"openvino"``, …). At test time
-# ``_should_skip`` walks the scopes that match the current ``(backend, generate, dynamic)``
-# triple and returns ``True`` as soon as the model is found in any of them. Reasons live next
-# to the model name so the "why" travels with the entry.
-#
-# Adding a new skip: pick the most specific scope that applies and add a ``"Name": "reason"``
-# entry. Add a new scope key if the existing ones don't fit.
+# `EXPORT_SKIPS[scope][model_class_name] = reason`. Scopes narrow from `"all"` to e.g. `"onnx.generate"`;
+# `_should_skip` checks every scope matching the test's backend, generate and dynamic flags. Add an entry under the
+# most specific scope that applies.
 
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
@@ -180,7 +174,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "1`, which single-token steps violate. ONNX reshapes at run time and passes."
         ),
     },
-    # The runtime drives these, but not from a *merged* decode — every other variant is served.
     "generate.runtime.multi_token": {
         "ClvpForCausalLM": (
             "The merged decode, captured on continuation steps, asserts `attention_mask.size()[1] >= 4`, which "
@@ -481,7 +474,6 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 # tester's prompt plus new tokens, since `generate` grows an under-sized static cache differently at capture
 # and at run time. `use_cache=True` because a cacheless decode graph can't serve a frozen-shape loop.
 _EXPORT_SHAPE_MODES = [False, True]
-_EXPORT_DECODE_MODES = [False, True]
 _EXPORT_GENERATION_CONFIGS = [
     GenerationConfig(use_cache=True),
     GenerationConfig(cache_implementation="static", max_cache_len=256, use_cache=True),
@@ -490,11 +482,11 @@ _EXPORT_GENERATION_CONFIGS = [
 _GENERATE_VARIANTS = [
     (dynamic, multi_token, config)
     for dynamic, multi_token, config in itertools.product(
-        _EXPORT_SHAPE_MODES, _EXPORT_DECODE_MODES, _EXPORT_GENERATION_CONFIGS
+        _EXPORT_SHAPE_MODES, [False, True], _EXPORT_GENERATION_CONFIGS
     )
     # A merged multi-token decode under static shapes would freeze its query axis at 2 — a graph no
     # decode step could ever run.
-    if not (multi_token and not dynamic)
+    if dynamic or not multi_token
 ]
 
 
@@ -573,17 +565,31 @@ def disable_hub_kernels(test_fn):
         from transformers.utils import import_utils
 
         # `lazy_load_kernel` gates on `hub_kernels`'s own binding; patch the canonical def too.
-        targets = [(hub_kernels, "is_kernels_available"), (import_utils, "is_kernels_available")]
-        saved = [(obj, name, getattr(obj, name)) for obj, name in targets]
-        for obj, name in targets:
-            setattr(obj, name, lambda *args, **kwargs: False)
-        try:
+        def unavailable(_original):
+            return lambda *args, **kwargs: False
+
+        with patch_attributes(
+            [(module, "is_kernels_available", unavailable) for module in (hub_kernels, import_utils)]
+        ):
             return test_fn(*args, **kwargs)
-        finally:
-            for obj, name, original in saved:
-                setattr(obj, name, original)
 
     return wrapper
+
+
+def _export_test(marker, *requires):
+    """What every export test carries: `slow`, the `requires` gates, the pytest `marker`, the timeout, the
+    minimum torch, and `disable_hub_kernels`."""
+
+    def decorate(test_fn):
+        test_fn = disable_hub_kernels(test_fn)
+        test_fn = require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)(test_fn)
+        test_fn = pytest.mark.timeout(EXPORT_TEST_TIMEOUT)(test_fn)
+        test_fn = getattr(pytest.mark, marker)(test_fn)
+        for require in reversed(requires):
+            test_fn = require(test_fn)
+        return slow(test_fn)
+
+    return decorate
 
 
 def _clean_inputs_for_export(inputs_dict, config):
@@ -636,10 +642,7 @@ def _is_executorch_runtime_limit(exc):
     if load and f"0x{load.group(1)}" in _ET_LOAD_LIMIT_CODES:
         return True
     execute = re.search(r"execute\(\) failed with error 0x([0-9a-fA-F]+)", msg)
-    if not execute:
-        return False
-    code = f"0x{execute.group(1)}"
-    return code in _ET_EXECUTE_LIMIT_CODES
+    return execute is not None and f"0x{execute.group(1)}" in _ET_EXECUTE_LIMIT_CODES
 
 
 def _scoped(table, model_class, dynamic: bool) -> list:
@@ -743,7 +746,7 @@ class ExportTesterMixin:
     ):
         """Whether `EXPORT_SKIPS` gates this model class for this test, walking the scopes that match it from
         broad to specific: `"all"`, `"generate"` (with `.dynamic`, `.multi_token`, `.runtime`,
-        `.runtime.multi_token`, `.runtime.dynamic` / `.runtime.static`), `"dynamic"` / `"static"`, and each of
+        `.runtime.multi_token`), `"dynamic"` / `"static"`, and each of
         those `"<backend>."`-prefixed. Static-cache variants also skip models that can't compile fullgraph.
         """
         if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
@@ -760,7 +763,6 @@ class ExportTesterMixin:
                 scopes.append("generate.runtime")
                 if multi_token:
                     scopes.append("generate.runtime.multi_token")
-                scopes.append("generate.runtime.dynamic" if dynamic else "generate.runtime.static")
         scopes.append("dynamic" if dynamic else "static")
         if backend:
             scopes += [backend] + [f"{backend}.{scope}" for scope in scopes if scope != "all"]
@@ -777,25 +779,25 @@ class ExportTesterMixin:
         )
         return True
 
-    def _prepare_export_model_and_inputs(self, model_class, backend, device=torch_device):
-        """Create model and forward inputs ready for export.
+    def _prepare_components(self, model_class, backend, device=torch_device, generate=False, **decompose_kwargs):
+        """The `{name: Component}` to export for `model_class` on `device`: what `decompose_for_generation` captures
+        from `generate` (given `decompose_kwargs`) with `generate`, else the model or its modality components.
 
-        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
-        backend targets CPU anyway, keeping any pre-trace forward off the GPU (a device-side
-        assert during tracing would otherwise poison the whole xdist worker's CUDA context).
-
-        Returns:
-            Dict of `{name: Component}` — one entry per component.
+        ExecuTorch builds on CPU: a device-side assert during the capture would poison the xdist worker's CUDA
+        context for every later test on it.
         """
-        if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+        if generate:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         else:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            else:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
-
         model, inputs_dict = _build_export_model(model_class, config, inputs_dict, backend, device)
-
+        if generate:
+            return decompose_for_generation(model, inputs_dict, **decompose_kwargs)
         if is_multimodal(model):
             return decompose_multimodal(model, inputs_dict)
         return {"model": Component(model, inputs_dict)}
@@ -936,7 +938,7 @@ class ExportTesterMixin:
                 mismatched, total = map(int, mismatched_percentage[0])
                 if mismatched / total < 0.05:
                     return  # allow up to 5%
-            raise e
+            raise
 
     def _exporter_and_config(self, backend, model_class, dynamic, executorch_backend=None):
         """The exporter and export config a backend's tests use for `model_class`."""
@@ -964,21 +966,15 @@ class ExportTesterMixin:
             self.assertTrue(actual, f"Exported outputs are empty for {label}.")
             self._check_outputs_close(actual, expected, atol=atol, rtol=rtol)
             return True
-        if backend == "onnx":
-            actual = exported.runtime()(**inputs)
-            self.assertTrue(actual, f"ONNX outputs are empty for {label}.")
-            self.assertEqual(set(actual.keys()), set(expected.keys()))
-            _assert_values_close(self, actual, expected, atol, rtol)
-            return True
-        if backend == "openvino":
+        if backend in ("onnx", "openvino"):
             runtime = exported.runtime()
-            actual = runtime(**inputs)
-            self.assertTrue(actual, f"OpenVINO outputs are empty for {label}.")
-            # Round-tripped cache tensors become plugin variables; read them back so they are compared too.
-            runner = getattr(runtime, "runner", None)
-            produced = {**actual, **(runner.state_tensors() if runner is not None and runner.owns_state else {})}
-            self.assertEqual(set(produced), set(expected))
-            _assert_values_close(self, produced, expected, atol, rtol)
+            actual = dict(runtime(**inputs))
+            self.assertTrue(actual, f"{backend} outputs are empty for {label}.")
+            # OpenVINO keeps round-tripped cache tensors as plugin variables; read them back so they are compared too.
+            if runtime.runner.owns_state:
+                actual.update(runtime.runner.state_tensors())
+            self.assertEqual(set(actual), set(expected))
+            _assert_values_close(self, actual, expected, atol, rtol)
             return True
         # Building the runner stays inside the tolerance: loading the method is where ExecuTorch reports a
         # missing kernel or an oversized arena.
@@ -1021,16 +1017,17 @@ class ExportTesterMixin:
                 continue
             exporter, config = self._exporter_and_config(backend, model_class, dynamic, executorch_backend)
             if generate:
-                components = self._prepare_export_generate_model_and_inputs(
+                components = self._prepare_components(
                     model_class,
                     backend,
                     device=device,
+                    generate=True,
                     generation_config=generation_config,
                     multi_token_decode=multi_token_decode,
                     decoder_writes_cross_cache=exporter.decoder_writes_cross_cache,
                 )
             else:
-                components = self._prepare_export_model_and_inputs(model_class, backend, device=device)
+                components = self._prepare_components(model_class, backend, device=device)
             eager_outputs = self._collect_eager_outputs(components)
 
             exported = {}
@@ -1052,20 +1049,12 @@ class ExportTesterMixin:
     # ──────────────────── torch.export tests ─────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
-    @slow
-    @pytest.mark.torch_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("torch_export_test")
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._export_and_compare("dynamo", dynamic=dynamic, atol=atol, rtol=rtol)
 
-    @slow
-    @pytest.mark.torch_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("torch_export_test")
     def test_precomputed_inputs_match_eager(self):
         """`prepare_for_export` must not change what the model computes.
 
@@ -1081,7 +1070,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, backend="dynamo"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class, "dynamo")
+            components = self._prepare_components(model_class, "dynamo")
             for name, component in components.items():
                 model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1119,13 +1108,7 @@ class ExportTesterMixin:
     # ──────────────────────── ONNX tests ─────────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
-    @slow
-    @require_onnxscript
-    @require_onnxruntime
-    @pytest.mark.onnx_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("onnx_export_test", require_onnxscript, require_onnxruntime)
     def test_onnx_export(self, dynamic, atol=1e-3, rtol=1e-3):
         """Export each model class to ONNX and verify its outputs match eager."""
         self._export_and_compare("onnx", dynamic=dynamic, atol=atol, rtol=rtol)
@@ -1133,12 +1116,7 @@ class ExportTesterMixin:
     # ──────────────────────── OpenVINO tests ─────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
-    @slow
-    @require_openvino
-    @pytest.mark.openvino_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("openvino_export_test", require_openvino)
     def test_openvino_export(self, dynamic, atol=1e-3, rtol=1e-3):
         """Export each model class to OpenVINO IR and verify its outputs match eager."""
         self._export_and_compare("openvino", dynamic=dynamic, atol=atol, rtol=rtol)
@@ -1146,12 +1124,7 @@ class ExportTesterMixin:
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @EXECUTORCH_EXPORT_PARAMS
-    @slow
-    @require_executorch
-    @pytest.mark.executorch_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("executorch_export_test", require_executorch)
     def test_executorch_export(self, backend, dynamic, atol=1e-3, rtol=1e-3):
         """Export each model class to ExecuTorch, run it, and verify its outputs match eager."""
         self._export_and_compare("executorch", dynamic=dynamic, executorch_backend=backend, atol=atol, rtol=rtol)
@@ -1171,56 +1144,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     Each generative model is decomposed into its generation components via `decompose_for_generation`.
     """
 
-    def _prepare_export_generate_model_and_inputs(
-        self,
-        model_class,
-        backend,
-        device=torch_device,
-        generation_config=None,
-        multi_token_decode=False,
-        decoder_writes_cross_cache=False,
-    ):
-        """Decompose a generative model into exportable components.
-
-        For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
-        For decoder-only models: returns prefill and decode components.
-
-        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` so the
-        ``generate()`` call inside :func:`decompose_for_generation` runs on CPU — a device-side
-        assert there (e.g. a VLM ``masked_scatter`` size mismatch) would otherwise poison the
-        xdist worker's CUDA context and cascade to every later test on it.
-
-        ``generation_config`` is forwarded to the ``generate()`` capture (default: the model's own).
-        Pass one with ``cache_implementation="static"`` to export against a fixed-size ``StaticCache``.
-
-        ``multi_token_decode`` captures the ``decode`` component with a multi-token query axis
-        (continuation-from-past, or a plain prefill when the cache is empty) instead of the classic
-        single-token step — see :func:`decompose_for_generation`.
-
-        Returns:
-            Dict of `{name: Component}` — one entry per component.
-        """
-        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
-
-        model, inputs_dict = _build_export_model(model_class, config, inputs_dict, backend, device)
-
-        return decompose_for_generation(
-            model,
-            inputs_dict,
-            generation_config=generation_config,
-            multi_token_decode=multi_token_decode,
-            decoder_writes_cross_cache=decoder_writes_cross_cache,
-        )
-
     # ──────────────────── torch.export tests ─────────────────────
 
     @GENERATE_EXPORT_PARAMS
-    @slow
-    @pytest.mark.torch_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("torch_export_test")
     # Looser `atol` than the non-generate 1e-4: t5gemma2's `encoder_last_hidden_state` sits near 1e-3 while its
     # intermediates are O(1), so fp32 accumulation drifts up to 1.8e-4, unseedably.
     def test_torch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=5e-4, rtol=1e-4):
@@ -1238,13 +1165,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # ──────────────────────── ONNX tests ─────────────────────────
 
     @GENERATE_EXPORT_PARAMS
-    @slow
-    @require_onnxscript
-    @require_onnxruntime
-    @pytest.mark.onnx_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("onnx_export_test", require_onnxscript, require_onnxruntime)
     def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
         """Export the generation components to ONNX and verify they match eager, then generate."""
         self._export_and_compare(
@@ -1258,12 +1179,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         )
 
     @GENERATE_EXPORT_PARAMS
-    @slow
-    @require_openvino
-    @pytest.mark.openvino_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("openvino_export_test", require_openvino)
     def test_openvino_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
         """Export the generation components to OpenVINO IR and verify they match eager, then generate."""
         self._export_and_compare(
@@ -1279,12 +1195,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @EXECUTORCH_GENERATE_EXPORT_PARAMS
-    @slow
-    @require_executorch
-    @pytest.mark.executorch_export_test
-    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
-    @disable_hub_kernels
+    @_export_test("executorch_export_test", require_executorch)
     def test_executorch_export_generate(
         self, backend, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3
     ):
