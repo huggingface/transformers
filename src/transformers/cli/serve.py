@@ -81,6 +81,10 @@ class Serve:
                 )
             ),
         ] = None,
+        decision_config: Annotated[
+            str | None,
+            typer.Option(help="Path to a JSON file with decision labels, temperatures, and a chat template."),
+        ] = None,
         device: Annotated[str, typer.Option(help="Device for inference (e.g. 'auto', 'cuda:0', 'cpu').")] = "auto",
         dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
         trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
@@ -199,6 +203,7 @@ class Serve:
             model_manager=self._model_manager,
             generation_state=self._generation_state,
             chat_template_kwargs=chat_template_kwargs,
+            decision_config=decision_config,
         )
 
         app = build_server(

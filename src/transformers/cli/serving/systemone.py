@@ -22,6 +22,7 @@ in one forward pass.
 import json
 import string
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from ...utils import logging
@@ -31,7 +32,7 @@ from ...utils.import_utils import is_serve_available
 if is_serve_available():
     from fastapi import HTTPException
     from fastapi.responses import JSONResponse
-    from pydantic import BaseModel, ConfigDict, Field, ValidationError
+    from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .utils import BaseHandler, GenerateManager, Modality
 
@@ -39,8 +40,38 @@ from .utils import BaseHandler, GenerateManager, Modality
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
 
+    from .model_manager import ModelManager
+    from .utils import GenerationState
+
 
 logger = logging.get_logger(__name__)
+
+
+class DecisionConfig(BaseModel):
+    """Explicit server settings for decision prompts and next-token scoring."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    labels: dict[Literal["choice", "score", "noul"], list[Annotated[str, Field(min_length=1)]]] = Field(
+        default_factory=dict
+    )
+    temperature: dict[Literal["choice", "score", "noul"], Annotated[float, Field(gt=0, allow_inf_nan=False)]] = Field(
+        default_factory=dict
+    )
+    chat_template: Annotated[str, Field(min_length=1)] | None = None
+
+    @classmethod
+    def from_file(cls, path: str | Path | None = None) -> "DecisionConfig":
+        """Load explicit JSON settings, or return defaults when no file is supplied."""
+        return cls() if path is None else cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+
+    @field_validator("labels")
+    @classmethod
+    def validate_labels(cls, labels):
+        for kind, values in labels.items():
+            if len(values) < (2 if kind == "noul" else 1) or len(set(values)) != len(values):
+                raise ValueError(f"labels.{kind} must contain distinct labels (at least two for noul).")
+        return labels
 
 
 # Request types follow https://api.typesafe.ai/openapi.json.
@@ -96,12 +127,9 @@ class TransformersSystemOneRequestParams(SystemOneRequest):
 @dataclass
 class Question:
     name: str
-    type: str
-    # The instructions and one line per labelled answer
-    text: str
-    # The line asking for the label, when the question is asked on its own
-    closing: str
-    # Answer keys in label order: the `criteria` keys for `choice`, the level indices for `score`, `true`/`false` for `noul`
+    type: Literal["choice", "score", "noul"]
+    instructions: str | dict[str, Any] | list[Any] | None
+    # Response keys in label order: choice keys, score indices, or true/false.
     options: list[str]
     labels: list[str]
     descriptions: list[str | dict[str, Any] | list[Any] | None]
@@ -115,52 +143,74 @@ def render_content(content: str | dict[str, Any] | list[Any] | None) -> str:
     return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
 
 
-def parse_question(name: str, question: ChoiceQuestion | ScoreQuestion | NoulQuestion) -> Question:
-    """Render a validated question as instructions followed by one line per labelled answer."""
+def parse_question(
+    name: str, question: ChoiceQuestion | ScoreQuestion | NoulQuestion, labels: list[str] | None = None
+) -> Question:
+    """Extract question metadata for prompt rendering and answer scoring, preserving raw JSON values.
+
+    Labels default to Yes/No for booleans and A/B/C/... otherwise.
+    """
     legend = None
+    n_options = 2 if isinstance(question, NoulQuestion) else len(question.criteria)
+    if labels is None:
+        labels = ["Yes", "No"] if isinstance(question, NoulQuestion) else list(string.ascii_uppercase[:n_options])
+    else:
+        labels = labels[:n_options]
+    if len(labels) != n_options:
+        raise HTTPException(
+            status_code=400,
+            detail=f"labels.{question.type} needs at least {n_options} labels for question {name!r}.",
+        )
 
     if isinstance(question, NoulQuestion):
         options = ["true", "false"]
-        labels = ["Yes", "No"]
         criteria = question.criteria
         descriptions = [criteria.true, criteria.false] if criteria is not None else [None, None]
-        lines = []
-        for label, criterion in zip(labels, descriptions):
-            description = render_content(criterion)
-            if description:
-                lines.append(f"{label}: {description}")
-        closing = f"Answer {labels[0]} or {labels[1]} only."
+    elif isinstance(question, ChoiceQuestion):
+        options = list(question.criteria)
+        descriptions = list(question.criteria.values())
     else:
-        labels = list(string.ascii_uppercase[: len(question.criteria)])
-        if isinstance(question, ChoiceQuestion):
-            options = list(question.criteria)
-            descriptions = list(question.criteria.values())
-            answers = []
-            for option, criterion in zip(options, descriptions):
-                description = render_content(criterion)
-                answers.append(f"{option}: {description}" if description else option)
-            answer_kind = "option"
-        else:
-            options = [str(i) for i in range(len(question.criteria))]
-            legend = question.criteria
-            descriptions = list(question.criteria)
-            answers = [render_content(level) for level in descriptions]
-            answer_kind = "level"
+        options = [str(i) for i in range(n_options)]
+        legend = question.criteria
+        descriptions = list(question.criteria)
 
-        lines = [f"{label}. {answer}" for label, answer in zip(labels, answers)]
-        closing = f"Answer with the letter of the {answer_kind} that fits best ({labels[0]} to {labels[-1]}) only."
-
-    instructions = render_content(question.instructions)
     return Question(
         name=name,
         type=question.type,
-        text="\n".join(line for line in [instructions, *lines] if line),
-        closing=closing,
+        instructions=question.instructions,
         options=options,
         labels=labels,
         descriptions=descriptions,
         legend=legend,
     )
+
+
+def render_decision_prompt(state: str | dict[str, Any] | list[Any], question: Question) -> str:
+    """Render the fallback decision prompt without chat role markers.
+
+    A custom chat template can use the raw state and question fields to replace this wording.
+    """
+    labels = question.labels
+    answers = [render_content(description) for description in question.descriptions]
+    if question.type == "noul":
+        if labels != ["Yes", "No"]:
+            answers = [answer or option for answer, option in zip(answers, question.options)]
+        lines = [f"{label}: {answer}" for label, answer in zip(labels, answers) if answer]
+        closing = f"Answer {labels[0]} or {labels[1]} only."
+    else:
+        if question.type == "choice":
+            answers = [
+                f"{option}: {answer}" if answer else option for option, answer in zip(question.options, answers)
+            ]
+        answer_kind = "option" if question.type == "choice" else "level"
+        lines = [f"{label}. {answer}" for label, answer in zip(labels, answers)]
+        label_kind = "letter" if labels == list(string.ascii_uppercase[: len(labels)]) else "label"
+        closing = (
+            f"Answer with the {label_kind} of the {answer_kind} that fits best ({labels[0]} to {labels[-1]}) only."
+        )
+
+    text = "\n".join(line for line in [render_content(question.instructions), *lines] if line)
+    return f"{render_content(state)}\n\n{text}\n{closing}"
 
 
 def build_answers(questions: list[Question], probabilities: list[list[float]]) -> dict[str, dict]:
@@ -169,12 +219,22 @@ def build_answers(questions: list[Question], probabilities: list[list[float]]) -
     for question, question_probabilities in zip(questions, probabilities):
         option_probabilities = dict(zip(question.options, question_probabilities))
         best = max(option_probabilities, key=option_probabilities.get)
+        if question.type != "noul":
+            n = len(question_probabilities)
+            if n == 1:
+                confidence = 1.0
+            elif question.type == "choice":
+                confidence = max(0.0, (option_probabilities[best] - 1 / n) / (1 - 1 / n))
+            else:
+                distance = sum(p * abs(i - int(best)) for i, p in enumerate(question_probabilities))
+                uniform_distance = sum(abs(i - (n - 1) / 2) for i in range(n)) / n
+                confidence = max(0.0, 1 - distance / uniform_distance)
         if question.type == "choice":
             answer = {
                 "type": "choice",
                 "choice": best,
                 "probabilities": option_probabilities,
-                "confidence": option_probabilities[best],
+                "confidence": confidence,
             }
         elif question.type == "score":
             answer = {
@@ -182,7 +242,7 @@ def build_answers(questions: list[Question], probabilities: list[list[float]]) -
                 "score": sum(int(level) * p for level, p in option_probabilities.items()),
                 "legend": dict(zip(question.options, question.legend)),
                 "probabilities": option_probabilities,
-                "confidence": option_probabilities[best],
+                "confidence": confidence,
             }
         else:
             answer = {"type": "noul", "noul": option_probabilities["true"]}
@@ -196,6 +256,20 @@ class SystemOneHandler(BaseHandler):
     Autoregressive models get one prompt per question and answer with their next token, all questions in one batched
     forward pass. Returns one JSON response; streaming is not supported.
     """
+
+    def __init__(
+        self,
+        model_manager: "ModelManager",
+        generation_state: "GenerationState",
+        chat_template_kwargs: dict | None = None,
+        decision_config: DecisionConfig | str | None = None,
+    ):
+        super().__init__(model_manager, generation_state, chat_template_kwargs)
+        self.decision_config = (
+            decision_config
+            if isinstance(decision_config, DecisionConfig)
+            else DecisionConfig.from_file(decision_config)
+        )
 
     def _validate_request(self, body: dict) -> TransformersSystemOneRequestParams:
         """Validate the entire request before resolving or loading a model."""
@@ -225,7 +299,10 @@ class SystemOneHandler(BaseHandler):
         gen_manager: GenerateManager = self.generation_state.get_manager(model_id, use_cb=False)  # type: ignore[assignment]
 
         inputs, questions, labels, input_tokens = self._prepare_inputs(model, processor, request)
-        probabilities = await gen_manager.async_submit(self._compute_probabilities, model, inputs, labels)
+        temperatures = [self.decision_config.temperature.get(question.type, 1.0) for question in questions]
+        probabilities = await gen_manager.async_submit(
+            self._compute_probabilities, model, inputs, labels, temperatures
+        )
         answers = build_answers(questions, probabilities)
 
         return JSONResponse(
@@ -242,11 +319,12 @@ class SystemOneHandler(BaseHandler):
         """Build one processor-compatible conversation per question and retain its answer metadata."""
         if request.images and modality not in (Modality.VLM, Modality.MULTIMODAL):
             raise HTTPException(status_code=400, detail="The selected model does not support image input.")
-        state = render_content(request.state)
-        questions = [parse_question(name, question) for name, question in request.questions.items()]
+        questions = []
         processor_inputs = []
-        for question in questions:
-            text = f"{state}\n\n{question.text}\n{question.closing}"
+        for name, request_question in request.questions.items():
+            question = parse_question(name, request_question, self.decision_config.labels.get(request_question.type))
+            questions.append(question)
+            text = render_decision_prompt(request.state, question)
             if modality == Modality.LLM:
                 content = text
             else:
@@ -261,16 +339,27 @@ class SystemOneHandler(BaseHandler):
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         request: TransformersSystemOneRequestParams,
     ) -> tuple[dict, list[Question], list[list[int]], int]:
-        """Render the model's decision template and batch text and images for one forward pass."""
+        """Apply the model's chat template and batch text and images for one forward pass."""
         tokenizer = getattr(processor, "tokenizer", processor)
         modality = self.model_manager.get_model_modality(model, processor=processor)
         processor_inputs, questions = self.get_processor_inputs_from_request(request, modality)
 
+        chat_template_kwargs = {
+            **self.chat_template_kwargs,
+            **request.chat_template_kwargs,
+            "enable_thinking": False,
+        }
         prompts = []
         for messages, question in zip(processor_inputs, questions):
-            template_kwargs = self._get_chat_template_kwargs(processor.chat_template, tokenizer, request, question)
+            if self.decision_config.chat_template is not None:
+                chat_template_kwargs.update(
+                    chat_template=self.decision_config.chat_template,
+                    state=request.state,
+                    question=question,
+                    images=request.images,
+                )
             prompt = processor.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False, **template_kwargs
+                messages, add_generation_prompt=True, tokenize=False, **chat_template_kwargs
             )
             prompts.append(prompt)
 
@@ -290,49 +379,10 @@ class SystemOneHandler(BaseHandler):
         input_tokens = int(inputs["attention_mask"].sum().item())
         return inputs, questions, labels, input_tokens
 
-    def _get_chat_template_kwargs(
-        self,
-        templates: str | dict[str, str] | None,
-        tokenizer: "PreTrainedTokenizerFast",
-        request: TransformersSystemOneRequestParams,
-        question: Question,
-    ) -> dict:
-        """Merge template options and add raw question fields for a named System One template."""
-        # The answer is read right after the prompt, so reasoning is always off
-        chat_template_kwargs = {
-            **self.chat_template_kwargs,
-            **request.chat_template_kwargs,
-            "enable_thinking": False,
-        }
-
-        # Special case: a named `systemone` template consumes raw question fields.
-        # Ordinary chat templates use the already-formatted messages.
-        template = None
-        for candidate in (templates, tokenizer.chat_template):
-            if isinstance(candidate, dict) and "systemone" in candidate:
-                template = candidate["systemone"]
-                break
-
-        if template is None:
-            return chat_template_kwargs
-
-        options = [
-            {"key": key, "label": label, "description": description}
-            for key, label, description in zip(question.options, question.labels, question.descriptions)
-        ]
-        return {
-            **chat_template_kwargs,
-            "chat_template": template,
-            "id": question.name,
-            "type": question.type,
-            "state": request.state,
-            "instructions": request.questions[question.name].instructions,
-            "options": options,
-            "images": request.images,
-        }
-
     @staticmethod
-    def _compute_probabilities(model: "PreTrainedModel", inputs: dict, labels: list[list[int]]) -> list[list[float]]:
+    def _compute_probabilities(
+        model: "PreTrainedModel", inputs: dict, labels: list[list[int]], temperatures: list[float] | None = None
+    ) -> list[list[float]]:
         """Run the model and normalize each question's logits over its allowed answer tokens."""
         import torch
 
@@ -343,8 +393,10 @@ class SystemOneHandler(BaseHandler):
         with torch.inference_mode():
             logits = model(**inputs, use_cache=False, logits_to_keep=1).logits[:, -1]
         probabilities = []
-        for question_logits, label_ids in zip(logits, labels):
+        for i, (question_logits, label_ids) in enumerate(zip(logits, labels)):
             answer_logits = question_logits[label_ids].float()
+            if temperatures is not None:
+                answer_logits = answer_logits / temperatures[i]
             answer_probabilities = answer_logits.softmax(dim=-1)
             probabilities.append(answer_probabilities.tolist())
         return probabilities
@@ -359,6 +411,11 @@ class SystemOneHandler(BaseHandler):
                 detail=f"The labels of question {question.name!r} are not single tokens for this model.",
             )
         label_ids = [ids[0] for ids in label_tokens]
+        if tokenizer.unk_token_id in label_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The labels of question {question.name!r} contain an unknown token for this model.",
+            )
         if len(set(label_ids)) != len(label_ids):
             raise HTTPException(
                 status_code=400, detail=f"Two labels of question {question.name!r} share a token for this model."

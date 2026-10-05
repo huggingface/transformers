@@ -27,6 +27,7 @@ The `transformers serve` command spawns a local server compatible with the [Open
 - `/v1/completions` for legacy text completions from a freeform prompt
 - `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
 - `/v1/audio/transcriptions` for audio transcriptions
+- `/v1/systemone` answers typed questions (choice, score, yes/no) with a probability for every allowed answer
 - `/v1/models` lists available models for third-party integrations
 - `/load_model` streams model loading progress via SSE
 
@@ -1648,6 +1649,91 @@ The follow-up question "How many people live there?" relies on the prior context
 ```
 As of 2021, Paris has a population of approximately 2.8 million people.
 ```
+
+## v1/systemone
+
+The `v1/systemone` endpoint answers typed questions about a shared `state`, following [TypeSafe’s System One API](https://api.typesafe.ai/openapi.json). Use it for decisions such as routing a support ticket, rating urgency, or choosing an action.
+
+The model scores the allowed answers in one batched forward pass without generating text. This endpoint supports autoregressive models with a chat template;
+
+Send a model, the state to evaluate, and questions keyed by name:
+
+```shell
+curl http://localhost:8000/v1/systemone \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "state": "Our integration has been failing for 3 days and we are losing sales!",
+    "questions": {
+      "team": {
+        "type": "choice",
+        "instructions": "Which team handles this?",
+        "criteria": {"billing": null, "technical": "Bugs or integration problems"}
+      },
+      "urgency": {
+        "type": "score",
+        "instructions": "How urgent is this ticket?",
+        "criteria": ["low", "medium", "high"]
+      },
+      "upset": {"type": "noul", "instructions": "Is the customer upset?"}
+    }
+  }'
+```
+
+Answers use the same question names. For example:
+
+```json
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "answers": {
+    "team": {"type": "choice", "choice": "technical", "probabilities": {"billing": 0.001, "technical": 0.999}, "confidence": 0.998},
+    "urgency": {"type": "score", "score": 1.98, "legend": {"0": "low", "1": "medium", "2": "high"}, "probabilities": {"0": 0.001, "1": 0.02, "2": 0.979}, "confidence": 0.967},
+    "upset": {"type": "noul", "noul": 0.82}
+  },
+  "usage": {"input_tokens": 190, "output_tokens": 0}
+}
+```
+
+| Question type | `criteria` | Answer |
+| :--- | :--- | :--- |
+| `choice` | Option names mapped to descriptions, which can be `null`. | The most likely option, option probabilities, and confidence. |
+| `score` | Level descriptions ordered from lowest to highest. | The probability-weighted level index, probabilities, a legend, and confidence. |
+| `noul` | Optional descriptions for `true` and `false`. | The probability of `true`. |
+
+`state`, optional `instructions`, and descriptions can contain text or JSON objects and arrays. Each request accepts up to 64 questions, with 1–26 choices or score levels per question.
+
+For vision-capable models, add an `images` array with up to four `data:image/...;base64,...` URLs. Every question receives the same images. The model's processor and chat template must support images; remote image URLs are not accepted.
+
+### Decision configuration
+
+By default, questions use a fallback prompt and the model's chat template with thinking disabled. Answer labels are `A`–`Z` for choices and scores, and `Yes`/`No` for booleans. Probabilities are the softmax over these labels at temperature 1.
+
+Pass `--decision-config` to override these defaults for a model:
+
+```shell
+transformers serve openjev/openjev --decision-config decision.json
+```
+
+The JSON file supports three optional fields:
+
+| Field | Meaning |
+| :--- | :--- |
+| `labels` | Answer labels by question type, in option order (`true`, then `false` for `noul`). Each must be a distinct, known single token. |
+| `temperature` | Positive temperatures by question type, applied as `softmax(label_logits / temperature)`. |
+| `chat_template` | An inline Jinja template replacing the full prompt, including chat formatting and the assistant prefix. |
+
+For example, to change labels and calibration while keeping the default prompt:
+
+```json
+{
+  "labels": {"noul": ["A", "B"]},
+  "temperature": {"choice": 0.85, "score": 0.85, "noul": 1.5547129}
+}
+```
+
+A custom template receives the usual `messages`, plus raw `state`, `images`, and `question` fields. The question exposes `name`, `type`, `instructions`, `options`, `labels`, `descriptions`, and `legend`; options, labels, and descriptions share the same order. Use these fields to replace the fallback wording, and `tojson` to render structured values. Templates for image inputs must include the model's image placeholders.
+
+The file is loaded at startup and applies to `/v1/systemone` only. Omitted settings keep their defaults; no decision configuration is read automatically from the checkpoint.
 
 ## v1/audio/transcriptions
 
