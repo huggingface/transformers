@@ -44,12 +44,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
-        name: Build (no push)
+        name: Build and push (test tag only)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
             REF=main
-          push: false
-          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
+          push: true
+          tags: huggingface/transformers-pytorch-amd-gpu:rocm10-test
 
