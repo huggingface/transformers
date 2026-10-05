@@ -184,7 +184,7 @@ class Molmo2Processor(ProcessorMixin):
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_grid = image_inputs["image_grids"][image_idx]
-        if hasattr(image_grid, "tolist"):
+        if not isinstance(image_grid, list):
             image_grid = image_grid.tolist()
         resized_h, resized_w, height, width = image_grid
 
@@ -233,13 +233,12 @@ class Molmo2Processor(ProcessorMixin):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         video_grid = video_inputs["video_grids"][video_idx]
-        video_metadata = video_inputs.get("video_metadata", [])
-        metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
+        metadata = video_inputs["video_metadata"][video_idx]
 
-        frames_indices = getattr(metadata, "frames_indices", None)
+        frames_indices = metadata.frames_indices
         if frames_indices is None:
             frames_indices = range(int(video_grid[0].item()))
-        fps = getattr(metadata, "fps", None)
+        fps = metadata.fps
         if fps is None:
             fps = self.video_processor.max_fps
             logger.warning_once(

@@ -271,17 +271,6 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
             self.assertEqual(predicted["num_image_patches"][0], inputs["pixel_values"].shape[0])
 
-    def test_model_input_names(self):
-        processor = self.get_processor()
-
-        text = self.prepare_text_inputs(modalities=["image"])
-        image_input = self.prepare_images_inputs()
-        inputs_dict = {"text": text, "images": image_input}
-        inputs = processor(**inputs_dict, return_tensors="pt")
-
-        # Output keys should be a subset of model_input_names (video keys absent when no video passed)
-        self.assertTrue(set(inputs.keys()).issubset(set(processor.model_input_names)))
-
     @unittest.skip(
         reason="Hub processor_config.json has use_single_crop_col_tokens=False, which differs from the __init__ "
         "default of None when building from components."

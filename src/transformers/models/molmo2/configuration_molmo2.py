@@ -162,6 +162,8 @@ class Molmo2TextConfig(PreTrainedConfig):
         super().validate_architecture()
         if self.qk_norm_type not in ("qwen3", "olmo"):
             raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
+        if self.additional_vocab_size < 0:
+            raise ValueError(f"`additional_vocab_size` must be >= 0, got {self.additional_vocab_size}")
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")

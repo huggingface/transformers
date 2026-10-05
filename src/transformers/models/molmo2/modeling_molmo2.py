@@ -661,7 +661,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         self.vocab_size = config.vocab_size
         # The checkpoint's extra-vocabulary table is concatenated onto the base one at load time
         # (see `conversion_mapping.py`), so the embedding covers `vocab_size + additional_vocab_size`.
-        self.embed_tokens = nn.Embedding(config.vocab_size + (config.additional_vocab_size or 0), config.hidden_size)
+        self.embed_tokens = nn.Embedding(config.vocab_size + config.additional_vocab_size, config.hidden_size)
         # trf-ignore: TRF034 (false positive: LlamaDecoderLayer subclasses GradientCheckpointingLayer)
         self.layers = nn.ModuleList(
             [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -840,6 +840,8 @@ class Molmo2Model(Molmo2PreTrainedModel):
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
             )
+        if self.training and mm_token_type_ids is None:
+            raise ValueError("`mm_token_type_ids` is required as a model input when training")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -869,9 +871,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
                 special_image_mask,
                 inputs_embeds[special_image_mask] + image_features.reshape(-1),
             )
-
-        if self.training and mm_token_type_ids is None:
-            raise ValueError("`mm_token_type_ids` is required as a model input when training")
 
         # An already prepared 4D mask (e.g. from `generate`) is returned as is by `create_causal_mask`
         mask_kwargs = {

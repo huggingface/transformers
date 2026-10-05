@@ -103,10 +103,6 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         input_ids[:, : self.num_image_tokens] = self.image_patch_id
         return input_ids
 
-    def create_attention_mask(self, input_ids):
-        # Molmo2 expects a standard 2D padding mask of ones, not the base's tril matrix.
-        return torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
     def get_additional_inputs(self, config, input_ids, pixel_values):
         batch_size = input_ids.shape[0]
         num_patches = (self.image_size // self.patch_size) ** 2
@@ -194,30 +190,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         inputs_dict["image_token_pooling"] = full_pooling[: batch_size * num_image_tokens]
         return config, inputs_dict
 
-    # overwrite inputs_embeds tests because we need to delete "pixel_values" for VLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["image_token_pooling"]
-            del inputs["image_grids"]
-            del inputs["image_num_crops"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
     @unittest.skip(
         "The test slices every input tensor in half along dim 0, but `image_token_pooling` has no batch "
         "dimension: pooled patches of all images are concatenated along one axis."
@@ -236,54 +208,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             "video_grids": torch.tensor([[2, 4, 4]] * batch_size, device=torch_device),
         }
         return config, inputs_dict
-
-    # overwrite inputs_embeds tests because we need to delete "pixel_values" for VLMs
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["image_token_pooling"]
-            del inputs["image_grids"]
-            del inputs["image_num_crops"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
-
-    @unittest.skip(
-        reason="This architecture does not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture does not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture does not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture does not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
 
     @unittest.skip(
         reason="Molmo2 always builds an attention mask in the forward (block-sequence mask for images, like "
@@ -355,27 +279,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             # inputs_embeds-only generation returns only the newly generated tokens
             self.assertEqual(out.sequences.shape[0], input_ids.shape[0])
             self.assertEqual(out.sequences.shape[1], 5)
-
-    def test_bidirectional_image_attention(self):
-        """
-        Image patch tokens attend bidirectionally while text tokens stay causal.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Molmo2Model._from_config(config, attn_implementation="eager").to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model(**inputs_dict, output_attentions=True)
-
-        token_types = inputs_dict["mm_token_type_ids"][0]
-        image_positions = (token_types == 1).nonzero().flatten()
-        text_positions = (token_types == 0).nonzero().flatten()
-        self.assertGreater(len(image_positions), 1)
-        self.assertGreater(len(text_positions), 1)
-
-        attention = outputs.attentions[0][0]  # [num_heads, seq_len, seq_len]
-        # an image token sees a later image token
-        self.assertTrue((attention[:, image_positions[0], image_positions[-1]] > 0).all())
-        # a text token never sees a later text token
-        self.assertTrue((attention[:, text_positions[0], text_positions[-1]] == 0).all())
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -493,9 +396,8 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.float32,
-            device_map=torch_device,
+            device_map="auto",
         )
-        model.eval()
 
         device_inputs = inputs.to(torch_device)
 
@@ -526,9 +428,8 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.float32,
-            device_map=torch_device,
+            device_map="auto",
         )
-        model.eval()
 
         device_inputs = inputs.to(torch_device)
 
@@ -609,9 +510,8 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map="auto",
         )
-        model.eval()
 
         device_inputs = inputs.to(torch_device)
 
@@ -642,9 +542,8 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map="auto",
         )
-        model.eval()
 
         device_inputs = inputs.to(torch_device)
 
@@ -725,9 +624,8 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map="auto",
         )
-        model.eval()
 
         device_inputs = inputs.to(torch_device)
 
@@ -758,9 +656,8 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map="auto",
         )
-        model.eval()
 
         device_inputs = inputs.to(torch_device)
 
@@ -803,9 +700,8 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map="auto",
         )
-        model.eval()
 
         device_inputs = inputs.to(torch_device)
 

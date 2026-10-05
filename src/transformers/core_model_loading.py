@@ -110,12 +110,8 @@ class _IdentityOp(ConversionOps):
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along `dim` into one piece per target, each as large as that target's model parameter along `dim`.
-    This allows uneven splits, such as a fused GQA `qkv` weight where k and v are smaller than q. Under TP the tensor
-    arrives already sharded, so a sharded target counts with its local shard. When the targets are not model parameters
-    (the reverse of `Concatenate`, on save), the pieces are equal. Additionally, `num_shards_attribute`
-    is a config field to read to know how many tensors to chunk into. Useful when concatenating an arbitrary number of
-    tensors."""
+    """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
+    to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
 
     def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
@@ -130,18 +126,9 @@ class Chunk(ConversionOps):
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = self.get_target_patterns(target_patterns, **kwargs)
-        sizes = self.get_target_sizes(targets, **kwargs)
-        chunks = torch.split(tensor, sizes, dim=self.dim) if sizes else torch.chunk(tensor, len(targets), dim=self.dim)
-        return dict(zip(targets, (chunk.contiguous() for chunk in chunks)))
-
-    def get_target_sizes(self, targets: list[str], full_layer_name=None, model=None, **kwargs) -> list[int]:
-        try:
-            parameters = [model.get_parameter(full_layer_name.replace(targets[0], target)) for target in targets]
-        except AttributeError:
-            return []
-        return [
-            (parameter.to_local() if is_dtensor(parameter) else parameter).shape[self.dim] for parameter in parameters
-        ]
+        num_shards = len(targets)
+        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
+        return dict(zip(targets, chunks))
 
     def get_target_patterns(self, target_patterns: list[str], **kwargs) -> list[str]:
         if self.num_shards_attribute is None:
@@ -158,6 +145,38 @@ class Chunk(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return Concatenate(self.dim, self.num_shards_attribute)
+
+
+class Split(ConversionOps):
+    """Split a tensor along `dim` into one piece per target, sized like that target's model parameter."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str,
+        model: PreTrainedModel,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) > 1:
+            raise ValueError("Undefined Operation encountered")
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        sizes = [
+            model.get_parameter(full_layer_name.replace(target_patterns[0], target)).shape[self.dim]
+            for target in target_patterns
+        ]
+        chunks = torch.split(tensor, sizes, dim=self.dim)
+        return {target: chunk.contiguous() for target, chunk in zip(target_patterns, chunks)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Concatenate(self.dim)
 
 
 class Concatenate(ConversionOps):

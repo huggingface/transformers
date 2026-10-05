@@ -16,12 +16,8 @@ import unittest
 from types import SimpleNamespace
 
 import torch
-import torch.distributed as dist
 import torch.nn as nn
-from torch.distributed.device_mesh import init_device_mesh
-from torch.distributed.tensor import DTensor
 from torch.distributed.tensor.placement_types import Shard
-from torch.testing._internal.distributed.fake_pg import FakeStore
 
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
@@ -39,6 +35,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Split,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -265,14 +262,14 @@ class DummyGQARoot(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
-    def test_chunk_splits_to_target_parameter_sizes(self):
+    def test_split_to_target_parameter_sizes(self):
         model = DummyGQARoot(PreTrainedConfig())
         fused = torch.arange(16.0).reshape(8, 2)
         weight_mapping = [
             WeightConverter(
                 "self_attn.qkv_proj.weight",
                 ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
-                operations=[Chunk(dim=0)],
+                operations=[Split(dim=0)],
             )
         ]
 
@@ -292,43 +289,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         reversed_state_dict = revert_weight_conversion(model, model_state)
         self.assertTrue(compare_state_dicts(reversed_state_dict, {"self_attn.qkv_proj.weight": fused}))
-
-    def test_chunk_sizes_pieces_from_local_shards_under_tensor_parallel(self):
-        dist.init_process_group(backend="fake", rank=0, world_size=2, store=FakeStore())
-        self.addCleanup(dist.destroy_process_group)
-        mesh = init_device_mesh("cpu", (2,))
-        model = nn.Module()
-        model.gate_proj = DummyParamModule((1, 2))
-        model.up_proj = DummyParamModule((1, 2))
-        for module in (model.gate_proj, model.up_proj):
-            module.weight = nn.Parameter(DTensor.from_local(torch.zeros(2, 2), mesh, [Shard(0)]))
-        local_fused = torch.arange(8.0).reshape(4, 2)
-
-        chunks = Chunk(dim=0).convert(
-            {"gate_up_proj.weight": local_fused},
-            source_patterns=["gate_up_proj.weight"],
-            target_patterns=["gate_proj.weight", "up_proj.weight"],
-            full_layer_name="gate_proj.weight",
-            model=model,
-        )
-
-        torch.testing.assert_close(chunks["gate_proj.weight"], local_fused[:2])
-        torch.testing.assert_close(chunks["up_proj.weight"], local_fused[2:])
-
-    def test_chunk_splits_equally_when_targets_are_not_parameters(self):
-        tensor = torch.arange(12.0).reshape(6, 2)
-
-        chunks = Chunk(dim=0).convert(
-            {"fused.weight": tensor},
-            source_patterns=["fused.weight"],
-            target_patterns=["first.weight", "second.weight", "third.weight"],
-            full_layer_name="first.weight",
-            model=DummyGQARoot(PreTrainedConfig()),
-        )
-
-        torch.testing.assert_close(chunks["first.weight"], tensor[:2])
-        torch.testing.assert_close(chunks["second.weight"], tensor[2:4])
-        torch.testing.assert_close(chunks["third.weight"], tensor[4:])
 
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.

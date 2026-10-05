@@ -27,6 +27,7 @@ from .core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Split,
     Transpose,
     WeightConverter,
     WeightRenaming,
@@ -853,7 +854,7 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 source_patterns="self_attn.att_proj",
                 target_patterns=["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
-                operations=[Chunk(dim=0)],
+                operations=[Split(dim=0)],
             ),
             WeightRenaming(source_patterns=r"self_attn\.attn_out", target_patterns="self_attn.o_proj"),
             WeightRenaming(source_patterns=r"mlp\.ff_out", target_patterns="mlp.down_proj"),

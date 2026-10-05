@@ -227,6 +227,8 @@ class Molmo2TextConfig(PreTrainedConfig):
         super().validate_architecture()
         if self.qk_norm_type not in ("qwen3", "olmo"):
             raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
+        if self.additional_vocab_size < 0:
+            raise ValueError(f"`additional_vocab_size` must be >= 0, got {self.additional_vocab_size}")
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
@@ -1033,7 +1035,7 @@ class Molmo2Processor(ProcessorMixin):
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_grid = image_inputs["image_grids"][image_idx]
-        if hasattr(image_grid, "tolist"):
+        if not isinstance(image_grid, list):
             image_grid = image_grid.tolist()
         resized_h, resized_w, height, width = image_grid
 
@@ -1082,13 +1084,12 @@ class Molmo2Processor(ProcessorMixin):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         video_grid = video_inputs["video_grids"][video_idx]
-        video_metadata = video_inputs.get("video_metadata", [])
-        metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
+        metadata = video_inputs["video_metadata"][video_idx]
 
-        frames_indices = getattr(metadata, "frames_indices", None)
+        frames_indices = metadata.frames_indices
         if frames_indices is None:
             frames_indices = range(int(video_grid[0].item()))
-        fps = getattr(metadata, "fps", None)
+        fps = metadata.fps
         if fps is None:
             fps = self.video_processor.max_fps
             logger.warning_once(
@@ -1437,7 +1438,7 @@ class Molmo2TextModel(LlamaModel):
         self.vocab_size = config.vocab_size
         # The checkpoint's extra-vocabulary table is concatenated onto the base one at load time
         # (see `conversion_mapping.py`), so the embedding covers `vocab_size + additional_vocab_size`.
-        self.embed_tokens = nn.Embedding(config.vocab_size + (config.additional_vocab_size or 0), config.hidden_size)
+        self.embed_tokens = nn.Embedding(config.vocab_size + config.additional_vocab_size, config.hidden_size)
         # trf-ignore: TRF034 (false positive: LlamaDecoderLayer subclasses GradientCheckpointingLayer)
         self.layers = nn.ModuleList(
             [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -1609,6 +1610,8 @@ class Molmo2Model(LlavaModel):
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
             )
+        if self.training and mm_token_type_ids is None:
+            raise ValueError("`mm_token_type_ids` is required as a model input when training")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1638,9 +1641,6 @@ class Molmo2Model(LlavaModel):
                 special_image_mask,
                 inputs_embeds[special_image_mask] + image_features.reshape(-1),
             )
-
-        if self.training and mm_token_type_ids is None:
-            raise ValueError("`mm_token_type_ids` is required as a model input when training")
 
         # An already prepared 4D mask (e.g. from `generate`) is returned as is by `create_causal_mask`
         mask_kwargs = {
