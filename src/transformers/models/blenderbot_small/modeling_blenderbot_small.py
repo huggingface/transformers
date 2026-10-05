@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -231,7 +231,7 @@ class BlenderbotSmallAttention(nn.Module):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->BlenderbotSmall, BART->BLENDERBOT_SMALL
-class BlenderbotSmallEncoderLayer(GradientCheckpointingLayer):
+class BlenderbotSmallEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BlenderbotSmallConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -283,7 +283,7 @@ class BlenderbotSmallEncoderLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->BlenderbotSmall, BART->BLENDERBOT_SMALL
-class BlenderbotSmallDecoderLayer(GradientCheckpointingLayer):
+class BlenderbotSmallDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BlenderbotSmallConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -369,7 +369,7 @@ class BlenderbotSmallDecoderLayer(GradientCheckpointingLayer):
 class BlenderbotSmallPreTrainedModel(PreTrainedModel):
     config: BlenderbotSmallConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

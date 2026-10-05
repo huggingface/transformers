@@ -37,7 +37,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -133,7 +133,7 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     config: Qwen2_5OmniConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Qwen2_5OmniDecoderLayer", "Qwen2_5OmniVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -657,7 +657,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         return attn_output
 
 
-class Qwen2_5OmniAudioEncoderLayer(GradientCheckpointingLayer):
+class Qwen2_5OmniAudioEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1134,7 +1134,7 @@ class Qwen2_5OmniMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
-class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
+class Qwen2_5OmniVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
         super().__init__()
         self.norm1 = Qwen2_5OmniRMSNorm(config.hidden_size, eps=1e-6)
@@ -1498,7 +1498,7 @@ class Qwen2MLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
-class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
+class Qwen2_5OmniDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen2_5OmniTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

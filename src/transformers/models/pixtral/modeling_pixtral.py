@@ -20,7 +20,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -264,7 +264,7 @@ class PixtralRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class PixtralAttentionLayer(GradientCheckpointingLayer):
+class PixtralAttentionLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention_norm = PixtralRMSNorm(config.hidden_size, eps=1e-5)
@@ -351,7 +351,7 @@ class PixtralPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
     _supports_sdpa = True

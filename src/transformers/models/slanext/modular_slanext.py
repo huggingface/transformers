@@ -146,7 +146,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keep_in_fp32_modules_strict = ["structure_attention_cell", "structure_generator"]
 
     @torch.no_grad()

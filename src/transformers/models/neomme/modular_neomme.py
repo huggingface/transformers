@@ -28,7 +28,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -417,7 +417,7 @@ class NeoMMEMLP(NemotronMLP):
     pass
 
 
-class NeoMMEEncoderLayer(GradientCheckpointingLayer):
+class NeoMMEEncoderLayer(ActivationCheckpointingLayer):
     """Pre-norm encoder layer with initial-state mixing and muP depth scaling."""
 
     def __init__(self, config: NeoMMEConfig, layer_idx: int):

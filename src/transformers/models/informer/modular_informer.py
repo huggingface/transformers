@@ -21,7 +21,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
 )
@@ -86,7 +86,7 @@ class InformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "past_values"
     input_modalities = ("time",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -302,7 +302,7 @@ class InformerProbSparseAttention(nn.Module):
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
-class InformerConvLayer(GradientCheckpointingLayer):
+class InformerConvLayer(ActivationCheckpointingLayer):
     def __init__(self, c_in):
         super().__init__()
         self.downConv = nn.Conv1d(

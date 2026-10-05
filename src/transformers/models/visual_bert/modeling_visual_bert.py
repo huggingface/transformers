@@ -23,7 +23,7 @@ from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -293,7 +293,7 @@ class VisualBertOutput(nn.Module):
         return hidden_states
 
 
-class VisualBertLayer(GradientCheckpointingLayer):
+class VisualBertLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -445,7 +445,7 @@ class VisualBertPreTrainedModel(PreTrainedModel):
     config: VisualBertConfig
     base_model_prefix = "visual_bert"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):

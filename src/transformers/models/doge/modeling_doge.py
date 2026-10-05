@@ -35,7 +35,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import AttentionInterface, PreTrainedModel
@@ -441,7 +441,7 @@ class DogeCDMoE(nn.Module):
         return hidden_states, router_logits
 
 
-class DogeDecoderLayer(GradientCheckpointingLayer):
+class DogeDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DogeConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
@@ -496,7 +496,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
 class DogePreTrainedModel(PreTrainedModel):
     config: DogeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["DogeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False

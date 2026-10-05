@@ -22,7 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     MaskedLMOutput,
@@ -670,7 +670,7 @@ class MraOutput(nn.Module):
         return hidden_states
 
 
-class MraLayer(GradientCheckpointingLayer):
+class MraLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -785,7 +785,7 @@ class MraOnlyMLMHead(nn.Module):
 class MraPreTrainedModel(PreTrainedModel):
     config: MraConfig
     base_model_prefix = "mra"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):

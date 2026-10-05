@@ -23,9 +23,9 @@ from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -353,7 +353,7 @@ class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
     pass
 
 
-class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
+class Qwen3_5DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3_5TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -492,7 +492,7 @@ class RecurrentGemmaMlp(nn.Module):
         return self.down_proj(gate * self.up_proj(hidden_states))
 
 
-class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
+class RecurrentGemmaDecoderLayer(ActivationCheckpointingLayer):
     """Griffin and Hawk's residual block."""
 
     def __init__(self, config, layer_idx):
@@ -536,7 +536,7 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
 class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config: RecurrentGemmaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True

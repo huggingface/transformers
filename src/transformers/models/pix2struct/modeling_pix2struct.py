@@ -24,7 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -201,7 +201,7 @@ class Pix2StructVisionMlp(nn.Module):
         return hidden_states
 
 
-class Pix2StructVisionLayer(GradientCheckpointingLayer):
+class Pix2StructVisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -394,7 +394,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     config: Pix2StructVisionConfig
     main_input_name = "flattened_patches"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
 
     def __init__(self, config: Pix2StructVisionConfig):
@@ -838,7 +838,7 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
         return layer_output, position_bias, attn_weights
 
 
-class Pix2StructTextBlock(GradientCheckpointingLayer):
+class Pix2StructTextBlock(ActivationCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
 
@@ -928,7 +928,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     input_modalities = ("text",)
     _no_split_modules = ["Pix2StructTextBlock"]
     _tied_weights_keys = {"lm_head.weight": "embed_tokens.weight"}
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def __init__(self, config):
         super().__init__(config)

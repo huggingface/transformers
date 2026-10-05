@@ -26,7 +26,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -192,7 +192,7 @@ class ASTMLP(nn.Module):
         return hidden_states
 
 
-class ASTLayer(GradientCheckpointingLayer):
+class ASTLayer(ActivationCheckpointingLayer):
     def __init__(self, config: ASTConfig):
         super().__init__()
         self.attention = ASTAttention(config)
@@ -230,7 +230,7 @@ class ASTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "audio_spectrogram_transformer"
     main_input_name = "input_values"
     input_modalities = ("audio",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["ASTEmbeddings", "ASTLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

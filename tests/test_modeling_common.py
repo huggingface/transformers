@@ -59,7 +59,7 @@ from transformers.integrations.moe import (
     sonicmoe_experts_forward,
 )
 from transformers.integrations.sonicmoe import is_sonicmoe_loadable
-from transformers.modeling_layers import GradientCheckpointingLayer
+from transformers.modeling_layers import ActivationCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
@@ -1055,7 +1055,7 @@ class ModelTesterMixin(ExportTesterMixin):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if not model_class.supports_gradient_checkpointing:
+            if not model_class.supports_activation_checkpointing:
                 continue
 
             config.gradient_checkpointing = True
@@ -1066,18 +1066,18 @@ class ModelTesterMixin(ExportTesterMixin):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if not model_class.supports_gradient_checkpointing:
+            if not model_class.supports_activation_checkpointing:
                 continue
 
             # at init model should have gradient checkpointing disabled
             model = model_class(copy.deepcopy(config))
             self.assertFalse(model.is_activation_checkpointing)
 
-            # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
+            # Gradient checkpointing is implemented via ActivationCheckpointingLayer, if none is present this is likely
             # an implementation issue. Note we exclude clvp for now since they are still not using
-            # GradientCheckpointingLayer.
+            # ActivationCheckpointingLayer.
             if config.model_type not in ["clvp", "clvp_decoder"]:
-                self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
+                self.assertTrue([m for m in model.modules() if isinstance(m, ActivationCheckpointingLayer)])
 
             # check enable works
             model.activation_checkpointing_enable()
@@ -1105,7 +1105,7 @@ class ModelTesterMixin(ExportTesterMixin):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if not model_class.supports_gradient_checkpointing:
+            if not model_class.supports_activation_checkpointing:
                 continue
 
             # at init model should have gradient checkpointing disabled
@@ -1163,7 +1163,7 @@ class ModelTesterMixin(ExportTesterMixin):
         has_verified_model = False
 
         for model_class in self.all_model_classes:
-            if not getattr(model_class, "supports_gradient_checkpointing", False):
+            if not getattr(model_class, "supports_activation_checkpointing", False):
                 continue
 
             model = model_class(copy.deepcopy(config))
@@ -1675,10 +1675,10 @@ class ModelTesterMixin(ExportTesterMixin):
                         *get_values(MODEL_MAPPING_NAMES),
                         *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                     ]
-                    or not model_class.supports_gradient_checkpointing
+                    or not model_class.supports_activation_checkpointing
                 ):
                     # TODO (ydshieh): use `skipTest` once pytest-dev/pytest-subtests/pull/169 is merged
-                    # self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    # self.skipTest(reason=f"`supports_activation_checkpointing` is False for {model_class.__name__}.")
                     continue
 
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1723,7 +1723,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 # now enable gradient checkpointing and compare the gradients
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
-                checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+                checkpointing_layer = next(m for m in model.modules() if isinstance(m, ActivationCheckpointingLayer))
 
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
                 with unittest.mock.patch.object(

@@ -20,7 +20,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
@@ -140,7 +140,7 @@ class Dinov2DropPath(SwinDropPath):
     pass
 
 
-class Dinov2Layer(GradientCheckpointingLayer):
+class Dinov2Layer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: Dinov2Config) -> None:

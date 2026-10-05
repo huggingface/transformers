@@ -1212,7 +1212,7 @@ class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
 class Glm5NextPreTrainedModel(PreTrainedModel):
     config: Glm5NextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     # needs index based kernel
     _supports_flash_attn = False

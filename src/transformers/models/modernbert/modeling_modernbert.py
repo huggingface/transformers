@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -298,7 +298,7 @@ class ModernBertAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class ModernBertEncoderLayer(GradientCheckpointingLayer):
+class ModernBertEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: ModernBertConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
@@ -334,7 +334,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
 class ModernBertPreTrainedModel(PreTrainedModel):
     config: ModernBertConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True

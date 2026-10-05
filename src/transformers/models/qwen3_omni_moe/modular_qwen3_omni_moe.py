@@ -33,7 +33,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -2131,7 +2131,7 @@ class Qwen3OmniMoeCode2WavLayerScale(MimiLayerScale):
     pass
 
 
-class Qwen3OmniMoeCode2WavTransformerLayer(GradientCheckpointingLayer):
+class Qwen3OmniMoeCode2WavTransformerLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size

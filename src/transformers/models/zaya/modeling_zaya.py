@@ -32,7 +32,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -428,7 +428,7 @@ class ZayaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class ZayaDecoderLayer(GradientCheckpointingLayer):
+class ZayaDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: ZayaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -637,7 +637,7 @@ class ZayaSparseMoeBlock(nn.Module):
 class ZayaPreTrainedModel(PreTrainedModel):
     config: ZayaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["ZayaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

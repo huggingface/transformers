@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -288,7 +288,7 @@ class InstructBlipMLP(nn.Module):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoderLayer with Blip->InstructBlip
-class InstructBlipEncoderLayer(GradientCheckpointingLayer):
+class InstructBlipEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: InstructBlipConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -325,7 +325,7 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     config: InstructBlipConfig
     base_model_prefix = "blip"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -587,7 +587,7 @@ class InstructBlipQFormerOutput(nn.Module):
         return hidden_states
 
 
-class InstructBlipQFormerLayer(GradientCheckpointingLayer):
+class InstructBlipQFormerLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward

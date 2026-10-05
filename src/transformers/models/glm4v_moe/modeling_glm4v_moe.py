@@ -34,7 +34,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -415,7 +415,7 @@ class Glm4vMoeTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
+class Glm4vMoeTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -466,7 +466,7 @@ class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
 class Glm4vMoePreTrainedModel(PreTrainedModel):
     config: Glm4vMoeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -812,7 +812,7 @@ class Glm4vMoeVisionAttention(nn.Module):
         return attn_output
 
 
-class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
+class Glm4vMoeVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

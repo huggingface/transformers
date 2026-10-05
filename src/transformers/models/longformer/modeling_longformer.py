@@ -22,7 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
@@ -1131,7 +1131,7 @@ class LongformerOutput(nn.Module):
         return hidden_states
 
 
-class LongformerLayer(GradientCheckpointingLayer):
+class LongformerLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.attention = LongformerAttention(config, layer_id)
@@ -1288,7 +1288,7 @@ class LongformerLMHead(nn.Module):
 class LongformerPreTrainedModel(PreTrainedModel):
     config: LongformerConfig
     base_model_prefix = "longformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["LongformerSelfAttention"]
 
 

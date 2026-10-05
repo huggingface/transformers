@@ -28,9 +28,9 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -324,7 +324,7 @@ class StableLmAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class StableLmDecoderLayer(GradientCheckpointingLayer):
+class StableLmDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: StableLmConfig, layer_idx: int):
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
@@ -384,7 +384,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
 class StableLmPreTrainedModel(PreTrainedModel):
     config: StableLmConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["StableLmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

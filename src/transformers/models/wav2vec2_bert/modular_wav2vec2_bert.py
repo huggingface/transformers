@@ -11,7 +11,7 @@ from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -301,7 +301,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         return attn_output, attn_weights
 
 
-class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
+class Wav2Vec2BertEncoderLayer(ActivationCheckpointingLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
@@ -569,7 +569,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "wav2vec2_bert"
     main_input_name = "input_features"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = ["Wav2Vec2BertEncoderLayer"]

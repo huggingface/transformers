@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -299,7 +299,7 @@ class HunYuanMoEV1Moe(nn.Module):
         return final_hidden_states + hidden_states_mlp
 
 
-class HunYuanMoEV1DecoderLayer(GradientCheckpointingLayer):
+class HunYuanMoEV1DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -345,7 +345,7 @@ class HunYuanMoEV1DecoderLayer(GradientCheckpointingLayer):
 class HunYuanMoEV1PreTrainedModel(PreTrainedModel):
     config: HunYuanMoEV1Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["HunYuanMoEV1DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

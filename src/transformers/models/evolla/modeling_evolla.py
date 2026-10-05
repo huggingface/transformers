@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPast,
@@ -433,7 +433,7 @@ class EvollaSaProtOutput(nn.Module):
         return hidden_states
 
 
-class EvollaSaProtLayer(GradientCheckpointingLayer):
+class EvollaSaProtLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -1174,7 +1174,7 @@ class EvollaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EvollaDecoderLayer(GradientCheckpointingLayer):
+class EvollaDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: EvollaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1248,7 +1248,7 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
 class EvollaPreTrainedModel(PreTrainedModel):
     config: EvollaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "EvollaDecoderLayer",
         "EvollaSaProtLayer",

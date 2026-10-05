@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -203,7 +203,7 @@ class QianfanOCRVisionMLP(nn.Module):
 NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": QianfanOCRVisionRMSNorm}
 
 
-class QianfanOCRVisionLayer(GradientCheckpointingLayer):
+class QianfanOCRVisionLayer(ActivationCheckpointingLayer):
     """Vision transformer layer with stochastic depth (DropPath) support."""
 
     def __init__(self, config: QianfanOCRVisionConfig, drop_path_rate: float = 0.0) -> None:
@@ -393,7 +393,7 @@ class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["QianfanOCRVisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -488,7 +488,7 @@ class QianfanOCRPreTrainedModel(PreTrainedModel):
     config: QianfanOCRConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True

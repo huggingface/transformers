@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN, gelu_pytorch_tanh
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -336,7 +336,7 @@ class MiniCPMV4_7VisionMLP(nn.Module):
         return hidden_states
 
 
-class MiniCPMV4_7VisionEncoderLayer(GradientCheckpointingLayer):
+class MiniCPMV4_7VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MiniCPMV4_7VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -402,7 +402,7 @@ class MiniCPMV4_7VisionPreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_7VisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
 
@@ -579,7 +579,7 @@ class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_7Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _no_split_modules = [

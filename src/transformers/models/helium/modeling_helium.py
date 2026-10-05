@@ -29,9 +29,9 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -271,7 +271,7 @@ class HeliumAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class HeliumDecoderLayer(GradientCheckpointingLayer):
+class HeliumDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -318,7 +318,7 @@ class HeliumDecoderLayer(GradientCheckpointingLayer):
 class HeliumPreTrainedModel(PreTrainedModel):
     config: HeliumConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["HeliumDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -424,7 +424,7 @@ class DeepseekV2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekV2DecoderLayer(GradientCheckpointingLayer):
+class DeepseekV2DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -471,7 +471,7 @@ class DeepseekV2DecoderLayer(GradientCheckpointingLayer):
 class DeepseekV2PreTrainedModel(PreTrainedModel):
     config: DeepseekV2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["DeepseekV2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

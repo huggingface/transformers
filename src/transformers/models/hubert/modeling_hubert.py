@@ -32,7 +32,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
@@ -106,7 +106,7 @@ class HubertSamePadLayer(nn.Module):
         return hidden_states
 
 
-class HubertNoLayerNormConvLayer(GradientCheckpointingLayer):
+class HubertNoLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -127,7 +127,7 @@ class HubertNoLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class HubertLayerNormConvLayer(GradientCheckpointingLayer):
+class HubertLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -154,7 +154,7 @@ class HubertLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class HubertGroupNormConvLayer(GradientCheckpointingLayer):
+class HubertGroupNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -371,7 +371,7 @@ class HubertFeedForward(nn.Module):
         return hidden_states
 
 
-class HubertEncoderLayer(GradientCheckpointingLayer):
+class HubertEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = HubertAttention(
@@ -476,7 +476,7 @@ class HubertAttnAdapterLayer(nn.Module):
         return hidden_states
 
 
-class HubertEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
+class HubertEncoderLayerStableLayerNorm(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = HubertAttention(
@@ -572,7 +572,7 @@ class HubertPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     input_modalities = "audio"
     _no_split_modules = ["HubertEncoderLayer", "ParametrizedConv1d"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

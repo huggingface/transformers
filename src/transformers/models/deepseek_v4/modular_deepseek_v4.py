@@ -23,7 +23,7 @@ from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1021,7 +1021,7 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         return routed + self.shared_experts(residual)
 
 
-class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
+class DeepseekV4DecoderLayer(ActivationCheckpointingLayer):
     r"""DeepSeek-V4 decoder block (paper §2). Differs from a classic residual block in
     two places:
 

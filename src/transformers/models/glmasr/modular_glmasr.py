@@ -20,7 +20,7 @@ from ...activations import ACT2FN
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -245,7 +245,7 @@ class GlmAsrMLP(nn.Module):
         return hidden_states
 
 
-class GlmAsrEncoderLayer(GradientCheckpointingLayer):
+class GlmAsrEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

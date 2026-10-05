@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -969,7 +969,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         return hidden_states
 
 
-class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
+class Zamba2MambaDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Zamba2Config, layer_idx: int):
         super().__init__()
         self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
@@ -1021,7 +1021,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Zamba2HybridLayer(GradientCheckpointingLayer):
+class Zamba2HybridLayer(ActivationCheckpointingLayer):
     def __init__(
         self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
     ):
@@ -1089,7 +1089,7 @@ class Zamba2HybridLayer(GradientCheckpointingLayer):
 class Zamba2PreTrainedModel(PreTrainedModel):
     config: Zamba2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Zamba2HybridLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

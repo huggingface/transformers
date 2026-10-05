@@ -29,7 +29,7 @@ from ...activations import ACT2FN, gelu
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -397,7 +397,7 @@ class Data2VecTextOutput(nn.Module):
         return hidden_states
 
 
-class Data2VecTextLayer(GradientCheckpointingLayer):
+class Data2VecTextLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -466,7 +466,7 @@ class Data2VecTextLayer(GradientCheckpointingLayer):
 class Data2VecTextPreTrainedModel(PreTrainedModel):
     config_class = Data2VecTextConfig
     base_model_prefix = "data2vec_text"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Data2VecTextEmbeddings", "Data2VecTextLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True

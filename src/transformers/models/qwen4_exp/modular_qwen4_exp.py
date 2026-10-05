@@ -25,7 +25,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -783,7 +783,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         return output
 
 
-class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
+class Qwen4ExpTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx]

@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -49,7 +49,7 @@ class FunAsrNanoPreTrainedModel(PreTrainedModel):
     config: FunAsrNanoConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["FunAsrNanoAttention"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -221,7 +221,7 @@ class FunAsrNanoPositionEmbedding(nn.Module):
         return positions.to(device=hidden_states.device, dtype=hidden_states.dtype)
 
 
-class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
+class FunAsrNanoEncoderLayer(ActivationCheckpointingLayer):
     """Shared by the audio encoder (`use_fsmn=True`) and the projector's adaptor layers (`use_fsmn=False`)."""
 
     def __init__(

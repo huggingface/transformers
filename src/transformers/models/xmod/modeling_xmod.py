@@ -24,7 +24,7 @@ from ...activations import ACT2FN, gelu
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -459,7 +459,7 @@ class XmodOutput(nn.Module):
         return hidden_states
 
 
-class XmodLayer(GradientCheckpointingLayer):
+class XmodLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -594,7 +594,7 @@ class XmodPooler(nn.Module):
 class XmodPreTrainedModel(PreTrainedModel):
     config_class = XmodConfig
     base_model_prefix = "roberta"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     no_split_modules = ["XmodEmbeddings", "XmodSelfAttention", "XmodCrossAttention"]
     _supports_flash_attn = True
     _supports_sdpa = True

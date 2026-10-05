@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -324,7 +324,7 @@ class JambaSparseMoeBlock(nn.Module):
         return hidden_states
 
 
-class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
+class JambaAttentionDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: JambaConfig, layer_idx: int):
         super().__init__()
         num_experts = config.layers_num_experts[layer_idx] if config.layers_num_experts else 1
@@ -362,7 +362,7 @@ class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class JambaMambaDecoderLayer(GradientCheckpointingLayer):
+class JambaMambaDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: JambaConfig, layer_idx: int):
         super().__init__()
         num_experts = config.layers_num_experts[layer_idx] if config.layers_num_experts else 1
@@ -401,7 +401,7 @@ ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": Jam
 class JambaPreTrainedModel(PreTrainedModel):
     config: JambaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["JambaAttentionDecoderLayer", "JambaMambaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

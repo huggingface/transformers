@@ -39,7 +39,7 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
@@ -907,7 +907,7 @@ MIXER_TYPES = {
 }
 
 
-class NemotronHBlock(GradientCheckpointingLayer):
+class NemotronHBlock(ActivationCheckpointingLayer):
     """
     A single transformer block in the NemotronH model.
 
@@ -971,7 +971,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
 class NemotronHPreTrainedModel(PreTrainedModel):
     config: NemotronHConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["NemotronHBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

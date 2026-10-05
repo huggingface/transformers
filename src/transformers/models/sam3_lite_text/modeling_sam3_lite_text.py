@@ -31,7 +31,7 @@ from torch import Tensor
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -291,7 +291,7 @@ class Sam3LiteTextTextMLP(nn.Module):
         return hidden_states
 
 
-class Sam3LiteTextTextEncoderLayer(GradientCheckpointingLayer):
+class Sam3LiteTextTextEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -349,7 +349,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):

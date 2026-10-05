@@ -31,10 +31,10 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -274,7 +274,7 @@ class ArceeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class ArceeDecoderLayer(GradientCheckpointingLayer):
+class ArceeDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: ArceeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -321,7 +321,7 @@ class ArceeDecoderLayer(GradientCheckpointingLayer):
 class ArceePreTrainedModel(PreTrainedModel):
     config: ArceeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["ArceeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

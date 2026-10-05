@@ -24,7 +24,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -190,7 +190,7 @@ class UVDocResNet(nn.Module):
         return hidden_states
 
 
-class UVDocBridgeBlock(GradientCheckpointingLayer):
+class UVDocBridgeBlock(ActivationCheckpointingLayer):
     """Bridge module with dilated convolutions for long-range dependencies."""
 
     def __init__(self, config, bridge_index):
@@ -253,7 +253,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = {
         "hidden_states": UVDocBridgeBlock,
     }

@@ -27,7 +27,7 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_sliding_window_mask
-from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForTokenClassification
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -344,7 +344,7 @@ class OpenAIPrivacyFilterMLP(nn.Module):
         return hidden_states, router_scores
 
 
-class OpenAIPrivacyFilterEncoderLayer(GradientCheckpointingLayer):
+class OpenAIPrivacyFilterEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: OpenAIPrivacyFilterConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -384,7 +384,7 @@ class OpenAIPrivacyFilterEncoderLayer(GradientCheckpointingLayer):
 class OpenAIPrivacyFilterPreTrainedModel(PreTrainedModel):
     config: OpenAIPrivacyFilterConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["OpenAIPrivacyFilterEncoderLayer"]
     _skip_keys_device_placement = None  # No cache
     _supports_flash_attn = True

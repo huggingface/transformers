@@ -30,7 +30,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -272,7 +272,7 @@ class EomtDinov3DropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class EomtDinov3Layer(GradientCheckpointingLayer):
+class EomtDinov3Layer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: EomtDinov3Config):
@@ -1072,7 +1072,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "eomt_dinov3"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _no_split_modules = ["EomtDinov3Layer"]
     _supports_sdpa = True
     _can_record_outputs = {

@@ -23,7 +23,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -276,7 +276,7 @@ class TrOCRAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class TrOCRDecoderLayer(GradientCheckpointingLayer):
+class TrOCRDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: TrOCRConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -391,7 +391,7 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
 class TrOCRPreTrainedModel(PreTrainedModel):
     config: TrOCRConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["TrOCRDecoderLayer"]
 
 

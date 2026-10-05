@@ -90,7 +90,7 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     config: PerceptionLMConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True

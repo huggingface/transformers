@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN, QuickGELUActivation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -665,7 +665,7 @@ class BridgeTowerBertCrossLayer(nn.Module):
         return layer_output
 
 
-class BridgeTowerTextLayer(GradientCheckpointingLayer):
+class BridgeTowerTextLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -874,7 +874,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     config: BridgeTowerConfig
     base_model_prefix = "bridgetower"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {

@@ -32,7 +32,7 @@ from ...masking_utils import (
     create_sliding_window_causal_mask,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -481,7 +481,7 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
     Identical to `Gemma4TextDecoderLayer` except that:
     1. It doesn't have the PLE code path
     2. Doesn't pipe `shared_kv_states` around
-    3. It is not a `GradientCheckpointingLayer`: it writes the shared KV cache, which must happen exactly once, so its
+    3. It is not a `ActivationCheckpointingLayer`: it writes the shared KV cache, which must happen exactly once, so its
        prefill stays out of the checkpointed region (checkpointing would replay the write and append a second time)
     """
 
@@ -564,7 +564,7 @@ class DiffusionGemmaDecoderTextLayer(Gemma4TextDecoderLayer):
     _can_checkpoint_with_cache = True
 
     def __init__(self, config: DiffusionGemmaConfig, layer_idx: int):
-        GradientCheckpointingLayer.__init__()
+        ActivationCheckpointingLayer.__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
@@ -683,7 +683,7 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
     ]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = None  # override
     _supports_flash_attn = True
     _supports_flex_attn = True

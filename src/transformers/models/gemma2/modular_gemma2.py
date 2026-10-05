@@ -23,7 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
@@ -266,7 +266,7 @@ class Gemma2Attention(GemmaAttention):
         return attn_output, attn_weights
 
 
-class Gemma2DecoderLayer(GradientCheckpointingLayer):
+class Gemma2DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

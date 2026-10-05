@@ -25,7 +25,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -604,7 +604,7 @@ class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
     pass
 
 
-class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
+class Step3p7VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
@@ -677,7 +677,7 @@ class Step3p7VisionEmbeddings(SiglipVisionEmbeddings):
 class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Step3p7VisionEncoderLayer", "Step3p7DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False

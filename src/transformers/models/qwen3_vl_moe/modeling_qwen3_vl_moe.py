@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -316,7 +316,7 @@ class Qwen3VLMoeTextMLP(nn.Module):
         return down_proj
 
 
-class Qwen3VLMoeTextDecoderLayer(GradientCheckpointingLayer):
+class Qwen3VLMoeTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
         super().__init__()
         self.self_attn = Qwen3VLMoeTextAttention(config, layer_idx)
@@ -366,7 +366,7 @@ class Qwen3VLMoeTextDecoderLayer(GradientCheckpointingLayer):
 class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     config: Qwen3VLMoeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -571,7 +571,7 @@ class Qwen3VLMoeVisionMLP(nn.Module):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
 
 
-class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
+class Qwen3VLMoeVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)

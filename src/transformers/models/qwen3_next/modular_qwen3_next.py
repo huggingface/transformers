@@ -689,7 +689,7 @@ class Qwen3NextDecoderLayer(Qwen3MoeDecoderLayer):
 class Qwen3NextPreTrainedModel(PreTrainedModel):
     config: Qwen3NextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Qwen3NextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
