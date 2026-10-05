@@ -517,7 +517,7 @@ class InklingShortConvolution(nn.Module):
             self.layer_idx, self.conv_idx
         )
 
-        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
+        if use_precomputed_states and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             conv_state = past_key_values.layers[self.layer_idx].conv_states[self.conv_idx]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(

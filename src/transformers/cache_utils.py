@@ -1651,6 +1651,11 @@ class Cache:
             if hasattr(self.layers[layer_idx], "activate_past_recording"):
                 self.layers[layer_idx].activate_past_recording()
 
+    def is_recording_past(self, layer_idx: int) -> bool:
+        """Returns a boolean indicating if the layer at index `layer_idx` is recording past states. If the layer cannot
+        record past states and is missing the `record_past` attribute, this returns False."""
+        return getattr(self.layers[layer_idx], "record_past", False)
+
     @property
     def batch_size(self) -> int:
         """Return the batch size of the cache, or ``-1`` if no layer has been initialized yet
