@@ -141,14 +141,14 @@ class TransformersDeviceMesh:
         expert : (pp, efsdp, ep)    experts
 
     Both views cover the same world, so pp * fsdp * tp == pp * efsdp * ep.
-    efsdp is not something you pick, it is whatever is left once ep is fixed:
+    efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
     efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
 
     There is no etp (expert tensor parallel) axis yet meaning experts are never tensor-sharded here.
-    If one were ever added, the identity would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
+    If one were ever added, the relationship would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
     (efsdp = fsdp * tp / (ep * etp))
 
-    When ep_size == tp_size, efsdp and fsdp are the same axis: same size and same rank groups.
+    When ep_size == tp_size, efsdp and fsdp are the same axis, same size and same rank groups.
     In that case experts could reuse the dense mesh's fsdp axis.
     When ep_size != tp_size, the two axes group different ranks, so experts need their own efsdp axis.
 
