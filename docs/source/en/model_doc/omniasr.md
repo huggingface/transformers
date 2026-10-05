@@ -94,10 +94,10 @@ for i, text in enumerate(processor.decode(outputs, skip_special_tokens=True)):
 
 ### LLM variant
 
-#### Simple transcription
+> [!NOTE]
+> The simplest way to transcribe audio is with `apply_transcription_request`, which handles the chat template formatting for you, namely it is a convenience wrapper for `apply_chat_template` (see [Chat template](#chat-template) below).
 
-The simplest way to transcribe audio is with `apply_transcription_request`, which handles the chat template formatting
-for you, namely it is a convenience wrapper for `apply_chat_template` (see [Chat template](#chat-template) below).
+#### Simple transcription
 
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
