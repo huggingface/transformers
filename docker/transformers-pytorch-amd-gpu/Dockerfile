@@ -1,10 +1,11 @@
-FROM rocm/pytorch:rocm7.2.2_ubuntu22.04_py3.10_pytorch_release_2.10.0
+# Python lives in the uv venv at /opt/python (on PATH); flash-attn is already installed in this image.
+FROM rocm/vllm:rocm10.0.0_ubuntu24.04_py3.14_pytorch_2.12.0_vllm_0.27.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
-    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip python3-dev ffmpeg git-lfs libjpeg-turbo8-dev libpng-dev zlib1g-dev && \
+    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng ffmpeg git-lfs libjpeg-turbo8-dev libpng-dev zlib1g-dev && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -45,17 +46,13 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 # `kernels` may causes many failing tests
 RUN python3 -m pip uninstall -y kernels
 
-# On ROCm, torchcodec is required to decode audio files. 0.10 matches the
-# torch 2.10 C++ ABI in the base image above;
-RUN python3 -m pip install --no-cache-dir "torchcodec==0.10"
-
-# Install pre-built flash-attention wheel from AMD's mirror. Wheel is pinned
-# to the (ROCm, Ubuntu, Python, torch) ABI of the base image above; bumping
-# the base image generally requires a matching wheel from AMD.
-RUN python3 -m pip install --no-cache-dir \
-    https://rocm.frameworks-devreleases.amd.com/whl/gfx942-gfx950/flash_attn-2.8.3-cp310-cp310-linux_x86_64.whl
+# On ROCm, torchcodec is required to decode audio files. 0.17 supports torch >= 2.11.
+RUN python3 -m pip install --no-cache-dir "torchcodec==0.17.0"
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
 # timm is required for many vision models tests
 RUN python3 -m pip install --no-cache-dir timm
+
+# Fail the build early if the dependency installs replaced the ROCm torch or broke flash-attn.
+RUN python3 -c "import torch, torchvision, flash_attn, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
