@@ -37,10 +37,6 @@ class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
 class Phi4MultimodalProcessor(ProcessorMixin):
     valid_processor_kwargs = Phi4MultimodalProcessorKwargs
 
-    audio_kwargs = {
-        "device": "cpu",
-    }
-
     def __init__(
         self,
         image_processor,

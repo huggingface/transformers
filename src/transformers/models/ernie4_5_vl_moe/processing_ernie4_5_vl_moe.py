@@ -33,7 +33,6 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
     valid_processor_kwargs = Ernie4_5_VLMoeProcessorKwargs
 
     text_kwargs = {
-        "padding": False,
         "return_token_type_ids": False,
     }
     return_mm_token_type_ids = True

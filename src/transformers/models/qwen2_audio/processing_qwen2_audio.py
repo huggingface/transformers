@@ -33,7 +33,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
     audio_kwargs = {
         "return_attention_mask": True,
-        "padding": "max_length",
     }
 
     def __init__(

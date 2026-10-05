@@ -105,3 +105,7 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
+
+    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass

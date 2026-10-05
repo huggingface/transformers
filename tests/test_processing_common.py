@@ -1851,3 +1851,53 @@ class ProcessorTesterMixin:
                 self.assertIn(curr_dict["type"], modalities)
                 start, end = curr_dict["new_span"]
                 self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
+
+    def test_no_redundant_default_kwargs(self):
+        processor = self.get_processor()
+        processor_class = processor.__class__
+        processor_class_name = processor_class.__name__
+
+        for modality in MODALITY_TEST_SPECS:
+            kwargs_name = f"{modality}_kwargs"
+            if not hasattr(processor, kwargs_name):
+                continue
+
+            # Don't allow defaults if there is no subprocessor for that modality
+            subprocessor_class_name = self.get_subprocessor_name(modality, processor_class.get_attributes())
+            if not hasattr(processor, subprocessor_class_name):
+                raise ValueError(
+                    f"`{processor_class_name}` has default `{kwargs_name}` but no `{subprocessor_class_name}`"
+                )
+
+            subprocessor = getattr(processor, subprocessor_class_name)
+            subprocessor_class_name = subprocessor.__class__.__name__
+
+            # Defaults must not be identical to the subprocessor's defaults, otherwise they are redundant.
+            for attr_name, default_value in getattr(processor, kwargs_name).items():
+                # Check if the subprocessor's `__call__` has a default for this attribute (e.g. for tokenizers).
+                subprocessor_call_parameters = inspect.signature(subprocessor.__call__).parameters
+                if attr_name in subprocessor_call_parameters:
+                    subprocessor_default_call_value = subprocessor_call_parameters[attr_name].default
+                    self.assertNotEqual(
+                        subprocessor_default_call_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.__call__`'s default (`{subprocessor_default_call_value}`). "
+                            f"Keep the default in `{subprocessor_class_name}.__call__` and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )
+                    continue
+
+                # Check if the subprocessor has an attribute with the same name (e.g. for image processors).
+                if hasattr(subprocessor, attr_name):
+                    subprocessor_value = getattr(subprocessor, attr_name)
+                    self.assertNotEqual(
+                        subprocessor_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.{attr_name}` (`{subprocessor_value}`). Keep the default in `{subprocessor_class_name}` "
+                            f"and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )

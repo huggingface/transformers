@@ -117,7 +117,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     }
     audio_kwargs = {
         "sampling_rate": 16000,
-        "padding": "max_length",
         "return_attention_mask": True,
     }
     seconds_per_chunk: float = 2.0

@@ -56,7 +56,6 @@ class GlmAsrProcessor(ProcessorMixin):
     audio_kwargs = {
         "sampling_rate": 16000,
         "return_attention_mask": True,
-        "padding": "max_length",
         "return_tensors": "pt",
     }
 

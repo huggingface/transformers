@@ -344,10 +344,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
     audio_kwargs = {
         "sampling_rate": 16000,
         "padding": True,
-        "truncation": False,
         "return_attention_mask": True,
         "n_window": 50,  # should match config.n_window
-        "return_tensors": "pt",
     }
 
     def __init__(

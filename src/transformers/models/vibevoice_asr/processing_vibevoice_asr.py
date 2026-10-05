@@ -68,7 +68,6 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
     audio_kwargs = {
         "sampling_rate": 24000,
         "pad_to_multiple_of": 3200,  # tokenizer hop length
-        "return_attention_mask": True,
     }
     feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"

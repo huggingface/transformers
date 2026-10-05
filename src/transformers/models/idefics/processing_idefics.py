@@ -141,7 +141,6 @@ class IdeficsProcessor(ProcessorMixin):
     text_kwargs = {
         "add_special_tokens": False,
         "padding": "longest",
-        "add_eos_token": False,
         "return_tensors": "pt",
     }
     images_kwargs = {

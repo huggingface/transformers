@@ -125,3 +125,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in input_subproc:
             if input_processor and key in processor.model_input_names:
                 torch.testing.assert_close(input_subproc[key], input_processor[key])
+
+    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass

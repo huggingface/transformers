@@ -47,7 +47,6 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
     audio_kwargs = {
         "sampling_rate": 16000,
         "padding": True,
-        "truncation": False,
     }
 
     def __init__(self, feature_extractor, tokenizer):

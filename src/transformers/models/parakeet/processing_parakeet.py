@@ -40,7 +40,6 @@ class ParakeetProcessor(ProcessorMixin):
     }
     audio_kwargs = {
         "sampling_rate": 16000,
-        "padding": "longest",
         "return_attention_mask": True,
         "subsampling_factor": 8,
         "return_tensors": "pt",

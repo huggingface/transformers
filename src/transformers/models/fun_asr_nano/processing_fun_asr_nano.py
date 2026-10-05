@@ -62,7 +62,6 @@ class FunAsrNanoProcessor(ProcessorMixin):
     text_kwargs = {"return_tensors": "pt"}
     audio_kwargs = {
         "sampling_rate": 16000,
-        "return_tensors": "pt",
     }
 
     def __init__(
