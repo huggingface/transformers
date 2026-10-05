@@ -42,7 +42,7 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_omniasr import OmniASRConfig, OmniASRCTCConfig, OmniASREncoderConfig
+from .configuration_omniasr import OmniASRAudioConfig, OmniASRConfig, OmniASRCTCConfig
 
 
 # NOTE: Simplified version of Wav2Vec2PositionalConvEmbedding
@@ -270,7 +270,7 @@ class OmniASRLayerNormConvLayer(GradientCheckpointingLayer):
 
 # NOTE: similar to `ParakeetEncoderSubsamplingConv2D` but for 1D directly on audio, and a replacement for `Wav2Vec2FeatureEncoder` and `Wav2Vec2FeatureProjection`
 class OmniASREncoderSubsamplingConv1D(nn.Module):
-    def __init__(self, config: OmniASREncoderConfig):
+    def __init__(self, config: OmniASRAudioConfig):
         super().__init__()
         self.conv_layers = nn.ModuleList(
             [OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(len(config.conv_dim))]
@@ -311,9 +311,9 @@ class OmniASRPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None
 
     def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
-        encoder_config = getattr(self.config, "encoder_config", self.config)
+        audio_config = getattr(self.config, "audio_config", self.config)
         lengths = input_lengths
-        for kernel_size, stride in zip(encoder_config.conv_kernel, encoder_config.conv_stride):
+        for kernel_size, stride in zip(audio_config.conv_kernel, audio_config.conv_stride):
             lengths = torch.div(lengths - kernel_size, stride, rounding_mode="floor") + 1
 
         return lengths
@@ -383,16 +383,16 @@ class OmniASRCTCGenerateOutput(ModelOutput):
     The OmniASR speech encoder, which is a Wav2Vec2-style encoder.
     """
 )
-class OmniASREncoder(OmniASRPreTrainedModel):
-    config: OmniASREncoderConfig
-    base_model_prefix = "encoder"
+class OmniASRAudioModel(OmniASRPreTrainedModel):
+    config: OmniASRAudioConfig
+    base_model_prefix = "audio_tower"
     _no_split_modules = ["OmniASREncoderLayer"]
     _can_record_outputs = {
         "attentions": OmniASRAttention,
         "hidden_states": OmniASREncoderLayer,
     }
 
-    def __init__(self, config: OmniASREncoderConfig):
+    def __init__(self, config: OmniASRAudioConfig):
         super().__init__(config)
 
         self.gradient_checkpointing = False
@@ -471,8 +471,8 @@ class OmniASRForCTC(OmniASRPreTrainedModel, GenerationMixin):
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-        self.encoder = AutoModel.from_config(config.encoder_config)
         self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
 
         self.post_init()
 
@@ -510,7 +510,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel, GenerationMixin):
 
         if labels is not None:
             kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.encoder(
+        encoder_outputs = self.audio_tower(
             input_values=input_values,
             padding_mask=padding_mask,
             **kwargs,
@@ -834,6 +834,6 @@ __all__ = [
     "OmniASRForCTC",
     "OmniASRForConditionalGeneration",
     "OmniASRModel",
-    "OmniASREncoder",
+    "OmniASRAudioModel",
     "OmniASRPreTrainedModel",
 ]

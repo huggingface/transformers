@@ -20,9 +20,9 @@ from unittest.mock import patch
 from transformers import (
     AutoProcessor,
     LlamaConfig,
+    OmniASRAudioConfig,
     OmniASRConfig,
     OmniASRCTCConfig,
-    OmniASREncoderConfig,
     OmniASRForConditionalGeneration,
     OmniASRForCTC,
     OmniASRModel,
@@ -48,7 +48,7 @@ class OmniASRModelTester(ALMModelTester):
     base_model_class = OmniASRModel
     conditional_generation_class = OmniASRForConditionalGeneration
     text_config_class = LlamaConfig
-    audio_config_class = OmniASREncoderConfig
+    audio_config_class = OmniASRAudioConfig
     audio_mask_key = "padding_mask"
 
     def __init__(self, parent, **kwargs):
@@ -111,7 +111,7 @@ class OmniASRForCTCModelTester:
 
     def get_config(self):
         return OmniASRCTCConfig(
-            encoder_config=OmniASREncoderConfig(
+            audio_config=OmniASRAudioConfig(
                 hidden_size=self.hidden_size,
                 conv_dim=self.conv_dim,
                 conv_kernel=self.conv_kernel,

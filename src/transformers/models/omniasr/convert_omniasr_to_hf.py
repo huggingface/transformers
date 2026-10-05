@@ -30,9 +30,9 @@ from tokenizers import Regex, decoders, normalizers, pre_tokenizers
 
 from transformers import (
     LlamaConfig,
+    OmniASRAudioConfig,
     OmniASRConfig,
     OmniASRCTCConfig,
-    OmniASREncoderConfig,
     OmniASRFeatureExtractor,
     OmniASRForConditionalGeneration,
     OmniASRForCTC,
@@ -129,11 +129,11 @@ LLM_KEY_MAPPING = {
 
 def get_key_mapping(model_card):
     """
-    The mapping of `model_card`: the speech encoder sits under `encoder` in OmniASRForCTC, and under
+    The mapping of `model_card`: the speech encoder sits under `audio_tower` in OmniASRForCTC, and under
     `model.audio_tower` in OmniASRForConditionalGeneration (which follows Voxtral's naming).
     """
     if "CTC" in model_card:
-        encoder_prefix, head_mapping = "encoder.", CTC_KEY_MAPPING
+        encoder_prefix, head_mapping = "audio_tower.", CTC_KEY_MAPPING
     else:
         encoder_prefix, head_mapping = "model.audio_tower.", LLM_KEY_MAPPING
     encoder_mapping = {
@@ -344,7 +344,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             "OmniASR only implements layer-normed feature extractor convolutions, but the original config has "
             "`feature_extractor_layer_norm_convs=False`."
         )
-    encoder_config = OmniASREncoderConfig(
+    audio_config = OmniASRAudioConfig(
         hidden_size=original_config.encoder_config.model_dim,
         conv_dim=conv_dim,
         conv_kernel=conv_kernel,
@@ -363,7 +363,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     if "CTC" in model_card:
         config = OmniASRCTCConfig(
-            encoder_config=encoder_config,
+            audio_config=audio_config,
             vocab_size=original_config.target_vocab_size,
             pad_token_id=pipeline.tokenizer.vocab_info.pad_idx,
             bos_token_id=pipeline.tokenizer.vocab_info.bos_idx,
@@ -417,7 +417,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         # tokens follow, one per row of the original language embedding table.
         lid_marker_id = original_config_llm.llama_config.vocab_size
         config = OmniASRConfig(
-            audio_config=encoder_config,
+            audio_config=audio_config,
             text_config=llama_config,
             bos_token_id=original_config_llm.bos_idx,
             pad_token_id=original_config_llm.pad_idx,

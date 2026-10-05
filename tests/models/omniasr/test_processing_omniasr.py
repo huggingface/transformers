@@ -16,7 +16,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoProcessor, OmniASRProcessor
+from transformers import AutoProcessor, OmniASRAudioConfig, OmniASRProcessor
 from transformers.testing_utils import require_librosa, require_torch
 from transformers.utils.import_utils import is_torch_available
 
@@ -39,6 +39,11 @@ class OmniASRCTCProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     audio_input_name = "input_values"
     text_input_name = "labels"
     model_id = "bezzam/omniasr-ctc-300m-v2"
+
+    @classmethod
+    def prepare_processor_dict(cls):
+        audio_config = OmniASRAudioConfig()
+        return {"conv_kernel": list(audio_config.conv_kernel), "conv_stride": list(audio_config.conv_stride)}
 
 
 @require_torch

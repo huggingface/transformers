@@ -27,7 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
 @strict
-class OmniASREncoderConfig(PreTrainedConfig):
+class OmniASRAudioConfig(PreTrainedConfig):
     r"""
     conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
         A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
@@ -50,20 +50,21 @@ class OmniASREncoderConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OmniASREncoderConfig, OmniASREncoder
+    >>> from transformers import OmniASRAudioConfig, OmniASRAudioModel
 
     >>> # Initializing an OmniASR encoder configuration
-    >>> configuration = OmniASREncoderConfig()
+    >>> configuration = OmniASRAudioConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = OmniASREncoder(configuration)
+    >>> model = OmniASRAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "omniasr_encoder"
+    model_type = "omniasr_audio"
+    base_config_key = "audio_config"
 
     hidden_size: int = 1024
     conv_dim: list[int] | tuple[int, ...] = (512, 512, 512, 512, 512, 512, 512)
@@ -99,8 +100,8 @@ class OmniASREncoderConfig(PreTrainedConfig):
 @strict
 class OmniASRCTCConfig(PreTrainedConfig):
     r"""
-    encoder_config (`Union[dict, OmniASREncoderConfig]`, *optional*):
-        The config object or dictionary of the encoder.
+    audio_config (`Union[dict, OmniASRAudioConfig]`, *optional*):
+        The config object or dictionary of the audio encoder.
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
         Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
         instance of [`OmniASRForCTC`].
@@ -126,38 +127,38 @@ class OmniASRCTCConfig(PreTrainedConfig):
     """
 
     model_type = "omniasr_ctc"
-    sub_configs = {"encoder_config": OmniASREncoderConfig}
+    sub_configs = {"audio_config": OmniASRAudioConfig}
 
     vocab_size: int = 10288
     ctc_loss_reduction: str = "mean"
     ctc_zero_infinity: bool = False
-    encoder_config: dict | PreTrainedConfig | None = None
-    pad_token_id: int | None = 1
+    audio_config: dict | PreTrainedConfig | None = None
     bos_token_id: int | None = 0
+    pad_token_id: int | None = 1
     eos_token_id: int | None = 2
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = OmniASREncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = OmniASREncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
+        if isinstance(self.audio_config, dict):
+            self.audio_config = OmniASRAudioConfig(**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = OmniASRAudioConfig()
+        self.initializer_range = self.audio_config.initializer_range
         super().__post_init__(**kwargs)
 
     @classmethod
-    def from_encoder_config(cls, encoder_config: OmniASREncoderConfig, **kwargs):
+    def from_audio_config(cls, audio_config: OmniASRAudioConfig, **kwargs):
         r"""
-        Instantiate a [`OmniASRCTCConfig`] (or a derived class) from omniASR encoder model configuration.
+        Instantiate a [`OmniASRCTCConfig`] (or a derived class) from omniASR audio model configuration.
 
         Returns:
             [`OmniASRCTCConfig`]: An instance of a configuration object
         """
 
-        return cls(encoder_config=encoder_config.to_dict(), **kwargs)
+        return cls(audio_config=audio_config.to_dict(), **kwargs)
 
     @property
     def hidden_size(self):
-        return self.encoder_config.hidden_size
+        return self.audio_config.hidden_size
 
 
 @auto_docstring(checkpoint="bezzam/omniasr-llm-300m-v2")
@@ -181,7 +182,7 @@ class OmniASRConfig(PreTrainedConfig):
     """
 
     model_type = "omniasr"
-    sub_configs = {"audio_config": OmniASREncoderConfig, "text_config": AutoConfig}
+    sub_configs = {"audio_config": OmniASRAudioConfig, "text_config": AutoConfig}
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -192,9 +193,9 @@ class OmniASRConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config = OmniASREncoderConfig(**self.audio_config)
+            self.audio_config = OmniASRAudioConfig(**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = OmniASREncoderConfig()
+            self.audio_config = OmniASRAudioConfig()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "llama")
@@ -214,4 +215,4 @@ class OmniASRConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["OmniASRConfig", "OmniASRCTCConfig", "OmniASREncoderConfig"]
+__all__ = ["OmniASRConfig", "OmniASRCTCConfig", "OmniASRAudioConfig"]

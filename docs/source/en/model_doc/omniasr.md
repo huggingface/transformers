@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-09-30.*
+*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-05.*
 
 # OmniASR
 
@@ -34,7 +34,7 @@ followed by a pre-norm Transformer encoder) with one of two heads:
   conditioning**: passing a language code such as `"eng_Latn"` makes the processor write the matching language token
   into the decoder context, which generally improves transcription quality.
 
-Checkpoints can be found in [this collection](https://huggingface.co/collections/bezzam/omnilingual-asr-transformers-compatible): 4x CTC checkpoints and 4x LLM checkpoints of various sizes. Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
+Checkpoints can be found in [this collection](https://huggingface.co/collections/bezzam/omnilingual-asr-transformers-compatible): 4x CTC checkpoints and 4x LLM checkpoints of various sizes (300M, 1B, 3B, 7B). Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
 
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
@@ -397,9 +397,9 @@ generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
 print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
-## OmniASREncoderConfig
+## OmniASRAudioConfig
 
-[[autodoc]] OmniASREncoderConfig
+[[autodoc]] OmniASRAudioConfig
 
 ## OmniASRCTCConfig
 
@@ -416,6 +416,11 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ## OmniASRProcessor
 
 [[autodoc]] OmniASRProcessor
+
+## OmniASRAudioModel
+
+[[autodoc]] OmniASRAudioModel
+    - forward
 
 ## OmniASRModel
 

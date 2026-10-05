@@ -36,8 +36,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig
-from ..parakeet.configuration_parakeet import ParakeetCTCConfig
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..parakeet.modeling_parakeet import (
     ParakeetCTCGenerateOutput,
     ParakeetEncoderModelOutput,
@@ -55,7 +54,7 @@ from ..wav2vec2.modeling_wav2vec2 import (
 
 @auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
 @strict
-class OmniASREncoderConfig(PreTrainedConfig):
+class OmniASRAudioConfig(PreTrainedConfig):
     r"""
     conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
         A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
@@ -78,20 +77,21 @@ class OmniASREncoderConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OmniASREncoderConfig, OmniASREncoder
+    >>> from transformers import OmniASRAudioConfig, OmniASRAudioModel
 
     >>> # Initializing an OmniASR encoder configuration
-    >>> configuration = OmniASREncoderConfig()
+    >>> configuration = OmniASRAudioConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = OmniASREncoder(configuration)
+    >>> model = OmniASRAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "omniasr_encoder"
+    model_type = "omniasr_audio"
+    base_config_key = "audio_config"
 
     hidden_size: int = 1024
     conv_dim: list[int] | tuple[int, ...] = (512, 512, 512, 512, 512, 512, 512)
@@ -125,10 +125,10 @@ class OmniASREncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
 @strict
-class OmniASRCTCConfig(ParakeetCTCConfig):
+class OmniASRCTCConfig(PreTrainedConfig):
     r"""
-    encoder_config (`Union[dict, OmniASREncoderConfig]`, *optional*):
-        The config object or dictionary of the encoder.
+    audio_config (`Union[dict, OmniASRAudioConfig]`, *optional*):
+        The config object or dictionary of the audio encoder.
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
         Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
         instance of [`OmniASRForCTC`].
@@ -154,27 +154,38 @@ class OmniASRCTCConfig(ParakeetCTCConfig):
     """
 
     model_type = "omniasr_ctc"
+    sub_configs = {"audio_config": OmniASRAudioConfig}
 
     vocab_size: int = 10288
+    ctc_loss_reduction: str = "mean"
     ctc_zero_infinity: bool = False
+    audio_config: dict | PreTrainedConfig | None = None
     bos_token_id: int | None = 0
     pad_token_id: int | None = 1
     eos_token_id: int | None = 2
 
+    def __post_init__(self, **kwargs):
+        if isinstance(self.audio_config, dict):
+            self.audio_config = OmniASRAudioConfig(**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = OmniASRAudioConfig()
+        self.initializer_range = self.audio_config.initializer_range
+        super().__post_init__(**kwargs)
+
     @classmethod
-    def from_encoder_config(cls, encoder_config: OmniASREncoderConfig, **kwargs):
+    def from_audio_config(cls, audio_config: OmniASRAudioConfig, **kwargs):
         r"""
-        Instantiate a [`OmniASRCTCConfig`] (or a derived class) from omniASR encoder model configuration.
+        Instantiate a [`OmniASRCTCConfig`] (or a derived class) from omniASR audio model configuration.
 
         Returns:
             [`OmniASRCTCConfig`]: An instance of a configuration object
         """
 
-        return cls(encoder_config=encoder_config.to_dict(), **kwargs)
+        return cls(audio_config=audio_config.to_dict(), **kwargs)
 
     @property
     def hidden_size(self):
-        return self.encoder_config.hidden_size
+        return self.audio_config.hidden_size
 
 
 @auto_docstring(checkpoint="bezzam/omniasr-llm-300m-v2")
@@ -198,7 +209,7 @@ class OmniASRConfig(PreTrainedConfig):
     """
 
     model_type = "omniasr"
-    sub_configs = {"audio_config": OmniASREncoderConfig, "text_config": AutoConfig}
+    sub_configs = {"audio_config": OmniASRAudioConfig, "text_config": AutoConfig}
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -209,9 +220,9 @@ class OmniASRConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config = OmniASREncoderConfig(**self.audio_config)
+            self.audio_config = OmniASRAudioConfig(**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = OmniASREncoderConfig()
+            self.audio_config = OmniASRAudioConfig()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "llama")
@@ -288,7 +299,7 @@ class OmniASRLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
 
 # NOTE: similar to `ParakeetEncoderSubsamplingConv2D` but for 1D directly on audio, and a replacement for `Wav2Vec2FeatureEncoder` and `Wav2Vec2FeatureProjection`
 class OmniASREncoderSubsamplingConv1D(nn.Module):
-    def __init__(self, config: OmniASREncoderConfig):
+    def __init__(self, config: OmniASRAudioConfig):
         super().__init__()
         self.conv_layers = nn.ModuleList(
             [OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(len(config.conv_dim))]
@@ -322,9 +333,9 @@ class OmniASRPreTrainedModel(ParakeetPreTrainedModel):
         raise AttributeError("Normal super call")
 
     def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
-        encoder_config = getattr(self.config, "encoder_config", self.config)
+        audio_config = getattr(self.config, "audio_config", self.config)
         lengths = input_lengths
-        for kernel_size, stride in zip(encoder_config.conv_kernel, encoder_config.conv_stride):
+        for kernel_size, stride in zip(audio_config.conv_kernel, audio_config.conv_stride):
             lengths = torch.div(lengths - kernel_size, stride, rounding_mode="floor") + 1
 
         return lengths
@@ -345,16 +356,16 @@ class OmniASRCTCGenerateOutput(ParakeetCTCGenerateOutput):
     The OmniASR speech encoder, which is a Wav2Vec2-style encoder.
     """
 )
-class OmniASREncoder(OmniASRPreTrainedModel):
-    config: OmniASREncoderConfig
-    base_model_prefix = "encoder"
+class OmniASRAudioModel(OmniASRPreTrainedModel):
+    config: OmniASRAudioConfig
+    base_model_prefix = "audio_tower"
     _no_split_modules = ["OmniASREncoderLayer"]
     _can_record_outputs = {
         "attentions": OmniASRAttention,
         "hidden_states": OmniASREncoderLayer,
     }
 
-    def __init__(self, config: OmniASREncoderConfig):
+    def __init__(self, config: OmniASRAudioConfig):
         super().__init__(config)
 
         self.gradient_checkpointing = False
@@ -426,7 +437,9 @@ class OmniASREncoder(OmniASRPreTrainedModel):
 class OmniASRForCTC(ParakeetForCTC):
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
         self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
+        del self.encoder
 
     # same as ParakeetForCTC but with `input_values` instead of `input_features` as we use audio values directly
     def forward(
@@ -461,7 +474,7 @@ class OmniASRForCTC(ParakeetForCTC):
 
         if labels is not None:
             kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.encoder(
+        encoder_outputs = self.audio_tower(
             input_values=input_values,
             padding_mask=padding_mask,
             **kwargs,
@@ -711,10 +724,10 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
 __all__ = [
     "OmniASRConfig",
     "OmniASRCTCConfig",
-    "OmniASREncoderConfig",
+    "OmniASRAudioConfig",
     "OmniASRForCTC",
     "OmniASRForConditionalGeneration",
     "OmniASRModel",
-    "OmniASREncoder",
+    "OmniASRAudioModel",
     "OmniASRPreTrainedModel",
 ]

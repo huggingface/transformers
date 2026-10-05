@@ -56,11 +56,11 @@ class OmniASRProcessor(ProcessorMixin):
             token of [`OmniASRConfig.audio_token_id`].
         conv_kernel (`list[int]`, *optional*):
             Kernel size of each convolution of the speech encoder's feature encoder, i.e.
-            [`OmniASREncoderConfig.conv_kernel`]. Needed by the LLM variant to count the frames an audio input is
+            [`OmniASRAudioConfig.conv_kernel`]. Needed by the LLM variant to count the frames an audio input is
             subsampled to, and therefore how many audio placeholders its prompt holds.
         conv_stride (`list[int]`, *optional*):
             Stride of each convolution of the speech encoder's feature encoder, i.e.
-            [`OmniASREncoderConfig.conv_stride`].
+            [`OmniASRAudioConfig.conv_stride`].
         """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
