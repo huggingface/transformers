@@ -1787,6 +1787,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             penalty_idx = cur_len - self.regulation_start
             # To support negative logits we compute the penalty of the absolute value and add to the original logit
             penalty = torch.abs(scores[:, self.eos_token_id]) * (pow(self.regulation_factor, penalty_idx) - 1)
+            penalty = penalty.masked_fill(~torch.isfinite(scores[:, self.eos_token_id]), 0.0)
             penalties[:, self.eos_token_id] = penalty
             scores_processed = scores + penalties
         return scores_processed
