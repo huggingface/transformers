@@ -294,9 +294,6 @@ SUPPORTED_TASKS = {
 
 PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
-_MIGRATION_GUIDE_URL = "https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md#pipelines"
-
-
 REMOVED_TASKS = {
     "text2text-generation": "Use the `text-generation` pipeline with a chat model instead.",
     "summarization": "Use the `text-generation` pipeline with a chat model instead.",
@@ -326,7 +323,7 @@ def _resolve_deprecated_task(task: str) -> str:
     if removed_task in REMOVED_TASKS:
         raise KeyError(
             f"The task {task} has been removed from transformers. {REMOVED_TASKS[removed_task]} See the migration"
-            f" guide for more details: {_MIGRATION_GUIDE_URL}"
+            f" guide for more details: https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md#pipelines"
         )
 
     return task
