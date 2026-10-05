@@ -115,6 +115,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
     sliding_window: int | None = 4096
     num_experts_per_tok: int = 2
     num_experts: int = 8
+    output_router_logits: bool = False
     num_shared_experts: int = 0
     shared_expert_combination_strategy: str = "average"
     expert_selection_fn: str = "softmax"

@@ -5863,6 +5863,31 @@ class ModelTesterMixin(ExportTesterMixin):
                         with torch.no_grad():
                             _ = model(**all_inputs)
 
+    def test_moe_models_record_router_logits(self):
+        """A model with sparse experts has to record `router_logits` and declare them in the output of its generative
+        heads, so that `output_router_logits=True` returns them."""
+        modeling_source = inspect.getsource(inspect.getmodule(self.all_model_classes[0]))
+        if "@use_experts_implementation" not in modeling_source:
+            self.skipTest("This model has no sparse experts.")
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            recordable_outputs = set().union(
+                *(
+                    (module._can_record_outputs or {}).keys()
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                )
+            )
+            self.assertIn("router_logits", recordable_outputs, f"{model_class.__name__} does not record them.")
+            if model_class in self.all_generative_model_classes:
+                return_type = model_class.forward.__annotations__.get("return")
+                output_fields = set().union(
+                    *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
+                )
+                self.assertIn("router_logits", output_fields, f"{model_class.__name__} does not return them.")
+
     def test_output_router_logits_from_config(self):
         """`config.output_router_logits` turns the router logits on, and an explicit forward argument wins over it.
         A head that wraps a MoE backbone has to resolve the flag against the config like the backbone does, otherwise
