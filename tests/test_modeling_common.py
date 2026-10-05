@@ -99,6 +99,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
+    require_flex_attention,
     require_kernels,
     require_non_hpu,
     require_torch,
@@ -527,7 +528,10 @@ def _test_eager_matches_sdpa_inference(
 
             # If 80% batch elements have matched results, it's fine
             if np.mean(results) < 0.8:
-                mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
+                # Keep in float to avoid any under/overflows in e.g. fp16
+                mean_relative_diff = (
+                    (logits_sdpa.float() - logits_eager.float()).abs() / (logits_eager.float().abs() + 1e-12)
+                ).mean()
                 raise ValueError(
                     f"mean relative difference for {key}: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
                     f"{rtol}"
@@ -4080,18 +4084,9 @@ class ModelTesterMixin(ExportTesterMixin):
 
         dtype = torch.bfloat16
 
-        def _expected_attn_implementations(attention_implementation: str) -> set[str]:
-            # Allow kernels fallbacks for flash attention tests.
-            requested = attention_implementation
-            base = requested.removeprefix("paged|")
-            prefix = "paged|" if requested.startswith("paged|") else ""
-
-            expected = {requested}
-            if base in FLASH_ATTN_KERNEL_FALLBACK:
-                expected.add(f"{prefix}{FLASH_ATTN_KERNEL_FALLBACK[base]}")
-            return expected
-
-        expected_attn_implementations = _expected_attn_implementations(attn_implementation)
+        expected_attn_implementations: set[str] = {attn_implementation}
+        if attn_implementation in FLASH_ATTN_KERNEL_FALLBACK:
+            expected_attn_implementations.add(FLASH_ATTN_KERNEL_FALLBACK[attn_implementation])
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4529,6 +4524,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
         return config
 
+    @require_flex_attention
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
@@ -5890,7 +5886,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
                 )
                 if "router_logits" not in output_fields:
-                    self.skipTest(f"{model_class.__name__} does not declare router_logits in its output type.")
+                    continue
 
                 model = model_class(copy.deepcopy(config)).to(device=torch_device)
                 model.eval()
@@ -5900,8 +5896,6 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 with torch.no_grad():
                     explicit = model(**inputs, output_router_logits=True)
-                    if not explicit.router_logits:
-                        self.skipTest(f"{model_class.__name__} was built without any sparse layer.")
                     self.assertFalse(model(**inputs).router_logits, "router logits returned with the flag off")
 
                     model.config.get_text_config(decoder=True).output_router_logits = True
@@ -6259,9 +6253,11 @@ class ModelTesterMixin(ExportTesterMixin):
             torch.testing.assert_close(ntk_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        # CHeck each layer type for nested RoPE configs
+        # CHeck each layer type for nested RoPE configs.
+        # Allow one float32 eps of slack, as some devices round `pow` differently
+        slack = 1 + torch.finfo(torch.float32).eps
         if not is_nested_rope:
-            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq * slack).all())
         else:
             layer_types = getattr(text_config, "_rope_type_labels", getattr(text_config, "layer_types"))
             for layer_type in layer_types:
@@ -6269,7 +6265,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     self.assertTrue(
                         (
                             getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
-                            <= getattr(original_rope, f"{layer_type}_inv_freq")
+                            <= getattr(original_rope, f"{layer_type}_inv_freq") * slack
                         ).all()
                     )
 

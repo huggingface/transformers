@@ -48,6 +48,7 @@ from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
     TransformersKwargs,
+    accepts_precomputed_kwargs,
     get_max_seqlen,
     merge_with_config_defaults,
 )
@@ -1241,6 +1242,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         ]
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
@@ -1428,6 +1430,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
             rope_deltas=self.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
 

@@ -97,12 +97,13 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
             Whether this chunk ends the streaming session. A chunk of a session ends with `chunk_right_context`
             look-ahead encoder frames that the model scores at the next step only, and that its next chunk opens
-            with. The last chunk has no next step, so every one of its frames is scored, whatever their number. Must
-            be `False` when `is_streaming=False`.
+            with. The last chunk has no next step, so every one of its frames is scored, whatever their number, and
+            its end is zero-padded as a full-utterance pass pads the end of the audio, so that it yields the last
+            frames of the utterance. Must be `False` when `is_streaming=False`.
 
         Returns:
             [`BatchFeature`]: the feature extractor outputs, `input_features` and `attention_mask`. In streaming mode
-            the trailing frames whose analysis window reaches past the chunk are dropped, so `input_features` holds
+            the trailing frames whose analysis window reaches past a chunk other than the last are dropped, so `input_features` holds
             exactly the frames of the chunk and can be passed to the model as is, and every chunk but the last also
             carries `num_lookahead_frames`, the number of its trailing look-ahead encoder frames, which puts the
             model in streaming mode.
@@ -117,7 +118,11 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         audio = make_list_of_audio(audio)
         output_kwargs = self._merge_kwargs(**kwargs)
         inputs = self.feature_extractor(
-            audio, sampling_rate=sampling_rate, center=is_first_audio_chunk, **output_kwargs["audio_kwargs"]
+            audio,
+            sampling_rate=sampling_rate,
+            center=is_first_audio_chunk,
+            is_last_audio_chunk=is_last_audio_chunk,
+            **output_kwargs["audio_kwargs"],
         )
         if is_streaming:
             num_frames = int(inputs["attention_mask"].sum(-1).max())
