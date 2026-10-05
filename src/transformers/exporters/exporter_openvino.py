@@ -92,7 +92,7 @@ class OpenVINOExporter(DynamoExporter):
     """
 
     required_packages = ["torch", "openvino"]
-    tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
+    tested_versions = {"torch": "2.13.0", "openvino": "2026.4.0"}
     export_format = ExportFormat.OPENVINO
     config_class = OpenVINOConfig
     artifact_suffix = ".xml"

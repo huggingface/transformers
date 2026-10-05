@@ -90,7 +90,7 @@ class OnnxExporter(DynamoExporter):
     artifact_suffix = ".onnx"
 
     required_packages = ["torch", "onnx", "onnxscript"]
-    tested_versions = {"torch": "2.13.0", "onnx": "1.22.0", "onnxscript": "0.7.1"}
+    tested_versions = {"torch": "2.13.0", "onnx": "1.23.0", "onnxscript": "0.7.2"}
 
     def export_artifact(
         self,
