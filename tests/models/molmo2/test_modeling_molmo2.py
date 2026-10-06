@@ -86,11 +86,12 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("image_token_id", kwargs["image_patch_id"])
         super().__init__(parent, **kwargs)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         num_patches = (self.image_size // self.patch_size) ** 2
         return floats_tensor(
             [
-                self.batch_size,
+                batch_size,
                 num_patches,
                 self.patch_size * self.patch_size * self.num_channels,
             ]
@@ -103,8 +104,8 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         input_ids[:, : self.num_image_tokens] = self.image_patch_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
-        batch_size = input_ids.shape[0]
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else input_ids.shape[0]
         num_patches = (self.image_size // self.patch_size) ** 2
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_patch_id] = 1
@@ -182,13 +183,7 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     """
 
     model_tester_class = Molmo2VisionText2TextModelTester
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        num_image_tokens = self.model_tester.num_image_tokens
-        full_pooling = self.model_tester.prepare_config_and_inputs_for_common()[1]["image_token_pooling"]
-        inputs_dict["image_token_pooling"] = full_pooling[: batch_size * num_image_tokens]
-        return config, inputs_dict
+    additional_model_inputs = ["mm_token_type_ids"]
 
     @unittest.skip(
         "The test slices every input tensor in half along dim 0, but `image_token_pooling` has no batch "
