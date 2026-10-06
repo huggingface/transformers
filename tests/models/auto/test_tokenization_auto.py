@@ -491,8 +491,7 @@ class AutoTokenizerTest(unittest.TestCase):
             existing_vocab_size = sum(1 for line in existing_vocab_lines if line.rstrip("\n"))
             with open(vocab_file_path, "w", encoding="utf-8") as f:
                 f.writelines(existing_vocab_lines)
-                for token in custom_tokens:
-                    f.write(token + "\n")
+                f.writelines(token + "\n" for token in custom_tokens)
 
             tokenizer_reloaded = AutoTokenizer.from_pretrained(tmp_dir)
 
