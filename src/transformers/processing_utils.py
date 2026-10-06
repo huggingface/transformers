@@ -600,7 +600,6 @@ class ProcessorMixin(PushToHubMixin):
     images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
     audio_kwargs: AudioKwargs
-    common_kwargs: dict[str, Any]
 
     return_mm_token_type_ids: bool = False
     return_text_replacement_offsets: bool = False

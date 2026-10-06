@@ -1853,6 +1853,9 @@ class ProcessorTesterMixin:
                 self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
 
     def test_no_redundant_default_kwargs(self):
+        """Tests that a processor doesn't define redundant default kwargs for a modality if the subprocessor
+        already has the same default.
+        """
         processor = self.get_processor()
         processor_class = processor.__class__
         processor_class_name = processor_class.__name__

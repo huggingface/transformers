@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     Qwen2_5OmniProcessor,
@@ -32,7 +31,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -91,53 +90,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """This function prepares a list of numpy audios."""
         audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
         return audio_inputs
-
-    @parameterized.expand(
-        [
-            ("text",),
-            ("images",),
-            ("videos",),
-            ("audio",),
-        ]
-    )
-    def test_subprocessor_defaults(self, modality):
-        """
-        Tests that sub-processor is called correctly when passing each modality input to the processor.
-        This test verifies that processor(single_modality_data) produces the same output as subprocessor(single_modality_data).
-        """
-        parameterized_config = MODALITY_TEST_SPECS[modality]
-        attributes = self.processor_class.get_attributes()
-        component_key = self.get_subprocessor_name(modality, attributes)
-        subprocessor = self.get_component(component_key)
-
-        # Get all other required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components, **self.prepare_processor_dict())
-        modality_input = self._prepare_modality_input(modality)
-
-        # merge processor defaults when calling a subprocessor
-        kwargs = parameterized_config["call_time_kwargs"]
-        kwargs["return_tensors"] = "pt"
-        merged_kwargs = processor._merge_kwargs(
-            processor.valid_processor_kwargs,
-            tokenizer_init_kwargs=processor.tokenizer.init_kwargs if hasattr(processor, "tokenizer") else {},
-            **kwargs,
-        )
-        kwargs = merged_kwargs[f"{modality}_kwargs"]
-
-        input_subproc = subprocessor(modality_input, **kwargs)
-        try:
-            input_processor = processor(**{modality: modality_input, **kwargs})
-        except Exception:
-            input_processor = {}
-
-        # Verify outputs match
-        for key in input_subproc:
-            if input_processor and key in processor.model_input_names:
-                torch.testing.assert_close(input_subproc[key], input_processor[key])
 
     def test_post_process_multimodal_output_batched_audio(self):
         # Batched generation returns one waveform per sample, each trimmed to its own length.
