@@ -932,7 +932,8 @@ class AudioOps:
 
     def pad(self, x, left, right, *, axis=-1, mode="constant", value=0.0):
         """Pad `axis` by `left` / `right` samples. `mode`: ``"constant"`` (with `value`),
-        ``"reflect"`` (mirror without repeating the edge), ``"replicate"`` (repeat the edge)."""
+        ``"reflect"`` (mirror without repeating the edge), ``"replicate"`` (repeat the edge).
+        `reflect` requires `left` and `right` each at most `len - 1`."""
         raise NotImplementedError
 
     def masked_fill(self, x, mask, value):
@@ -983,7 +984,9 @@ class AudioOps:
 
     def frame(self, x, frame_length, hop):
         """Overlapping frames of the last axis: ``(..., n_frames, frame_length)`` with
-        ``n_frames = 1 + (len - frame_length) // hop``. May return a view."""
+        ``n_frames = 1 + (len - frame_length) // hop``. May return a view.
+        Read-only: callers multiply by a window into a new array and must not write into the frames.
+        `x` must have at least `frame_length` samples."""
         raise NotImplementedError
 
     def rfft(self, x, n):
@@ -999,7 +1002,8 @@ class AudioOps:
 
     def randn(self, shape, *, seed, like=None):
         """Standard normal samples of `shape`, in `like`'s dtype and on its device, from a stream
-        seeded with the integer `seed`. Streams differ between backends; only moments match."""
+        seeded with the integer `seed`. Streams differ between backends; only moments match.
+        float32 when `like` is `None`; `like` must be a float array."""
         raise NotImplementedError
 
 
@@ -1027,11 +1031,15 @@ def missing_ops(backend_cls, names) -> list[str]:
 
 def register_audio_backend(name: str, backend_cls: type[AudioOps]) -> None:
     """Make `backend_cls` loadable as ``backend=name``. Refused unless every core op is implemented."""
+    if name in _AUDIO_BACKENDS:
+        raise ValueError(f"Audio backend {name!r} is already registered.")
     missing = missing_ops(backend_cls, CORE_OPS)
     if missing:
         raise TypeError(
             f"Cannot register audio backend {name!r}: {backend_cls.__name__} is missing core ops {missing}."
         )
+    if backend_cls.name and backend_cls.name != name:
+        raise ValueError(f"{backend_cls.__name__} is named {backend_cls.name!r}, cannot register it as {name!r}.")
     backend_cls.name = name
     _AUDIO_BACKENDS[name] = backend_cls
 
@@ -1046,11 +1054,16 @@ def get_audio_backend(name: str) -> type[AudioOps]:
 def register_audio_op(backend: str, name: str):
     """Attach `fn` as op `name` on the registered backend `backend`, for code outside the library
     (remote-code processors, outside backends adding an optional op). In-library ops are plain
-    methods in this module. Refuses to replace an existing op."""
+    methods in this module. Refuses to replace an existing op.
+
+    The function receives no `self`: it is attached as a staticmethod, so it cannot call the
+    backend's other ops. An op attached to a shipped class is inherited by every subclass of it."""
 
     def decorator(fn):
         backend_cls = get_audio_backend(backend)
-        if callable(getattr(backend_cls, name, None)):
+        if name.startswith("_"):
+            raise ValueError(f"{name!r} is not a valid op name.")
+        if hasattr(backend_cls, name):
             raise ValueError(f"Op {name!r} already exists on audio backend {backend!r}.")
         setattr(backend_cls, name, staticmethod(fn))
         return fn
@@ -1099,6 +1112,8 @@ class NumpyOps(AudioOps):
         width[axis] = (left, right)
         if mode == "constant":
             return np.pad(x, width, mode="constant", constant_values=value)
+        if mode not in _NUMPY_PAD_MODES:
+            raise ValueError(f"Unknown pad mode {mode!r}.")
         return np.pad(x, width, mode=_NUMPY_PAD_MODES[mode])
 
     def masked_fill(self, x, mask, value):
@@ -1143,14 +1158,12 @@ class NumpyOps(AudioOps):
     # ── signal ─────────────────────────────────────────────────────────────────────────────────
 
     def frame(self, x, frame_length, hop):
-        x = np.ascontiguousarray(x)
-        n_frames = 1 + (x.shape[-1] - frame_length) // hop
-        strides = x.strides[:-1] + (x.strides[-1] * hop, x.strides[-1])
-        shape = x.shape[:-1] + (n_frames, frame_length)
-        return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
+        return np.lib.stride_tricks.sliding_window_view(x, frame_length, axis=-1)[..., ::hop, :]
 
     def rfft(self, x, n):
-        # numpy promotes a float32 FFT to complex128; the contract keeps the input's precision.
+        # The contract keeps the input's precision; numpy 1.x computes a float32 FFT in float64 and
+        # returns complex128, numpy 2 returns complex64 directly. The reference pins the *dtype*, and
+        # values within the conformance tolerance.
         out = np.fft.rfft(x, n=n)
         return out.astype(np.complex64, copy=False) if x.dtype == np.float32 else out
 
