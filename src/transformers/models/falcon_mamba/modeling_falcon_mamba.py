@@ -387,7 +387,12 @@ class FalconMambaMixer(nn.Module):
     ):
         seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is None:
+            conv_state, recurrent_state = None, None
+        else:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -422,12 +427,8 @@ class FalconMambaMixer(nn.Module):
 
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
-        if use_precomputed_states:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
-
         # 2. Convolution sequence transformation
-        if use_precomputed_states and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -476,7 +477,7 @@ class FalconMambaMixer(nn.Module):
         time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
 
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             scan_output = mamba_selective_state_update(
                 recurrent_state,
                 hidden_states_B_C.transpose(1, 2)[..., 0],
