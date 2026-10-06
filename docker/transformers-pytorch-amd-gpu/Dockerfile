@@ -48,10 +48,19 @@ RUN python3 -m pip uninstall -y kernels
 # Use the CPU build: the PyPI wheel links its image library against CUDA (libnvrtc.so.13) and fails to import on ROCm.
 RUN python3 -m pip install --no-cache-dir --no-deps "torchcodec==0.17.0+cpu" --index-url https://download.pytorch.org/whl/cpu
 
+# `kenlm` (wav2vec2 + LM tests) is only pulled by the `audio` extra for Python < 3.13, and its published sources
+# ship a Cython-generated `kenlm.cpp` that does not compile on 3.14: regenerate it with a recent Cython.
+RUN python3 -m pip install --no-cache-dir cython && \
+    git clone --depth 1 https://github.com/kpu/kenlm /tmp/kenlm && \
+    cd /tmp/kenlm && \
+    cython --cplus python/kenlm.pyx -o python/kenlm.cpp && \
+    python3 -m pip install --no-cache-dir --no-build-isolation . && \
+    cd / && rm -rf /tmp/kenlm
+
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
 # timm is required for many vision models tests
 RUN python3 -m pip install --no-cache-dir timm
 
 # Fail the build early if the dependency installs replaced the ROCm torch or broke flash-attn.
-RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
+RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, kenlm, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
