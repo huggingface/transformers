@@ -81,13 +81,7 @@ class SeamlessM4tAudioProcessorMixin:
 
     def _normalize_utterances(self, features, frame_counts):
         """Zero-mean, unit-variance each clip over its own frames (unbiased variance, `1e-7` inside the root)."""
-        # float64 moments, rounded once to the log stage's float32: independent of the batch layout and of
-        # the reduction order
-        features = self._astype(features, "float64")
-        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float64")[:, None, None]
-        valid = self._arange(features.shape[1], like=features)[None, :, None] < counts
-        mean = (features * valid).sum(axis=1)[:, None, :] / counts
-        variance = (((features - mean) * valid) ** 2).sum(axis=1)[:, None, :] / (counts - 1)
+        features, mean, variance = self._frame_moments(features, frame_counts, ddof=1)
         return self._astype((features - mean) / self._sqrt(variance + 1e-7), "float32")
 
     def _padded_frame_count(self, padded_length, spectrogram_config, *, stride, **kwargs) -> int:

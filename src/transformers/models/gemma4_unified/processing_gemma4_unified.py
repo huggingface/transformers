@@ -223,7 +223,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         waveform frames directly through RMSNorm → Linear with **no downsampling**.
         So the number of output soft tokens equals the number of valid input frames.
         """
-        mask = audio_inputs["input_features_mask"][audio_idx]
+        mask = audio_inputs["audio_features_mask"][audio_idx]
         return f"{self.boa_token}{self.audio_token * int(mask.sum())}{self.eoa_token}"
 
     def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):

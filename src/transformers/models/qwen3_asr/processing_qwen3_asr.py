@@ -23,7 +23,7 @@ from ...audio_utils import (
     prepare_language_inputs,
 )
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
@@ -328,7 +328,18 @@ def _detect_and_fix_repetitions(text, threshold=20):
     return text
 
 
+class Qwen3ASRAudioKwargs(AudioKwargs, total=False):
+    """
+    n_window (`int`, *optional*, defaults to 50):
+        Attention window of the audio encoder, in feature frames. Used by the processor to compute how many
+        audio tokens each clip expands to. Should match `config.n_window`.
+    """
+
+    n_window: int | None
+
+
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: Qwen3ASRAudioKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,

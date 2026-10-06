@@ -342,6 +342,19 @@ class BaseAudioProcessor(AudioProcessingMixin):
         valid = (self._arange(features.shape[1], like=features)[None, :] < counts)[..., None]
         return features * valid + padding_value * ~valid
 
+    def _frame_moments(self, features, frame_counts, *, ddof):
+        """Float64 mean and variance of each clip over its own frames, on the time axis 1 of the padded batch.
+
+        Returns `(features, mean, variance)`, all float64, for per-clip normalization rounded once by the caller.
+        Accumulating in float64 makes the result independent of the batch layout and of the reduction order.
+        """
+        features = self._astype(features, "float64")
+        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float64")[:, None, None]
+        valid = self._arange(features.shape[1], like=features)[None, :, None] < counts
+        mean = (features * valid).sum(axis=1)[:, None, :] / counts
+        variance = (((features - mean) * valid) ** 2).sum(axis=1)[:, None, :] / (counts - ddof)
+        return features, mean, variance
+
     def _standardize_features(self, features, frame_counts, eps):
         """Zero-mean, unit-variance each utterance over its first `frame_counts` frames; padded frames come out zero.
 

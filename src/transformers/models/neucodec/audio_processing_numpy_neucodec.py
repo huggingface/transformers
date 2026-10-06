@@ -18,15 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_neucodec import NeuCodecAudioProcessorMixin
 
 
 class NeuCodecAudioProcessorNumpy(NeuCodecAudioProcessorMixin, NumpyAudioBackend):
-    def _standardize_frames(self, features):
-        return (features - features.mean(0)) / np.sqrt(features.var(0, ddof=1) + 1e-7)
+    pass
 
 
 __all__ = ["NeuCodecAudioProcessorNumpy"]

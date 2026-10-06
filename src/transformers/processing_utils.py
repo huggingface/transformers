@@ -1674,32 +1674,12 @@ class ProcessorMixin(PushToHubMixin):
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
-            # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
-            # In those cases, we don’t declare a `ModalityKwargs` attribute in the TypedDict.
-            # Instead, we dynamically obtain the kwargs from the preprocessor and merge them
-            # with the general kwargs set. This ensures consistency between preprocessor and
-            # processor classes, and helps prevent accidental mismatches.
-            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
-            if modality in map_preprocessor_kwargs:
-                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-                preprocessor_valid_kwargs = (
-                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
-                )
-                modality_valid_kwargs.update(
-                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
-                )
-            # update defaults with arguments from tokenizer init
-            for modality_key in modality_valid_kwargs:
-                # init with tokenizer init kwargs if necessary
-                if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
-                    value = (
-                        getattr(self.tokenizer, modality_key)
-                        if hasattr(self.tokenizer, modality_key)
-                        else tokenizer_init_kwargs[modality_key]
-                    )
-                    default_kwargs[modality][modality_key] = value
-        # now defaults kwargs are updated with the tokenizers defaults.
-        # pass defaults to output dictionary
+
+        # The tokenizer's init kwargs are text defaults
+        if tokenizer_init_kwargs is not None:
+            for key in ModelProcessorKwargs.__annotations__["text_kwargs"].__annotations__:
+                if key in tokenizer_init_kwargs:
+                    default_kwargs["text_kwargs"][key] = getattr(self.tokenizer, key, tokenizer_init_kwargs[key])
         output_kwargs.update(default_kwargs)
 
         # For `common_kwargs` just update all modality-specific kwargs with same key/values
@@ -1760,6 +1740,23 @@ class ProcessorMixin(PushToHubMixin):
                     logger.warning_once(
                         f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                     )
+
+        # `return_attention_mask` was an audio option until audio processors renamed it `return_padding_mask`.
+        # Accept it from every route it could arrive by -- class defaults, `audio_kwargs`, or a flat kwarg, which
+        # used to reach audio and text alike -- rather than rejecting it below. Removal target: v5.15.
+        if getattr(self, map_preprocessor_kwargs["audio_kwargs"], None) is not None:
+            audio_kwargs = output_kwargs["audio_kwargs"]
+            legacy = audio_kwargs.pop("return_attention_mask", "__empty__")
+            if legacy == "__empty__" and "return_attention_mask" in non_modality_kwargs:
+                legacy = kwargs["return_attention_mask"]
+            if legacy != "__empty__":
+                warnings.warn(
+                    "`return_attention_mask` is deprecated for audio and will be removed in transformers v5.15. "
+                    "Use `return_padding_mask` instead.",
+                    FutureWarning,
+                    stacklevel=3,
+                )
+                audio_kwargs.setdefault("return_padding_mask", legacy)
 
         for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
             if key in map_preprocessor_kwargs:

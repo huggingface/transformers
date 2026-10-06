@@ -22,7 +22,7 @@
 from tokenizers.decoders import DecodeStream
 
 from ...audio_utils import AudioInput, make_list_of_audio
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
@@ -35,7 +35,18 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+class Nemotron3_5AsrAudioKwargs(AudioKwargs, total=False):
+    """
+    subsampling_factor (`int`, *optional*, defaults to 8):
+        Ratio between audio feature frames and encoder output frames. Used by the processor to convert
+        encoder frame indices to timestamps; it does not change the audio features.
+    """
+
+    subsampling_factor: int | None
+
+
 class Nemotron3_5AsrProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: Nemotron3_5AsrAudioKwargs
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -287,6 +298,8 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
             output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
+        # A processor-level option: it converts encoder frames to timestamps, not audio to features.
+        output_kwargs["audio_kwargs"].pop("subsampling_factor", None)
         if audio is not None:
             # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
             inputs = self.audio_processor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])

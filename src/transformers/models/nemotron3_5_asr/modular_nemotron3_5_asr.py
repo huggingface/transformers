@@ -283,6 +283,8 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
             # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
             output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
+        # A processor-level option: it converts encoder frames to timestamps, not audio to features.
+        output_kwargs["audio_kwargs"].pop("subsampling_factor", None)
         if audio is not None:
             # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
             inputs = self.audio_processor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])

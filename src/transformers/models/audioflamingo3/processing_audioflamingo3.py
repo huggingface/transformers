@@ -35,6 +35,7 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
+            "padding_side": "left",
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -43,7 +44,6 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {
             "return_tensors": "pt",
-            "padding_side": "left",
         },
     }
 

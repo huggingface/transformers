@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
@@ -140,13 +139,28 @@ class Xcodec2AudioProcessorMixin:
         if return_padding_mask:
             output["audio_values_mask"] = self._get_mask(audio_ranges, audio_values.shape[-1])
 
-        features = []
-        for i, (start, end) in enumerate(audio_ranges):
-            waveform = self._select_semantic_waveform(audio[i], audio_values[i], start, end, hop_length=hop_length)
-            waveform = self._pad_semantic_waveform(waveform, hop_length=hop_length)
-            features.append(
-                self._standardize_frames(self.spectrogram(waveform, spectrogram_config=spectrogram_config, **kwargs))
+        semantic = [
+            self._pad_semantic_waveform(
+                self._select_semantic_waveform(audio[i], audio_values[i], start, end, hop_length=hop_length),
+                hop_length=hop_length,
             )
+            for i, (start, end) in enumerate(audio_ranges)
+        ]
+        # One fbank over the zero-padded batch: every Kaldi step is frame-local, so each clip's leading valid
+        # frames are its legacy per-clip frames, up to the mel GEMM's reduction order (ADR 0001, 2026-09-30).
+        semantic, semantic_ranges = self.pad(
+            semantic, "longest", None, False, None, padding_side="right", padding_value=0.0
+        )
+        batch = self.spectrogram(
+            self._stack_waveforms(semantic),
+            spectrogram_config=spectrogram_config,
+            audio_ranges=semantic_ranges,
+            **kwargs,
+        )
+        frame_counts = self._valid_frame_counts(self._lengths_from_ranges(semantic_ranges), spectrogram_config)
+        batch, mean, variance = self._frame_moments(batch, frame_counts, ddof=1)
+        batch = self._astype((batch - mean) / self._sqrt(variance + 1e-7), "float32")
+        features = [batch[i, : int(count)] for i, count in enumerate(frame_counts)]
 
         features, frame_ranges = self._pad_features(
             features,
@@ -169,8 +183,7 @@ class Xcodec2AudioProcessorMixin:
 
 
 class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):
-    def _standardize_frames(self, features):
-        return (features - features.mean(0)) / torch.sqrt(features.var(0, unbiased=True) + 1e-7)
+    pass
 
 
 __all__ = ["Xcodec2AudioProcessor"]

@@ -25,10 +25,20 @@ import numpy as np
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
+
+
+class Qwen3OmniMoeAudioKwargs(AudioKwargs, total=False):
+    """
+    n_window (`int`, *optional*, defaults to 50):
+        Attention window of the audio encoder, in feature frames. Used by the processor to compute how many
+        audio tokens each clip expands to; it does not change the audio features. Should match the model config.
+    """
+
+    n_window: int | None
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -103,6 +113,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
             "return_padding_mask": True,
         },
     }
+    audio_kwargs: Qwen3OmniMoeAudioKwargs
 
 
 def _get_feat_extract_output_lengths(input_lengths, n_window=50):
@@ -385,16 +396,15 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        audio_processor_input_names = self.audio_processor.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         video_processor_input_names = self.video_processor.model_input_names
+        # The audio processor's outputs are renamed in `__call__`
         return list(
             dict.fromkeys(
                 tokenizer_input_names
-                + audio_processor_input_names
                 + image_processor_input_names
                 + video_processor_input_names
-                + ["feature_attention_mask"]
+                + ["input_features", "feature_attention_mask"]
                 + ["video_second_per_grid"]
             )
         )

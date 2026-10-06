@@ -49,7 +49,7 @@ class ClvpProcessor(ProcessorMixin):
         # The CLVP model relies on the *text* attention mask. When both text and audio are provided, prevent the
         # feature extractor's audio attention mask from overriding the tokenizer's attention mask in the merged output.
         if audio is not None and text is not None:
-            merged_kwargs["audio_kwargs"]["return_attention_mask"] = False
+            merged_kwargs["audio_kwargs"]["return_padding_mask"] = False
 
         return super().__call__(*args, text=text, audio=audio, **merged_kwargs)
 

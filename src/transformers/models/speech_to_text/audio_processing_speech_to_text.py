@@ -94,16 +94,11 @@ class SpeechToTextAudioProcessorMixin:
 
     def _utterance_cmvn(self, features, frame_counts, *, normalize_means, normalize_vars):
         """Cepstral mean and variance normalization of each clip over its own frames (biased std)."""
-        # float64 moments, rounded once to the log stage's float32: independent of the batch layout and of
-        # the reduction order
-        features = self._astype(features, "float64")
-        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float64")[:, None, None]
-        valid = self._arange(features.shape[1], like=features)[None, :, None] < counts
+        features, mean, variance = self._frame_moments(features, frame_counts, ddof=0)
         if normalize_means:
-            features = features - (features * valid).sum(axis=1)[:, None, :] / counts
+            features = features - mean
         if normalize_vars:
-            mean = (features * valid).sum(axis=1)[:, None, :] / counts
-            features = features / self._sqrt((((features - mean) * valid) ** 2).sum(axis=1)[:, None, :] / counts)
+            features = features / self._sqrt(variance)
         return self._astype(features, "float32")
 
 

@@ -43,7 +43,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
@@ -2614,7 +2614,18 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         return thinker_result.sequences, talker_wavs
 
 
+class Qwen3OmniMoeAudioKwargs(AudioKwargs, total=False):
+    """
+    n_window (`int`, *optional*, defaults to 50):
+        Attention window of the audio encoder, in feature frames. Used by the processor to compute how many
+        audio tokens each clip expands to; it does not change the audio features. Should match the model config.
+    """
+
+    n_window: int | None
+
+
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
+    audio_kwargs: Qwen3OmniMoeAudioKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
