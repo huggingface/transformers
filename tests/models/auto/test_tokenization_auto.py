@@ -469,6 +469,7 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertEqual(tokenizer2.vocab_size, 12)
 
+    @require_tokenizers
     def test_auto_tokenizer_custom_vocab_txt_not_overridden_by_tokenizer_json(self):
         """Regression test for #48967.
 
@@ -485,11 +486,10 @@ class AutoTokenizerTest(unittest.TestCase):
             base_tokenizer.save_pretrained(tmp_dir)
 
             custom_tokens = [f"[CUSTOM_{i}]" for i in range(5)]
+            sorted_vocab = sorted(base_tokenizer.get_vocab().items(), key=lambda x: x[1])
             vocab_file_path = os.path.join(tmp_dir, "vocab.txt")
-            with open(vocab_file_path, encoding="utf-8") as f:
-                existing_vocab_lines = f.readlines()
             with open(vocab_file_path, "w", encoding="utf-8") as f:
-                f.writelines(existing_vocab_lines)
+                f.writelines(token + "\n" for token, _ in sorted_vocab)
                 f.writelines(token + "\n" for token in custom_tokens)
 
             tokenizer_reloaded = AutoTokenizer.from_pretrained(tmp_dir)
