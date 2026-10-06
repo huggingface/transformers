@@ -23,15 +23,13 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Python comes from uv, at the version in the repo's `.python-version` (passed as a build arg by the build
-# workflow), instead of Ubuntu 22.04's 3.10. `python`, `python3` and `pip` all resolve to the venv.
+# Python comes from uv, at the version in the repo's `.python-version` (passed as the `PYTHON_VERSION` build arg by the
+# build workflow), instead of Ubuntu 22.04's 3.10.
 ARG PYTHON_VERSION
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
-ENV VIRTUAL_ENV="/opt/venv"
-ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
-RUN uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv" UV_PYTHON_INSTALL_DIR="/opt/uv/python"
+ENV PATH="$VIRTUAL_ENV/bin:/root/.local/bin:$PATH"
+COPY --from=gpu-common install-python.sh /opt/ci/
+RUN sh /opt/ci/install-python.sh "$PYTHON_VERSION"
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip ninja "pydantic>=2.0.0"
 RUN python3 -m pip uninstall -y apex torch torchvision torchaudio
@@ -49,14 +47,10 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 
 RUN python3 -m pip install --no-cache-dir ./transformers[accelerate,testing,sentencepiece,sklearn]
 
-# When installing in editable mode, `transformers` is not recognized as a package.
-# this line must be added in order for python to be aware of transformers.
-RUN cd transformers && python3 setup.py develop
+COPY --from=gpu-common finish-transformers-install.sh /opt/ci/
+RUN sh /opt/ci/finish-transformers-install.sh
 
 RUN python3 -c "from deepspeed.launcher.runner import main"
 
 # Remove nvml as it is not compatible with ROCm
 RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
-
-# `kernels` may causes many failing tests
-RUN python3 -m pip uninstall -y kernels
