@@ -44,7 +44,7 @@ jobs:
 
       - name: Notify
         if: ${{ env.NEW_MODEL != ''}}
-        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
