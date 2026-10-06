@@ -138,6 +138,7 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
 config_class_to_model_tester_map = {
     "Qwen3_5Config": "Qwen3_5VisionText2TextModelTester",
     "Qwen3_5MoeConfig": "Qwen3_5MoeVisionText2TextModelTester",
+    "Qwen4ExpConfig": "Qwen4ExpVisionText2TextModelTester",
     "InstructBlipConfig": "InstructBlipForConditionalGenerationDecoderOnlyModelTester",
     "InstructBlipVideoConfig": "InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester",
     "MllamaConfig": "MllamaVisionText2TextModelTester",
@@ -168,6 +169,14 @@ config_class_to_model_tester_map = {
     "Gemma4VisionConfig": "Gemma4Vision2TextModelTester",
     "Qwen3_5VisionConfig": "Qwen3_5VisionText2TextModelTester",
     "Qwen3_5MoeVisionConfig": "Qwen3_5MoeVisionText2TextModelTester",
+}
+
+# Maps config class names to the attribute name of their text sub-config, for models where
+# get_text_config() does not resolve correctly (e.g. the text config is stored under a
+# non-standard attribute name like `encoder_config` rather than `text_config`/`decoder`).
+# Used in the vocab_size propagation loop to keep validate_architecture happy.
+config_class_to_text_sub_config_attr = {
+    "GraniteSpeech5CTCConfig": "encoder_config",  # encoder_config holds the CTC text config
 }
 
 
@@ -210,10 +219,14 @@ configs_requiring_too_exotic_dependency = {
 # These are excluded from the "no processor found" error checks.
 CONFIGS_WITHOUT_PROCESSOR = {
     "AutoformerConfig",
+    "MuseGlimmerAssistantConfig",  # embedding-input sub-model; checkpoint is private
     "PatchTSMixerConfig",
     "PatchTSTConfig",
     "PI0Config",
     "PPLCNetV3Config",
+    "PPLCNetV4Config",  # vision backbone; checkpoint not yet released
+    "Qwen4ExpTextConfig",  # sub-config of Qwen4ExpConfig; not used as a standalone model
+    "Qwen4ExpVisionConfig",  # sub-config of Qwen4ExpConfig; not used as a standalone model
     "TimesFmConfig",
     "TimesFm2_5Config",
     "TimmBackboneConfig",
@@ -221,6 +234,13 @@ CONFIGS_WITHOUT_PROCESSOR = {
     "VitDetConfig",
 }
 
+
+# Configs whose Hub checkpoint has not yet been publicly released.
+# Processor building is skipped; tiny models are still created from default config values.
+UNRELEASED_CHECKPOINTS = {
+    "MiniCPMV4_7Config",       # openbmb/MiniCPM-V-4.7 not yet released
+    "MiniCPMV4_7VisionConfig",  # sub-config of MiniCPMV4_7Config; same unreleased checkpoint
+}
 
 # Checkpoints for some configs are only available on hub PRs or in subfolders.
 # TODO: a better long-term handle for revisions and subfolders.
@@ -232,6 +252,7 @@ CHECKPOINT_REVISIONS = {
     "VideoPrismConfig": "refs/pr/2",  # google/videoprism-lvt-base-f16r288
     "VideoPrismVisionConfig": "refs/pr/4",  # google/videoprism-base-f16r288
 }
+
 
 CHECKPOINT_SUBFOLDERS = {
     "GlmImageConfig": "processor",
@@ -1582,7 +1603,7 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
         fill_result_with_error(result, error, trace, models_to_create)
 
     if len(result["processor"]) == 0:
-        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR:
+        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR and config_class.__name__ not in UNRELEASED_CHECKPOINTS:
             error = f"No processor could be built for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
@@ -1618,7 +1639,7 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
     #     p.save_pretrained(processor_output_folder)
 
     if len(processors) == 0:
-        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR:
+        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR and config_class.__name__ not in UNRELEASED_CHECKPOINTS:
             error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
@@ -1658,6 +1679,37 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
             # `save_pretrained -> from_pretrained` work.
             if hasattr(tiny_config, "text_config_dict"):
                 tiny_config.text_config_dict[k] = v
+        # Also propagate to the sub-config returned by get_text_config() when it differs from
+        # `text_config` (e.g. CanaryConfig.get_text_config() returns decoder_config, and
+        # GraniteSpeech5CTCConfig.get_text_config() returns encoder_config). This keeps
+        # validate_architecture happy when vocab_size is overridden from the tokenizer.
+        # Skip if get_text_config() raises (e.g. multiple valid text sub-configs → ambiguous).
+        try:
+            _text_conf = tiny_config.get_text_config()
+        except ValueError:
+            _text_conf = tiny_config
+        if (
+            _text_conf is not tiny_config
+            and _text_conf is not getattr(tiny_config, "text_config", None)
+            and hasattr(_text_conf, k)
+        ):
+            setattr(_text_conf, k, v)
+        # For encoder-decoder models where the encoder itself has a nested text_config
+        # (e.g. T5Gemma2: encoder.text_config.vocab_size must equal decoder.vocab_size),
+        # propagate to that nested config too.
+        _enc = getattr(tiny_config, "encoder", None)
+        if _enc is not None:
+            _enc_text = getattr(_enc, "text_config", None)
+            if _enc_text is not None and hasattr(_enc_text, k):
+                setattr(_enc_text, k, v)
+        # For models where get_text_config() does not resolve to the right sub-config
+        # (e.g. GraniteSpeech5CTCConfig stores its text config under `encoder_config`),
+        # propagate using the explicit attribute name from config_class_to_text_sub_config_attr.
+        _text_attr = config_class_to_text_sub_config_attr.get(config_class.__name__)
+        if _text_attr is not None:
+            _explicit_text_conf = getattr(tiny_config, _text_attr, None)
+            if _explicit_text_conf is not None and hasattr(_explicit_text_conf, k):
+                setattr(_explicit_text_conf, k, v)
 
     if result["warnings"]:
         logger.warning(result["warnings"][0][0])
