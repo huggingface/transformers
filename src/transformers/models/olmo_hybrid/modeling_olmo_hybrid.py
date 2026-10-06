@@ -643,7 +643,11 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # Reads "we have cached conv/recurrent state to continue from". Single-token vs multi-token
         # branching lives inside `ShortConvolution` and in the recurrent-vs-chunk kernel dispatch
         # below, each of which gates on `seq_len == 1` locally.
-        use_precomputed_states = use_cache and cache_params.has_previous_state()
+        if use_cache:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         mixed_qkv = torch.cat(
             [
@@ -654,12 +658,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             dim=-1,
         ).transpose(1, 2)
 
-        if use_precomputed_states:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
-
         # Single token decode path
-        if use_precomputed_states and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -707,7 +707,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         g = -self.A_log.float().exp() * F.softplus(self.a_proj(hidden_states).float() + self.dt_bias)
 
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             output, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 q,
                 k,
@@ -727,7 +727,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 v,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
