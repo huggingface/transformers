@@ -30,7 +30,7 @@ from pathlib import Path
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
 from get_test_info import get_model_to_tester_mapping, get_test_module, get_tester_classes_for_model
-from huggingface_hub import create_repo, hf_api, upload_folder
+from huggingface_hub import create_repo, hf_api, hf_hub_download, upload_folder
 
 from transformers import (
     CONFIG_MAPPING,
@@ -1882,11 +1882,16 @@ def build_simple_report(results):
     return text, failed_text
 
 
-def update_tiny_model_summary_file(report_path):
+def update_tiny_model_summary_file(report_path, hub_summary_repo=None):
     with open(os.path.join(report_path, "tiny_model_summary.json"), encoding="utf-8") as fp:
         new_data = json.load(fp)
-    with open("tests/utils/tiny_model_summary.json", encoding="utf-8") as fp:
-        data = json.load(fp)
+    if hub_summary_repo is not None:
+        existing_path = hf_hub_download(hub_summary_repo, "tiny_model_summary.json")
+        with open(existing_path, encoding="utf-8") as fp:
+            data = json.load(fp)
+    else:
+        with open("tests/utils/tiny_model_summary.json", encoding="utf-8") as fp:
+            data = json.load(fp)
     for key, value in new_data.items():
         if key not in data:
             data[key] = value
@@ -1919,6 +1924,7 @@ def create_tiny_models(
     organization,
     token,
     num_workers=1,
+    hub_summary_repo=None,
 ):
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
@@ -2024,7 +2030,7 @@ def create_tiny_models(
     with open(os.path.join(report_path, "simple_failed_report.txt"), "w", encoding="utf-8") as fp:
         fp.write(failed_report)
 
-    update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"))
+    update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"), hub_summary_repo=hub_summary_repo)
 
 
 if __name__ == "__main__":
@@ -2065,6 +2071,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--token", default=None, type=str, help="A valid authentication token for HuggingFace Hub with write access."
     )
+    parser.add_argument(
+        "--hub_summary_repo",
+        default=None,
+        type=str,
+        help="Hub repo ID holding tiny_model_summary.json (e.g. 'hf-tiny-v2/tiny-model-summary'). "
+        "When set, the updated summary is merged against the Hub file instead of tests/utils/tiny_model_summary.json.",
+    )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
     parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
 
@@ -2083,4 +2096,5 @@ if __name__ == "__main__":
         args.organization,
         args.token,
         args.num_workers,
+        hub_summary_repo=args.hub_summary_repo,
     )

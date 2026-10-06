@@ -13,10 +13,9 @@
 # limitations under the License.
 """A script running `create_dummy_models.py` with a pre-defined set of arguments.
 
-This file is intended to be used in a CI workflow file without the need of specifying arguments. It creates and uploads
-tiny models for all model classes (if their tiny versions are not on the Hub yet), as well as produces an updated
-version of `tests/utils/tiny_model_summary.json`. That updated file should be merged into the `main` branch of
-`transformers` so the pipeline testing will use the latest created/updated tiny models.
+This file is intended to be used in a CI workflow file. It creates and uploads tiny models for all model classes whose
+tiny versions are not yet present in the Hub summary repo (specified via --hub_summary_repo). The updated summary is
+written to `tiny_models/reports/updated_tiny_model_summary.json` and captured as a CI artifact.
 """
 
 import argparse
@@ -26,7 +25,7 @@ import os
 import time
 
 from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
 
 import transformers
 from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer, logging
@@ -56,8 +55,9 @@ def get_all_model_names():
     return sorted(model_names)
 
 
-def get_tiny_model_names_from_repo():
-    with open("tests/utils/tiny_model_summary.json", encoding="utf-8") as fp:
+def get_tiny_model_names_from_hub(hub_summary_repo, token=None):
+    path = hf_hub_download(hub_summary_repo, "tiny_model_summary.json", token=token)
+    with open(path, encoding="utf-8") as fp:
         tiny_model_info = json.load(fp)
     tiny_models_names = set()
     for model_base_name in tiny_model_info:
@@ -147,27 +147,36 @@ def get_tiny_model_summary_from_hub(output_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
+    parser.add_argument(
+        "--organization",
+        required=True,
+        type=str,
+        help="The organization on the Hub to which the tiny models will be uploaded.",
+    )
+    parser.add_argument(
+        "--hub_summary_repo",
+        required=True,
+        type=str,
+        help="Hub repo ID (e.g. 'hf-tiny-v2/tiny-model-summary') holding tiny_model_summary.json. "
+        "Used to determine which models already exist and should be skipped.",
+    )
     args = parser.parse_args()
 
     # This has to be `spawn` to avoid hanging forever!
     multiprocessing.set_start_method("spawn")
 
-    output_path = "tiny_models"
-    all = True
-    model_types = None
-    models_to_skip = get_tiny_model_names_from_repo()
-    no_check = True
-    upload = True
-    organization = "hf-internal-testing"
+    token = os.environ.get("TOKEN", None)
+    models_to_skip = get_tiny_model_names_from_hub(args.hub_summary_repo, token=token)
 
     create_tiny_models(
-        output_path,
-        all,
-        model_types,
-        models_to_skip,
-        no_check,
-        upload,
-        organization,
-        token=os.environ.get("TOKEN", None),
+        output_path="tiny_models",
+        all=True,
+        model_types=None,
+        models_to_skip=models_to_skip,
+        no_check=True,
+        upload=True,
+        organization=args.organization,
+        token=token,
         num_workers=args.num_workers,
+        hub_summary_repo=args.hub_summary_repo,
     )
