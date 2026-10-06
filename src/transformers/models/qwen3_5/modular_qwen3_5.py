@@ -234,11 +234,11 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is None:
-            conv_state, recurrent_state = None, None
-        else:
+        if cache_params is not None:
             conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
