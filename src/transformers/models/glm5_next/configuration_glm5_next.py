@@ -90,10 +90,9 @@ class Glm5NextTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {"num_local_experts": "n_routed_experts"}
@@ -108,6 +107,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
     n_routed_experts: int = 288
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 1536
@@ -147,7 +147,6 @@ class Glm5NextTextConfig(PreTrainedConfig):
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
-    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
 
     index_kpool: int = 16

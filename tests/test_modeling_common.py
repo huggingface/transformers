@@ -137,7 +137,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+    from transformers.distributed.tensor_parallel import _get_parameter_plan
     from transformers.integrations.accelerate import compute_module_sizes
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
@@ -4871,10 +4871,9 @@ class ModelTesterMixin(ExportTesterMixin):
             for pattern in tp_plan:
                 # Check if this given pattern matches any param or module (the value attributed to the pattern does not matter)
                 pattern_usage[pattern] = any(
-                    _get_parameter_tp_plan(param, {pattern: ""}, is_weight=True) is not None for param in param_names
+                    _get_parameter_plan(param, {pattern: ""}, is_weight=True) is not None for param in param_names
                 ) or any(
-                    _get_parameter_tp_plan(module, {pattern: ""}, is_weight=False) is not None
-                    for module in module_names
+                    _get_parameter_plan(module, {pattern: ""}, is_weight=False) is not None for module in module_names
                 )
 
             unused_entries = {k for k, v in pattern_usage.items() if not v}
@@ -5862,6 +5861,31 @@ class ModelTesterMixin(ExportTesterMixin):
                     with patch.object(CompileableContextVar, "reset", new=new_reset):
                         with torch.no_grad():
                             _ = model(**all_inputs)
+
+    def test_moe_models_record_router_logits(self):
+        """A model with sparse experts has to record `router_logits` and declare them in the output of its generative
+        heads, so that `output_router_logits=True` returns them."""
+        modeling_source = inspect.getsource(inspect.getmodule(self.all_model_classes[0]))
+        if "@use_experts_implementation" not in modeling_source:
+            self.skipTest("This model has no sparse experts.")
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            recordable_outputs = set().union(
+                *(
+                    (module._can_record_outputs or {}).keys()
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                )
+            )
+            self.assertIn("router_logits", recordable_outputs, f"{model_class.__name__} does not record them.")
+            if model_class in self.all_generative_model_classes:
+                return_type = model_class.forward.__annotations__.get("return")
+                output_fields = set().union(
+                    *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
+                )
+                self.assertIn("router_logits", output_fields, f"{model_class.__name__} does not return them.")
 
     def test_output_router_logits_from_config(self):
         """`config.output_router_logits` turns the router logits on, and an explicit forward argument wins over it.
