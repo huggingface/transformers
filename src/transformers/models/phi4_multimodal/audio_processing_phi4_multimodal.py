@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -37,6 +34,10 @@ class Phi4MultimodalAudioProcessorKwargs(AudioKwargs, total=False):
 class Phi4MultimodalAudioProcessorMixin:
     sampling_rate = 16000
     extra_model_input_names = ["audio_embed_sizes"]
+    # Kaldi-style fbank on int16-scaled samples: per-frame preemphasis, Hamming window, power
+    # spectrum, Kaldi mel bank, floor at 1 then natural log. The legacy extractor batched this
+    # recipe and zeroed one partial frame past each clip's valid count; that frame is outside
+    # `audio_features_mask` and is not reproduced (ADR 0001, 2026-10-06 amendment).
     spectrogram_config = {
         "stft_config": {
             "n_fft": 512,
@@ -48,7 +49,9 @@ class Phi4MultimodalAudioProcessorMixin:
             "power": 2.0,
             "window_dtype": "float64",
         },
+        "waveform_scale": 32768.0,
         "preemphasis": 0.97,
+        "preemphasis_mode": "per_frame",
         "mel_scale_config": {
             "n_mels": 80,
             "f_min": 0,
@@ -88,15 +91,9 @@ class Phi4MultimodalAudioProcessorMixin:
         audio_downsample_rate,
         **kwargs,
     ):
-        mask = output.get("audio_features_mask")
-        if mask is None:
-            if feature_ranges is None:
-                lengths = self._valid_frame_counts(
-                    np.asarray([end - start for start, end in audio_ranges]), spectrogram_config
-                )
-                feature_ranges = [(0, int(length)) for length in lengths]
-            mask = self._get_mask(feature_ranges, max(end for _, end in feature_ranges))
-        feature_lengths = mask.sum(-1) * audio_feat_stride
+        """Add `audio_embed_sizes`: how many encoder tokens each clip's valid frames become."""
+        frame_counts = self._valid_frame_counts(self._lengths_from_ranges(audio_ranges), spectrogram_config)
+        feature_lengths = self._as_backend_array(frame_counts, like=output["audio_features"]) * audio_feat_stride
         output["audio_embed_sizes"] = self._compute_audio_embed_size(
             feature_lengths,
             audio_compression_rate=audio_compression_rate,
@@ -106,43 +103,7 @@ class Phi4MultimodalAudioProcessorMixin:
 
 
 class Phi4MultimodalAudioProcessor(Phi4MultimodalAudioProcessorMixin, TorchAudioBackend):
-    def _process_frames(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
-        # Mask frames that overlap the boundary between real audio and padding
-        stft_cfg = spectrogram_config.stft_config
-        win_length = stft_cfg.win_length
-        hop_length = stft_cfg.hop_length
-        batch_size = frames.shape[0]
-
-        if audio_ranges is not None and batch_size > 1:
-            audio_lengths_t = torch.tensor([end - start for start, end in audio_ranges])
-            to_mask_idxs = torch.arange(batch_size)[audio_lengths_t != audio_lengths_t.max()]
-            if to_mask_idxs.numel() > 0:
-                frames = frames.clone()
-                down = (audio_lengths_t[to_mask_idxs] - win_length) // hop_length + 1
-                up = audio_lengths_t[to_mask_idxs] // hop_length - 1
-                offset = down.min()
-                max_idx = up.max()
-
-                mask_range = torch.arange(max_idx - offset).expand(to_mask_idxs.shape[0], -1)
-                mask = ((down - offset).unsqueeze(1) <= mask_range) & (mask_range < (up - offset).unsqueeze(1))
-                mask = mask.unsqueeze(-1).expand(-1, -1, win_length)
-
-                masked_frames = frames[to_mask_idxs, offset:max_idx].masked_fill_(mask, 0)
-                frames[to_mask_idxs, offset:max_idx] = masked_frames
-
-        frames_prev = torch.roll(frames, 1, dims=-1)
-        frames_prev[..., 0] = frames_prev[..., 1]
-        return (frames - spectrogram_config.preemphasis * frames_prev) * 32768
-
-    def _stft_framed(self, frames, window, frame_length, stft_cfg):
-        frames = frames * window
-        if frame_length < stft_cfg.n_fft:
-            frames = torch.nn.functional.pad(frames, (0, stft_cfg.n_fft - frame_length))
-        # Cast to complex64 before abs() to match the FE's precision path
-        spec = torch.fft.rfft(frames, n=stft_cfg.n_fft).to(torch.complex64)
-        if stft_cfg.normalized:
-            spec = spec / window.pow(2.0).sum().sqrt()
-        return spec.transpose(-2, -1)
+    pass
 
 
 __all__ = ["Phi4MultimodalAudioProcessor"]

@@ -781,7 +781,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Called after framing, before windowing and FFT. Applies DC-offset removal, per-frame
         (kaldi-style) preemphasis, and USM/HTK-style extended-frame preemphasis when
         ``stft_config.extra_samples_per_frame`` is set. Override for non-standard frame processing
-        that doesn't fit these knobs, e.g. boundary-frame masking (Phi4-multimodal).
+        that doesn't fit these knobs.
         """
         if spectrogram_config.stft_config.extra_samples_per_frame:
             # USM-style extended frames: preemphasis consumes the extra trailing sample,

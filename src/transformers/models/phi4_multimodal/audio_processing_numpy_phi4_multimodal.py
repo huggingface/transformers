@@ -12,48 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_phi4_multimodal import Phi4MultimodalAudioProcessorMixin
 
 
 class Phi4MultimodalAudioProcessorNumpy(Phi4MultimodalAudioProcessorMixin, NumpyAudioBackend):
-    def _process_frames(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
-        # Mask frames that overlap the boundary between real audio and padding
-        stft_cfg = spectrogram_config.stft_config
-        win_length = stft_cfg.win_length
-        hop_length = stft_cfg.hop_length
-        batch_size = frames.shape[0]
-
-        if audio_ranges is not None and batch_size > 1:
-            audio_lengths = np.array([end - start for start, end in audio_ranges])
-            to_mask_idxs = np.arange(batch_size)[audio_lengths != audio_lengths.max()]
-            if to_mask_idxs.size > 0:
-                frames = frames.copy()
-                down = (audio_lengths[to_mask_idxs] - win_length) // hop_length + 1
-                up = audio_lengths[to_mask_idxs] // hop_length - 1
-                offset = down.min()
-                max_idx = up.max()
-
-                mask_range = np.arange(max_idx - offset)[None, :]
-                mask = ((down - offset)[:, None] <= mask_range) & (mask_range < (up - offset)[:, None])
-                block = frames[to_mask_idxs, offset:max_idx]
-                frames[to_mask_idxs, offset:max_idx] = np.where(mask[..., None], 0, block)
-
-        frames_prev = np.roll(frames, 1, axis=-1)
-        frames_prev[..., 0] = frames_prev[..., 1]
-        return (frames - spectrogram_config.preemphasis * frames_prev) * 32768
-
-    def _stft_framed(self, frames, window, frame_length, stft_cfg):
-        frames = frames * window
-        if frame_length < stft_cfg.n_fft:
-            frames = np.pad(frames, [(0, 0)] * (frames.ndim - 1) + [(0, stft_cfg.n_fft - frame_length)])
-        # Cast to complex64 before abs() to match the FE's precision path
-        spec = np.fft.rfft(frames, n=stft_cfg.n_fft).astype(np.complex64)
-        if stft_cfg.normalized:
-            spec = spec / np.sqrt((window**2).sum())
-        return spec.swapaxes(-2, -1)
+    pass
 
 
 __all__ = ["Phi4MultimodalAudioProcessorNumpy"]
