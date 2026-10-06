@@ -275,6 +275,9 @@ def _ignore_causal_mask_sdpa(
     # Additional case to optimize prefill: if the cache is empty (`q_offset == 0`), we can use `is_causal=True` even
     # with a padding_mask, if the padding_mask only contains padding related to "future k/v tokens" of the static k/v states
     # returned by StaticCaches. This works thanks to the upper-left alignment of sdpa's `is_causal` mask
+    # Under `torch.compile`, a tensor `q_offset` cannot be read without breaking the graph
+    if isinstance(q_offset, torch.Tensor) and is_tracing(q_offset):
+        return False
     if q_offset == 0 and (
         padding_mask is None or (fast_all(padding_mask[:, :q_length]) and fast_all(~padding_mask[:, q_length:]))
     ):
