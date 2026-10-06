@@ -65,6 +65,10 @@ class DtensorShardOperation:
     | TP + FSDP, same tensor dim (fused/interleaved TP) | [_StridedShard(d, sf=tp_size), Shard(d)]     |
     | TP + FSDP, different dims                         | [Shard(d1), Shard(d2)]                       |
 
+    There is an additional case when we have to force non-empty chunks. This will transform any Shard(n) placements
+    into a [Shard(n), Replicate()].
+    This is intended to solved cases where you have 6 key value heads and 8 process -> 2 process shard(n) replicated 4 times.
+
     Loading (this class)
     --------------------
     During from_pretrained, each rank looks up every tensor key, but does not load the weight bytes yet (safetensors get_slice).
@@ -137,7 +141,6 @@ class DtensorShardOperation:
                 intervals_by_dim[dim_idx] = intervals
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
-            # finally fetch from the disk only the slices
             # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.
