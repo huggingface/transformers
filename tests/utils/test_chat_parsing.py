@@ -26,6 +26,7 @@ from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
+from transformers.utils.chat_parsing.response_templates import load_response_template
 
 
 cohere_template = {
@@ -719,6 +720,28 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response("<think>only</think>", template_spec, prefix=""),
             {"role": "assistant", "thinking": "only"},
         )
+
+    def test_mutable_defaults_not_shared_between_parses(self):
+        """A list default like `tool_calls: []` must be copied for each parse, not appended to in place."""
+        template_spec = {
+            "defaults": {"role": "assistant", "tool_calls": []},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "tool_calls": {"open": "<tool_call>", "close": "</tool_call>", "content": "json", "repeats": True}
+            },
+        }
+        original = copy.deepcopy(template_spec)
+        loaded = load_response_template(template_spec)
+        text = '<tool_call>{"name": "f", "arguments": {}}</tool_call>'
+        expected = {"role": "assistant", "tool_calls": [{"name": "f", "arguments": {}}]}
+        for _ in range(2):
+            self.assertEqual(parse_response(text, template_spec, prefix=""), expected)
+            self.assertEqual(parse_response(text, loaded, prefix=""), expected)
+        # An untouched default is returned as-is, so mutating the result must not reach the template either
+        parse_response("", template_spec, prefix="")["tool_calls"].append("leak")
+        parse_response("", loaded, prefix="")["tool_calls"].append("leak")
+        self.assertEqual(template_spec, original)
+        self.assertEqual(parse_response("", loaded, prefix=""), {"role": "assistant", "tool_calls": []})
 
     def test_join_validation(self):
         no_repeats = {"start_anchor": "a", "fields": {"x": {"open": "<x>", "close": "</x>", "join": ""}}}

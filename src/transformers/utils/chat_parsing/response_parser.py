@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from collections.abc import Callable
 from inspect import isfunction, ismethod
@@ -139,7 +140,7 @@ class ResponseParser:
                 self._tool_params[fn["name"]] = properties if isinstance(properties, dict) else {}
         self._buffer: str = ""
         self._pos: int = 0
-        self._output: dict[str, Any] = dict(self._spec.defaults)
+        self._output: dict[str, Any] = deepcopy(self._spec.defaults)
         self._implicit_name: str | None = self._spec.implicit
         # Unified current-region state: starts in the implicit region (or a
         # null sink if none was declared), and returns there after every close.

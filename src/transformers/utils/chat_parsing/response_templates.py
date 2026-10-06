@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -230,7 +231,7 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         raise ValueError("response_template must define 'start_anchor' or 'start_anchor_pattern'.")
 
     return ResponseTemplate(
-        defaults=dict(spec.get("defaults", {})),
+        defaults=deepcopy(spec.get("defaults", {})),
         fields=fields,
         implicit=implicit_fields[0] if implicit_fields else None,
         start_anchor_re=start_anchor_re,
