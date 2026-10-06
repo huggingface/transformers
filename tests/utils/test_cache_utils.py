@@ -14,6 +14,7 @@
 
 import copy
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -177,6 +178,19 @@ class CacheTest(unittest.TestCase):
             per_layer_config={1: {"num_attention_heads": 2}},
         )
         self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16]))
+
+    def test_generate_static_cache_on_static_shape_backends(self):
+        """On backends that compile static shapes only, `generate` stores the sliding window layers at full size"""
+        model = GenerationMixin()
+        model.config = Gemma2Config(num_hidden_layers=2, sliding_window=4)
+        for device_type, layer_class in [
+            ("cuda", StaticSlidingWindowLayer),
+            ("neuron", StaticLayer),
+            ("tpu", StaticLayer),
+        ]:
+            model.device = SimpleNamespace(type=device_type)
+            cache = model._prepare_static_cache("static", 1, 16, None, {})
+            self.assertIs(type(cache.layers[0]), layer_class)
 
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache

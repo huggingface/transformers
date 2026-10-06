@@ -2163,6 +2163,8 @@ class GenerationMixin(ContinuousMixin):
             "config": self.config.get_text_config(decoder=True),
             "max_cache_len": effective_length,
             "offloading": offload_cache,
+            # Neuron and TPU compile static shapes only
+            "full_size_sliding_layers": self.device.type in ("neuron", "tpu"),
         }
         cache = StaticCache(**self_attention_cache_kwargs)
         if self.config.is_encoder_decoder:
