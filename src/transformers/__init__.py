@@ -65,26 +65,7 @@ _import_structure = {
     "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
-    "data": [
-        "DataProcessor",
-        "InputExample",
-        "InputFeatures",
-        "SingleSentenceClassificationProcessor",
-        "SquadExample",
-        "SquadFeatures",
-        "SquadV1Processor",
-        "SquadV2Processor",
-        "glue_compute_metrics",
-        "glue_convert_examples_to_features",
-        "glue_output_modes",
-        "glue_processors",
-        "glue_tasks_num_labels",
-        "squad_convert_examples_to_features",
-        "xnli_compute_metrics",
-        "xnli_output_modes",
-        "xnli_processors",
-        "xnli_tasks_num_labels",
-    ],
+    "data": [],
     "data.data_collator": [
         "DataCollator",
         "DataCollatorForLanguageModeling",
@@ -99,8 +80,6 @@ _import_structure = {
         "DefaultDataCollator",
         "default_data_collator",
     ],
-    "data.metrics": [],
-    "data.processors": [],
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
@@ -393,12 +372,6 @@ else:
         "VisionUnfuseAndPermuteForRope",
         "WeightConverter",
     ]
-    _import_structure["data.datasets"] = [
-        "GlueDataset",
-        "GlueDataTrainingArguments",
-        "SquadDataset",
-        "SquadDataTrainingArguments",
-    ]
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
@@ -521,24 +494,6 @@ if TYPE_CHECKING:
     from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
-    from .data import DataProcessor as DataProcessor
-    from .data import InputExample as InputExample
-    from .data import InputFeatures as InputFeatures
-    from .data import SingleSentenceClassificationProcessor as SingleSentenceClassificationProcessor
-    from .data import SquadExample as SquadExample
-    from .data import SquadFeatures as SquadFeatures
-    from .data import SquadV1Processor as SquadV1Processor
-    from .data import SquadV2Processor as SquadV2Processor
-    from .data import glue_compute_metrics as glue_compute_metrics
-    from .data import glue_convert_examples_to_features as glue_convert_examples_to_features
-    from .data import glue_output_modes as glue_output_modes
-    from .data import glue_processors as glue_processors
-    from .data import glue_tasks_num_labels as glue_tasks_num_labels
-    from .data import squad_convert_examples_to_features as squad_convert_examples_to_features
-    from .data import xnli_compute_metrics as xnli_compute_metrics
-    from .data import xnli_output_modes as xnli_output_modes
-    from .data import xnli_processors as xnli_processors
-    from .data import xnli_tasks_num_labels as xnli_tasks_num_labels
     from .data.data_collator import DataCollator as DataCollator
     from .data.data_collator import DataCollatorForLanguageModeling as DataCollatorForLanguageModeling
     from .data.data_collator import DataCollatorForMultipleChoice as DataCollatorForMultipleChoice
@@ -553,10 +508,6 @@ if TYPE_CHECKING:
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
-    from .data.datasets import GlueDataset as GlueDataset
-    from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
-    from .data.datasets import SquadDataset as SquadDataset
-    from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
     from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
