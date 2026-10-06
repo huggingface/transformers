@@ -862,3 +862,337 @@ class TorchAudioBackend(BaseAudioProcessor):
         if spectrogram_config.mel_floor != 0.0:
             mel_spec = torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
         return mel_spec
+
+
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+# Op-table backends (docs/superpowers/specs/2026-10-06-audio-backend-ops-design.md).
+#
+# The classes above are the inheritance-era backends and still serve every model file; they are
+# deleted in step 3 of the migration, when `NumpyOps` / `TorchOps` take their names. Until then the
+# two generations coexist here so that each intermediate commit passes `./validate`.
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+
+
+class AudioOps:
+    """The contract an audio backend implements: array operations, nothing else.
+
+    Every numerical stage of the pipeline lives in `BaseAudioProcessor`, written against these
+    ops. A backend is a subclass implementing each *core* op below (every method of this class);
+    it may also implement the names in `OPTIONAL_OPS`, which individual models require. It holds no
+    model state. `NumpyOps` is the reference implementation: when this docstring and that code
+    disagree, the code wins.
+
+    Conventions:
+    - `like` is an existing backend array whose device (and, where it matters, dtype) the new
+      array should share. It may be `None`.
+    - `dtype` is a numpy-style name: ``"float32"``, ``"float64"``, ``"int32"``, ``"int64"``,
+      ``"bool"``, ``"complex64"``, ``"complex128"``. A backend resolves ``"float64"`` to its widest
+      available float for the array's device (float32 on torch/MPS), and ``"complex128"`` likewise.
+    - Axes follow numpy; ``axis=-1`` is the sample / frame axis.
+    - Ops return backend arrays, except `to_numpy`.
+    """
+
+    name: str = ""
+
+    # ── plumbing ───────────────────────────────────────────────────────────────────────────────
+
+    def asarray(self, x, *, like=None):
+        """Backend array from a numpy array, a sequence, or an existing backend array (no copy)."""
+        raise NotImplementedError
+
+    def to_numpy(self, x):
+        """Host numpy array with the same values and dtype."""
+        raise NotImplementedError
+
+    def to_device(self, x, device):
+        """`x` on `device` (a backend-specific designator). Backends without devices return `x`."""
+        raise NotImplementedError
+
+    def astype(self, x, dtype):
+        """`x` cast to `dtype` (see the class docstring for the widest-float rule)."""
+        raise NotImplementedError
+
+    def zeros(self, shape, *, dtype="float32", like=None):
+        """Zeros of `shape` and `dtype`, on `like`'s device."""
+        raise NotImplementedError
+
+    def arange(self, n, *, like=None):
+        """Integers ``0 .. n-1`` (int64), on `like`'s device."""
+        raise NotImplementedError
+
+    # ── assembly ───────────────────────────────────────────────────────────────────────────────
+
+    def stack(self, seq):
+        """Stack equally shaped arrays along a new leading axis."""
+        raise NotImplementedError
+
+    def concat(self, seq, axis=-1):
+        """Concatenate along an existing axis."""
+        raise NotImplementedError
+
+    def pad(self, x, left, right, *, axis=-1, mode="constant", value=0.0):
+        """Pad `axis` by `left` / `right` samples. `mode`: ``"constant"`` (with `value`),
+        ``"reflect"`` (mirror without repeating the edge), ``"replicate"`` (repeat the edge)."""
+        raise NotImplementedError
+
+    def masked_fill(self, x, mask, value):
+        """`x` with `value` written where the boolean `mask` (broadcastable) is true."""
+        raise NotImplementedError
+
+    # ── elementwise ────────────────────────────────────────────────────────────────────────────
+
+    def log(self, x):
+        raise NotImplementedError
+
+    def log10(self, x):
+        raise NotImplementedError
+
+    def sqrt(self, x):
+        raise NotImplementedError
+
+    def abs(self, x):
+        """Magnitude; for complex input the modulus, in the matching real dtype."""
+        raise NotImplementedError
+
+    def maximum(self, x, y):
+        """Elementwise maximum of two broadcastable arrays."""
+        raise NotImplementedError
+
+    def clamp_min(self, x, value):
+        """Elementwise ``max(x, value)`` for a scalar `value`."""
+        raise NotImplementedError
+
+    # ── reductions ─────────────────────────────────────────────────────────────────────────────
+
+    def sum(self, x, axis):
+        raise NotImplementedError
+
+    def mean(self, x, axis):
+        raise NotImplementedError
+
+    def amax(self, x, axis):
+        raise NotImplementedError
+
+    # ── linear algebra ─────────────────────────────────────────────────────────────────────────
+
+    def matmul(self, a, b):
+        """Batched matrix product with numpy broadcasting over leading axes."""
+        raise NotImplementedError
+
+    # ── signal ─────────────────────────────────────────────────────────────────────────────────
+
+    def frame(self, x, frame_length, hop):
+        """Overlapping frames of the last axis: ``(..., n_frames, frame_length)`` with
+        ``n_frames = 1 + (len - frame_length) // hop``. May return a view."""
+        raise NotImplementedError
+
+    def rfft(self, x, n):
+        """Real FFT of the last axis, `n` points, one-sided. The output precision matches the
+        input's (float32 → complex64, float64 → complex128); callers wanting a wider FFT cast first."""
+        raise NotImplementedError
+
+    def resample(self, x, orig_sr, target_sr):
+        """Resample the last axis from `orig_sr` to `target_sr` Hz with the backend's resampler."""
+        raise NotImplementedError
+
+    # ── randomness ─────────────────────────────────────────────────────────────────────────────
+
+    def randn(self, shape, *, seed, like=None):
+        """Standard normal samples of `shape`, in `like`'s dtype and on its device, from a stream
+        seeded with the integer `seed`. Streams differ between backends; only moments match."""
+        raise NotImplementedError
+
+
+CORE_OPS = tuple(name for name, value in vars(AudioOps).items() if callable(value) and not name.startswith("_"))
+
+# Ops a backend may implement and a model may require (`required_ops`). No stub on `AudioOps`:
+# their presence on a backend class means exactly "this backend implements it". The numpy
+# implementation's docstring is the contract.
+OPTIONAL_OPS = ("bilinear_resize",)
+
+
+_AUDIO_BACKENDS: dict[str, type[AudioOps]] = {}
+
+
+def missing_ops(backend_cls, names) -> list[str]:
+    """Names in `names` that `backend_cls` does not implement (a core op left as the contract's
+    stub counts as missing)."""
+    return [
+        name
+        for name in names
+        if not callable(getattr(backend_cls, name, None))
+        or getattr(backend_cls, name) is getattr(AudioOps, name, None)
+    ]
+
+
+def register_audio_backend(name: str, backend_cls: type[AudioOps]) -> None:
+    """Make `backend_cls` loadable as ``backend=name``. Refused unless every core op is implemented."""
+    missing = missing_ops(backend_cls, CORE_OPS)
+    if missing:
+        raise TypeError(
+            f"Cannot register audio backend {name!r}: {backend_cls.__name__} is missing core ops {missing}."
+        )
+    backend_cls.name = name
+    _AUDIO_BACKENDS[name] = backend_cls
+
+
+def get_audio_backend(name: str) -> type[AudioOps]:
+    try:
+        return _AUDIO_BACKENDS[name]
+    except KeyError:
+        raise ValueError(f"Unknown audio backend {name!r}. Registered backends: {sorted(_AUDIO_BACKENDS)}.") from None
+
+
+def register_audio_op(backend: str, name: str):
+    """Attach `fn` as op `name` on the registered backend `backend`, for code outside the library
+    (remote-code processors, outside backends adding an optional op). In-library ops are plain
+    methods in this module. Refuses to replace an existing op."""
+
+    def decorator(fn):
+        backend_cls = get_audio_backend(backend)
+        if callable(getattr(backend_cls, name, None)):
+            raise ValueError(f"Op {name!r} already exists on audio backend {backend!r}.")
+        setattr(backend_cls, name, staticmethod(fn))
+        return fn
+
+    return decorator
+
+
+_NUMPY_PAD_MODES = {"constant": "constant", "reflect": "reflect", "replicate": "edge"}
+
+
+class NumpyOps(AudioOps):
+    """The reference backend: every op, in numpy. No devices; `like` only matters for dtype."""
+
+    name = "numpy"
+
+    # ── plumbing ───────────────────────────────────────────────────────────────────────────────
+
+    def asarray(self, x, *, like=None):
+        return x if isinstance(x, np.ndarray) else np.asarray(x)
+
+    def to_numpy(self, x):
+        return np.asarray(x)
+
+    def to_device(self, x, device):
+        return x
+
+    def astype(self, x, dtype):
+        return x.astype(np.dtype(dtype), copy=False)
+
+    def zeros(self, shape, *, dtype="float32", like=None):
+        return np.zeros(shape, dtype=np.dtype(dtype))
+
+    def arange(self, n, *, like=None):
+        return np.arange(n, dtype=np.int64)
+
+    # ── assembly ───────────────────────────────────────────────────────────────────────────────
+
+    def stack(self, seq):
+        return np.stack(list(seq))
+
+    def concat(self, seq, axis=-1):
+        return np.concatenate(list(seq), axis=axis)
+
+    def pad(self, x, left, right, *, axis=-1, mode="constant", value=0.0):
+        width = [(0, 0)] * x.ndim
+        width[axis] = (left, right)
+        if mode == "constant":
+            return np.pad(x, width, mode="constant", constant_values=value)
+        return np.pad(x, width, mode=_NUMPY_PAD_MODES[mode])
+
+    def masked_fill(self, x, mask, value):
+        return np.where(mask, np.asarray(value, dtype=x.dtype), x)
+
+    # ── elementwise ────────────────────────────────────────────────────────────────────────────
+
+    def log(self, x):
+        return np.log(x)
+
+    def log10(self, x):
+        return np.log10(x)
+
+    def sqrt(self, x):
+        return np.sqrt(x)
+
+    def abs(self, x):
+        return np.abs(x)
+
+    def maximum(self, x, y):
+        return np.maximum(x, y)
+
+    def clamp_min(self, x, value):
+        return np.maximum(x, np.asarray(value, dtype=x.dtype))
+
+    # ── reductions ─────────────────────────────────────────────────────────────────────────────
+
+    def sum(self, x, axis):
+        return np.sum(x, axis=axis)
+
+    def mean(self, x, axis):
+        return np.mean(x, axis=axis)
+
+    def amax(self, x, axis):
+        return np.amax(x, axis=axis)
+
+    # ── linear algebra ─────────────────────────────────────────────────────────────────────────
+
+    def matmul(self, a, b):
+        return np.matmul(a, b)
+
+    # ── signal ─────────────────────────────────────────────────────────────────────────────────
+
+    def frame(self, x, frame_length, hop):
+        x = np.ascontiguousarray(x)
+        n_frames = 1 + (x.shape[-1] - frame_length) // hop
+        strides = x.strides[:-1] + (x.strides[-1] * hop, x.strides[-1])
+        shape = x.shape[:-1] + (n_frames, frame_length)
+        return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
+
+    def rfft(self, x, n):
+        # numpy promotes a float32 FFT to complex128; the contract keeps the input's precision.
+        out = np.fft.rfft(x, n=n)
+        return out.astype(np.complex64, copy=False) if x.dtype == np.float32 else out
+
+    def resample(self, x, orig_sr, target_sr):
+        requires_backends(self.resample, ["soxr"])
+        import soxr
+
+        # soxr wants (samples, channels); flatten leading axes to channels and restore them.
+        leading = x.shape[:-1]
+        flat = x.reshape(-1, x.shape[-1]).T
+        out = soxr.resample(np.ascontiguousarray(flat), orig_sr, target_sr, quality="HQ").T
+        return out.reshape(*leading, out.shape[-1])
+
+    # ── randomness ─────────────────────────────────────────────────────────────────────────────
+
+    def randn(self, shape, *, seed, like=None):
+        dtype = like.dtype if like is not None else np.float32
+        return np.random.RandomState(seed).standard_normal(shape).astype(dtype, copy=False)
+
+    # ── optional ops ───────────────────────────────────────────────────────────────────────────
+
+    def bilinear_resize(self, x, size):
+        """Bilinear resize of a 2-D ``(rows, cols)`` array to `size`, ``align_corners=False``
+        (PyTorch / OpenCV convention): output pixel centres map to ``(i + 0.5) * in/out - 0.5``,
+        clamped at 0, interpolating between the two nearest source rows and columns. Coordinates
+        are computed in float32, as `torch.nn.functional.interpolate` does. Required by CLAP's
+        fusion views (the shrink of a whole-clip mel to the encoder's frame count)."""
+        out_rows, out_cols = size
+        in_rows, in_cols = x.shape
+
+        def coords(n_in, n_out):
+            scale = np.float32(n_in) / np.float32(n_out)
+            src = np.maximum((np.arange(n_out, dtype=np.float32) + np.float32(0.5)) * scale - np.float32(0.5), 0)
+            i0 = np.minimum(np.floor(src).astype(np.int64), n_in - 1)
+            i1 = np.minimum(i0 + 1, n_in - 1)
+            return i0, i1, (src - i0).astype(x.dtype)
+
+        r0, r1, wr = coords(in_rows, out_rows)
+        c0, c1, wc = coords(in_cols, out_cols)
+        top = x[r0][:, c0] * (1 - wc) + x[r0][:, c1] * wc
+        bottom = x[r1][:, c0] * (1 - wc) + x[r1][:, c1] * wc
+        return top * (1 - wr)[:, None] + bottom * wr[:, None]
+
+
+register_audio_backend("numpy", NumpyOps)
