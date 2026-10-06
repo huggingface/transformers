@@ -134,7 +134,12 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     max_new_tokens = 3
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.batch_size = batch_size
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        finally:
+            self.model_tester.batch_size = original_batch_size
 
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
@@ -147,11 +152,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             "labels",
             # model-specific exceptions should overload/overwrite this function
         ]
-        filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
-            for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore
-        }
+        filtered_inputs_dict = {k: v for k, v in inputs_dict.items() if k not in input_keys_to_ignore}
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
         text_gen_config = config.get_text_config(decoder=True)
@@ -1734,8 +1735,14 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if not model_class._can_compile_fullgraph:
                 self.skipTest("This model doesn't support compilation without graph breaks")
 
-            # 2. Prepares two sets of inputs
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+            # 2. Prepares two sets of inputs, For this test we need two sets of *different* inputs with the same shape
+            set_seed(42)
+            config, input_1 = self.prepare_config_and_inputs_for_generate(batch_size=2)
+
+            set_seed(62)
+            _, input_2 = self.prepare_config_and_inputs_for_generate(batch_size=2)
+            model_input_sets = [input_1, input_2]
+
             set_config_for_less_flaky_test(config)
             model = model_class(config).to(torch_device)
             set_model_for_less_flaky_test(model)
@@ -1749,19 +1756,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             else:
                 model_to_be_compiled = model
 
-            # creates two sets of *different* inputs with the same shape
-            main_input = inputs_dict[model.main_input_name].to(torch_device)
-            half_batch_size = main_input.shape[0] // 2
-            input_1 = {}
-            input_2 = {}
-            for key, value in inputs_dict.items():
-                if isinstance(value, torch.Tensor):
-                    input_1[key] = value[:half_batch_size, :].to(torch_device)
-                    input_2[key] = value[half_batch_size : half_batch_size * 2, :].to(torch_device)
-                else:
-                    input_1[key] = value
-                    input_2[key] = value
-            model_input_sets = [input_1, input_2]
             self.assertTrue(
                 model_input_sets[0][model.main_input_name].shape == model_input_sets[1][model.main_input_name].shape
             )
@@ -1769,7 +1763,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # 3. compilation-specific setup and generation parameterization
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-            compile_config = CompileConfig(fullgraph=True, dynamic=False)  # Error out on dynamic shapes
+            # The model knows which backend compiles on the device it sits on; only the options the
+            # test is about are overridden here.
+            compile_config = model._default_compile_config()
+            compile_config.fullgraph = True
+            compile_config.dynamic = False  # Error out on dynamic shapes
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
@@ -1876,7 +1874,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # BLIP is the only exception with custom generate which call `self.lm.generate()`
             # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
             # compatible with multimodality
-            compile_config = CompileConfig()
+            compile_config = model._default_compile_config()
             compile_config._compile_all_devices = True
             if "blip" in model.__class__.__name__.lower():
                 model.language_model.generation_config.compile_config = compile_config
@@ -1940,7 +1938,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if "blip" in model.__class__.__name__.lower():
                 self.skipTest("Blip overwrite `generate` for some reason making it interact weirdly")
 
-            compile_config = CompileConfig()
+            compile_config = model._default_compile_config()
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
             generation_kwargs = {
                 "use_cache": True,
