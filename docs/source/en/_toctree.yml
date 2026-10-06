@@ -535,6 +535,8 @@
         title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
+      - local: model_doc/berrylm
+        title: BerryLM
       - local: model_doc/bert
         title: BERT
       - local: model_doc/bert-generation
