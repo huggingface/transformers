@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build_ci_docker_image*
+      - fix_flash_attn_docker_build*
   repository_dispatch:
   workflow_dispatch:
   workflow_call:
@@ -23,6 +24,7 @@ permissions: {}
 
 jobs:
   latest-docker:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions:
       contents: read
     name: "Latest PyTorch [dev]"
@@ -90,9 +92,9 @@ jobs:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
             REF=main
-            CUDA=cu126
-            PYTORCH=2.8.0
-            TORCHCODEC=0.7.0
+            CUDA=cu130
+            PYTORCH=2.14.0
+            TORCHCODEC=0.16.0
             FLASH_ATTN=yes
           push: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:flash-attn
@@ -107,6 +109,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-torch-deepspeed-docker:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions:
       contents: read
     name: "Latest PyTorch + DeepSpeed"
@@ -147,6 +150,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   doc-builder:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions:
       contents: read
     name: "Doc builder"
@@ -191,6 +195,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-pytorch-amd:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions:
       contents: read
     name: "Latest PyTorch (AMD) [dev]"
@@ -231,6 +236,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   cache-latest-pytorch-amd:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions: {}
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
@@ -263,6 +269,7 @@ jobs:
           echo "Cache populated successfully at ${final_path}"
 
   latest-pytorch-deepspeed-amd:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions:
       contents: read
     name: "PyTorch + DeepSpeed (AMD) [dev]"
@@ -303,6 +310,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-quantization-torch-docker:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions:
       contents: read
     name: "Latest Pytorch + Quantization [dev]"
@@ -343,6 +351,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   xpu-ci-image:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/fix_flash_attn_docker_build') }}
     permissions:
       contents: read
     name: "PyTorch XPU"
