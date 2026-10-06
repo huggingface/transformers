@@ -71,6 +71,11 @@ class ZayaConfig(LagunaConfig):
     """
 
     model_type = "zaya"
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
 
     vocab_size: int = 262272
     moe_intermediate_size: int = 2048
