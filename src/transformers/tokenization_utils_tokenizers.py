@@ -174,22 +174,28 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         )
                         break
 
+            vocab = tokenizer_json.get("model", {}).get("vocab", None)
+            if cls.model is None:
+                if isinstance(vocab, list):
+                    vocab = list(map(tuple, vocab))  # TODO just for now
+            elif cls.model.__name__ == "Unigram":
+                if isinstance(vocab, list) and vocab and isinstance(vocab[0], (list, tuple)):
+                    vocab = [tuple(item) for item in vocab]
+            elif cls.model.__name__ == "WordLevel":
+                vocab = {token: i for i, token in enumerate(vocab)}
+            elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
+                if isinstance(vocab, list):
+                    vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
+            
             _vocab_file = local_kwargs.get("vocab_file")
-            if _vocab_file is not None and os.path.isfile(_vocab_file):
+            if (
+                cls.model is not None
+                and cls.model.__name__ == "WordPiece"
+                and _vocab_file is not None
+                and os.path.isfile(_vocab_file)
+            ):
                 local_kwargs["vocab"] = _vocab_file
             else:
-                vocab = tokenizer_json.get("model", {}).get("vocab", None)
-                if cls.model is None:
-                    if isinstance(vocab, list):
-                        vocab = list(map(tuple, vocab))  # TODO just for now
-                elif cls.model.__name__ == "Unigram":
-                    if isinstance(vocab, list) and vocab and isinstance(vocab[0], (list, tuple)):
-                        vocab = [tuple(item) for item in vocab]
-                elif cls.model.__name__ == "WordLevel":
-                    vocab = {token: i for i, token in enumerate(vocab)}
-                elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
-                    if isinstance(vocab, list):
-                        vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
                 local_kwargs["vocab"] = vocab
 
             model_type = getattr(cls, "model", None)
