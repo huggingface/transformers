@@ -50,7 +50,7 @@ jobs:
 
   create_run:
     name: Create run
-    needs: [get-pr-number, get-pr-info]
+    needs: [get-pr-number, get-pr-info, verify_pr_commit]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
     permissions:
       statuses: write
@@ -95,7 +95,7 @@ jobs:
 
   build-doc:
     name: Build doc
-    needs: [get-pr-number, get-pr-info]
+    needs: [get-pr-number, get-pr-info, verify_pr_commit]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3 # main
     with:
