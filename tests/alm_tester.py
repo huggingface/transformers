@@ -63,9 +63,10 @@ class ALMModelTester(MultiModalModelTester):
 
     # -- Overridable ALM-specific hooks ------------------------------------------------------
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         """Create audio feature tensor. Override for different shapes (e.g. [B, T, features])."""
-        return floats_tensor([self.batch_size, self.num_mel_bins, self.feat_seq_length])
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor([batch_size, self.num_mel_bins, self.feat_seq_length])
 
     def get_audio_embeds_mask(self, audio_embeds_mask):
         """Get audio embeds mask from audio mask. Override for different shapes."""
@@ -95,7 +96,7 @@ class ALMModelTester(MultiModalModelTester):
         """Key name for audio features in the inputs dict."""
         return "input_features"
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         """Create audio-level attention mask with contiguous valid regions per batch element.
 
         Each element gets a random offset and length, producing masks like [0, 0, 1, 1, 1, 0, 0].
@@ -103,13 +104,14 @@ class ALMModelTester(MultiModalModelTester):
         """
         # Use a locally-seeded RNG so repeated calls within a test produce the same mask
         rng = random.Random(0)
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # Sample lengths in [1, feat_seq_length] and offsets in [0, feat_seq_length - length]
-        lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs() + 1
+        lengths = ids_tensor([batch_size], vocab_size=self.feat_seq_length, rng=rng).abs() + 1
         lengths = lengths.clamp(max=self.feat_seq_length)
 
         # Presuming feat_seq_length is set correctly, ensure at least one batch has a full-length mask for valid audio tokens
-        lengths[rng.randint(0, self.batch_size - 1)] = self.feat_seq_length
-        offsets = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs()
+        lengths[rng.randint(0, batch_size - 1)] = self.feat_seq_length
+        offsets = ids_tensor([batch_size], vocab_size=self.feat_seq_length, rng=rng).abs()
         offsets = offsets % (self.feat_seq_length - lengths + 1)
 
         positions = torch.arange(self.feat_seq_length, device=torch_device)[None, :]
@@ -125,9 +127,9 @@ class ALMModelTester(MultiModalModelTester):
     def _build_modality_sub_configs(self):
         return {self.audio_config_key: self.get_audio_config()}
 
-    def _prepare_modality_inputs(self, input_ids, config):
-        audio_features = self.create_audio_features()
-        audio_mask = self.create_audio_mask()
+    def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
+        audio_features = self.create_audio_features(batch_size=batch_size)
+        audio_mask = self.create_audio_mask(batch_size=batch_size)
         audio_embeds_mask = self.get_audio_embeds_mask(audio_mask)
         num_audio_tokens = audio_embeds_mask.sum(dim=1)
         input_ids = self.place_audio_tokens(input_ids, config, num_audio_tokens)
@@ -135,6 +137,11 @@ class ALMModelTester(MultiModalModelTester):
         modality_inputs = {self.get_audio_feature_key(): audio_features}
         if self.audio_mask_key is not None:
             modality_inputs[self.audio_mask_key] = audio_mask
+
+        additional_inputs = self.get_additional_inputs(
+            config, input_ids, modality_inputs=modality_inputs, batch_size=batch_size
+        )
+        modality_inputs.update(additional_inputs)
         return input_ids, modality_inputs
 
     # -- Audio sub-config construction -------------------------------------------------------

@@ -247,6 +247,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     }
     n_group: int | None = None
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     n_shared_experts: int = 2
     routed_scaling_factor: float = 1.0
     topk_group: int | None = None

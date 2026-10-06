@@ -161,6 +161,7 @@ class Step3p7TextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 8
     num_local_experts: int = 128
+    output_router_logits: bool = False
     rope_parameters: RopeParameters | dict | None = None
     base_config_key = "text_config"
     mlp_layer_types: list[str] | None = None

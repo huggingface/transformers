@@ -92,6 +92,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 1408
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     n_routed_experts: int = 128
     routed_scaling_factor: float = 1.0
@@ -104,7 +105,6 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section"}
-    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.0001
 
     def __post_init__(self, **kwargs):

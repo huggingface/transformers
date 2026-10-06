@@ -832,17 +832,19 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         experts_forward: Callable,
         tokens: torch.Tensor,
         expert_ids: torch.Tensor,
-        num_local_experts: int,
     ) -> torch.Tensor:
         """Run local experts with top-1 routing and unit weights; apply routing weights after combine."""
-        # One zero row per expert keeps tokens and all expert weights connected to backward. Without it,
-        # empty eager experts can skip the reverse all-to-all and FSDP reduction, leaving other ranks waiting.
-        num_tokens, hidden_dim = tokens.shape
-        local_expert_ids = torch.arange(num_local_experts, device=tokens.device)
-        tokens = torch.cat([tokens, tokens.new_zeros(num_local_experts, hidden_dim)])
-        expert_ids = torch.cat([expert_ids, local_expert_ids]).unsqueeze(-1)
+        num_tokens = tokens.shape[0]
+        if num_tokens == 0:
+            # Keep the empty tokens connected to backward so the reverse all-to-all and FSDP reduction still run.
+            dummy = tokens.sum(dim=0, keepdim=True)
+            dummy_ids = torch.zeros((1, 1), dtype=expert_ids.dtype, device=tokens.device)
+            dummy_weights = torch.ones((1, 1), dtype=tokens.dtype, device=tokens.device)
+            return experts_forward(dummy, dummy_ids, dummy_weights)[:0]
+
+        expert_ids = expert_ids.unsqueeze(-1)
         weights = torch.ones_like(expert_ids, dtype=tokens.dtype)
-        return experts_forward(tokens, expert_ids, weights)[:num_tokens]
+        return experts_forward(tokens, expert_ids, weights)
 
     def _combine_tokens(
         self,
@@ -907,7 +909,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 tokens, expert_ids, order, send_sizes, recv_sizes = self._dispatch_tokens(
                     hidden_states, top_k_index, module.num_experts, ep_group, ep_size
                 )
-                expert_output = self._run_local_experts(experts_forward, tokens, expert_ids, module.num_experts)
+                expert_output = self._run_local_experts(experts_forward, tokens, expert_ids)
                 output = self._combine_tokens(
                     expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
                 ).to(hidden_states.dtype)
