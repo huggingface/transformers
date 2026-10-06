@@ -351,16 +351,10 @@ class TextGenerationPipeline(Pipeline):
 
         if handle_long_generation == "hole":
             cur_len = inputs["input_ids"].shape[-1]
-            generation_config = generate_kwargs.get("generation_config", self.generation_config)
-            if "max_new_tokens" in generate_kwargs:
-                new_tokens = generate_kwargs["max_new_tokens"]
-            elif "max_length" not in generate_kwargs and generation_config.max_new_tokens is not None:
-                new_tokens = generation_config.max_new_tokens
-            else:
-                max_length = generate_kwargs.get("max_length", generation_config.max_length)
-                if max_length is None:
-                    max_length = GenerationConfig._get_default_generation_params()["max_length"]
-                new_tokens = max_length - cur_len
+            generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
+            new_tokens = generate_kwargs.get("max_new_tokens", self.model.generation_config.max_new_tokens)
+            if new_tokens is None:
+                new_tokens = generate_kwargs.get("max_length", self.model.generation_config.max_length) - cur_len
                 if new_tokens < 0:
                     raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
@@ -389,27 +383,14 @@ class TextGenerationPipeline(Pipeline):
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
 
-        # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
-        # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
         prefix_length = generate_kwargs.pop("prefix_length", 0)
-        if prefix_length > 0:
-            generation_config = generate_kwargs.get("generation_config", self.generation_config)
-            has_max_new_tokens = "max_new_tokens" in generate_kwargs or (
-                "max_length" not in generate_kwargs and generation_config.max_new_tokens is not None
-            )
-            if not has_max_new_tokens:
-                max_length = generate_kwargs.get("max_length") or generation_config.max_length
-                if max_length is None:
-                    max_length = GenerationConfig._get_default_generation_params()["max_length"]
-                generate_kwargs["max_length"] = max_length + prefix_length
-            has_min_new_tokens = "min_new_tokens" in generate_kwargs or (
-                "min_length" not in generate_kwargs and generation_config.min_new_tokens is not None
-            )
-            if not has_min_new_tokens and "min_length" in generate_kwargs:
-                generate_kwargs["min_length"] += prefix_length
-
-        # User-defined `generation_config` passed to the pipeline call take precedence
-        generate_kwargs = self._merge_generation_config(generate_kwargs)
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
+        if prefix_length:  # a total length (as opposed to a number of new tokens) has to include the prefix
+            config = self.model.generation_config
+            for length, new_tokens in (("max_length", "max_new_tokens"), ("min_length", "min_new_tokens")):
+                total_length = generate_kwargs.get(length, getattr(config, length))
+                if total_length is not None and generate_kwargs.get(new_tokens, getattr(config, new_tokens)) is None:
+                    generate_kwargs[length] = total_length + prefix_length
 
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
 

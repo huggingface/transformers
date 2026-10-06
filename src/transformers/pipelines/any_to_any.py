@@ -421,8 +421,7 @@ class AnyToAnyPipeline(Pipeline):
         prompt_text = model_inputs.pop("text")
         input_ids = model_inputs.get("input_ids", model_inputs.get("decoder_input_ids"))
 
-        # User-defined `generation_config` passed to the pipeline call take precedence
-        generate_kwargs = self._merge_generation_config(generate_kwargs)
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}

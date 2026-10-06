@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from typing import Any, TypedDict, overload
 
 from ..audio_utils import AudioInput
@@ -132,7 +133,7 @@ class TextToAudioPipeline(Pipeline):
         if self.sampling_rate is None:
             # get sampling_rate from config and generation config
 
-            config = self.model.config
+            config = copy.deepcopy(self.model.config)
             gen_config = self.model.__dict__.get("generation_config", None)
             if gen_config is not None:
                 config.update({k: v for k, v in gen_config.to_dict().items() if v is not None})
@@ -210,9 +211,8 @@ class TextToAudioPipeline(Pipeline):
             # we expect some kwargs to be additional tensors which need to be on the right device
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
-            # User-defined `generation_config` passed to the pipeline call take precedence, and `generate_kwargs` take
-            # precedence over `forward_params`. Dict output facilitates postprocessing.
-            forward_params = self._merge_generation_config(
+            # `generate_kwargs` take precedence over `forward_params`. Dict output facilitates postprocessing.
+            forward_params = self._prepare_generate_kwargs(
                 {"return_dict_in_generate": True, **forward_params, **generate_kwargs}
             )
 

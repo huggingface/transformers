@@ -545,8 +545,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     generate_kwargs["return_token_timestamps"] = True
                     generate_kwargs["return_segments"] = True
 
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            generate_kwargs = self._merge_generation_config(generate_kwargs)
+            generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
             main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"
             generate_kwargs = {

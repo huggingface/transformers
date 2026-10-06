@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -566,6 +567,18 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             ],
         )
         # fmt: on
+
+    @require_torch
+    def test_whisper_generation_parameters_passed_as_kwargs(self):
+        # Whisper's `generate()` takes `temperature` as an argument and ignores the one in a `generation_config`
+        speech_recognizer = pipeline(task="automatic-speech-recognition", model="openai/whisper-tiny")
+        model = speech_recognizer.model
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = speech_recognizer(waveform, generate_kwargs={"temperature": 0.8, "max_new_tokens": 2})
+        generate_kwargs = generate.call_args.kwargs
+        self.assertNotIn("generation_config", generate_kwargs)
+        self.assertEqual(generate_kwargs["temperature"], 0.8)
 
     @require_torch
     def test_return_timestamps_in_init(self):
