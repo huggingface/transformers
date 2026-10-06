@@ -105,7 +105,7 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Some tests require quanto
 RUN python3 -m pip install --no-cache-dir quanto
 
-# Install FA2, FA3, FA4:
+# Install FA2, FA3:
 #
 # FA2 is built from source because Dao-AILab stopped publishing wheels for torch>=2.9.
 # Key optimisations vs the naive `pip install flash-attn --no-build-isolation`:
@@ -124,7 +124,7 @@ RUN python3 -m pip install --no-cache-dir quanto
 #                    split as NVCC_THREADS=4 / MAX_JOBS=product÷4).
 #
 # FA3 ships as a pre-built manylinux wheel on PyTorch's index (no compilation needed).
-# FA4 ships as a pure-Python wheel on PyPI (JIT-compiled at runtime; Hopper/Blackwell only).
+# FA4 is skipped — it is Hopper/Blackwell only and our runners use Ampere (A10G).
 RUN if [ "$FLASH_ATTN" != "false" ]; then \
         set -e; \
         \
@@ -158,7 +158,6 @@ RUN if [ "$FLASH_ATTN" != "false" ]; then \
         \
         python3 -m pip install --no-cache-dir flash-attn-3 \
             --extra-index-url https://download.pytorch.org/whl/cu130; \
-        python3 -m pip install --no-cache-dir flash-attn-4; \
     else \
         echo "Skipping FA install (FLASH_ATTN=${FLASH_ATTN})"; \
     fi
