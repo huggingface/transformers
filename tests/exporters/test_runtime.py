@@ -11,31 +11,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Runtime tests for exported artifacts — running them in real inference settings.
-
-`test_export.py` checks that models *export* across backends (and that each component runs and returns
-the right number of outputs). This file is the complement: it takes exported artifacts and exercises
-them the way a deployment would — real inputs, real loops, on the actual runtimes (`torch.export`
-`module()`, ONNX Runtime, the ExecuTorch runtime) — checking the results match eager. That's the
-behaviour a count-only smoke test can't see.
-
-Current coverage — the generation `decode` component:
-
-- **query axis stays dynamic** — the exported multi-token decode runs at query lengths other than the
-  captured one;
-- **cache mutates in place** — driving the decode against a fixed-size `StaticCache` carries the cache
-  across steps in place and matches eager: `torch.export` via `USER_INPUT_MUTATION`, and ONNX Runtime
-  via `CudaSession` buffer sharing on the max-performance path (device-resident buffers, in-place input
-  updates, no per-step allocations or host round-trips).
+"""Runtime tests for exported artifacts: the exported `decode` steps a static cache in place at any query length
+(`torch.export` and ONNX Runtime), an exported draft assists generation, and a saved export generates and forwards
+like the in-memory one. Everything runs through the shipped runners, the layer a deployment uses.
 """
 
 import copy
+import functools
+import tempfile
 import unittest
 
 import pytest
 
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters import (
+    AutoExportedModel,
+    DynamoConfig,
+    DynamoExporter,
+    OnnxConfig,
+    OnnxExporter,
+)
+from transformers.exporters.base import ModelRunner
+from transformers.exporters.cache import mask_width
+from transformers.exporters.decompose import decompose_for_generation
+from transformers.exporters.generator import ExportedGenerator
 from transformers.testing_utils import (
     require_onnxruntime,
     require_onnxscript,
@@ -59,6 +58,69 @@ def _causal_mask(positions, cache_len):
     return (torch.arange(cache_len)[None, :] <= positions[:, None])[None, None]
 
 
+@require_torch
+class RuntimeFeedTest(unittest.TestCase):
+    """What the runtime hands a graph, decided without exporting anything.
+
+    Each case here is a bug that reached a model sweep and read as a flake for weeks, because the question
+    it gets wrong ("how wide is the mask", "does this graph take this kwarg") is only asked while driving a
+    real export. They are plain functions, so they can be asked directly.
+    """
+
+    class _Graph:
+        """A stand-in for a runner: what it declares, and what the trace recorded about it."""
+
+        def __init__(self, input_names, kwargs=None):
+            from transformers.exporters.metadata import ExportMetadata
+
+            self.input_names = tuple(input_names)
+            self.export_metadata = ExportMetadata.from_dict({"kwargs": kwargs or {}})
+            self.cache_inputs = ("past_key_values",)
+            self.device = "cpu"
+
+        declares = ModelRunner.declares
+
+    def test_declares_a_pytree_kwarg_its_backend_flattened(self):
+        """A backend that flattens a kwarg declares only its leaves, so the kwarg's own name is absent —
+        the rule that left t5gemma's per-type decoder masks unfed on ONNX."""
+        graph = self._Graph(["input.encoder_outputs.last_hidden_state", "decoder_attention_mask.full_attention"])
+        self.assertTrue(graph.declares("encoder_outputs", {"last_hidden_state": torch.zeros(1)}))
+        self.assertTrue(graph.declares("decoder_attention_mask", {"full_attention": torch.zeros(1)}))
+        # A plain tensor has to be named outright: a graph taking `input_features_mask` does not take
+        # `input_features`.
+        self.assertFalse(graph.declares("input_features", torch.zeros(1)))
+
+    def test_mask_width_comes_from_the_layer_the_mask_belongs_to(self):
+        """`get_max_length()` answers for the *longest* layer, which on mllama is the vision-sized
+        cross-attention one — the mask belongs to the self-attention layer beside it."""
+
+        class _Cache:
+            def get_mask_sizes(self, query_length, layer_idx):
+                return 256, 0
+
+            def get_max_length(self):
+                return 904
+
+        self.assertEqual(mask_width(_Cache(), query_length=7), 256)
+
+    def test_mask_is_built_at_the_rank_the_graph_was_traced_with(self):
+        """`generate` omits the mask when nothing is padded. Rebuilding it as the 4-D causal mask for a
+        graph traced on the 2-D padding mask puts the head axis where the width belongs, which the graph's
+        own comparison then rejects (`input_ids.size()[1] <= attention_mask.size()[1]`)."""
+        two_dimensional = self._Graph(["attention_mask"], {"attention_mask": {"rank": 2, "dtype": "bool"}})
+        four_dimensional = self._Graph(["attention_mask"], {"attention_mask": {"rank": 4, "dtype": "float32"}})
+        generator = ExportedGenerator.__new__(ExportedGenerator)
+        generator._device = torch.device("cpu")
+        positions = torch.arange(3)[None]
+
+        flat = generator._mask_feed(two_dimensional, None, positions, cache_len=3)["attention_mask"]
+        self.assertEqual(flat.shape, (1, 3))
+        self.assertEqual(flat.dtype, torch.bool)
+
+        causal = generator._mask_feed(four_dimensional, None, positions, cache_len=3)["attention_mask"]
+        self.assertEqual(causal.dim(), 4)
+
+
 @slow
 @require_torch
 class ExportedDecodeRuntimeTest(unittest.TestCase):
@@ -78,171 +140,163 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         """Capture the multi-token `decode` component against a fixed-size `StaticCache`."""
         inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
         gen_config = GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
-        return decompose_for_generation(
+        decode = decompose_for_generation(
             model, copy.deepcopy(inputs), generation_config=gen_config, multi_token_decode=True
         )["decode"]
+        return decode.module, decode.inputs
 
-    # ──────────────────── torch.export (Dynamo) ────────────────────
-
-    @pytest.mark.torch_export_test
-    def test_decode_accepts_variable_query_length(self):
-        """The multi-token decode's query axis stays dynamic: the exported graph runs at query lengths
-        other than the one it was captured with, returning logits for every query position."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
-
-        torch.manual_seed(0)
-        model = self._tiny_model()
-        decode_model, decode_inputs = self._decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
-        decode = (
-            DynamoExporter()
-            .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
+    def _assert_decode_steps_like_eager(self, decode, decode_model, decode_inputs, prompt, device):
+        """Prefill `prompt`, then a 2-token and a 1-token step, on one cache the exported `decode` mutates in place:
+        each step matches eager, returns the last position's logits, and advances the cache it was handed."""
+        past_key_values = torch.utils._pytree.tree_map(
+            lambda leaf: leaf.to(device) if isinstance(leaf, torch.Tensor) else leaf,
+            copy.deepcopy(decode_inputs["past_key_values"]),
         )
-
-        for query_len in (1, 2, 4):
-            with self.subTest(query_len=query_len):
-                past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
-                past_key_values.reset()
-                positions = torch.arange(query_len)
-                with torch.no_grad():
-                    out = decode(
-                        input_ids=torch.randint(0, 64, (1, query_len)),
-                        attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
-                        position_ids=positions[None],
-                        past_key_values=past_key_values,
-                    )
-                logits = out.logits if hasattr(out, "logits") else out[0]
-                self.assertEqual(logits.shape[:2], (1, query_len))
-
-    @pytest.mark.torch_export_test
-    def test_static_cache_mutated_in_place_dynamo(self):
-        """The exported decode mutates the passed `StaticCache` in place (a `USER_INPUT_MUTATION`): the
-        same cache reused across calls advances its per-layer position counter, so state carries from
-        step to step without threading a cache in and out."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
-
-        torch.manual_seed(0)
-        model = self._tiny_model()
-        decode_model, decode_inputs = self._decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
-        decode = (
-            DynamoExporter()
-            .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
-        )
-
-        past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
         past_key_values.reset()
+        eager_cache = copy.deepcopy(decode_inputs["past_key_values"])
+        eager_cache.reset()
 
-        def run(input_ids, positions):
+        start = prompt.shape[1]
+        steps = [(prompt, torch.arange(start)), (torch.tensor([[7, 8]]), torch.arange(start, start + 2))]
+        steps.append((torch.tensor([[9]]), torch.tensor([start + 2])))
+        for input_ids, positions in steps:
+            mask = _causal_mask(positions, MAX_CACHE_LEN)
             with torch.no_grad():
-                decode(
-                    input_ids=input_ids,
-                    attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
-                    position_ids=positions[None],
+                outputs = decode(
+                    input_ids=input_ids.to(device),
+                    attention_mask=mask.to(device),
+                    position_ids=positions[None].to(device),
                     past_key_values=past_key_values,
                 )
+                expected = decode_model(
+                    input_ids=input_ids,
+                    attention_mask=mask,
+                    position_ids=positions[None],
+                    past_key_values=eager_cache,
+                    logits_to_keep=decode_inputs["logits_to_keep"],
+                ).logits
+            self.assertEqual(outputs["logits"].shape[:2], (1, 1))
+            torch.testing.assert_close(outputs["logits"].cpu(), expected, atol=1e-3, rtol=1e-3)
+            self.assertEqual(int(past_key_values.get_seq_length()), int(positions[-1]) + 1)
 
-        self.assertEqual(int(past_key_values.get_seq_length()), 0)
-        run(torch.randint(0, 64, (1, 4)), torch.arange(4))  # prefill 4 tokens
-        self.assertEqual(int(past_key_values.get_seq_length()), 4)
-        run(torch.randint(0, 64, (1, 1)), torch.tensor([4]))  # one decode step
-        self.assertEqual(int(past_key_values.get_seq_length()), 5)
-
-    # ──────────────────────── ONNX Runtime ────────────────────────
+    @pytest.mark.torch_export_test
+    def test_decode_steps_in_place_dynamo(self):
+        """The multi-token decode keeps its query axis dynamic, and mutates the `StaticCache` it is passed (a
+        `USER_INPUT_MUTATION`), so state carries from step to step."""
+        torch.manual_seed(0)
+        prompt = torch.randint(0, 64, (1, 4))
+        decode_model, decode_inputs = self._decompose_static_decode(self._tiny_model(), prompt)
+        exported = DynamoExporter().export(
+            decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True)
+        )
+        self._assert_decode_steps_like_eager(exported.runtime(), decode_model, decode_inputs, prompt, "cpu")
 
     @require_torch_gpu
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
-    def test_static_cache_mutated_in_place_onnx(self):
-        """Run the exported decode on ONNX Runtime and check it matches eager while carrying the cache in
-        place. The decode graph exposes the cache as matched `input.<name>` / `output.<name>` pairs;
-        ORT's `CudaSession.set_buffer_sharing` binds each pair to one device buffer, so the cache updates
-        in place. Max-performance path: the shared cache and the step inputs are device-resident buffers
-        reused across steps (passed in `feed_dict` by pointer, written in place — no host round-trips),
-        and `CudaSession` binds the logits output. Teacher-forced, so the check is on the logits, not a
-        greedy argmax a random model can flip on near-ties."""
-        import onnxruntime as ort
-        from onnxruntime.transformers.io_binding_helper import CudaSession
+    def test_decode_steps_in_place_onnx(self):
+        """The same on ONNX Runtime: the graph exposes the cache as matched `input.<name>` / `output.<name>`
+        pairs, which [`OnnxModelRunner`] binds to one device buffer, so the update lands in the tensors passed in."""
+        torch.manual_seed(0)
+        prompt = torch.randint(0, 64, (1, 4))
+        decode_model, decode_inputs = self._decompose_static_decode(self._tiny_model(), prompt)
+        exported = OnnxExporter().export(
+            decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True, external_data=False)
+        )
+        graph = exported.artifact.model_proto.graph
+        cache_names = {node.name[len("input.") :] for node in graph.input if node.name.startswith("input.")}
+        self.assertTrue(cache_names, "decode graph exposes no cache inputs")
+        self.assertLessEqual({f"output.{name}" for name in cache_names}, {node.name for node in graph.output})
+        # Device-resident: the runner binds by pointer, and would copy (then write into the copy) a host tensor.
+        self._assert_decode_steps_like_eager(
+            exported.runtime(device="cuda").runner, decode_model, decode_inputs, prompt, "cuda"
+        )
 
-        from transformers.exporters import OnnxConfig, OnnxExporter
+    # ──────────────────────── save / load ────────────────────────
 
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_saved_export_generates_like_the_in_memory_one(self):
+        """`export_for_generation` -> `save_pretrained` -> `AutoExportedModel.from_pretrained` -> `generate` gives
+        what the in-memory export generated: the manifest carries the components, precisions and cache."""
+        torch.manual_seed(0)
+        model = self._tiny_model()
+        model.generation_config.pad_token_id = 0
+        prompt = torch.randint(0, 64, (1, 4))
+        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+
+        exported = OnnxExporter().export_for_generation(
+            model, copy.deepcopy(inputs), config=OnnxConfig(dynamic=True, external_data=False)
+        )
+        in_memory = exported.runtime(device="cpu").generate(**inputs, max_new_tokens=4, do_sample=False)
+
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = AutoExportedModel.from_pretrained(directory, device="cpu")
+            from_disk = loaded.generate(**inputs, max_new_tokens=4, do_sample=False)
+
+        self.assertListEqual(from_disk.tolist(), in_memory.tolist())
+
+    @pytest.mark.torch_export_test
+    def test_exported_draft_assists_generation(self):
+        """An `assistant_model` passed to `export_for_generation` is exported with the target and saved beside it,
+        and its runtime drafts for the target's `generate` like any `assistant_model`. A draft with other weights
+        disagrees with the target, so candidates are rejected and the caches rolled back, and greedy assisted
+        decoding must still match plain greedy."""
+        torch.manual_seed(0)
+        target = self._tiny_model()
+        draft = self._tiny_model()
+        prompt = torch.randint(0, 64, (1, 6))
+        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+        generate_kwargs = {"do_sample": False, "max_new_tokens": 8, "min_new_tokens": 8}
+        expected = target.generate(**inputs, **generate_kwargs)
+        self.assertFalse(torch.equal(draft.generate(**inputs, **generate_kwargs), expected))
+
+        exported = DynamoExporter().export_for_generation(
+            target, copy.deepcopy(inputs), config=DynamoConfig(dynamic=True), assistant_model=draft
+        )
+
+        def assisted_generate(runtime, draft_runtime):
+            # Count the draft's steps, keeping the signature `generate` reads
+            forward = draft_runtime.forward
+            calls = []
+            draft_runtime.forward = functools.wraps(forward)(lambda **kwargs: calls.append(1) or forward(**kwargs))
+            return runtime.generate(**inputs, **generate_kwargs, assistant_model=draft_runtime), len(calls)
+
+        in_memory, draft_steps = assisted_generate(exported.runtime(), exported.assistant.runtime())
+        self.assertGreater(draft_steps, 0)
+        self.assertListEqual(in_memory.tolist(), expected.tolist())
+
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = AutoExportedModel.from_pretrained(directory)
+            loaded_draft = AutoExportedModel.from_pretrained(directory, subfolder="assistant")
+            from_disk, draft_steps = assisted_generate(loaded, loaded_draft)
+        self.assertGreater(draft_steps, 0)
+        self.assertListEqual(from_disk.tolist(), expected.tolist())
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_saved_single_graph_matches_eager(self):
+        """A non-generative export loads as an [`ExportedModel`] and forwards like the model it came from —
+        the shape most exports are (a classifier, an encoder)."""
         torch.manual_seed(0)
         model = self._tiny_model()
         prompt = torch.randint(0, 64, (1, 4))
-        decode_model, decode_inputs = self._decompose_static_decode(model, prompt)
-        onnx_program = OnnxExporter().export(
-            decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True, external_data=False)
+        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+        with torch.no_grad():
+            expected = model(**copy.deepcopy(inputs)).logits
+
+        exported = OnnxExporter().export(
+            model, copy.deepcopy(inputs), config=OnnxConfig(dynamic=True, external_data=False)
         )
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = AutoExportedModel.from_pretrained(directory, device="cpu")
+            self.assertNotIsInstance(loaded, ExportedGenerator)
+            outputs = loaded(**inputs)
 
-        # cache exposed as matched `input.<name>` / `output.<name>` pairs (graph-input order lines up
-        # with the `StaticCache` pytree leaves below)
-        cache_names = [
-            node.name[len("input.") :]
-            for node in onnx_program.model_proto.graph.input
-            if node.name.startswith("input.")
-        ]
-        self.assertTrue(cache_names, "decode graph exposes no cache inputs")
-        counter_name = next(name for name in cache_names if name.endswith("cumulative_length"))
-        vocab_size = model.config.vocab_size
-
-        session = ort.InferenceSession(
-            onnx_program.model_proto.SerializeToString(), providers=["CUDAExecutionProvider"]
-        )
-        cuda = CudaSession(session, torch.device("cuda"))
-        for name in cache_names:
-            cuda.set_buffer_sharing(f"input.{name}", f"output.{name}")
-
-        # shared cache buffers (device, zeroed = empty cache), passed in `feed_dict` each step so
-        # `CudaSession` binds each `input.<name>` and its `output.<name>` to the same buffer → in place
-        cache_tensors = [
-            t for t in torch.utils._pytree.tree_leaves(decode_inputs["past_key_values"]) if isinstance(t, torch.Tensor)
-        ]
-        cache = {name: torch.zeros_like(t, device="cuda") for name, t in zip(cache_names, cache_tensors)}
-        cache_feed = {f"input.{name}": buf for name, buf in cache.items()}
-
-        # eager reference: a fresh StaticCache fed the same tokens across the whole trajectory
-        eager_cache = copy.deepcopy(decode_inputs["past_key_values"])
-        eager_cache.reset()
-
-        def eager(input_ids, positions):
-            with torch.no_grad():
-                return decode_model(
-                    input_ids=input_ids,
-                    attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
-                    position_ids=positions[None],
-                    past_key_values=eager_cache,
-                ).logits
-
-        # prefill the whole prompt in one multi-token forward (populates the shared cache in place)
-        prompt_len = prompt.shape[1]
-        positions = torch.arange(prompt_len)
-        cuda.allocate_buffers({"logits": (1, prompt_len, vocab_size)})
-        out = cuda.infer(
-            {
-                "input_ids": prompt.cuda(),
-                "attention_mask": _causal_mask(positions, MAX_CACHE_LEN).cuda(),
-                "position_ids": positions[None].cuda(),
-                **cache_feed,
-            }
-        )
-        torch.testing.assert_close(out["logits"].cpu(), eager(prompt, positions), atol=1e-3, rtol=1e-3)
-        self.assertEqual(int(cache[counter_name].cpu().item()), prompt_len)
-
-        # decode loop: fixed query=1 device buffers allocated once and updated in place each step
-        cuda.allocate_buffers({"logits": (1, 1, vocab_size)})
-        input_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-        position_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-        attention_mask = torch.empty((1, 1, 1, MAX_CACHE_LEN), dtype=torch.bool, device="cuda")
-        slots = torch.arange(MAX_CACHE_LEN, device="cuda")
-        for position in range(prompt_len, prompt_len + 2):
-            input_ids.fill_(7)  # teacher-forced with a fixed token on both sides
-            position_ids.fill_(position)
-            attention_mask[0, 0, 0].copy_(slots <= position)
-            out = cuda.infer(
-                {"input_ids": input_ids, "attention_mask": attention_mask, "position_ids": position_ids, **cache_feed}
-            )
-            torch.testing.assert_close(
-                out["logits"].cpu(), eager(torch.tensor([[7]]), torch.tensor([position])), atol=1e-3, rtol=1e-3
-            )
-            self.assertEqual(int(cache[counter_name].cpu().item()), position + 1)
+        torch.testing.assert_close(outputs.logits, expected, atol=1e-3, rtol=1e-3)

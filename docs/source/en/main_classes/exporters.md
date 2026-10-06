@@ -16,7 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-New export backends can be added to Transformers by subclassing [`HfExporter`].
+New export backends can be added to Transformers by subclassing [`HfExporter`] and implementing its two
+hooks, `export_artifact` and `save_artifact`.
 
 <Tip>
 
@@ -39,17 +40,71 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 ## DynamoExporter
 
 [[autodoc]] exporters.exporter_dynamo.DynamoExporter
-    - export
+    - export_artifact
+    - save_artifact
 
 ## OnnxExporter
 
 [[autodoc]] exporters.exporter_onnx.OnnxExporter
-    - export
+    - export_artifact
+    - save_artifact
 
 ## ExecutorchExporter
 
 [[autodoc]] exporters.exporter_executorch.ExecutorchExporter
-    - export
+    - export_artifact
+    - save_artifact
+
+## OpenVINOExporter
+
+[[autodoc]] exporters.exporter_openvino.OpenVINOExporter
+    - export_artifact
+    - save_artifact
+
+## ExportArtifacts
+
+[[autodoc]] exporters.base.ExportArtifacts
+
+## Component
+
+[[autodoc]] exporters.components.Component
+
+## ExportedComponent
+
+[[autodoc]] exporters.components.ExportedComponent
+
+## AutoExportedModel
+
+A decomposed, cache-driven export is loaded back as an [`ExportedGenerator`] and driven through `generate`; a
+single graph is loaded as an [`ExportedModel`] and called. [`AutoExportedModel`] reads the manifest and picks
+between them.
+
+[[autodoc]] exporters.auto.AutoExportedModel
+
+## ExportedGenerator
+
+[[autodoc]] exporters.generator.ExportedGenerator
+    - from_pretrained
+
+## ExportedModel
+
+[[autodoc]] exporters.base.ExportedModel
+    - from_pretrained
+    - __call__
+
+## ModelRunner
+
+One exported graph, bound to the runtime that runs it.
+
+[[autodoc]] exporters.base.ModelRunner
+
+[[autodoc]] exporters.runner_dynamo.DynamoModelRunner
+
+[[autodoc]] exporters.runner_onnx.OnnxModelRunner
+
+[[autodoc]] exporters.runner_openvino.OpenVINOModelRunner
+
+[[autodoc]] exporters.runner_executorch.ExecutorchModelRunner
 
 ## DynamoConfig
 
@@ -76,10 +131,10 @@ between decomposing a model and exporting each component.
 
 [[autodoc]] exporters.utils.prepare_for_export
 
-[[autodoc]] exporters.utils.decompose_prefill_decode
+[[autodoc]] exporters.decompose.decompose_prefill_decode
 
-[[autodoc]] exporters.utils.decompose_multimodal
+[[autodoc]] exporters.decompose.decompose_multimodal
 
-[[autodoc]] exporters.utils.decompose_for_generation
+[[autodoc]] exporters.decompose.decompose_for_generation
 
-[[autodoc]] exporters.utils.is_multimodal
+[[autodoc]] exporters.decompose.is_multimodal

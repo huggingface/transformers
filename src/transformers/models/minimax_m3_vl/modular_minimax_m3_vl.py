@@ -287,7 +287,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
         super().__init__(max_cache_len)
         self.idx_keys: torch.Tensor | None = None
         # Tensor (not int) so it can be marked as a static address for cudagraphs, like `cumulative_length`.
-        self.idx_cumulative_length = torch.tensor([0], dtype=int)
+        self.idx_cumulative_length: torch.Tensor | None = None
 
     def update_index(self, idx_k: torch.Tensor) -> torch.Tensor:
         """Write the new token's `idx_k` into the static buffer in place and return the whole buffer.
@@ -302,7 +302,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
                 dtype=idx_k.dtype,
                 device=idx_k.device,
             )
-            self.idx_cumulative_length = self.idx_cumulative_length.to(idx_k.device)
+            self.idx_cumulative_length = torch.zeros(1, dtype=torch.long, device=idx_k.device)
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.idx_keys)
                 torch._dynamo.mark_static_address(self.idx_cumulative_length)
@@ -892,6 +892,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.rotary_emb = MiniMaxM3VLVisionRotaryEmbedding(config)
+        self.include_temporal_position_ids = True
         self.post_init()
 
     @merge_with_config_defaults
@@ -907,7 +908,10 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
         position_ids = get_vision_position_ids(
-            grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
+            grid_thw,
+            self.config.spatial_merge_size,
+            include_temporal=self.include_temporal_position_ids,
+            kwargs=kwargs,
         )
         position_embeddings = self.rotary_emb(embeds, position_ids)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)

@@ -23,6 +23,24 @@ small workaround at that stage rather than editing the model.
 
 Add a workaround by writing one function and registering it with a decorator. Each workaround belongs at the lowest stage that can express it cleanly.
 
+To add a whole backend rather than a workaround, subclass [`HfExporter`] and implement its two hooks —
+`export_artifact`, which traces one graph and returns it with the metadata describing it, and
+`save_artifact`, which writes one out — then declare `export_format`, `artifact_suffix` and `config_class`. The public
+`export` / `export_for_generation` entry points, the [`~exporters.ExportArtifacts`] they return, and
+loading it back are built on those two and need no per-backend code.
+
+Pair it with a [`~exporters.ModelRunner`], which is what runs the artifact back: `from_artifact` and
+`from_pretrained` build one, `__call__` takes the graph's kwargs and returns its named tensor leaves.
+Register the config, the exporter and the runner under one format name with
+`register_backend(name, config, exporter, runner)`, and every auto class and loader finds them. The runner
+is optional: a format registered without one exports and saves, but can't run or load its artifacts.
+
+The smallest pair in the tree is [`DynamoExporter`] and [`DynamoModelRunner`], in
+[exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)
+and
+[runner_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/runner_dynamo.py);
+every other backend subclasses that exporter and lowers the program it traces.
+
 ## Patches and fixes
 
 A workaround is either a patch or a fix. The two differ in whether they can be reverted.
@@ -80,7 +98,7 @@ this reference line up. Look there for the exact ops and classes each stage hand
 
 ### DynamoExporter
 
-The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export`
+The base exporter runs six stages, in order, inside `DynamoExporter.export_artifact`
 (see [exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)).
 
 1. Forward-signature patch: gives `model.forward` a flat argument signature so `torch.export`
@@ -94,6 +112,7 @@ The base exporter runs one patch stage and four helpers, in order, inside `Dynam
    with `DynamoConfig.dynamic_shapes`.
 5. State cleanup: reset tensor attributes a model sets inside `forward` that `torch.export` leaves
    as fake tensors. Extend by adding the attribute name to `_STATEFUL_CACHE_ATTRS`.
+6. Unused-weight removal: drop parameters and buffers the traced graph never reads.
 
 ### OnnxExporter
 
@@ -112,8 +131,9 @@ grep -nE "^def (_patch_|_fix_|_aten_)" src/transformers/exporters/exporter_onnx.
 3. FX node fixes: rewrite graph nodes the ONNX exporter can't lower, such as alias ops, in-place
    views, and dead asserts. Extend with `@register_fx_node_fix("onnx")`.
 4. ONNX translations: supply a custom lowering for an aten op where the default is missing or buggy
-   (for example `aten.index_put` or `aten._grouped_mm`). Add an `_aten_*` function to
-   `_ONNX_TRANSLATION_TABLE`.
+   (for example `aten.index_put` or `aten._grouped_mm`). Write an `_aten_*` function and register it
+   with `@register_onnx_translation("torch.ops.aten.<op>.<overload>")` (dotted op paths, like
+   `register_patch`); `_get_onnx_translation_table` assembles them into `custom_translation_table`.
 5. ONNX IR fixes: rewrite the finished ONNX program to work around ONNX Runtime bugs (for example
    forcing `TopK(sorted=True)`). Add a `_fix_ir_*` function to `_IR_FIXES`.
 
@@ -124,7 +144,7 @@ starting with backend preparation (see
 [exporter_executorch.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_executorch.py)).
 
 1. Backend preparation: move the model to the target device and dtype and pick its partitioner
-   (`prepare_for_xnnpack`, `prepare_for_cuda`). Add a backend by registering `prepare_for_<name>` in
+   (`prepare_for_xnnpack`, `prepare_for_cuda`, `prepare_for_mlx`, `prepare_for_openvino`). Add a backend by registering `prepare_for_<name>` in
    `_BACKEND_PREPARE`.
 2. Torch patches: replace `torch` ops the ExecuTorch backends can't accept, such as `split_copy`,
    `chunk`, and `topk(k>dim)`. Extend with `@register_patch("executorch", ...)`.
@@ -136,16 +156,10 @@ starting with backend preparation (see
 5. FX node fixes: rewrite individual nodes, such as mapping Python sym ops to `executorch_prim.*` or
    rewriting `pow` as a `mul` chain. Extend with `@register_fx_node_fix("executorch")`.
 
-## Known upstream workarounds
+## Test skip tables
 
-A few model classes hit confirmed bugs in the `onnxscript` graph optimizer (constant folding crashing
-on `SplitToSequence`, FPN initializers being dropped). [ONNX_DISABLE_OPTIMIZE](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_export.py) 
-disables `onnxscript` optimization for those models. Each entry records the
-upstream issue next to the model name. The list is expected to shrink as upstream bugs land, so a
-new entry must reference a specific upstream bug rather than disable optimization arbitrarily.
-
-[EXPORT_SKIPS](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_export.py),
-opts a handful of model classes out of the export sweep entirely when the model is
-fundamentally non-exportable as-is (data-dependent control flow that can't be vectorized, or modules
-treated as forward arguments). Each entry carries a reason naming the model-side change needed. This
-list is also expected to shrink, not grow.
+[test_export.py](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_export.py) keeps
+the models the export sweep treats differently in scope-keyed tables: `EXPORT_SKIPS` for classes a backend or
+variant can't export or compare yet (with the reason and, where one exists, the TODO that lifts it), and
+`ONNX_DISABLE_OPTIMIZE` / `EXECUTORCH_PARTITION_EXCLUDE` / `EXECUTORCH_DISABLE_PARTITION` for classes that
+export only with a backend option turned off. New entries need a reason next to the model name.

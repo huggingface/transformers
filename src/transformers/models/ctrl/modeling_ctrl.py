@@ -313,9 +313,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         inputs_embeds *= np.sqrt(self.d_model_size)
 
-        # `self.pos_encoding` won't be sent to the correct device and dtype along the model, so we do it manually.
-        self.pos_encoding = self.pos_encoding.to(device=device, dtype=inputs_embeds.dtype)
-        pos_embeds = self.pos_encoding[position_ids, :]
+        pos_embeds = self.pos_encoding[position_ids, :].to(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + pos_embeds + token_type_embeds
 

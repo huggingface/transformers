@@ -375,6 +375,9 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
     def __init__(self, config: Kimi_K25VisionConfig):
         super().__init__(config)
         self.merge_kernel_size = config.merge_kernel_size
+        # Positions and attention run un-merged over every frame; the merge is deferred to `temporal_patch_merger`.
+        self.spatial_merge_size = 1
+        self.merge_temporal_attention = True
         self.patch_embed = Kimi_K25VisionPatchEmbed(config)
 
         self.rotary_emb = Kimi_K25VisionRotaryEmbedding(config)
@@ -423,11 +426,11 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
-            grid_thw, self.config, merge_temporal=True, kwargs=kwargs
+            grid_thw, self.config, merge_temporal=self.merge_temporal_attention, kwargs=kwargs
         )
 
         for block in self.layers:

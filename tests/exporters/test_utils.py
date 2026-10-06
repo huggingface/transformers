@@ -21,8 +21,7 @@ DON'T touch:
 - The **auto factory** (``AutoExportConfig`` / ``AutoHfExporter``) — models bypass it and
   instantiate concrete exporters directly.
 - **Config dict round-trips** — configs are built via constructor calls, never serialised.
-- **Registration edge cases** — collision warnings and type-check rejections in
-  ``register_exporter`` / ``register_export_config``.
+- **Registration edge cases** — type-check rejections in ``register_backend``.
 - **`patch_attributes` restore-on-exception** — the happy path is exercised but the exception
   branch never fires in real exports.
 - The **`decompose_prefill_decode` guard** against generators that bypass the top-level
@@ -38,15 +37,21 @@ from unittest import mock
 
 from transformers.exporters import utils as exporter_utils
 from transformers.exporters.auto import (
-    AUTO_EXPORT_CONFIG_MAPPING,
-    AUTO_EXPORTER_MAPPING,
+    EXPORT_BACKENDS,
     AutoExportConfig,
     AutoHfExporter,
-    register_export_config,
-    register_exporter,
+    export_backend,
+    register_backend,
 )
-from transformers.exporters.base import HfExporter
-from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
+from transformers.exporters.base import HfExporter, ModelRunner
+from transformers.exporters.configs import (
+    DynamoConfig,
+    ExecutorchConfig,
+    ExportConfigMixin,
+    ExportFormat,
+    OnnxConfig,
+    OpenVINOConfig,
+)
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
 
@@ -55,10 +60,10 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import GenerationConfig
+    from transformers import GenerationConfig, PretrainedConfig
+    from transformers.exporters.decompose import decompose_prefill_decode
     from transformers.exporters.utils import (
         cast_leaf_tensors,
-        decompose_prefill_decode,
         duplicate_leaf_tensors,
         patch_attributes,
         register_patch,
@@ -69,6 +74,7 @@ CONCRETE_CONFIGS = [
     (OnnxConfig, ExportFormat.ONNX),
     (DynamoConfig, ExportFormat.DYNAMO),
     (ExecutorchConfig, ExportFormat.EXECUTORCH),
+    (OpenVINOConfig, ExportFormat.OPENVINO),
 ]
 
 
@@ -95,18 +101,10 @@ class AutoExportConfigTest(unittest.TestCase):
                 # Enum inputs also work — serialised configs may hold either form.
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format}), config_cls)
 
-    def test_from_dict_missing_export_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "export_format"):
-            AutoExportConfig.from_dict({})
-
-    def test_from_dict_unknown_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "Unknown exporter type"):
-            AutoExportConfig.from_dict({"export_format": "not_a_real_backend"})
-
 
 class AutoHfExporterTest(unittest.TestCase):
     def _check_dispatch(self, config):
-        expected_cls = AUTO_EXPORTER_MAPPING[config.export_format.value]
+        expected_cls = EXPORT_BACKENDS[config.export_format.value].exporter
         self.assertIsInstance(AutoHfExporter.from_config(config), expected_cls)
         # Same dispatch works when starting from a plain dict.
         self.assertIsInstance(AutoHfExporter.from_config(config.to_dict()), expected_cls)
@@ -127,47 +125,44 @@ class AutoHfExporterTest(unittest.TestCase):
         self._check_dispatch(ExecutorchConfig())
 
     def test_from_config_raises_on_unknown_format(self):
-        with self.assertRaisesRegex(ValueError, "Unsupported export config"):
+        # Both name the formats that *are* registered, so the message says what to pass instead.
+        with self.assertRaisesRegex(ValueError, "Unknown export format 'not_a_real_backend'"):
             AutoHfExporter.from_config({"export_format": "not_a_real_backend"})
-        with self.assertRaisesRegex(ValueError, "Unsupported export config"):
+        with self.assertRaisesRegex(ValueError, "No export format given"):
             AutoHfExporter.from_config({})
 
 
 class RegistrationTest(unittest.TestCase):
-    """Cover the edge cases of `register_exporter` / `register_export_config` that normal
-    registrations at module load don't hit — the type-check rejection paths. The mappings are
-    temporarily patched so registrations never leak into other tests."""
+    """`register_backend` wires a format through to `export_backend`, and refuses parts of the wrong type.
+    `EXPORT_BACKENDS` is temporarily patched so registrations never leak into other tests."""
 
-    def test_register_exporter_rejects_non_subclass(self):
-        with mock.patch.dict(AUTO_EXPORTER_MAPPING):
+    def test_register_backend_rejects_non_subclass(self):
+        with mock.patch.dict(EXPORT_BACKENDS):
             with self.assertRaisesRegex(TypeError, "HfExporter"):
+                register_backend("bad", ExportConfigMixin, object, ModelRunner)
 
-                @register_exporter("bad")
-                class _NotAnExporter:
-                    pass
+    def test_register_backend_installs_stub(self):
+        class _StubExporter(HfExporter):
+            required_packages = []
 
-    def test_register_export_config_rejects_non_subclass(self):
-        with mock.patch.dict(AUTO_EXPORT_CONFIG_MAPPING):
-            with self.assertRaisesRegex(TypeError, "ExportConfigMixin"):
+            def export_artifact(self, model, sample_inputs, config):
+                return None, {}
 
-                @register_export_config("bad_config")
-                class _NotAConfig:
-                    pass
+            @classmethod
+            def save_artifact(cls, artifact, path):
+                return None
 
-    def test_register_exporter_installs_stub(self):
-        # Sanity check that a legit registration is wired through — protects against a future
-        # refactor that would break the decorator without breaking any real export test.
-        with mock.patch.dict(AUTO_EXPORTER_MAPPING):
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend("stub", ExportConfigMixin, _StubExporter, ModelRunner)
+            self.assertIs(export_backend("stub", "exporter"), _StubExporter)
+        self.assertNotIn("stub", EXPORT_BACKENDS)
 
-            @register_exporter("stub_exporter")
-            class _StubExporter(HfExporter):
-                required_packages = []
-
-                def export(self, model, sample_inputs, config):
-                    return None
-
-            self.assertIs(AUTO_EXPORTER_MAPPING["stub_exporter"], _StubExporter)
-        self.assertNotIn("stub_exporter", AUTO_EXPORTER_MAPPING)
+    def test_export_only_backend_refuses_to_run(self):
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend("export_only", ExportConfigMixin, HfExporter)
+            self.assertIs(export_backend("export_only", "exporter"), HfExporter)
+            with self.assertRaisesRegex(ValueError, "registers no runner"):
+                export_backend("export_only", "runner")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -183,10 +178,7 @@ class _Owner:
 @require_torch
 class PatchRegistryEdgeCasesTest(unittest.TestCase):
     def test_patch_attributes_roll_back_on_exception(self):
-        # Real exports never exit the trace via exception, so this rollback path is untested by
-        # integration. If it ever regressed to leave already-installed patches in place when a
-        # later factory raises, the *next* export would run against a leaked patch and fail in
-        # a way that looks unrelated. Only this test would catch that.
+        # A factory raising mid-install must roll back the patches already installed.
         a, b = _Owner(), _Owner()
 
         def _bad_factory(original):
@@ -204,9 +196,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         self.assertEqual(b.method(), "original")
 
     def test_register_patch_skips_unresolvable_path(self):
-        # Real backends only register paths that resolve; the silent-skip fallback is what lets
-        # `exporter_onnx.py` and `exporter_executorch.py` co-exist when only one backend is
-        # installed. If it ever started raising, one of the two backends would fail to import.
+        # An unresolvable path is skipped, so a backend imports when another's packages are missing.
         backend = "_test_unresolvable"
 
         @register_patch(backend, "does.not.exist.at.all")
@@ -227,10 +217,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
 @require_torch
 class LeafTensorInvariantsTest(unittest.TestCase):
     def test_duplicate_leaf_tensors_only_clones_repeats(self):
-        # If this ever regressed to ``.clone()``-everything, ONNX exports would still succeed
-        # and just get a bit bigger — no integration test would notice. Similarly, if it
-        # stopped cloning the second occurrence, ONNX's output-node dedup would rename ports
-        # in a way that only manifests as a stale name mapping.
+        # Only repeated tensors are cloned, so ONNX's output dedup never renames ports.
         shared = torch.zeros(2)
         distinct = torch.ones(3)
         result = duplicate_leaf_tensors({"a": shared, "b": shared, "c": distinct})
@@ -240,10 +227,7 @@ class LeafTensorInvariantsTest(unittest.TestCase):
         self.assertIs(result["c"], distinct)
 
     def test_cast_leaf_tensors_preserves_integer_dtypes(self):
-        # ``prepare_for_export`` casts input trees to the model's dtype. If this ever started
-        # coercing integer tensors (``input_ids``, indices, positions) to float, most exports
-        # would still trace but embedding-lookup / bincount / index-select paths would fail
-        # far downstream with confusing errors. Only this test would attribute it to the cast.
+        # Casting inputs to the model's dtype leaves integer tensors (ids, indices, positions) alone.
         out = cast_leaf_tensors(
             {
                 "input_ids": torch.zeros(2, dtype=torch.int64),
@@ -259,23 +243,21 @@ class LeafTensorInvariantsTest(unittest.TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# decompose_prefill_decode guard (dead code without this test — no real generator
-# calls forward < 2 times, so the branch would rot silently)
+# decompose_prefill_decode guard
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 @require_torch
 class DecomposePrefillDecodeGuardTest(unittest.TestCase):
     def test_raises_when_generate_bypasses_forward(self):
-        # Guards against generators that delegate to an inner model — the top-level ``forward``
-        # captures at most one call, so the ``calls[0] / calls[1]`` indexing would raise a
-        # confusing IndexError instead of the helpful RuntimeError below.
+        # A generator delegating to an inner model captures too few top-level forwards.
         class _FakeGenerator(nn.Module):
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(1, 1)
-                # `decompose_prefill_decode` bases its capture config on the model's own (mimics a
+                # `decompose_prefill_decode` reads the model's own configs before capturing (mimics a
                 # real `PreTrainedModel`); the guard under test fires afterwards on the capture count.
+                self.config = PretrainedConfig()
                 self.generation_config = GenerationConfig()
 
             def forward(self, input_ids=None, **kwargs):

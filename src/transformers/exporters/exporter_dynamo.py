@@ -13,34 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Dynamo exporter.
+"""Dynamo exporter: `torch.export.export(strict=False)` plus what makes Transformers models traceable.
 
-Wraps `torch.export.export(strict=False)` with helpers that make Transformers
-models exportable. The export pipeline uses five sections, in execution order:
+In execution order:
 
-1. **Model signature patch** (`patch_forward_signature`): replaces `model.forward`
-   with a flat explicit signature derived from `sample_inputs` so `torch.export` does
-   not expand `**kwargs` into a `combined_args` bundle that mismatches `dynamic_shapes`.
-   This is the entry contract `torch.export` reads before tracing.
-2. **Model patches** (`_PATCHES["dynamo"]` via `apply_patches("dynamo")`): reversible
-   class-attribute swaps applied during tracing to replace non-exportable model patterns
-   (data-dependent loops, in-place ops, mask checks) with export-safe equivalents.
-   Modeling code itself is not updated because these patches are too model-specific.
-3. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
-   hooks (via `torch.utils._pytree.register_pytree_node`) for Cache subclasses and
-   custom containers so `torch.export` can trace through them.
-4. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` inference
-   for all tensor and cache inputs when `DynamoConfig.dynamic=True`.
-5. **Model state cleanup** (`reset_model_state`): non-Cache stateful module attributes
-   (`_STATEFUL_CACHE_ATTRS`) are saved on entry, set to `None` during the trace, and
-   restored on exit — so a previous eager forward doesn't leak into the trace and any
-   FakeTensors the trace planted are discarded before the next eager forward.
+1. **Signature patch** (`patch_forward_signature`): a flat explicit `forward` signature built from the sample
+   inputs, so `**kwargs` does not become a `combined_args` bundle that mismatches `dynamic_shapes`.
+2. **Model patches** (`apply_patches("dynamo")`): reversible swaps of non-exportable modeling patterns
+   (data-dependent loops, in-place ops, mask checks), including the varlen vision attention.
+3. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten for `Cache` subclasses and
+   custom containers.
+4. **Dynamic shapes** (`get_auto_dynamic_shapes`): `Dim.AUTO` for every input axis the architecture does not fix,
+   when `DynamoConfig.dynamic=True`.
+5. **State cleanup** (`reset_model_state`): stateful module attributes cleared for the trace and restored after.
+6. **Unused-weight removal** (`drop_unused_weights`): parameters the graph never reads are dropped, since a
+   component is traced from a wrapper holding the whole model.
 """
 
 from __future__ import annotations
 
 import copy
-import importlib
 import inspect
 import sys
 import types
@@ -51,13 +43,24 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
-from .configs import DynamoConfig
-from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
+from .configs import DynamoConfig, ExportFormat
+from .metadata import (
+    build_export_metadata,
+)
+from .utils import (
+    _class_to_path,
+    _path_to_class,
+    apply_patches,
+    patch_attributes,
+    prepare_for_export,
+    register_patch,
+)
 
 
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
+    from torch.export.graph_signature import ExportGraphSignature
 
     from ..cache_utils import Cache
     from ..modeling_utils import PreTrainedModel
@@ -75,25 +78,26 @@ class DynamoExporter(HfExporter):
     >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
 
     >>> exporter = DynamoExporter()
-    >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
-    >>> outputs = exported.module()(**inputs)
+    >>> exported_artifacts = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
+    >>> outputs = exported_artifacts.module()(**inputs)
     ```
     """
 
+    export_format = ExportFormat.DYNAMO
+    config_class = DynamoConfig
+    artifact_suffix = ".pt2"
+
     required_packages = ["torch"]
     min_versions = {"torch": "2.11.0"}
-    tested_versions = {"torch": "2.12.0"}
+    tested_versions = {"torch": "2.13.0"}
 
-    def export(
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
         config: DynamoConfig | dict[str, Any],
     ) -> ExportedProgram:
-        if isinstance(config, dict):
-            config = DynamoConfig(**config)
-        elif not isinstance(config, DynamoConfig):
-            raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+        config = self._as_config(config)
 
         model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
 
@@ -114,7 +118,7 @@ class DynamoExporter(HfExporter):
             apply_patches("dynamo"),
             reset_model_state(model),
             patch_model_config(model, output_flags),
-            patch_forward_signature(model, sample_inputs),
+            patch_forward_signature(model, sample_inputs, output_flags),
         ):
             exported_program: ExportedProgram = torch.export.export(
                 model,
@@ -125,27 +129,24 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
-        return exported_program
+        exported_program = drop_unused_weights(exported_program)
+
+        metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
+        return exported_program, metadata
+
+    @classmethod
+    def save_artifact(cls, artifact, path) -> None:
+        torch.export.save(artifact, str(path))
 
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────
-# Replaces `model.forward` with a flat explicit signature derived from the
-# inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
-# `patch_model_config` lives here too — it strips output flags from the inputs
-# and applies them onto `model.config` for the duration of the trace.
 
 
-# Output flags stripped from inputs and applied onto `model.config` for the trace.
 @contextmanager
 def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
-    """Reversibly tweak `model.config` for the trace:
+    """Reversibly apply `output_flags` (popped by `prepare_for_export`) onto `model.config` for the trace.
 
-    - Applies `output_flags` (popped from inputs by `prepare_for_export`) onto
-      `model.config.<flag>` so the model picks them up via its usual `<flag> if <flag> is
-      not None else self.config.<flag>` fallback.
-
-    Originals are restored on exit. Flags whose value is `None`, or that the config doesn't
-    declare, are silently skipped — useful for submodels that don't accept every parent flag.
+    Flags that are `None` or that the config doesn't declare are skipped.
     """
     config_patches = []
     for flag, value in output_flags.items():
@@ -157,19 +158,19 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
 
 
 @contextmanager
-def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
-    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
+def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any], output_flags: dict[str, Any]):
+    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`, passing the
+    `output_flags` the config does not declare (`patch_model_config` applies the rest) as fixed values.
 
-    `torch.export` infers the exported function signature from `model.forward.__signature__`.
-    Most transformers models use `**kwargs: Unpack[TransformersKwargs]`, which causes
-    `torch.export` to expand the signature into a large `combined_args` bundle that
-    mismatches the `dynamic_shapes` dict. This patch replaces the forward with a
-    minimal signature containing only the keys present in `inputs`.
+    With `**kwargs` in the signature, `torch.export` builds a `combined_args` bundle that mismatches the
+    `dynamic_shapes` dict.
     """
     original_forward = model.forward
+    config = getattr(model, "config", None)
+    baked = {flag: value for flag, value in output_flags.items() if value is not None and not hasattr(config, flag)}
 
     def _flat_forward(**kwargs):
-        return original_forward(**kwargs)
+        return original_forward(**kwargs, **baked)
 
     _flat_forward.__signature__ = inspect.Signature(
         [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]
@@ -183,19 +184,29 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
 
 
 # ── Stage 2: Model patches ────────────────────────────────────────────────────
-# Reversible class-attribute swaps applied during `torch.export` tracing via
-# `apply_patches("dynamo")`. Each replaces a non-exportable model pattern
-# (data-dependent control flow, in-place ops on views, etc.) with an
-# export-safe equivalent on the owning class — every live instance sees the
-# replacement until the context exits. Modeling code itself is not updated
-# because these patches are too model-specific; we do strive to keep modeling
-# code compliant where reasonable.
-#
-# Each `@register_patch("dynamo", *dotted_paths)` decorator targets one or
-# more `Class.method` paths and wraps a `factory(original) -> replacement`.
-# Multiple paths share the same factory when the same method shape needs to be
-# swapped across several classes (e.g. `_reshaped_vision_attention_forward`
-# applied to every chunked-vision attention class — see the long list below).
+# Reversible class-attribute swaps applied during tracing via `apply_patches("dynamo")`, for patterns too
+# model-specific to fix in modeling code.
+
+
+@register_patch(
+    "dynamo",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
+)
+def _patch_sliding_window_length(original):
+    """Read a growing sliding layer's length off its keys tensor instead of its own counter.
+
+    The python-int counter is baked as a constant, pinning the graph to the traced step (a tree-spec
+    `cumulative_length` mismatch). Below the window `keys.shape[-2]` is the same quantity, and symbolic.
+    """
+
+    def patch(self, *args, **kwargs):
+        keys = getattr(self, "keys", None)
+        cached = keys.shape[-2] if keys is not None else 0
+        with patch_attributes([(self, "cumulative_length", lambda _original: cached)]):
+            return original(self, *args, **kwargs)
+
+    return patch
 
 
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
@@ -206,12 +217,10 @@ def _patch_classifier_cast(_original):
 
 @register_patch("dynamo", "torch.nn.functional.scaled_dot_product_attention")
 def _patch_sdpa(original):
-    """Route SDPA through the MATH backend on CPU during tracing — CPU SDPA's flash/efficient
-    paths guard on ``Eq(batch, 1)`` (upstream https://github.com/pytorch/pytorch/issues/180202),
-    which trips ``GuardOnDataDependentSymNode`` whenever the batch dim comes from a data-dependent
-    op like ``pixel_values[bool_mask]`` (Idefics2/3 and most VLMs). The MATH decomposition has no
-    batch-1 dispatch, so the guard never fires. CUDA exports are left alone — the GPU kernels
-    don't have this guard, and we want the flash/efficient decompositions there.
+    """Route SDPA through the MATH backend on CPU during tracing.
+
+    CPU flash/efficient paths guard on ``Eq(batch, 1)`` (https://github.com/pytorch/pytorch/issues/180202),
+    a ``GuardOnDataDependentSymNode`` when the batch comes from e.g. ``pixel_values[bool_mask]``.
     """
     from torch.nn.attention import SDPBackend, sdpa_kernel
 
@@ -226,11 +235,9 @@ def _patch_sdpa(original):
 
 @register_patch(
     "dynamo",
-    # Canonical definition + the public re-export.
     "transformers.utils.import_utils.is_kernels_available",
     "transformers.utils.is_kernels_available",
-    # Local `from ...utils import is_kernels_available` rebinds in modeling modules
-    # — each one needs its own override since the name is looked up there.
+    # Modules that rebind the name locally need their own override.
     "transformers.modeling_utils.is_kernels_available",
     "transformers.models.sam3_video.modeling_sam3_video.is_kernels_available",
     "transformers.models.mra.modeling_mra.is_kernels_available",
@@ -238,32 +245,16 @@ def _patch_sdpa(original):
     "transformers.models.yoso.modeling_yoso.is_kernels_available",
 )
 def _patch_is_kernels_available(_original):
-    """Force-disable the optional ``kernels`` library during export — its kernels
-    call into native code that ``torch.export`` cannot trace, and the pure-PyTorch
-    fallbacks in each model are always traceable."""
+    """Disable the ``kernels`` library during export; its native kernels are not traceable."""
     return lambda *args, **kwargs: False
 
 
 # --- Chunked vision/audio attention ─────────────────────────────────────────
-# Sub-encoders that pack multiple variable-length sequences into one flat tensor
-# with `cu_seqlens` markers fall back to `split → per-segment SDPA → cat` in the
-# unpatched forward, which is a Python loop that `torch.export` can't trace.
-# `_reshaped_vision_attention_forward` replaces that loop with a reshape into a
-# per-segment batch followed by a single SDPA call. It handles the layout
-# differences across encoders (combined `qkv` vs separate `q/k/v` vs separate
-# `q_proj/k_proj/v_proj`, asymmetric `q_dim/kv_dim` split, `(cos, sin)` vs single
-# rotary tensor vs none, `.proj` vs `.out_proj`, NaViT `(1, T, D)` packing,
-# tuple vs single return). The `returns_tuple` flag is bound once per class at
-# install time by inspecting the original `forward`'s source.
-#
-# NOTE: this whole stack of patches becomes unnecessary once transformers adopts a
-# proper varlen-attention op (e.g. PyTorch's `torch._nested.scaled_dot_product_attention`
-# or a Flex-Attention varlen kernel) — the modeling forwards can then express the
-# segmented attention directly with `cu_seqlens` and trace through `torch.export`
-# without this reshape-into-batch workaround. Drop this section when that lands.
+# Packed `cu_seqlens` encoders loop `split -> per-segment SDPA -> cat`, which can't be traced; replaced by
+# one `_varlen_attn` op, which ONNX and ExecuTorch lower to a `cu_seqlens`-built masked SDPA.
 
 
-def _reshaped_vision_attention_forward(
+def _varlen_vision_attention_forward(
     self,
     hidden_states: torch.Tensor,
     cu_seqlens: torch.Tensor,
@@ -272,12 +263,9 @@ def _reshaped_vision_attention_forward(
     returns_tuple: bool = False,
     **kwargs,
 ):
-    """Export-safe chunked vision/audio attention: reshape segments into a batch dim,
-    apply rotary if provided, run one SDPA call, project, and re-emit in the original layout."""
+    """Export-safe chunked vision/audio attention: one varlen attention over the `cu_seqlens` segments."""
 
-    # Normalise NaViT-style `(1, T, D)` packing (minicpmv4_6) to the flat `(T, D)` layout
-    # the rest of this wrapper assumes. The leading dim is always 1 — multi-image batches
-    # are packed along the sequence dim.
+    # NaViT-style `(1, T, D)` packing (minicpmv4_6) to flat `(T, D)`.
     needs_batch_restore = hidden_states.ndim == 3
     if needs_batch_restore:
         hidden_states = hidden_states.squeeze(0)
@@ -287,19 +275,9 @@ def _reshaped_vision_attention_forward(
         seq_length != 0,
         "Chunked vision attention received an empty input.",
     )
-    num_segments = cu_seqlens.shape[0] - 1
-    # The reshape-into-batch below needs equal-length segments.
-    segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-    torch_compilable_check(
-        (segment_lengths == segment_lengths[0]).all(),
-        "Chunked vision attention requires uniform segment lengths during export. "
-        "Ensure all images have the same resolution (use do_resize=True in the processor) "
-        "or pad inputs to a common size.",
-    )
 
     if hasattr(self, "qkv"):
-        # Grouped-query attention (q_dim != kv_dim, e.g. Exaone4.5) splits asymmetrically;
-        # uniform reshape into (seq, 3, num_heads, -1) only works when Q, K, V share the head count.
+        # GQA (e.g. Exaone4.5) splits the packed qkv asymmetrically.
         if hasattr(self, "q_dim") and hasattr(self, "kv_dim") and self.q_dim != self.kv_dim:
             query_states, key_states, value_states = self.qkv(hidden_states).split(
                 [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
@@ -320,44 +298,39 @@ def _reshaped_vision_attention_forward(
         value_states = v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
     if position_embeddings is not None:
-        # Each vision encoder ships its own ``apply_rotary_pos_emb_vision`` in its modeling file
-        # (Qwen2-VL's takes (q, k, cos, sin), Qwen2.5/3-Omni's takes (x, rotary_emb), etc.). Look
-        # it up on the model's own module so this patch stays signature-agnostic across the
-        # ~19 attention classes it's installed on.
+        # Each encoder's own ``apply_rotary_pos_emb_vision``; signatures differ per model.
         apply_rotary_pos_emb_vision = sys.modules[type(self).__module__].apply_rotary_pos_emb_vision
         if isinstance(position_embeddings, (tuple, list)):
-            # (cos, sin) tuple convention — most VL encoders.
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
         else:
-            # Single `rotary_pos_emb` tensor convention — Qwen2.5/3 Omni vision applies rotary per-states.
+            # Single rotary tensor (Qwen2.5/3 Omni).
             query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
             key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
-    seg_len = seq_length // num_segments
+    # `seq_length` bounds `max_q`/`max_k` without a data-dependent `.max()`.
+    # The flash kernel needs head_dim % 8 == 0; otherwise emit the masked SDPA directly.
+    enable_gqa = getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads
+    if query_states.shape[-1] % 8 == 0:
+        from torch.nn.attention.varlen import varlen_attn
 
-    # (seq, heads, dim) → (n_seg, seg_len, heads, dim) → (n_seg, heads, seg_len, dim)
-    def _to_batched(t):
-        return t.unflatten(0, (num_segments, seg_len)).transpose(1, 2)
-
-    query_states = _to_batched(query_states)
-    key_states = _to_batched(key_states)
-    value_states = _to_batched(value_states)
-
-    torch_compilable_check(query_states.shape[0] != 0, "Reshaped chunked-vision attention got zero batch.")
-    torch_compilable_check(query_states.shape[2] != 0, "Reshaped chunked-vision attention got zero seq.")
-    attn_output = torch.nn.functional.scaled_dot_product_attention(
-        query_states,
-        key_states,
-        value_states,
-        is_causal=False,
-        scale=self.scaling,
-        dropout_p=0.0 if not self.training else self.attention_dropout,
-        enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
-    )
-
-    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
-    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1)
+        cu = cu_seqlens.to(torch.int32)
+        attn_output = varlen_attn(
+            query_states,
+            key_states,
+            value_states,
+            cu,
+            cu,
+            seq_length,
+            seq_length,
+            scale=self.scaling,
+            enable_gqa=enable_gqa,
+        )
+    else:
+        attn_output = varlen_attn_masked_sdpa(
+            query_states, key_states, value_states, cu_seqlens, scale=self.scaling, enable_gqa=enable_gqa
+        )
+    attn_output = attn_output.reshape(seq_length, -1)
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
     attn_output = out_proj(attn_output)
 
@@ -367,9 +340,8 @@ def _reshaped_vision_attention_forward(
     return (attn_output, None) if returns_tuple else attn_output
 
 
-@register_patch(
-    "dynamo",
-    # Combined `qkv` + `(cos, sin)` rotary + `.proj`
+# Named so `needs_half_precision_export` can tell which models hit the (bf16-only) varlen flash path.
+_VARLEN_ATTENTION_PATHS = (
     "transformers.models.qwen2_vl.modeling_qwen2_vl.VisionAttention.forward",
     "transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionAttention.forward",
     "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLVisionAttention.forward",
@@ -381,63 +353,107 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
-    # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
-    # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
-    # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
-    # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
     "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
     "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
-    # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
-    # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
     "transformers.models.minicpmv4_7.modeling_minicpmv4_7.MiniCPMV4_7VisionAttention.forward",
-    # Audio attention: separate `_proj` + `.out_proj`, no rotary
+    # Audio attention
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniAudioAttention.forward",
     "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeAudioAttention.forward",
     "transformers.models.qwen3_asr.modeling_qwen3_asr.Qwen3ASRAudioAttention.forward",
 )
+
+
+@register_patch("dynamo", *_VARLEN_ATTENTION_PATHS)
 def _patch_chunked_vision_attention(original):
     """Bind `returns_tuple` once per class by inspecting the original forward's source."""
     src = inspect.getsource(original)
     returns_tuple = "return attn_output, attn_weight" in src or "return attn_output, None" in src
 
     def forward(self, *args, **kwargs):
-        return _reshaped_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
+        return _varlen_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
 
     return forward
 
 
+def varlen_attn_masked_sdpa(
+    query,
+    key,
+    value,
+    cu_seq_q,
+    cu_seq_k=None,
+    max_q=None,
+    max_k=None,
+    is_causal=False,
+    scale=None,
+    window_size=None,
+    enable_gqa=False,
+    seqused_k=None,
+    block_table=None,
+    num_splits=None,
+):
+    """Block-diagonal masked SDPA over the packed `(total, heads, dim)` sequence; the exportable equivalent
+    of `torch_attn::_varlen_attn`.
+
+    Registered as the op's CPU kernel, so unsupported arguments are refused rather than silently ignored.
+    """
+    # `(-1, -1)` is "no window", `(-1, 0)` the causal mask `is_causal` already carries
+    if window_size is not None and tuple(window_size) in ((-1, -1), (-1, 0)):
+        window_size = None
+    unsupported = {"window_size": window_size, "seqused_k": seqused_k, "block_table": block_table}
+    if named := [name for name, value in unsupported.items() if value is not None]:
+        raise NotImplementedError(
+            f"`varlen_attn_masked_sdpa` has no implementation for {named}; it masks whole segments only. "
+            "Run this attention on a device with the flash kernel, or extend the mask built below."
+        )
+    positions = torch.arange(query.shape[0], device=query.device)
+    segment_id = (positions[:, None] >= cu_seq_q[1:][None, :]).sum(-1)
+    block_mask = (segment_id[:, None] == segment_id[None, :])[None, None]
+    if is_causal:
+        # Within the block mask, a global lower-triangular mask is per-segment causality.
+        block_mask = block_mask & (positions[:, None] >= positions[None, :])[None, None]
+    q, k, v = (tensor.transpose(0, 1)[None] for tensor in (query, key, value))
+    out = torch.nn.functional.scaled_dot_product_attention(
+        q, k, v, attn_mask=block_mask, scale=scale, enable_gqa=enable_gqa
+    )
+    return out[0].transpose(0, 1)
+
+
+# torch ships `torch_attn::_varlen_attn` with a CUDA flash kernel only: add a CPU kernel, or on older torch
+# define the op with the masked SDPA as `CompositeImplicitAutograd`.
+if is_torch_available():
+
+    def _varlen_attn_op_kernel(*args, **kwargs):
+        # Schema returns `(output, softmax_lse, rng_state)`; the aux outputs are empty stubs.
+        out = varlen_attn_masked_sdpa(*args, **kwargs)
+        return out, out.new_empty(0), out.new_empty(0)
+
+    try:
+        import torch.nn.attention.varlen  # noqa: F401  # registers `torch_attn::_varlen_attn`
+
+        torch.library.register_kernel("torch_attn::_varlen_attn", "cpu", _varlen_attn_op_kernel)
+    except ImportError:
+        torch.library.define(
+            "torch_attn::_varlen_attn",
+            "(Tensor query, Tensor key, Tensor value, Tensor cu_seq_q, Tensor? cu_seq_k, SymInt max_q, "
+            "SymInt max_k, bool is_causal=False, float? scale=None, SymInt[]? window_size=None, "
+            "bool enable_gqa=False, Tensor? seqused_k=None, Tensor? block_table=None, "
+            "SymInt? num_splits=None) -> (Tensor, Tensor, Tensor)",
+        )
+        torch.library.register_kernel("torch_attn::_varlen_attn", "CompositeImplicitAutograd", _varlen_attn_op_kernel)
+
+
 # ── Stage 3: Pytree registration ─────────────────────────────────────────────
-# torch.export needs pytree flatten/unflatten for Cache objects and other
-# custom types. The generic flattener serialises any object to a JSON-native
-# context (bools, ints, strings, dicts, lists) while collecting tensors into
-# a flat list — the inverse reconstructs the original object.
-#
-# To register a new type: it should be handled automatically by the generic
-# flattener. If not, add a branch in _flatten_to_context / _unflatten_from_context.
-
-
-def _class_to_path(cls: type) -> str:
-    return f"{cls.__module__}:{cls.__qualname__}"
-
-
-def _path_to_class(path: str) -> type:
-    module_name, qualname = path.split(":", 1)
-    obj = importlib.import_module(module_name)
-    for part in qualname.split("."):
-        obj = getattr(obj, part)
-    return obj
+# The generic flattener serialises any object to a JSON-native context while collecting its tensors.
 
 
 def _maybe_sym_constant(sym: Any) -> Any:
-    """The concrete value a ``Sym*`` has already specialized to, or ``None`` if it's still dynamic.
-    Each ``Sym*`` type has its own accessor (``maybe_as_bool``/``maybe_as_float``/``maybe_as_int``);
-    there is no generic one."""
+    """The concrete value a ``Sym*`` has already specialized to, or ``None`` if it's still dynamic."""
     node = sym.node
     if isinstance(sym, torch.SymBool):
         return node.maybe_as_bool()
@@ -447,8 +463,9 @@ def _maybe_sym_constant(sym: Any) -> Any:
 
 
 def _flatten_to_context(obj: Any, tensors: list) -> Any:
-    """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
-    # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
+    """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`.
+
+    Builtins match by exact type, so their subclasses fall through to the generic object cases."""
     if obj is None or type(obj) in (bool, int, float, str):
         return obj
     if type(obj) is list:
@@ -456,7 +473,6 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if type(obj) is dict:
         return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
 
-    # --- Torch objects ---
     if isinstance(obj, torch.Tensor):
         idx = len(tensors)
         tensors.append(obj)
@@ -470,14 +486,8 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if isinstance(obj, torch.layout):
         return {"_t": "layout", "n": str(obj).removeprefix("torch.")}
     if isinstance(obj, (torch.SymInt, torch.SymFloat, torch.SymBool)):
-        # A Sym* that has already specialized to a concrete constant is not a genuine dynamic
-        # graph output — bake it as a plain scalar instead of a leaf. Leaving it as a leaf makes
-        # flatten non-deterministic: the same field can be a constant-valued SymInt at one trace
-        # point (the dynamo out_spec capture) and an already-materialized python scalar at another
-        # (the aot-decomposition retrace), so the leaf count flips and `treespec.unflatten` fails
-        # with an off-by-one. deepseek_v4 hits this via two sibling cache layers
-        # (DeepseekV4HCACache / DeepseekV4CSACache) sharing a `cumulative_length` counter that one
-        # path leaves as a constant SymInt and the other as a python int.
+        # A specialized Sym* is baked as a scalar: as a leaf it can be a SymInt at one trace and a python int
+        # at the retrace, and the flipping leaf count breaks `treespec.unflatten` (deepseek_v4).
         const = _maybe_sym_constant(obj)
         if const is not None:
             return const
@@ -485,11 +495,9 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         tensors.append(obj)
         return {"_t": "sym", "i": idx}
 
-    # --- Python types ---
     if isinstance(obj, type):
         return {"_t": "type", "p": _class_to_path(obj)}
 
-    # --- Generic Python objects (by structural category) ---
     cls = type(obj)
     if isinstance(obj, dict):  # dict subclasses (OrderedDict, etc.)
         return {
@@ -504,21 +512,29 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
             "v": [_flatten_to_context(i, tensors) for i in obj],
         }
     if isinstance(obj, types.MethodType):
-        # A bound method can't be flattened into pytree context. Models shouldn't bind methods onto
-        # objects they return at forward time (e.g. recurrent_gemma binds `get_seq_length`/
-        # `get_mask_sizes` onto its `DynamicCache`) — that pattern isn't exportable; such a model is
-        # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
+        # e.g. recurrent_gemma binds methods onto its `DynamicCache`; not exportable.
         raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
-        return {"_t": "obj", "p": _class_to_path(cls), "s": state}
+        attributes = dict(vars(obj))
+        # Sliding-layer step counters would pin the graph to the traced step (see
+        # `_patch_sliding_window_length`); normalised before the walk so no SymInt leaf is orphaned.
+        if "sliding_window" in attributes and not isinstance(attributes.get("cumulative_length", 0), torch.Tensor):
+            attributes["cumulative_length"] = 0
+        if "cumulative_length_int" in attributes:
+            attributes["cumulative_length_int"] = 0
+        # `generate`'s mark on a cache the caller passed in (an assistant's, in assisted decoding), not structure
+        attributes.pop("_is_user_defined", None)
+        return {
+            "_t": "obj",
+            "p": _class_to_path(cls),
+            "s": {k: _flatten_to_context(v, tensors) for k, v in attributes.items()},
+        }
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
 
 
 def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
     """Reconstruct an object from its JSON-native context, substituting tensor index markers."""
-    # --- Pure Python / JSON-native ---
     if ctx is None or type(ctx) in (bool, int, float, str):
         return ctx
     if type(ctx) is list:
@@ -526,38 +542,27 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
     if type(ctx) is dict and "_t" not in ctx:
         return {k: _unflatten_from_context(v, tensors) for k, v in ctx.items()}
 
-    # --- Torch objects ---
     t = ctx["_t"]
-    if t == "tensor":
+    if t in ("tensor", "sym"):
         return tensors[ctx["i"]]
-    if t == "layout":
-        return getattr(torch, ctx["n"])
-    if t == "dtype":
+    if t in ("dtype", "layout"):
         return getattr(torch, ctx["n"])
     if t == "device":
         return torch.device(ctx["s"])
     if t == "size":
         return torch.Size(ctx["v"])
-    if t == "sym":
-        return tensors[ctx["i"]]
-
-    # --- Python types ---
+    cls = _path_to_class(ctx["p"])
     if t == "type":
-        return _path_to_class(ctx["p"])
-
-    # --- Generic Python objects ---
+        return cls
     if t == "map":
-        cls = _path_to_class(ctx["p"])
         return cls({k: _unflatten_from_context(v, tensors) for k, v in ctx["v"].items()})
     if t == "seq":
-        cls = _path_to_class(ctx["p"])
         items = [_unflatten_from_context(i, tensors) for i in ctx["v"]]
         try:
             return cls(items)  # tuple, list subclass, set, frozenset, etc.
         except TypeError:
             return cls(*items)  # NamedTuple (requires positional args)
     if t == "obj":
-        cls = _path_to_class(ctx["p"])
         instance = cls.__new__(cls)
         for k, v in ctx["s"].items():
             instance.__dict__[k] = _unflatten_from_context(v, tensors)
@@ -582,8 +587,11 @@ def _pytree_unflatten(values, context: Any) -> Any:
 
 
 def register_pytree_node(object_cls: type):
-    """Register a single class (e.g. a `Cache` subclass like `StaticCache`) as a torch.export pytree
-    node, so `torch.export.load` can unflatten it as a graph input without needing the original model."""
+    """Register a class (e.g. `StaticCache`) as a torch.export pytree node.
+
+    A class keeps the first flattener registered for it, so this does not mix with `export_with_dynamic_cache`
+    (`integrations/executorch.py`), which registers its own for `DynamicCache`, in the same process.
+    """
     try:
         torch.utils._pytree.register_pytree_node(
             object_cls,
@@ -610,18 +618,18 @@ def is_cache_class(cls: type) -> bool:
 
 
 def is_cache_object(value: Any) -> bool:
-    """Whether ``value`` is a cache, by the same rule [`register_cache_pytrees_for_model`] uses to
-    decide what to register as a pytree node."""
+    """Whether ``value`` is a cache, by the rule [`register_cache_pytrees_for_model`] uses."""
     return is_cache_class(type(value))
 
 
-def register_cache_pytrees_for_model(model: PreTrainedModel):
-    """Register all relevant cache types as pytree nodes for torch.export."""
-    # All transformers Cache subclasses
+def register_cache_pytrees_for_model(model: PreTrainedModel | None = None):
+    """Register every `Cache` subclass as a pytree node for torch.export, plus `model`'s own cache classes."""
     for cache_type in _iter_subclasses(Cache):
         register_pytree_node(cache_type)
+    if model is None:
+        return
 
-    # Model-specific cache classes (e.g. custom per-model caches not inheriting from Cache)
+    # Per-model caches not inheriting from Cache
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
         if inspect.isclass(obj) and obj.__module__ == model.__class__.__module__ and is_cache_class(obj):
             register_pytree_node(obj)
@@ -634,59 +642,62 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
 
 
 # ── Stage 4: Dynamic shapes ─────────────────────────────────────────────────
-# Automatic `Dim.AUTO` inference for all tensor and cache inputs when
-# `DynamoConfig.dynamic` is True and no explicit `dynamic_shapes` are provided.
 
 
-def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:
-    """Generate a dynamic shape with all dimensions set to Dim.AUTO for a given tensor."""
-    return dict.fromkeys(range(tensor.dim()), torch.export.Dim.AUTO)
+def architecture_axes(name: str, tensor: torch.Tensor) -> tuple[int, ...]:
+    """The axes of one input the architecture fixes, kept out of `Dim.AUTO`.
+
+    The embedding feature axis, and m-rope `position_ids`' section axis, which models branch on in Python
+    (glm4v's `position_ids.shape[0] == 4`).
+    """
+    if not isinstance(tensor, torch.Tensor) or not tensor.dim():
+        return ()
+    if name in ("inputs_embeds", "decoder_inputs_embeds"):
+        return (tensor.dim() - 1,)
+    if name in ("position_ids", "decoder_position_ids") and tensor.dim() == 3:
+        return (0,)
+    return ()
 
 
-def get_auto_dynamic_shapes(inputs: Any) -> Any:
-    """Recursively build dynamic shapes for any input value.
+def _auto_dynamic_shape(
+    tensor: torch.Tensor, is_cache_tensor: bool = False, static_axes: tuple[int, ...] = ()
+) -> dict[int, torch.export.Dim]:
+    """Generate a dynamic shape with all dimensions set to Dim.AUTO, except `static_axes`.
 
-    - Tensors → per-dimension Dim.AUTO spec.
-    - Scalars / None → None (no dynamic dims).
-    - Registered pytree nodes (ModelOutput, Cache, …) → list of one spec per child of the
-      registered flatten, recursed, matching the ``TreeSpec(list, …)`` torch.export compares against.
-    - Other objects with ``__dict__`` → flat list of leaf specs.
-    - Lists / tuples → same container type, recursed element-wise.
-    - Plain dicts → recursed dict of specs.
-    - Everything else → None.
+    A rank-4 KV cache tensor keeps heads and head_dim static, so the runtime can read the cache geometry
+    back off the graph.
+    """
+    static_dims = (1, 3) if is_cache_tensor and tensor.dim() == 4 else ()
+    static_dims = (*static_dims, *static_axes)
+    return {dim: torch.export.Dim.AUTO for dim in range(tensor.dim()) if dim not in static_dims}
+
+
+def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False, static_axes: tuple[int, ...] = ()) -> Any:
+    """Recursively build dynamic shapes for any input value, mirroring its pytree structure.
+
+    Registered pytree nodes yield one spec per child of their flatten; recursing through a ``Cache`` marks the
+    tensors below it as cache state.
     """
     if isinstance(inputs, torch.Tensor):
-        return _auto_dynamic_shape(inputs)
+        return _auto_dynamic_shape(inputs, is_cache_tensor, static_axes)
     if inputs is None or isinstance(inputs, (int, float, bool, str)):
         return None
     if type(inputs) in (list, tuple, set, frozenset):
-        return type(inputs)(get_auto_dynamic_shapes(v) for v in inputs)
+        return type(inputs)(get_auto_dynamic_shapes(v, is_cache_tensor) for v in inputs)
     if type(inputs) is dict:
-        return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
+        return {k: get_auto_dynamic_shapes(v, is_cache_tensor, architecture_axes(k, v)) for k, v in inputs.items()}
     if (node := torch.utils._pytree.SUPPORTED_NODES.get(type(inputs))) is not None:
-        # Registered pytree node (a `ModelOutput`, a `Cache` subclass, ...). Mirror one level of its
-        # registered flatten and recurse, so a field holding a container keeps that container in the
-        # spec. A `Cache` is registered with a flatten that collapses to tensors, so it still yields a
-        # flat list; a `ModelOutput` yields one child per field, which is what `torch.export` compares
-        # against -- flattening it to tensors hands over a flat spec where nested children are expected.
+        # One level only: a `ModelOutput` must keep one child per field, not a flat tensor list.
         children, _ = node.flatten_fn(inputs)
-        return [get_auto_dynamic_shapes(child) for child in children]
+        return [get_auto_dynamic_shapes(child, is_cache_tensor or isinstance(inputs, Cache)) for child in children]
     if hasattr(inputs, "__dict__"):
         leaves, _ = _pytree_flatten(inputs)
-        return get_auto_dynamic_shapes(leaves)
+        return get_auto_dynamic_shapes(leaves, is_cache_tensor or isinstance(inputs, Cache))
     return None
 
 
 # ── Stage 5: Model state cleanup ────────────────────────────────────────────
-# `torch.export` traces forward with FakeTensors, which can leave non-Cache stateful
-# tensor attributes as FakeTensors after tracing — a follow-up eager forward then
-# hits shape/dtype mismatches when it reuses the stale state. We also want stale
-# eager-mode state cleared on entry so it doesn't leak into the trace.
-# `reset_model_state` brackets the `torch.export.export` call: it saves every
-# attribute in `_STATEFUL_CACHE_ATTRS` on every submodule, sets them to `None` for
-# the trace, and restores the originals on exit (finally semantics).
-#
-# To register a new stateful attribute: append its name to `_STATEFUL_CACHE_ATTRS`.
+# Tracing can leave FakeTensors in non-Cache stateful attributes, and stale eager state can leak into the trace.
 
 _STATEFUL_CACHE_ATTRS = (
     "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t, clvp
@@ -696,11 +707,7 @@ _STATEFUL_CACHE_ATTRS = (
 
 @contextmanager
 def reset_model_state(model: torch.nn.Module):
-    """Save each `_STATEFUL_CACHE_ATTRS` value, null it for the trace, restore on exit.
-
-    FakeTensors that `torch.export` plants into these attributes during the trace are
-    discarded by the restore.
-    """
+    """Save each `_STATEFUL_CACHE_ATTRS` value, null it for the trace, restore on exit."""
     originals = [
         (module, attr, getattr(module, attr))
         for module in model.modules()
@@ -714,3 +721,37 @@ def reset_model_state(model: torch.nn.Module):
     finally:
         for module, attr, original in originals:
             setattr(module, attr, original)
+
+
+# ── Stage 6: Unused-weight removal ──────────────────────────────────────────
+
+
+def drop_unused_weights(exported_program: ExportedProgram) -> ExportedProgram:
+    """Drop the parameters and buffers the graph never reads.
+
+    A decomposed component is traced from a wrapper holding the whole model, so `torch.export` lifts every
+    weight (a four-component video_llava export came to 3.2x the model's weights).
+    """
+    signature = exported_program.graph_signature
+    lifted = {**signature.inputs_to_parameters, **signature.inputs_to_buffers}
+    # Mutated buffers stay even when the body never reads them.
+    mutated = {spec.arg.name for spec in signature.output_specs if hasattr(spec.arg, "name")}
+    graph_module = copy.deepcopy(exported_program.graph_module)
+    unused = [
+        node
+        for node in graph_module.graph.nodes
+        if node.op == "placeholder" and node.name in lifted and not node.users and node.name not in mutated
+    ]
+    if not unused:
+        return exported_program
+
+    dropped = {node.name for node in unused}
+    for node in unused:
+        graph_module.graph.erase_node(node)
+    graph_module.recompile()
+    input_specs = [spec for spec in signature.input_specs if getattr(spec.arg, "name", None) not in dropped]
+    weights = {lifted[name] for name in dropped}
+    state_dict = {name: value for name, value in exported_program.state_dict.items() if name not in weights}
+    return exported_program._update(
+        graph_module, ExportGraphSignature(input_specs, signature.output_specs), state_dict=state_dict
+    )

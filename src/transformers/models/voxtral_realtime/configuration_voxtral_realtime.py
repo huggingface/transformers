@@ -110,10 +110,10 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
     hidden_act: str = "silu"
     max_position_embeddings: int = 1500
     rms_norm_eps: float = 1e-05
+    use_cache: bool = True
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int = 750
     head_dim: int = 64
-    use_cache: bool = True
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads

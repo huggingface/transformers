@@ -16,6 +16,7 @@ from functools import partial
 
 import torch
 import torch.nn.functional as F
+from torch.fx.experimental.symbolic_shapes import has_free_unbacked_symbols
 
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
@@ -210,7 +211,11 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     local_padding_mask = attention_mask
     if attention_mask is not None:
         # Pad it if necessary
-        if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
+        padding_length = kv_length + kv_offset - attention_mask.shape[-1]
+        # An unbacked width (only under export, e.g. opt) can't be compared, so clamp it with `sym_max` instead
+        if is_torchdynamo_exporting() and has_free_unbacked_symbols(padding_length):
+            local_padding_mask = torch.nn.functional.pad(attention_mask, (0, torch.sym_max(padding_length, 0)))
+        elif padding_length > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
     return local_padding_mask
 
@@ -249,20 +254,19 @@ def _ignore_causal_mask_sdpa(
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
     """
+    # Never skip under export: `is_causal` would be hard-coded into the graph for the traced query length
+    # (pytorch#108108). `torch.compile` can still skip when `padding_mask` values need not be read, on
+    # torch>=2.14 (before pytorch#176499, `torch.compiler.is_exporting()` was a constant `True` under dynamo).
+    # A static single-token query without padding is the exception: its `is_causal=False` holds at any length.
+    if is_torchdynamo_exporting():
+        return padding_mask is None and local_attention_size is None and type(q_length) is int and q_length == 1
+    if padding_mask is not None and is_tracing(padding_mask):
+        return False
+
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
-    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
-    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
-    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
-    # `ignore_causal_mask = True` if we are not tracing
-    # NOTE: under `torch.compile` we can still skip, but only if we do not have to read the values of the
-    # `padding_mask`. This requires torch>=2.14: before pytorch#176499, dynamo replaced
-    # `torch.compiler.is_exporting()` by a constant `True`, so older versions keep the previous behavior of
-    # never skipping while compiling.  # noqa: NC001, NC002
-    if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
-        return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
         return False

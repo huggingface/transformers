@@ -817,6 +817,8 @@ class PaddleOCRVisionEncoder(nn.Module):
         self.layers = nn.ModuleList([PaddleOCRVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
         self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(config)
+        # Positions run un-merged; the merge is deferred to the projector.
+        self.spatial_merge_size = 1
 
     # Ignore copy
     @can_return_tuple
@@ -840,7 +842,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         """
         # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
-        position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = inputs_embeds

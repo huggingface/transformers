@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 
-from ...cache_utils import DynamicCache, QuantizedCache, QuantizedLayer, StaticCache
+from ...cache_utils import DynamicCache, QuantizedCache, QuantizedLayer
 from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
@@ -295,6 +295,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 batch_size=cache_batch_size,
                 max_cache_len=max_cache_length,
                 prefill_chunk_size=generation_config.prefill_chunk_size,
+                model_kwargs=model_kwargs,
                 max_length_attr_name=max_length_attr_name,
             )
         elif generation_config.cache_implementation == "quantized":
@@ -308,52 +309,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             if generation_config.cache_implementation == "offloaded":
                 dynamic_cache_kwargs["offloading"] = True
             model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
-
-    def _prepare_static_cache(
-        self,
-        cache_implementation: str,
-        batch_size: int,
-        max_cache_len: int,
-        prefill_chunk_size: int | None,
-        max_length_attr_name: str = "_previous_max_cache_length",
-    ) -> StaticCache:
-        """
-        This method overrides [~generation.utils.GenerationMixin._prepare_static_cache].
-
-        Same behavior as the base method (a fresh `StaticCache` per call, sized to the longest length requested so
-        far so that `torch.compile` does not recompile on later calls), except the memorized length is stored under
-        the attribute named by `max_length_attr_name` instead of always `self._previous_max_cache_length`. This lets
-        the CFG negative branch track its own (much shorter) length. Only the decoder-only path used by VibeVoice
-        is kept.
-
-        Returns the resulting cache object.
-        """
-        offload_cache = "offloaded" in cache_implementation
-        previous_max_len = getattr(self, max_length_attr_name, -1)
-        effective_length = max(max_cache_len, previous_max_len)
-
-        cache = StaticCache(
-            config=self.config.get_text_config(decoder=True),
-            max_cache_len=effective_length,
-            offloading=offload_cache,
-        )
-        if prefill_chunk_size is not None:
-            # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next
-            # call (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
-            init_shape = self._get_static_cache_init_shape()
-            if init_shape is not None:
-                num_heads, head_dim = init_shape
-                cache.early_initialization(
-                    batch_size=batch_size,
-                    num_heads=num_heads,
-                    head_dim=head_dim,
-                    dtype=self.dtype,
-                    device=self.device,
-                )
-
-        # Memorize the current length, to avoid a recompilation on later calls if we can
-        setattr(self, max_length_attr_name, effective_length)
-        return cache
 
     def _get_negative_compiled_call(self, compile_config: GenerationConfig | None):
         """
