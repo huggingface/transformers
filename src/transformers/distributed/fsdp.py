@@ -213,12 +213,10 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
         for module_name, module in model.named_modules():
             if _get_parameter_plan(module_name, model.ep_plan, is_weight=False) == "ep_dispatch_experts":
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
-                # Dense parameters on fsdp get a per-batch average: gradients summed over fsdp_size batches,
-                # then divided by fsdp_size. Experts must match that scale:
-                # - an EP group holds ep_size / tp_size distinct batches
-                # - the efsdp reduce then sums efsdp_size copies of that expert.
+                # an EP group holds ep_size / tp_size distinct batches
+                # the efsdp reduce the sums on efsdp_size copies of that expert.
                 # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size batches
-                # (the relationsip is efsdp_size = fsdp_size * tp_size / ep_size)
+                # not efsdp_size batches (the relationship is efsdp_size = fsdp_size * tp_size / ep_size)
                 module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
                 if torch.distributed.get_backend(expert_mesh.get_group()) != "nccl":
                     # Non-NCCL backends need to sum first, then apply the division otherwise it runtime error.
