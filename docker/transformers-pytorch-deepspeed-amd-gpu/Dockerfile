@@ -43,8 +43,6 @@ RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed -
 ARG REF=main
 WORKDIR /
 
-# Invalidate docker cache from here if new commit is available.
-ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 RUN python3 -m pip install --no-cache-dir ./transformers[accelerate,testing,sentencepiece,sklearn]
