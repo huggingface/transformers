@@ -57,12 +57,11 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     num_hidden_layers: int = 8
     num_local_experts: int = 128
