@@ -20,8 +20,8 @@ from pathlib import Path
 
 from transformers import (
     AutoProcessor,
+    MossTranscribeDiarizeAudioConfig,
     MossTranscribeDiarizeConfig,
-    MossTranscribeDiarizeEncoderConfig,
     MossTranscribeDiarizeForConditionalGeneration,
     MossTranscribeDiarizeModel,
     Qwen3Config,
@@ -46,7 +46,7 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
     base_model_class = MossTranscribeDiarizeModel
     conditional_generation_class = MossTranscribeDiarizeForConditionalGeneration
     text_config_class = Qwen3Config
-    audio_config_class = MossTranscribeDiarizeEncoderConfig
+    audio_config_class = MossTranscribeDiarizeAudioConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("feat_seq_length", 128)

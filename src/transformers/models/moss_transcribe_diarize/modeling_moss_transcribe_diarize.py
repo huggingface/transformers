@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -42,7 +41,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_moss_transcribe_diarize import MossTranscribeDiarizeConfig, MossTranscribeDiarizeEncoderConfig
+from .configuration_moss_transcribe_diarize import MossTranscribeDiarizeAudioConfig, MossTranscribeDiarizeConfig
 
 
 logger = logging.get_logger(__name__)
@@ -65,19 +64,6 @@ class MossTranscribeDiarizeMultiModalProjector(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return self.norm(hidden_states)
-
-
-@auto_docstring
-class MossTranscribeDiarizePreTrainedModel(PreTrainedModel):
-    config: MossTranscribeDiarizeConfig
-    base_model_prefix = "model"
-    input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["MossTranscribeDiarizeEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_attention_backend = True
 
 
 def eager_attention_forward(
@@ -106,7 +92,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class MossTranscribeDiarizeAttention(nn.Module):
+class MossTranscribeDiarizeAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -194,12 +180,11 @@ class MossTranscribeDiarizeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MossTranscribeDiarizeEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MossTranscribeDiarizeConfig):
+class MossTranscribeDiarizeAudioLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MossTranscribeDiarizeAudioConfig):
         super().__init__()
         self.embed_dim = config.d_model
-
-        self.self_attn = MossTranscribeDiarizeAttention(
+        self.self_attn = MossTranscribeDiarizeAudioAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -250,65 +235,62 @@ class MossTranscribeDiarizeEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class MossTranscribeDiarizePreTrainedModel(PreTrainedModel):
+    config: MossTranscribeDiarizeConfig
+    base_model_prefix = "model"
+    input_modalities = ("audio", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MossTranscribeDiarizeAudioLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
+
+
 @auto_docstring(
     custom_intro="""
-    The MOSS-Transcribe-Diarize encoder, which is a Whisper encoder.
+    The MOSS-Transcribe-Diarize audio model, which is a Whisper encoder.
     """
 )
-class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
+class MossTranscribeDiarizeAudioModel(MossTranscribeDiarizePreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`MossTranscribeDiarizeEncoderLayer`].
+    [`MossTranscribeDiarizeAudioLayer`].
 
     Args:
-        config: MossTranscribeDiarizeEncoderConfig
+        config: MossTranscribeDiarizeAudioConfig
     """
 
-    # Ignore copy
-    config: MossTranscribeDiarizeEncoderConfig
+    config: MossTranscribeDiarizeAudioConfig
     main_input_name = "input_features"
     input_modalities = "audio"
-    _no_split_modules = ["MossTranscribeDiarizeEncoderLayer"]
+    _input_embed_layer = "conv1"
+    _no_split_modules = ["MossTranscribeDiarizeAudioLayer"]
     _can_record_outputs = {
-        "hidden_states": MossTranscribeDiarizeEncoderLayer,
-        "attentions": MossTranscribeDiarizeAttention,
+        "hidden_states": MossTranscribeDiarizeAudioLayer,
+        "attentions": MossTranscribeDiarizeAudioAttention,
     }
 
-    def __init__(self, config: MossTranscribeDiarizeEncoderConfig):
+    def __init__(self, config: MossTranscribeDiarizeAudioConfig):
         super().__init__(config)
         self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
         self.max_source_positions = config.max_source_positions
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
         self.embed_positions.requires_grad_(False)
-
-        self.layers = nn.ModuleList([MossTranscribeDiarizeEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([MossTranscribeDiarizeAudioLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
-        # Ignore copy
-        self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
 
     @merge_with_config_defaults
     @capture_outputs
@@ -328,10 +310,10 @@ class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
             compatibility, but it is not used.
         """
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
-        if input_features.shape[-1] != expected_seq_length:
-            raise ValueError(
-                f"MossTranscribeDiarize expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
-            )
+        torch_compilable_check(
+            input_features.shape[-1] == expected_seq_length,
+            f"MossTranscribeDiarize expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}.",
+        )
 
         input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
@@ -353,15 +335,6 @@ class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
         )
-
-    # Ignore copy
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers and the output length of the audio encoder
-        """
-        input_lengths = (input_lengths - 1) // 2 + 1
-        output_lengths = (input_lengths - 2) // 2 + 1
-        return input_lengths, output_lengths
 
 
 @auto_docstring
@@ -635,7 +608,7 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
 
 __all__ = [
     "MossTranscribeDiarizePreTrainedModel",
-    "MossTranscribeDiarizeEncoder",
+    "MossTranscribeDiarizeAudioModel",
     "MossTranscribeDiarizeModel",
     "MossTranscribeDiarizeForConditionalGeneration",
 ]

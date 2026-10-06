@@ -215,7 +215,8 @@ class MossTranscribeDiarizeFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
-        # Split each sample into consecutive `n_samples`-long Whisper-window chunks and flatten
+        # Whisper truncates to a single `n_samples` window, Moss instead splits each sample into consecutive
+        # `n_samples`-long Whisper-window chunks and flattens them, so the batch dim counts chunks, not samples
         window_size = int(self.n_samples)
         per_sample_lengths: list[int] = []
         flat_chunks: list[np.ndarray] = []
@@ -231,6 +232,7 @@ class MossTranscribeDiarizeFeatureExtractor(SequenceFeatureExtractor):
                 end = min((i + 1) * window_size, time_cap)
                 flat_chunks.append(waveform[start:end])
 
+        # Every chunk is padded to a full window and the attention mask is always needed downstream
         chunks = [np.asarray([chunk], dtype=np.float32).T for chunk in flat_chunks]
         padded_inputs = self.pad(
             BatchFeature({"input_features": chunks}),
@@ -247,15 +249,20 @@ class MossTranscribeDiarizeFeatureExtractor(SequenceFeatureExtractor):
         )
         padded_inputs["input_features"] = extract_fbank_features(input_features[0], device)
 
-        # Rescale raw-sample attention mask to mel-frame resolution.
+        # rescale from sample (48000) to feature (3000)
         rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+        # The STFT computation produces L//hop_length + 1 frames, but we skip the last frame (see `_torch_extract_fbank_features`).
+        # This means we need to trim the rescaled attention mask to match the actual number of frames (L//hop_length) when the input length
+        # is not divisible by the hop length.
         if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
             rescaled_attention_mask = rescaled_attention_mask[:, :-1]
+        # Whisper overwrites `attention_mask` in place, here the frame-level mask is`input_features_mask`
         padded_inputs["input_features_mask"] = rescaled_attention_mask
-        del padded_inputs["attention_mask"]
+        padded_inputs.pop("attention_mask")
 
-        # `input_features_mask` alone can't tell chunks apart at a window boundary, but `padding_mask` records
-        # each sample's raw length
+        # Not in Whisper: `input_features_mask` alone can't tell chunks apart at a window boundary, so
+        # `padding_mask` records each sample's raw length (one row per input sample, not per chunk)
         padding_mask = np.zeros((len(raw_speech), max(per_sample_lengths)), dtype=np.int64)
         for idx, length in enumerate(per_sample_lengths):
             padding_mask[idx, :length] = 1

@@ -28,8 +28,9 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     GenerationConfig,
+    MossTranscribeDiarizeAudioConfig,
     MossTranscribeDiarizeConfig,
-    MossTranscribeDiarizeEncoderConfig,
+    MossTranscribeDiarizeFeatureExtractor,
     MossTranscribeDiarizeForConditionalGeneration,
     MossTranscribeDiarizeProcessor,
 )
@@ -194,11 +195,11 @@ def convert_config(original_config_dict: dict[str, Any]) -> MossTranscribeDiariz
     config_dict.pop("adaptor_input_dim", None)
 
     # The original `audio_config` is a full `WhisperConfig`, keep only the encoder fields
-    attribute_map = MossTranscribeDiarizeEncoderConfig.attribute_map
-    encoder_fields = {field.name for field in dataclasses.fields(MossTranscribeDiarizeEncoderConfig)}
+    attribute_map = MossTranscribeDiarizeAudioConfig.attribute_map
+    encoder_fields = {field.name for field in dataclasses.fields(MossTranscribeDiarizeAudioConfig)}
     audio_config = {attribute_map.get(key, key): value for key, value in config_dict["audio_config"].items()}
     audio_config = {key: value for key, value in audio_config.items() if key in encoder_fields}
-    audio_config["model_type"] = MossTranscribeDiarizeEncoderConfig.model_type
+    audio_config["model_type"] = MossTranscribeDiarizeAudioConfig.model_type
     config_dict["audio_config"] = audio_config
 
     return MossTranscribeDiarizeConfig.from_dict(config_dict)
@@ -229,6 +230,8 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
     with open(checkpoint_dir / "config.json", "r", encoding="utf-8") as f:
         config = convert_config(json.load(f))
     processor = MossTranscribeDiarizeProcessor.from_pretrained(checkpoint_dir)
+    # The original `preprocessor_config.json` declares `WhisperFeatureExtractor`, which lacks the chunking and `padding_mask`
+    processor.feature_extractor = MossTranscribeDiarizeFeatureExtractor.from_pretrained(checkpoint_dir)
     processor.chat_template = CHAT_TEMPLATE
 
     processor.tokenizer.padding_side = "left"

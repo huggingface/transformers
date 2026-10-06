@@ -31,10 +31,16 @@ from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_available,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.import_utils import requires
-from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3CausalLMOutputWithPast,
@@ -45,7 +51,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..auto import CONFIG_MAPPING
-from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
+from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEncoder, Qwen2AudioEncoderLayer
 from ..vibevoice_asr.processing_vibevoice_asr import VibeVoiceAsrProcessor, VibeVoiceAsrProcessorKwargs
 from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
@@ -113,7 +119,8 @@ class MossTranscribeDiarizeFeatureExtractor(WhisperFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
-        # Split each sample into consecutive `n_samples`-long Whisper-window chunks and flatten
+        # Whisper truncates to a single `n_samples` window, Moss instead splits each sample into consecutive
+        # `n_samples`-long Whisper-window chunks and flattens them, so the batch dim counts chunks, not samples
         window_size = int(self.n_samples)
         per_sample_lengths: list[int] = []
         flat_chunks: list[np.ndarray] = []
@@ -129,6 +136,7 @@ class MossTranscribeDiarizeFeatureExtractor(WhisperFeatureExtractor):
                 end = min((i + 1) * window_size, time_cap)
                 flat_chunks.append(waveform[start:end])
 
+        # Every chunk is padded to a full window and the attention mask is always needed downstream
         chunks = [np.asarray([chunk], dtype=np.float32).T for chunk in flat_chunks]
         padded_inputs = self.pad(
             BatchFeature({"input_features": chunks}),
@@ -145,15 +153,20 @@ class MossTranscribeDiarizeFeatureExtractor(WhisperFeatureExtractor):
         )
         padded_inputs["input_features"] = extract_fbank_features(input_features[0], device)
 
-        # Rescale raw-sample attention mask to mel-frame resolution.
+        # rescale from sample (48000) to feature (3000)
         rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+        # The STFT computation produces L//hop_length + 1 frames, but we skip the last frame (see `_torch_extract_fbank_features`).
+        # This means we need to trim the rescaled attention mask to match the actual number of frames (L//hop_length) when the input length
+        # is not divisible by the hop length.
         if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
             rescaled_attention_mask = rescaled_attention_mask[:, :-1]
+        # Whisper overwrites `attention_mask` in place, here the frame-level mask is`input_features_mask`
         padded_inputs["input_features_mask"] = rescaled_attention_mask
-        del padded_inputs["attention_mask"]
+        padded_inputs.pop("attention_mask")
 
-        # `input_features_mask` alone can't tell chunks apart at a window boundary, but `padding_mask` records
-        # each sample's raw length
+        # Not in Whisper: `input_features_mask` alone can't tell chunks apart at a window boundary, so
+        # `padding_mask` records each sample's raw length (one row per input sample, not per chunk)
         padding_mask = np.zeros((len(raw_speech), max(per_sample_lengths)), dtype=np.int64)
         for idx, length in enumerate(per_sample_lengths):
             padding_mask[idx, :length] = 1
@@ -166,7 +179,7 @@ class MossTranscribeDiarizeFeatureExtractor(WhisperFeatureExtractor):
 
 @auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
 @strict
-class MossTranscribeDiarizeEncoderConfig(AudioFlamingo3EncoderConfig):
+class MossTranscribeDiarizeAudioConfig(AudioFlamingo3EncoderConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
         The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
@@ -174,19 +187,19 @@ class MossTranscribeDiarizeEncoderConfig(AudioFlamingo3EncoderConfig):
     Example:
 
     ```python
-    >>> from transformers import MossTranscribeDiarizeEncoderConfig, MossTranscribeDiarizeEncoder
+    >>> from transformers import MossTranscribeDiarizeAudioConfig, MossTranscribeDiarizeAudioModel
 
-    >>> # Initializing a MossTranscribeDiarizeEncoderConfig
-    >>> configuration = MossTranscribeDiarizeEncoderConfig()
+    >>> # Initializing a MossTranscribeDiarizeAudioConfig
+    >>> configuration = MossTranscribeDiarizeAudioConfig()
 
-    >>> # Initializing a MossTranscribeDiarizeEncoder (with random weights)
-    >>> model = MossTranscribeDiarizeEncoder(configuration)
+    >>> # Initializing a MossTranscribeDiarizeAudioModel (with random weights)
+    >>> model = MossTranscribeDiarizeAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "moss_transcribe_diarize_encoder"
+    model_type = "moss_transcribe_diarize_audio"
 
     num_mel_bins: int = 80
     num_hidden_layers: int = 24
@@ -230,10 +243,10 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "moss_transcribe_diarize_encoder")
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "moss_transcribe_diarize_audio")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["moss_transcribe_diarize_encoder"]()
+            self.audio_config = CONFIG_MAPPING["moss_transcribe_diarize_audio"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
@@ -246,7 +259,7 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
                 num_attention_heads=16,
                 num_key_value_heads=8,
                 max_position_embeddings=131_072,
-                rope_theta=1_000_000.0,
+                rope_parameters={"rope_theta": 1_000_000.0, "rope_type": "default"},
             )
 
         PreTrainedConfig.__post_init__(self, **kwargs)
@@ -280,8 +293,6 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
     """
 
     valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
-    feature_extractor_class = "MossTranscribeDiarizeFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,
@@ -320,7 +331,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         )
         del self.audio_duration_token
         self.audio_tokens_per_second = audio_tokens_per_second
-        self.audio_merge_size = int(audio_merge_size)
+        self.audio_merge_size = audio_merge_size
         self.time_marker_every_seconds = time_marker_every_seconds
         # Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
         self._segment_pattern = re.compile(
@@ -539,19 +550,59 @@ class MossTranscribeDiarizeMultiModalProjector(AudioFlamingo3MultiModalProjector
         return self.norm(hidden_states)
 
 
+class MossTranscribeDiarizeAudioAttention(Qwen2AudioAttention):
+    pass
+
+
+class MossTranscribeDiarizeAudioLayer(Qwen2AudioEncoderLayer):
+    def __init__(self, config: MossTranscribeDiarizeAudioConfig):
+        super().__init__(config)
+        self.self_attn = MossTranscribeDiarizeAudioAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
+            config=config,
+        )
+
+
 class MossTranscribeDiarizePreTrainedModel(AudioFlamingo3PreTrainedModel):
-    _no_split_modules = ["MossTranscribeDiarizeEncoderLayer"]
+    _no_split_modules = ["MossTranscribeDiarizeAudioLayer"]
 
 
 @auto_docstring(
     custom_intro="""
-    The MOSS-Transcribe-Diarize encoder, which is a Whisper encoder.
+    The MOSS-Transcribe-Diarize audio model, which is a Whisper encoder.
     """
 )
-class MossTranscribeDiarizeEncoder(Qwen2AudioEncoder):
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
+class MossTranscribeDiarizeAudioModel(Qwen2AudioEncoder):
+    """
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    [`MossTranscribeDiarizeAudioLayer`].
+
+    Args:
+        config: MossTranscribeDiarizeAudioConfig
+    """
+
+    config: MossTranscribeDiarizeAudioConfig
+    _no_split_modules = ["MossTranscribeDiarizeAudioLayer"]
+    _can_record_outputs = {
+        "hidden_states": MossTranscribeDiarizeAudioLayer,
+        "attentions": MossTranscribeDiarizeAudioAttention,
+    }
+
+    def __init__(self, config: MossTranscribeDiarizeAudioConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList([MossTranscribeDiarizeAudioLayer(config) for _ in range(config.encoder_layers)])
+        del self.layerdrop
+        del self.embed_scale
+        del self.avg_pooler
+
+    def _freeze_parameters(self):
+        raise AttributeError("Not needed for MossTranscribeDiarize")
+
+    def _get_feat_extract_output_lengths(self, input_lengths):
+        raise AttributeError("Not needed for MossTranscribeDiarize")
+
     def forward(
         self,
         input_features,
@@ -567,10 +618,10 @@ class MossTranscribeDiarizeEncoder(Qwen2AudioEncoder):
             compatibility, but it is not used.
         """
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
-        if input_features.shape[-1] != expected_seq_length:
-            raise ValueError(
-                f"MossTranscribeDiarize expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
-            )
+        torch_compilable_check(
+            input_features.shape[-1] == expected_seq_length,
+            f"MossTranscribeDiarize expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}.",
+        )
 
         input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
@@ -794,11 +845,11 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
 
 __all__ = [
     "MossTranscribeDiarizeConfig",
-    "MossTranscribeDiarizeEncoderConfig",
+    "MossTranscribeDiarizeAudioConfig",
     "MossTranscribeDiarizeFeatureExtractor",
     "MossTranscribeDiarizeProcessor",
     "MossTranscribeDiarizePreTrainedModel",
-    "MossTranscribeDiarizeEncoder",
+    "MossTranscribeDiarizeAudioModel",
     "MossTranscribeDiarizeModel",
     "MossTranscribeDiarizeForConditionalGeneration",
 ]
