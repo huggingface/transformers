@@ -1685,6 +1685,14 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
             and hasattr(_text_conf, k)
         ):
             setattr(_text_conf, k, v)
+        # For encoder-decoder models where the encoder itself has a nested text_config
+        # (e.g. T5Gemma2: encoder.text_config.vocab_size must equal decoder.vocab_size),
+        # propagate to that nested config too.
+        _enc = getattr(tiny_config, "encoder", None)
+        if _enc is not None:
+            _enc_text = getattr(_enc, "text_config", None)
+            if _enc_text is not None and hasattr(_enc_text, k):
+                setattr(_enc_text, k, v)
 
     if result["warnings"]:
         logger.warning(result["warnings"][0][0])
