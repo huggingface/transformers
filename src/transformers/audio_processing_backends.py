@@ -1255,12 +1255,12 @@ if is_torch_available():
             if isinstance(x, torch.Tensor):
                 result = x
             elif isinstance(x, np.ndarray):
-                # Read-only or negative-stride arrays cannot be wrapped by `from_numpy`: copy those
-                # (contiguously, no warning); everything else is shared without a copy.
+                # `from_numpy` cannot wrap read-only or negative-stride arrays: this copies read-only
+                # or negative-stride input (no warning); everything else is shared without a copy.
                 if x.flags.writeable and all(stride >= 0 for stride in x.strides):
                     result = torch.from_numpy(x)
                 else:
-                    result = torch.from_numpy(np.ascontiguousarray(x))
+                    result = torch.from_numpy(np.array(x))
             else:
                 # Sequences (`list[list[float]]`) are a documented input type; go through numpy so
                 # the torch backend accepts everything the numpy one does.
