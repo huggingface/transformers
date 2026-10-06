@@ -168,7 +168,7 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
     max_soft_tokens = 70
     pooling_kernel_size = 3
     valid_kwargs = Gemma4VideoProcessorKwargs
-    model_input_names = ["pixel_values_videos", "video_position_ids"]
+    model_input_names = ["pixel_values_videos", "video_position_ids", "num_frames_per_video"]
 
     def __init__(self, **kwargs: Unpack[Gemma4VideoProcessorKwargs]):
         super().__init__(**kwargs)
@@ -242,7 +242,7 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
         pixel_values = []
         position_ids = []
         num_soft_tokens_per_video = []
-        num_frames = 1
+        num_frames_per_video = []
 
         for video in videos:
             if do_resize:
@@ -261,6 +261,7 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
             patch_width = video.shape[-1] // patch_size
             patches = convert_video_to_patches(video, patch_size)
             num_soft_tokens_per_video.append(patches.shape[1] // pooling_kernel_size**2)
+            num_frames_per_video.append(num_frames)
 
             device = video.device
             patch_grid = torch.meshgrid(
@@ -276,13 +277,15 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
             pixel_values.append(patches)
             position_ids.append(positions)
 
-        # Stack into batch tensors
-        pixel_values = torch.stack(pixel_values, dim=0)  # (num_videos, num_frames, max_patches, patch_pixels)
-        position_ids = torch.stack(position_ids, dim=0)  # (num_videos, num_frames, max_patches, 2)
+        # Concatenate along the frame axis rather than stacking on a new video axis, so that videos with
+        # different frame counts can be batched together. `num_frames_per_video` splits it back per video.
+        pixel_values = torch.cat(pixel_values, dim=0)  # (total_num_frames, max_patches, patch_pixels)
+        position_ids = torch.cat(position_ids, dim=0)  # (total_num_frames, max_patches, 2)
 
         data = {
             "pixel_values_videos": pixel_values,
             "video_position_ids": position_ids,
+            "num_frames_per_video": num_frames_per_video,
             "num_soft_tokens_per_video": num_soft_tokens_per_video,
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
