@@ -149,6 +149,8 @@ class PixtralVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
             [(64, 64), (64, 64)],
             [(64, 32), (32, 64)],
             [(16, 64), (64, 16)],
+            [(64, 64), (32, 48), (16, 64)],
+            [(16, 16), (64, 32), (32, 64)],
         ):
             with self.subTest(image_sizes=image_sizes), torch.no_grad():
                 pixel_values = torch.randn(len(image_sizes), 3, 64, 64, device=torch_device, dtype=torch.bfloat16)
