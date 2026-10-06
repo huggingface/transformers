@@ -951,7 +951,8 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
-    mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+    if mode is None:
+        mode = Mode.TRAINING if model.training else Mode.INFERENCE
     device = Device(type=get_device_type(model.device))
 
     if model.kernel_config is not None:
