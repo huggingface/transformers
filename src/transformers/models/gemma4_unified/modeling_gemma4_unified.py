@@ -999,9 +999,6 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
-            Number of frames belonging to each video. Required whenever `pixel_values_videos` is passed,
-            since the frames of all videos are concatenated along a single axis.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
