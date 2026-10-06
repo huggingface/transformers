@@ -29,7 +29,6 @@ from ..utils import (
     PushToHubMixin,
     cached_file,
     hf_api,
-    is_torch_available,
     logging,
     resolve_revision,
 )
@@ -40,6 +39,7 @@ if TYPE_CHECKING:
 
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
+    from .logits_process import WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -56,10 +56,6 @@ DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
 )
 ALL_STATIC_CACHE_IMPLEMENTATIONS = STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
 ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
-
-
-if is_torch_available():
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 def _should_warn(outer_attr: str, inner_attr: str, user_set_attributes: set | None) -> bool:
@@ -1525,6 +1521,8 @@ class WatermarkingConfig(BaseWatermarkingConfig):
             )
 
     def construct_processor(self, vocab_size: int, device) -> "WatermarkLogitsProcessor":
+        from .logits_process import WatermarkLogitsProcessor
+
         return WatermarkLogitsProcessor(
             vocab_size=vocab_size,
             device=device,
@@ -1614,6 +1612,8 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             )
 
     def construct_processor(self, vocab_size: int, device) -> "WatermarkLogitsProcessor":
+        from .logits_process import SynthIDTextWatermarkLogitsProcessor
+
         return SynthIDTextWatermarkLogitsProcessor(
             ngram_len=self.ngram_len,
             keys=self.keys,

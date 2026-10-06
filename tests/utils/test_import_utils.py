@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from contextlib import contextmanager
 from types import ModuleType
@@ -419,3 +420,22 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
         return x + 1 if helper(*args) else x - 1
 
     run(torch.zeros(3))  # a graph break inside the helper would raise here
+
+
+def test_auto_classes_do_not_import_generation_or_sklearn():
+    """
+    Importing the config/tokenizer auto classes must not pull in the generation stack (which imports torch) or
+    scikit-learn: those are only needed once a model generates. Runs in a fresh interpreter so modules imported
+    by the test session don't mask the result.
+    """
+    code = (
+        "import sys\n"
+        "from transformers import AutoConfig, AutoTokenizer, PreTrainedConfig\n"
+        "PreTrainedConfig(dtype='float32')\n"
+        "leaked = [m for m in ('sklearn', 'transformers.generation.logits_process',"
+        " 'transformers.generation.candidate_generator', 'transformers.modeling_gguf_pytorch_utils')"
+        " if m in sys.modules]\n"
+        "print(leaked)\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == "[]", result.stdout + result.stderr

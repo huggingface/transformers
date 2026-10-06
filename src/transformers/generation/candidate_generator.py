@@ -27,9 +27,6 @@ from .configuration_utils import GenerationConfig
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
 
-if is_sklearn_available():
-    from sklearn.metrics import roc_curve
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
@@ -266,6 +263,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
             if (
                 len(self.probs) > 5 and {0, 1}.issubset(self.matches)
             ):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
+                from sklearn.metrics import roc_curve
+
                 fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
                 fnr = 1 - tpr
 
