@@ -1240,7 +1240,8 @@ class DeepseekV4Model(LlamaModel):
 
 
 class DeepseekV4ForCausalLM(MixtralForCausalLM):
-    pass
+    # Deepseek V4 ships only an EP plan
+    _tp_plan = AttributeError()
 
 
 __all__ = [

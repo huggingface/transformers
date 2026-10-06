@@ -448,7 +448,7 @@ def main() -> int:
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
         distributed_config=DistributedConfig(
-            tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True
+            tp_size=int(os.environ["WORLD_SIZE"]), ep_size=int(os.environ["WORLD_SIZE"])
         ),
     )
     model.eval()
@@ -527,7 +527,7 @@ def main() -> int:
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
         distributed_config=DistributedConfig(
-            tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True
+            tp_size=int(os.environ["WORLD_SIZE"]), ep_size=int(os.environ["WORLD_SIZE"])
         ),
     )
     model.eval()
