@@ -45,7 +45,8 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 RUN python3 -m pip uninstall -y kernels
 
 # On ROCm, torchcodec is required to decode audio files. 0.17 supports torch >= 2.11.
-RUN python3 -m pip install --no-cache-dir "torchcodec==0.17.0"
+# Use the CPU build: the PyPI wheel links its image library against CUDA (libnvrtc.so.13) and fails to import on ROCm.
+RUN python3 -m pip install --no-cache-dir --no-deps "torchcodec==0.17.0+cpu" --index-url https://download.pytorch.org/whl/cpu
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
@@ -53,4 +54,4 @@ RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 RUN python3 -m pip install --no-cache-dir timm
 
 # Fail the build early if the dependency installs replaced the ROCm torch or broke flash-attn.
-RUN python3 -c "import torch, torchvision, flash_attn, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
+RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
