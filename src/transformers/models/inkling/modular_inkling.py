@@ -637,12 +637,12 @@ class InklingShortConvolution(nn.Module):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(
-            self.layer_idx, self.conv_idx
-        )
-
-        if use_precomputed_states and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
+        if past_key_values is None:
+            conv_state = None
+        else:
             conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
+
+        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
