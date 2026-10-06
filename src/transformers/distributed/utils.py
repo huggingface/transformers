@@ -154,7 +154,9 @@ class TransformersDeviceMesh:
     efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
     efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
 
-    There is no etp (expert tensor parallel) axis yet meaning experts are never tensor-sharded here.
+	There is no etp (expert tensor parallel) axis: with EP on, experts are never tensor-sharded. (for now)
+	For experts, EP plays the role TP plays for dense layers (weights stay sharded during compute),
+	and efsdp plays the role of fsdp (weights all-gathered before compute).
     If one were ever added, the relationship would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
     (efsdp = fsdp * tp / (ep * etp))
 
