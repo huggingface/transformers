@@ -335,6 +335,7 @@ class Speech2TextFeatureExtractionWithoutTorchaudioTest(Speech2TextFeatureExtrac
     # Seeding global_rng before each test avoids these unlucky inputs.
     def _seed_rng(self):
         from tests.test_processing_common import global_rng
+
         global_rng.seed(42)
 
     def test_cepstral_mean_and_variance_normalization(self):
