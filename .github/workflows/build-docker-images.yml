@@ -242,7 +242,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
-            REF=main
+            REF=${{ github.sha }}
             PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
           tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
@@ -321,7 +321,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-amd-gpu
           build-args: |
-            REF=main
+            REF=${{ github.sha }}
             PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
