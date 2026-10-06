@@ -61,7 +61,7 @@ class Cosmos3OmniConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_vl_vision":
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") != "qwen3_vl_vision":
             # old ckpt with incorrect model type -> override manually
             self.vision_config["model_type"] = "qwen3_vl_vision"
         super().__post_init__(**kwargs)
