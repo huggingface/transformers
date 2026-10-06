@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and limitations 
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-02.*
+*This model was contributed to Hugging Face Transformers on 2026-10-05.*
 
 # MOSS-Transcribe-Diarize
 
@@ -41,6 +41,11 @@ This model was contributed by [Ita Zaporozhets](https://huggingface.co/itazap) f
 [OpenMOSS repository](https://github.com/OpenMOSS/MOSS-Transcribe-Diarize) for more details.
 
 ## Usage
+
+> [!NOTE]
+> Most examples below use `apply_transcription_request`, a convenience function that builds the chat template for
+> you. See [Advanced usage with the chat template](#advanced-usage-with-the-chat-template) for the equivalent
+> `apply_chat_template` call.
 
 ### Basic transcription and diarization
 
@@ -129,8 +134,7 @@ WITH keywords   : Let's talk about the most spoken languages in the world. Manda
 
 ### Advanced usage with the chat template
 
-The above examples use `apply_transcription_request`, which is a convenience function to avoid having to write out
-the chat template. It is equivalent to a user turn that contains only audio:
+`apply_transcription_request` is equivalent to a chat template with a user turn that contains only audio:
 
 ```python
 from transformers import AutoProcessor, AutoModelForCausalLM
@@ -344,9 +348,9 @@ print(transcription)
 
 [[autodoc]] MossTranscribeDiarizeConfig
 
-## MossTranscribeDiarizeEncoderConfig
+## MossTranscribeDiarizeAudioConfig
 
-[[autodoc]] MossTranscribeDiarizeEncoderConfig
+[[autodoc]] MossTranscribeDiarizeAudioConfig
 
 ## MossTranscribeDiarizeFeatureExtractor
 

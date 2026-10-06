@@ -71,8 +71,6 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = VibeVoiceAsrProcessorKwargs
-    feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,

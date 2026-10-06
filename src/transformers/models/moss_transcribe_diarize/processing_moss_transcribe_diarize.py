@@ -58,8 +58,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
-    feature_extractor_class = "MossTranscribeDiarizeFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,
@@ -96,7 +94,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_tokens_per_second = audio_tokens_per_second
-        self.audio_merge_size = int(audio_merge_size)
+        self.audio_merge_size = audio_merge_size
         self.time_marker_every_seconds = time_marker_every_seconds
         # Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
         self._segment_pattern = re.compile(

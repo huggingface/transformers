@@ -247,6 +247,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     config: VoxtralEncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
+    _input_embed_layer = "conv1"
     _no_split_modules = ["VoxtralEncoderLayer"]
     _can_record_outputs = {
         "attentions": VoxtralAttention,
@@ -282,12 +283,6 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
 
     @merge_with_config_defaults
     @capture_outputs

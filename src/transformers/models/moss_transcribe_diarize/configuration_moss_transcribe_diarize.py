@@ -27,7 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
 @strict
-class MossTranscribeDiarizeEncoderConfig(PreTrainedConfig):
+class MossTranscribeDiarizeAudioConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
         The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
@@ -35,19 +35,19 @@ class MossTranscribeDiarizeEncoderConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MossTranscribeDiarizeEncoderConfig, MossTranscribeDiarizeEncoder
+    >>> from transformers import MossTranscribeDiarizeAudioConfig, MossTranscribeDiarizeAudioModel
 
-    >>> # Initializing a MossTranscribeDiarizeEncoderConfig
-    >>> configuration = MossTranscribeDiarizeEncoderConfig()
+    >>> # Initializing a MossTranscribeDiarizeAudioConfig
+    >>> configuration = MossTranscribeDiarizeAudioConfig()
 
-    >>> # Initializing a MossTranscribeDiarizeEncoder (with random weights)
-    >>> model = MossTranscribeDiarizeEncoder(configuration)
+    >>> # Initializing a MossTranscribeDiarizeAudioModel (with random weights)
+    >>> model = MossTranscribeDiarizeAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "moss_transcribe_diarize_encoder"
+    model_type = "moss_transcribe_diarize_audio"
 
     attribute_map = {
         "d_model": "hidden_size",
@@ -111,10 +111,10 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "moss_transcribe_diarize_encoder")
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "moss_transcribe_diarize_audio")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["moss_transcribe_diarize_encoder"]()
+            self.audio_config = CONFIG_MAPPING["moss_transcribe_diarize_audio"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
@@ -127,7 +127,7 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
                 num_attention_heads=16,
                 num_key_value_heads=8,
                 max_position_embeddings=131_072,
-                rope_theta=1_000_000.0,
+                rope_parameters={"rope_theta": 1_000_000.0, "rope_type": "default"},
             )
 
         super().__post_init__(**kwargs)
@@ -137,4 +137,4 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         return self.audio_config.hidden_size * self.audio_merge_size
 
 
-__all__ = ["MossTranscribeDiarizeConfig", "MossTranscribeDiarizeEncoderConfig"]
+__all__ = ["MossTranscribeDiarizeConfig", "MossTranscribeDiarizeAudioConfig"]
