@@ -57,11 +57,9 @@ def run(model, inputs, generation_kwargs, warmup: int, iterations: int) -> dict:
 
     latencies = []
     for i in range(warmup + iterations):
-        # `generate` consumes the entries of `cache_config`, so every call is given a fresh copy of it
-        kwargs = generation_kwargs | {"cache_config": dict(generation_kwargs["cache_config"])}
         torch.accelerator.synchronize()
         start = time.perf_counter()
-        outputs = model.generate(**inputs, **kwargs)
+        outputs = model.generate(**inputs, **generation_kwargs)
         torch.accelerator.synchronize()
         if i >= warmup:
             latencies.append(time.perf_counter() - start)

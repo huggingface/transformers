@@ -1015,13 +1015,20 @@ class Fp8QuantizedLayer(QuantizedLayer):
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search. The scale being per-tensor, the FP8 states can be
-        reordered as-is, without any dequantization."""
+        reordered as-is, without any dequantization. The reordering is therefore applied right away, contrary
+        to the base class which defers it to the next `update`."""
         if not self.is_initialized:
             return
 
         beam_idx = beam_idx.to(self._quantized_keys.device)
         self._quantized_keys = self._quantized_keys.index_select(0, beam_idx)
         self._quantized_values = self._quantized_values.index_select(0, beam_idx)
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        super().reset()
+        # The scales are dropped along with the states they quantize, so that the next `update` recalibrates
+        self._key_scale = self._value_scale = None
 
 
 class LinearAttentionCacheLayerMixin(ABC):

@@ -252,6 +252,49 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(keys.shape[-2], 3)
         self.assertEqual(layer.get_seq_length(), 3)
 
+    def test_fp8_quantized_layer_beam_reorder(self):
+        """
+        Same contract as `test_quantized_layer_beam_reorder`, for the FP8 backend. The scale being per-tensor, the
+        reordering is applied to the quantized states right away rather than deferred to the next `update`.
+        """
+        layer = Fp8QuantizedLayer()
+        # Row `i` of the states holds a constant that is exactly representable in `float8_e4m3fn` once divided by
+        # the calibrated scale, so the beam order can be read back off the cache without any rounding slack
+        row_values = torch.tensor([1.0, 2.0, 4.0, 8.0]).view(4, 1, 1, 1)
+
+        def states(order, seq_len):
+            return row_values.index_select(0, order).expand(4, 2, seq_len, 8).clone()
+
+        order = torch.arange(4)
+        layer.update(states(order, 5), states(order, 5))
+
+        for beam_idx in [[1, 0, 3, 2], [2, 2, 0, 1], [3, 1, 2, 0], [0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 1, 3]]:
+            beam_idx = torch.tensor(beam_idx)
+            layer.reorder_cache(beam_idx)
+            order = order.index_select(0, beam_idx)
+            keys, values = layer.update(states(order, 1), states(order, 1))
+            expected = row_values.index_select(0, order).expand_as(keys)
+            torch.testing.assert_close(keys, expected, rtol=0, atol=0)
+            torch.testing.assert_close(values, expected, rtol=0, atol=0)
+
+    def test_fp8_quantized_layer_reset(self):
+        """`reset` must drop the quantized states and the calibrated scales, so the next `update` starts over."""
+        layer = Fp8QuantizedLayer()
+
+        # Calibrate on states with a large amplitude, so a stale scale would be obvious on the next calibration
+        layer.update(torch.rand(4, 2, 5, 8) * 100, torch.rand(4, 2, 5, 8) * 100)
+        calibrated_scale = layer._key_scale.clone()
+        layer.reset()
+
+        self.assertEqual(layer.get_seq_length(), 0)
+        self.assertIsNone(layer._quantized_keys)
+        self.assertIsNone(layer._key_scale)
+
+        keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
+        self.assertEqual(keys.shape[-2], 3)
+        self.assertEqual(layer.get_seq_length(), 3)
+        self.assertLess(layer._key_scale.item(), calibrated_scale.item())
+
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
             hidden_size=64,
