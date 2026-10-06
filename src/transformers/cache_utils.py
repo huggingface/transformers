@@ -1411,7 +1411,9 @@ class Cache:
             raise ValueError(
                 f"Cannot get conv state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
             )
-        return layer.conv_states[state_idx]
+        if layer.has_previous_state[state_idx]:
+            return layer.conv_states[state_idx]
+        return None
 
     def update_conv_state(
         self, conv_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
@@ -1443,7 +1445,9 @@ class Cache:
             raise ValueError(
                 f"Cannot get recurrent state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
             )
-        return layer.recurrent_states[state_idx]
+        if layer.has_previous_state[state_idx]:
+            return layer.recurrent_states[state_idx]
+        return None
 
     def update_recurrent_state(
         self, recurrent_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
