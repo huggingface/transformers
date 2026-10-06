@@ -127,10 +127,6 @@ _deps = [
     # `utils/rules.toml` back into the released package.
     "transformers-mlinter==0.1.5",
     "ty==0.0.20",
-    # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
-    # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
-    # `Trainer` tests (see references to `run_translation.py`).
-    "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.8.0",
     "sagemaker>=2.31.0",
@@ -231,7 +227,6 @@ extras["testing"] = (
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
-        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )
     + extras["docs"]
