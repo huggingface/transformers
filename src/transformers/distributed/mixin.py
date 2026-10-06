@@ -52,6 +52,7 @@ class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
+    _is_distributed_loading_by_transformers = False
     _mesh_manager: TransformersDeviceMesh | None = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
@@ -59,6 +60,14 @@ class DistributedMixin:
     _fsdp_size = None
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
+
+    @property
+    def is_distributed_loading_by_transformers(self) -> bool:
+        """
+        Whether `from_pretrained(distributed_config=...)` sharded the model at load time (each rank reads only its
+        shard through `DtensorShardOperation`), rather than a wrapper such as Accelerate sharding it afterwards.
+        """
+        return self._is_distributed_loading_by_transformers
 
     def init_parallel_plans(self) -> None:
         """Copy class-level plans onto the instance and merge config/children contributions."""
@@ -192,6 +201,7 @@ class DistributedMixin:
         model.config.distributed_config = distributed_config
         model._mesh_manager = mesh_manager
         model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
+        model._is_distributed_loading_by_transformers = True
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
 
