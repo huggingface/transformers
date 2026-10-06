@@ -1957,6 +1957,10 @@ def create_tiny_models(
         if len(models) > 0:
             to_create[c] = {"processor": processors, "pytorch": models}
 
+    # When uploading, keep_model=True so model dirs persist to output_path for the upload loop below.
+    # All configs are built first, uploads happen after. This trades peak disk usage (all models on
+    # disk simultaneously) for throughput — interleaving build+upload would serialize them and lose
+    # parallelism. On a CI runner with a fresh disk this is generally fine.
     results = {}
     if num_workers <= 1:
         for c, models_to_create in list(to_create.items()):
