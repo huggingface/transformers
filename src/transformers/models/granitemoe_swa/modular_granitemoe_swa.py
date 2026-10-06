@@ -34,7 +34,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
 from ..granitemoe.modeling_granitemoe import GraniteMoeMoE, GraniteMoeTopKRouter
 from ..granitemoeshared.configuration_granitemoeshared import GraniteMoeSharedConfig
@@ -157,8 +157,13 @@ class GraniteMoeSWADecoderLayer(GraniteMoeSharedDecoderLayer):
 class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeSWADecoderLayer"]
     _supports_sdpa = False
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/aiter-flash-attn",
+    ]
     _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeSWATopKRouter, index=0),
         "hidden_states": GraniteMoeSWADecoderLayer,
         "attentions": GraniteMoeSWAAttention,
     }

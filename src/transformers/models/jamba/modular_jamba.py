@@ -108,6 +108,12 @@ class JambaMambaMixer(FalconMambaMixer):
 
     def __init__(self, config: JambaConfig, layer_idx):
         nn.Module.__init__(self)
+        if not config.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
         self.config = config
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size

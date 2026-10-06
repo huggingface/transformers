@@ -221,7 +221,7 @@ def convert_checkpoint(
     repo_id=None,
 ):
     if config_path is not None:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             model_config = json.load(f)
         hidden_size = model_config["codec_decoder_hidden_size"]
     else:

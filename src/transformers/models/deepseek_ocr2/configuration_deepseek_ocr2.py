@@ -238,16 +238,16 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_experts": "n_routed_experts",
     }
     n_group: int | None = None
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     n_shared_experts: int = 2
     routed_scaling_factor: float = 1.0
     topk_group: int | None = None

@@ -46,6 +46,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     Trainer,
+    TrainerCallback,
     TrainerState,
     TrainingArguments,
     default_data_collator,
@@ -461,29 +462,40 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
         # won't be the same since the training dataloader is shuffled).
 
+        def check_train_metrics(metrics, step_losses):
+            # `train_loss` and throughput must only cover the steps run in this `train()` call
+            self.assertAlmostEqual(metrics["train_loss"], sum(step_losses) / len(step_losses), places=3)
+            self.assertEqual(round(metrics["train_steps_per_second"] * metrics["train_runtime"]), len(step_losses))
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(
-                output_dir=tmpdir,
-                train_len=128,
-                save_steps=5,
-                learning_rate=0.1,
-            )
-            trainer.train()
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "logging_steps": 1,
+            }
+            trainer = get_regression_trainer(**kwargs)
+            metrics = trainer.train().metrics
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
             state = dataclasses.asdict(trainer.state)
+            step_losses = {log["step"]: log["loss"] for log in trainer.state.log_history if "loss" in log}
+            check_train_metrics(metrics, list(step_losses.values()))
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
             self.convert_to_sharded_checkpoint(checkpoint)
 
             # Reinitialize trainer
-            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            trainer = get_regression_trainer(**kwargs)
 
-            trainer.train(resume_from_checkpoint=checkpoint)
+            metrics1 = trainer.train(resume_from_checkpoint=checkpoint).metrics
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
+            # The resumed run only trained the steps after the checkpoint, with the same losses as the full run
+            check_train_metrics(metrics1, [loss for step, loss in step_losses.items() if step > 5])
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_gradient_accumulation(self):
@@ -705,6 +717,31 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
             trainer.train()
         self.assertEqual(trainer._train_batch_size, 14)
+
+    def test_auto_batch_size_eval_oom_fails_fast(self):
+        # An eval OOM must not be caught by the batch size finder, which only shrinks the train batch size
+        class MockEvalOOMCallback(TrainerCallback):
+            def on_evaluate(self, args, state, control, **kwargs):
+                raise RuntimeError("CUDA out of memory.")
+
+        train_dataset = RegressionDataset(length=128)
+        eval_dataset = RegressionDataset(length=16)
+        model = RegressionRandomPreTrainedModel(RegressionModelConfig(a=0, b=2))
+        args = RegressionTrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            max_steps=2,
+            eval_strategy="steps",
+            eval_steps=1,
+            save_strategy="no",
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+        )
+        trainer = Trainer(
+            model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=[MockEvalOOMCallback()]
+        )
+        with self.assertRaisesRegex(RuntimeError, "per_device_eval_batch_size"):
+            trainer.train()
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)

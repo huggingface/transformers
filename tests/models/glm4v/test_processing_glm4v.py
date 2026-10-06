@@ -37,6 +37,9 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+        # GLM4V uses the same token for images and video, so a video's tokens only count as
+        # video inside the begin/end span
+        cls.video_token = f"<|begin_of_video|>{processor.video_token}<|end_of_video|>"
 
     @parameterized.expand([(1, "pt")])
     @unittest.skip("Mode requires metadata to be always passed by users")

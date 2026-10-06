@@ -210,7 +210,7 @@ class MusicFlamingoRotaryEmbedding(MoonshineRotaryEmbedding):
     timestamps in seconds.
     """
 
-    def __init__(self, config: MusicFlamingoConfig, device=None):
+    def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
         position_angles = self._compute_position_angles(self.inv_freq)
         self.position_angles = nn.Buffer(position_angles, persistent=False)

@@ -18,7 +18,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
@@ -36,6 +36,7 @@ from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_ava
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
+from .cache_allocators import SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
 from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
@@ -44,7 +45,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import ThreadLocalCounter, WorkloadHints, drain_queue
+from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, stream_context
 
 
 """
@@ -402,8 +403,8 @@ class ContinuousBatchProcessor:
     def __del__(self) -> None:
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
@@ -496,19 +497,19 @@ class ContinuousBatchProcessor:
 
         # Schedule the next batch of requests
         requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
-            self.max_batch_tokens, self.cache.num_pages
+            self.max_batch_tokens, self.cache.max_tokens_read
         )
 
         # If requests_in_batch is None, it means the cache is full and no requests can be scheduled. We loop over active
         # requests and offload enough so that the remaining ones can all be scheduled. The loop is necessary because of
         # prefix sharing: offloading a fully shared request has 0 impact. Its termination is guaranteed.
         while requests_in_batch is None:
-            # Stop case: no request can be offloaded.
-            if self.offloading_manager.offload_requests() == 0:
+            # Stop case: no request can be offloaded
+            if not self.offloading_manager.offload_requests():
                 raise RuntimeError("No requests can be scheduled and no requests can be offloaded.")
             # Otherwise, the loop has offloaded at least one request, and we try scheduling again.
             requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
-                self.max_batch_tokens, self.cache.num_pages
+                self.max_batch_tokens, self.cache.max_tokens_read
             )
 
         # If requests_in_batch is an empty list, it means we have no requests to process anymore
@@ -520,14 +521,6 @@ class ContinuousBatchProcessor:
 
         # Restore any CPU-offloaded requests that were just scheduled
         self.offloading_manager.restore_scheduled_requests(requests_in_batch)
-
-        # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
-                f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
-                f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
-            )
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
@@ -569,8 +562,8 @@ class ContinuousBatchProcessor:
 
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token, logprob)
-                # We mark the completed blocks as such
-                self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+                # Register the hashes of the blocks completed in this forward pass (before the request may finish)
+                self.cache.mark_complete_blocks(state, future_state.complete_blocks)
                 if is_finished:
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
@@ -578,46 +571,37 @@ class ContinuousBatchProcessor:
                     pending_outputs.append(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING:
-                self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+                self.cache.mark_complete_blocks(state, future_state.complete_blocks)
 
         if pending_outputs:
             self.output_router.deliver_batch(pending_outputs)
 
-        # If some requests need to be forked, we do it now
-        copy_source, copy_destination = [], []
-        while self.scheduler._requests_to_fork:
-            # Get the number of children and reset it so it's not forked again
-            state_to_fork = self.scheduler._requests_to_fork.pop()
-            num_children = state_to_fork.num_children
-            state_to_fork.num_children = 0
-            new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
-            # If there are not enough free blocks, some children are created as new pending requests rather than forked
-            num_to_fork = min(num_children, self.cache.compute_max_num_forks(state_to_fork.request_id))
-            num_to_schedule = num_children - num_to_fork
-            for _ in range(num_to_schedule):
-                new_request_id = new_request_ids.pop()
-                child_state = state_to_fork.create_equivalent_initial_request()
-                child_state.request_id = new_request_id
-                self.scheduler.add_waiting_request(child_state)
-            # Early stop if no forks can be done
-            if num_to_fork == 0:
-                continue
-            # Create the new request and add them to the scheduler
-            for new_request_id in new_request_ids:
-                self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
-            # Fork the cache
-            copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
-            copy_source.extend(copy_src)
-            copy_destination.extend(copy_dst)
+        # If some requests need to be forked, we do it now. The block copies run on the compute stream so they cannot
+        # race with the in-flight forward when async batching is used.
+        if self.scheduler._requests_to_fork:
+            self.cache.pool.try_to_free_sectors()  # once to maximize the nb of free sectors available for the forks
 
-        # The copy induced by the fork is done in one go (if it's even needed)
-        if copy_source:
-            # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
-            # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
-            compute_stream = self.inputs_and_outputs.compute_stream
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
-                self.cache.copy_cache(copy_source, copy_destination)
+            # Loop over the requests to fork and accumulate the block copies to do
+            fork_src_and_dst = {name: ([], []) for name in self.cache.cache_allocators}
+            while self.scheduler._requests_to_fork:
+                # Get the number of children and reset it so the request is not forked again
+                state_to_fork = self.scheduler._requests_to_fork.pop()
+                num_children = state_to_fork.num_children
+                state_to_fork.num_children = 0
+                new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
+                # Fork the cache of as many children as it can hold and register them as active requests
+                forked_ids = self.cache.prepare_fork_request(state_to_fork, new_request_ids, fork_src_and_dst)
+                for new_request_id in forked_ids:
+                    self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
+                # Children that did not fit become new pending requests instead, prefilled from scratch
+                for new_request_id in new_request_ids[len(forked_ids) :]:
+                    child_state = state_to_fork.create_equivalent_initial_request()
+                    child_state.request_id = new_request_id
+                    self.scheduler.add_waiting_request(child_state)
+
+            # Actually perform the block copies
+            with stream_context(self.inputs_and_outputs.compute_stream):
+                self.cache.perform_cache_copy(fork_src_and_dst)
 
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
@@ -713,7 +697,7 @@ class ContinuousBatchingManager:
 
         # Model-related attributes
         self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
-        self.switch_to_cb_friendly_attn(model)
+        self.switch_to_cb_friendly_attn(model, continuous_batching_config.auto_switch_to_flash)
         self.model = model.eval()
 
         # Generation config related attributes
@@ -725,6 +709,7 @@ class ContinuousBatchingManager:
         self.distributed_helper = DistributedHelper(
             device_mesh=getattr(self.model, "_device_mesh", None),
             cpu_group_timeout=continuous_batching_config.cpu_group_timeout,
+            tp_plan=getattr(self.model, "tp_plan", {}),
         )
         self.is_tp_driver = self.distributed_helper.is_tp_driver
         # If TP is on, check if NCCL graph mixing is disabled (helps with performance)
@@ -748,38 +733,50 @@ class ContinuousBatchingManager:
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
-    def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is
-        requested and, in any cases, switch to a paged implementation."""
+    def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel, auto_switch_to_flash: bool = True) -> None:
+        """Switch the attn implementation to one that is CB compatible. If auto_switch_to_flash is True, and the attn
+        implementation is SDPA or eager, also switch to flash if it is supported and available."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
         original_attn_impl = model.config._attn_implementation
         target_implem = original_attn_impl
 
         # Check if flash attention is supported and available
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
-        is_paged = "paged|" in target_implem
-        if not is_flash and not is_paged and model._supports_flash_attn:
+        is_paged = target_implem == "paged|eager"
+        if not is_flash and not is_paged and model._supports_flash_attn and auto_switch_to_flash:
             # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
             elif is_flash_attn_2_available(kernels_fallback_ok=True):
                 version = 2
+            # TODO: add FA4 to this list
             else:
                 version = None
             # Change and warn
             msg = "Continuous batching is much better when using flash attention."
             if version is not None:
-                target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
+                target_implem = f"flash_attention_{version}"
                 logger.warning(
-                    f"{msg} Switching from {original_attn_impl} to {target_implem}. "
-                    "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
+                    f"{msg} Switching from {original_attn_impl} to {target_implem}. If you need to use eager or sdpa, "
+                    "set `auto_switch_to_flash=False` in the continuous batching config."
                 )
             else:
                 logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
-        # Switch to a paged implementation (always entered if conversion to flash happened)
-        if "paged|" not in target_implem:
-            model.set_attn_implementation(f"paged|{target_implem}")
+        # If the implementation is still eager, switch to paged|eager to avoid a crash
+        target_implem = "paged|eager" if target_implem == "eager" else target_implem
+
+        # Check the implementation is valid for CB
+        is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
+        if not (target_implem in ["paged|eager", "sdpa"] or is_flash):
+            raise ValueError(
+                f"Implementation {target_implem} is not supported for continuous batching. Use 'paged|eager', 'sdpa' "
+                "or a flash implementation instead."
+            )
+
+        # If the target implementation is different from the original, set it and save the original
+        if target_implem != original_attn_impl:
+            model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:
@@ -851,7 +848,7 @@ class ContinuousBatchingManager:
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
-            self.model._cached_continuous_batching_manager = self
+            self.model._cached_continuous_batching_manager = self  # type: ignore
 
         # Restore the original attention implementation
         if self._original_attn_impl is not None:
@@ -860,8 +857,8 @@ class ContinuousBatchingManager:
 
         # In all cases, a little cleanup is good
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
         """Wait for the background thread to finish. Wait can be capped using the timeout argument (in seconds)."""
@@ -1156,13 +1153,14 @@ class ContinuousBatchingManager:
             return batch_processor
 
         # Create the PagedAttentionCache
+        supports_logits_to_keep = getattr(self.model, "_supports_logits_to_keep", None)
         paged_attention_cache = PagedAttentionCache(
             config=self.model.config.get_text_config(),
             continuous_batching_config=self.continuous_batching_config,
             device=self.model.device,
             distributed_helper=self.distributed_helper,
-            tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
+            model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
@@ -1171,11 +1169,10 @@ class ContinuousBatchingManager:
             cb_config=self.continuous_batching_config,
             num_blocks=paged_attention_cache.num_blocks,
             max_batch_tokens=paged_attention_cache.max_batch_tokens,
-            use_prefix_sharing=self._use_prefix_sharing,
         )
 
         # Disable the decode path if the model has sliding window attention (TODO)
-        if paged_attention_cache.num_sliding_attention_groups > 0:
+        if SLIDING_ATTENTION in paged_attention_cache.cache_allocators:
             self.continuous_batching_config.max_blocks_per_request = 0
 
         # Retrieve the scheduler class
@@ -1280,7 +1277,8 @@ class ContinuousMixin:
                 "Cached continuous batching manager found: it will be re-used instead of creating a new one. If you"
                 " want to create a new manager, you should call `destroy_cached_continuous_batching_manager` first."
             )
-            cached_manager.switch_to_cb_friendly_attn(self)  # might have switched in .stop
+            auto_switch_to_flash = cached_manager.continuous_batching_config.auto_switch_to_flash
+            cached_manager.switch_to_cb_friendly_attn(self, auto_switch_to_flash)  # might have switched in .stop
             return cached_manager
 
         # Retrieve generation config
@@ -1458,17 +1456,22 @@ class ContinuousMixin:
             except Exception as e:
                 logger.error(f"Error during batch generation: {e}", exc_info=True)
 
-        # Re-order requests to match the order of the inputs
+        # Re-order requests to match the order of the inputs, forked children right after their parent
         reordered_results = {}
         missing_keys, failed_keys = [], []
-        for req_id in request_ids:
-            result = results.get(req_id)
-            if result is not None:
-                reordered_results[req_id] = result
-                if result.error is not None:
-                    failed_keys.append(req_id)
-            else:
-                missing_keys.append(req_id)
+        for request_id in request_ids:
+            # If there are multiple return sequences, taken it into account
+            selected_ids = [f"{request_id}__child#{i}" for i in range(num_return_sequences - 1)]
+            selected_ids.append(request_id)
+            # Add the parent and child IDs to the list
+            for selected_id in selected_ids:
+                result = results.get(selected_id)
+                if result is not None:
+                    reordered_results[selected_id] = result
+                    if result.error is not None:
+                        failed_keys.append(selected_id)
+                else:
+                    missing_keys.append(selected_id)
 
         if missing_keys:
             logger.error(f"Requests {missing_keys} not found in results.")
