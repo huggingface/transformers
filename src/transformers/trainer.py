@@ -1957,8 +1957,7 @@ class Trainer:
                     self.optimizer.step()
                     optimizer_step_was_skipped = self.accelerator.optimizer_step_was_skipped
                     self.state.optimizer_step_attempts += 1
-                    if not optimizer_step_was_skipped:
-                        self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
+                    self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
 
                     # get leaning rate before update
                     learning_rate = self._get_learning_rate()
