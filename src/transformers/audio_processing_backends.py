@@ -1038,8 +1038,9 @@ def register_audio_backend(name: str, backend_cls: type[AudioOps]) -> None:
         raise TypeError(
             f"Cannot register audio backend {name!r}: {backend_cls.__name__} is missing core ops {missing}."
         )
-    if backend_cls.name and backend_cls.name != name:
-        raise ValueError(f"{backend_cls.__name__} is named {backend_cls.name!r}, cannot register it as {name!r}.")
+    own_name = vars(backend_cls).get("name")
+    if own_name and own_name != name:
+        raise ValueError(f"{backend_cls.__name__} is named {own_name!r}, cannot register it as {name!r}.")
     backend_cls.name = name
     _AUDIO_BACKENDS[name] = backend_cls
 
