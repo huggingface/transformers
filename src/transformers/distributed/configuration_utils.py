@@ -72,7 +72,25 @@ class DistributedConfig:
 
     @property
     def efsdp_size(self) -> int:
-        """Size of the expert FSDP axis in the expert mesh view."""
+        """
+        The number of ranks that own the same experts and FSDP-shard them between each other.
+        Dense and expert parameters are laid out over the same world size:
+
+            pp x fsdp x tp == pp x efsdp x ep   =>   efsdp = fsdp x tp // ep
+
+        Experts are not tensor-parallel, so EP and expert-FSDP together cover all the ranks that
+        dense parameters split between FSDP and TP. Example with 16 ranks, ep=8:
+
+            ep groups    : {0..7} {8..15}          the 8 ranks of a group together hold all experts
+                                                   (num_experts / 8 each), tokens are routed within it
+            efsdp groups : {0,8} {1,9} ... {7,15}  each pair holds the same experts, FSDP-sharded
+                                                   on dim 0 (the expert dim) and all-gathered for compute
+
+        - ep == tp       : efsdp == fsdp
+        - ep == fsdp * tp: efsdp == 1, every expert lives whole on a single rank
+
+        Sharding over `efsdp` is applied by the EP token-dispatch path (`ep_dispatch_experts`).
+        """
         return self.fsdp_size * self.tp_size // self.ep_size
 
     def __post_init__(self):
