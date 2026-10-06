@@ -1435,6 +1435,9 @@ class Cache:
         if self.offloading:
             # Wait for the stream to finish if needed, and start prefetching the next layer
             torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
+            # The prefetch must also wait for the default stream: the offloading copies to cpu are not finished yet,
+            # and the previously prefetched tensors may still be read there before their memory is reused
+            self.prefetch_stream.wait_stream(torch.cuda.default_stream(key_states.device))
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
