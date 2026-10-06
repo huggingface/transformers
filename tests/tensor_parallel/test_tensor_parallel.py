@@ -365,3 +365,76 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+
+@is_tensor_parallel_test
+class TestLocalShardForwards(TestCasePlus):
+    """Modules that read sharded parameters directly must see their local shards, not DTensors."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import tempfile
+
+        import torch.distributed as dist
+        from torch.distributed.device_mesh import init_device_mesh
+
+        cls._owns_process_group = not dist.is_initialized()
+        if cls._owns_process_group:
+            cls._store_file = tempfile.NamedTemporaryFile(delete=False)
+            dist.init_process_group("gloo", store=dist.FileStore(cls._store_file.name, 1), rank=0, world_size=1)
+        cls.mesh = init_device_mesh("cpu", (1,))
+
+    @classmethod
+    def tearDownClass(cls):
+        import torch.distributed as dist
+
+        if cls._owns_process_group:
+            dist.destroy_process_group()
+        super().tearDownClass()
+
+    class Attention(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.proj = torch.nn.Linear(4, 4, bias=False)
+            self.sinks = torch.nn.Parameter(torch.ones(4))
+
+        def forward(self, x):
+            return self.proj(x) + self.sinks
+
+    class SharedExperts(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.ones(2, 4, 4))
+
+        def forward(self, x):
+            return torch.bmm(x.expand(2, -1, -1), self.weight.transpose(1, 2)).sum(dim=0)
+
+    def test_parameter_sharded_without_a_module_style_is_local_in_forward(self):
+        model = torch.nn.ModuleDict({"attn": self.Attention()})
+        plan = {"attn.proj": "colwise", "attn.sinks": "colwise"}
+        tensor_parallel.apply_tensor_parallelism(model, self.mesh, plan)
+        forward = model["attn"].forward
+
+        output = model["attn"](torch.ones(3, 4, requires_grad=True))
+        output.sum().backward()
+
+        self.assertIsInstance(model["attn"].sinks, torch.distributed.tensor.DTensor)
+        self.assertEqual(model["attn"].sinks.grad.full_tensor().tolist(), [3.0] * 4)
+        # A later pass whose plan shards nothing on the module leaves its forward alone, as masked EP applies the EP
+        # plan after the TP plan.
+        tensor_parallel.apply_tensor_parallelism(model, self.mesh, {"attn.proj": "colwise"})
+        self.assertIs(model["attn"].forward, forward)
+
+    def test_all_reduce_runs_modules_with_sharded_parameters_on_local_shards(self):
+        model = torch.nn.ModuleDict({"shared_experts": self.SharedExperts()})
+        plan = {"shared_experts.weight": "colwise", "shared_experts": "all_reduce"}
+        tensor_parallel.apply_tensor_parallelism(model, self.mesh, plan)
+        x = torch.ones(3, 4, requires_grad=True)
+
+        output = model["shared_experts"](x)
+        output.sum().backward()
+
+        self.assertNotIsInstance(output, torch.distributed.tensor.DTensor)
+        self.assertEqual(output.tolist(), [[8.0] * 4] * 3)
+        self.assertEqual(x.grad.tolist(), [[8.0] * 4] * 3)

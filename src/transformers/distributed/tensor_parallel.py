@@ -370,6 +370,24 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
 class AllReduceParallel(TensorParallelLayer):
     """All-reduce a module's partial forward output across the TP mesh."""
 
+    def should_use_local_tensors(self, module):
+        # A module holding sharded parameters (e.g. Inkling's batched shared experts) computes its partial output from
+        # its local shards. A module without any, e.g. DeepSeek V4's indexer scorer, gets its partial output from children.
+        return any(isinstance(param, DTensor) for param in module.parameters(recurse=False))
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        if not (self.should_use_local_tensors(module) and torch.is_grad_enabled()):
+            return args, kwargs
+        # Replicated inputs meet a local shard, so each rank only holds its shard's part of their gradient: sum them.
+        process_group = mesh.get_group()
+        args = tuple(
+            _AllReduceBackward.apply(arg, process_group)
+            if isinstance(arg, torch.Tensor) and not isinstance(arg, DTensor) and arg.requires_grad
+            else arg
+            for arg in args
+        )
+        return args, kwargs
+
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
             return None
@@ -1004,6 +1022,16 @@ def resolve_parallel_plans(
     return tp_plan, ep_plan
 
 
+def _install_local_params_forward(module):
+    original_forward = module.forward
+
+    def local_params_forward(*args, **kwargs):
+        with _use_local_dtensor_params(module):
+            return original_forward(*args, **kwargs)
+
+    module.forward = local_params_forward
+
+
 def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
     """Apply parameter sharding and forward hooks on the TP mesh."""
     tp_plan = model.tp_plan if tp_plan is None else tp_plan
@@ -1011,6 +1039,7 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
+        has_sharded_params = False
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
             style_name = _get_parameter_plan(parameter_name=full, plan=tp_plan, is_weight=True)
@@ -1018,6 +1047,7 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
+                has_sharded_params |= isinstance(module._parameters[p_name], DTensor)
 
         # Install the input/output transforms required by this module's TP style.
         style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)
@@ -1027,6 +1057,10 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+        elif has_sharded_params:
+            # A parameter sharded without a style on its module, e.g. the attention `sinks`, is read by a forward
+            # that works on the local head shards produced by the colwise projections: hand it its local shard too.
+            _install_local_params_forward(module)
         module._is_hooked = True
 
     return model
