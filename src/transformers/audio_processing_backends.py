@@ -1221,6 +1221,15 @@ if is_torch_available():
 
         name = "torch"
 
+        _DTYPES = {
+            "float32": torch.float32,
+            "float64": torch.float64,
+            "int32": torch.int32,
+            "int64": torch.int64,
+            "bool": torch.bool,
+            "complex64": torch.complex64,
+            "complex128": torch.complex128,
+        }
         _WIDEST_ON_MPS = {"float64": "float32", "complex128": "complex64"}
 
         @staticmethod
@@ -1228,6 +1237,13 @@ if is_torch_available():
             if device_type == "mps":
                 return TorchOps._WIDEST_ON_MPS.get(dtype, dtype)
             return dtype
+
+        @classmethod
+        def _torch_dtype(cls, dtype: str, device_type: str):
+            name = cls._resolve_dtype(dtype, device_type)
+            if name not in cls._DTYPES:
+                raise ValueError(f"Unknown dtype {dtype!r}; expected one of {sorted(cls._DTYPES)}.")
+            return cls._DTYPES[name]
 
         @staticmethod
         def _device_of(like):
@@ -1239,7 +1255,12 @@ if is_torch_available():
             if isinstance(x, torch.Tensor):
                 result = x
             elif isinstance(x, np.ndarray):
-                result = torch.from_numpy(x)
+                # Read-only or negative-stride arrays cannot be wrapped by `from_numpy`: copy those
+                # (contiguously, no warning); everything else is shared without a copy.
+                if x.flags.writeable and all(stride >= 0 for stride in x.strides):
+                    result = torch.from_numpy(x)
+                else:
+                    result = torch.from_numpy(np.ascontiguousarray(x))
             else:
                 # Sequences (`list[list[float]]`) are a documented input type; go through numpy so
                 # the torch backend accepts everything the numpy one does.
@@ -1251,6 +1272,9 @@ if is_torch_available():
 
         def to_device(self, x, device):
             device = torch.device(device)
+            # The widest-float rule lives in `_resolve_dtype`; this is the transfer side of it.
+            if device.type == "mps" and x.dtype in (torch.float64, torch.complex128):
+                x = x.to(torch.float32 if x.dtype == torch.float64 else torch.complex64)
             if x.device == device:
                 return x
             if device.type == "cuda" and x.device.type == "cpu":
@@ -1260,11 +1284,11 @@ if is_torch_available():
             return x.to(device)
 
         def astype(self, x, dtype):
-            return x.to(getattr(torch, self._resolve_dtype(dtype, x.device.type)))
+            return x.to(self._torch_dtype(dtype, x.device.type))
 
         def zeros(self, shape, *, dtype="float32", like=None):
             device = self._device_of(like)
-            return torch.zeros(shape, dtype=getattr(torch, self._resolve_dtype(dtype, device.type)), device=device)
+            return torch.zeros(shape, dtype=self._torch_dtype(dtype, device.type), device=device)
 
         def arange(self, n, *, like=None):
             return torch.arange(n, dtype=torch.int64, device=self._device_of(like))
@@ -1285,6 +1309,7 @@ if is_torch_available():
             if mode not in ("reflect", "replicate"):
                 raise ValueError(f"Unknown pad mode {mode!r}.")
             # `reflect` / `replicate` pad only the last axis of a (batch, channel, length) tensor.
+            # For a non-last axis this copies once in and once out and returns a non-contiguous tensor.
             moved = x.movedim(axis, -1)
             flat = moved.reshape(1, -1, moved.shape[-1])
             padded = torch.nn.functional.pad(flat, (left, right), mode=mode)
@@ -1332,6 +1357,7 @@ if is_torch_available():
         # ── signal ─────────────────────────────────────────────────────────────────────────────
 
         def frame(self, x, frame_length, hop):
+            # A writable overlapping view; by contract callers never write into frames (numpy's view is read-only).
             return x.unfold(-1, frame_length, hop)
 
         def rfft(self, x, n):
@@ -1346,6 +1372,7 @@ if is_torch_available():
         # ── randomness ─────────────────────────────────────────────────────────────────────────
 
         def randn(self, shape, *, seed, like=None):
+            # Streams differ by device as well as by backend: the same seed gives different numbers on CPU and CUDA.
             device = self._device_of(like)
             dtype = like.dtype if isinstance(like, torch.Tensor) else torch.float32
             generator = torch.Generator(device=device).manual_seed(seed)
