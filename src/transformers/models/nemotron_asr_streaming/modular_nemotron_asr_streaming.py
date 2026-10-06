@@ -35,7 +35,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
@@ -207,6 +207,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
         center: bool = True,
+        is_last_audio_chunk: bool = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -246,6 +247,10 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
                 subsequent streaming chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
                 reproduces, frame-for-frame, the features that a single `center=True` pass over the whole utterance
                 would have produced for those frames.
+            is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
+                Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio
+                is then zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the
+                whole utterance reaches past the audio at most, so that this frame is kept rather than dropped.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -312,15 +317,21 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
+        audio_lengths = padded_inputs.audio_lengths
+        if is_last_audio_chunk and not center:
+            # the last frame a `center=True` pass counts reaches up to `n_fft // 2 - hop` past the audio; padded
+            # after the preemphasis, which would otherwise turn the first zero into `-preemphasis * audio[-1]`
+            num_padding = self.n_fft // 2 - self.hop_length
+            input_features = torch.nn.functional.pad(input_features, (0, num_padding))
+            audio_lengths = audio_lengths + num_padding
+
         input_features = self._torch_extract_fbank_features(input_features, device, center=center)
         if center:
             # `center=True` pads `n_fft // 2` on each side, so the number of valid frames is `floor(L / hop)`.
-            features_lengths = torch.floor_divide(
-                padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
-            )
+            features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
         else:
             # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
-            features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1
+            features_lengths = torch.floor_divide(audio_lengths - self.n_fft, self.hop_length) + 1
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # NemotronAsrStreaming never normalizes the mel features
@@ -497,23 +508,14 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(ParakeetEncoderRelPositio
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
+        # The attention layers expect a batch dimension on the positional embeddings
+        freqs = freqs.expand(hidden_states.shape[0], -1, -1)
+        sin = freqs.sin()
+        cos = freqs.cos()
+        # interleave sin and cos
+        pos_embed = torch.stack([sin, cos], dim=-1)
+        pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
         return pos_embed.to(dtype=hidden_states.dtype)
 

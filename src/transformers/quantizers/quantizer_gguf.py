@@ -160,7 +160,7 @@ class GgufHfQuantizer(HfQuantizer):
                 module.input_permutation = permutation.to(module.weight.device)
         kernelize_ggml_layers(model)
         if not self.quantization_config.dequantize and not self.attn_requested:
-            GGML_ATTN = "transformers-community/ggml-attn"
+            GGML_ATTN = "ggml-org/ggml-attn"
             try:
                 model.set_attn_implementation(GGML_ATTN)
             except Exception as error:

@@ -13,6 +13,8 @@ permissions:
 
 jobs:
   check_links:
+    permissions:
+      contents: read
     name: Check documentation links
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -23,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.10'
+          python-version-file: .python-version
 
       - name: Install uv
         run: |
@@ -41,7 +43,7 @@ jobs:
   build:
     needs: check_links
     if: github.event_name == 'pull_request'
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@17ccdf17e0f5e5f88b1ce9f20b3b73fb19017169  # main (light installs, no custom container)
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3  # main
     with:
       commit_sha: ${{ github.event.pull_request.head.sha }}
       pr_number: ${{ github.event.number }}
@@ -50,12 +52,14 @@ jobs:
 
   # Satisfy required check in merge queue without actually building docs
   skip_merge_queue:
+    permissions: {}
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - run: echo "Skipping doc build in merge queue"
 
   doc_build_status_check:
+    permissions: {}
     needs: [build, check_links, skip_merge_queue]
     if: always()
     runs-on: ubuntu-latest

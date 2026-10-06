@@ -28,7 +28,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -661,6 +661,10 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
         loss_fct = MSELoss()
+        torch_compilable_check(
+            logits.shape[1] == labels.shape[1],
+            "VideoMAE reconstruction logits and labels must cover the same number of masked patches.",
+        )
         loss = loss_fct(logits, labels)
 
         return VideoMAEForPreTrainingOutput(

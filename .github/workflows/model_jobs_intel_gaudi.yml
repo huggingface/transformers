@@ -28,11 +28,13 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache/.cache/huggingface
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   run_models_gpu:
+    permissions:
+      contents: read
     name: " "
     strategy:
       max-parallel: 8

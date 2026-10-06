@@ -52,7 +52,8 @@ class ChameleonImageProcessorPil(PilBackend):
         """
         if not isinstance(image, PIL.Image.Image):
             return image
-        elif image.mode == "RGB":
+        # PNG tRNS keeps mode "RGB" while storing transparency in image.info.
+        elif image.mode == "RGB" and image.info.get("transparency") is None:
             return image
 
         img_rgba = np.array(image.convert("RGBA"))

@@ -218,7 +218,7 @@ def main():
 
     Usage:
         # Step 1: Download the original checkpoint
-        huggingface-cli download deepseek-ai/DeepSeek-OCR-2 --local-dir /path/to/DeepSeek-OCR-2
+        hf download deepseek-ai/DeepSeek-OCR-2 --local-dir /path/to/DeepSeek-OCR-2
 
         # Step 2: Convert to native transformers format
         python convert_deepseek_ocr2_weights_to_hf.py \\

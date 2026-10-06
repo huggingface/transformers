@@ -31,7 +31,7 @@ Install [kernels](https://huggingface.co/docs/kernels/index), otherwise the pack
 pip install kernels
 ```
 
-Weights stay packed when the Hub kernel [transformers-community/ggml-quantization](https://huggingface.co/transformers-community/ggml-quantization) is available. The loader defaults to MPS when that kernel is present and runs matmuls directly on the packed blocks. If the kernel isn't available, the model is dequantized at load.
+Weights stay packed when the Hub kernel [ggml-org/ggml-quantization](https://huggingface.co/ggml-org/ggml-quantization) is available. The loader defaults to MPS when that kernel is present and runs matmuls directly on the packed blocks. If the kernel isn't available, the model is dequantized at load.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -57,13 +57,13 @@ The packed path currently supports Qwen3.5 and Qwen3.5 MoE. Packed loads use flo
 
 ## Attention
 
-On MPS, with kernels installed, [ggml-attn](https://huggingface.co/kernels/transformers-community/ggml-attn) is the default attention when loading a GGUF file: the same flash-attention kernel llama.cpp uses for decode and prefill. If the kernel cannot be fetched, the model keeps its attention implementation. Passing `attn_implementation` (for example `"sdpa"`) always takes precedence.
+On MPS, with kernels installed, [ggml-attn](https://huggingface.co/kernels/ggml-org/ggml-attn) is the default attention when loading a GGUF file: the same flash-attention kernel llama.cpp uses for decode and prefill. If the kernel cannot be fetched, the model keeps its attention implementation. Passing `attn_implementation` (for example `"sdpa"`) always takes precedence.
 
 You can also pass it explicitly:
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, gguf_file=filename, attn_implementation="transformers-community/ggml-attn"
+    model_id, gguf_file=filename, attn_implementation="ggml-org/ggml-attn"
 )
 ```
 

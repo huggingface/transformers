@@ -7,11 +7,13 @@ on:
 env:
   SLACK_CHANNEL_ID: '#transformers-gh-ci-central'
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   get-python-versions:
+    permissions:
+      contents: read
     name: Get supported Python versions
     runs-on: ubuntu-latest
     outputs:
@@ -35,6 +37,8 @@ jobs:
           echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
 
   test-extras:
+    permissions:
+      contents: read
     name: Test extras on Python ${{ matrix.python-version }}
     needs: get-python-versions
     runs-on: ubuntu-latest
@@ -119,6 +123,7 @@ jobs:
           if-no-files-found: ignore
 
   precheck-slack:
+    permissions: {}
     name: Check Slack token availability
     runs-on: ubuntu-latest
     outputs:
@@ -135,6 +140,8 @@ jobs:
           fi
 
   notify-failures:
+    permissions:
+      contents: read
     name: Notify failures to Slack
     needs: [test-extras, precheck-slack]
     runs-on: ubuntu-latest
@@ -148,7 +155,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version
 
       - name: Download all failure reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -175,24 +182,26 @@ jobs:
 
       - name: Send Slack notification
         if: env.SLACK_MESSAGE != ''
-        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
-          channel-id: ${{ env.SLACK_CHANNEL_ID }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           payload: |
             {
+              "channel": ${{ toJSON(env.SLACK_CHANNEL_ID) }},
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ env.SLACK_TITLE }}"
+                    "text": ${{ toJSON(env.SLACK_TITLE) }}
                   }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "${{ env.SLACK_MESSAGE }}"
+                    "text": ${{ toJSON(env.SLACK_MESSAGE) }}
                   }
                 },
                 {
@@ -207,5 +216,3 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

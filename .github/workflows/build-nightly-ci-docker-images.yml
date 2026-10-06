@@ -14,11 +14,13 @@ concurrency:
   group: docker-images-builds
   cancel-in-progress: false
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   latest-with-torch-nightly-docker:
+    permissions:
+      contents: read
     name: "Nightly PyTorch"
     if: inputs.job == 'latest-with-torch-nightly-docker' || inputs.job == ''
     runs-on:
@@ -50,6 +52,8 @@ jobs:
           tags: huggingface/transformers-all-latest-torch-nightly-gpu
 
   nightly-torch-deepspeed-docker:
+    permissions:
+      contents: read
     name: "Nightly PyTorch + DeepSpeed"
     if: inputs.job == 'nightly-torch-deepspeed-docker' || inputs.job == ''
     runs-on:
