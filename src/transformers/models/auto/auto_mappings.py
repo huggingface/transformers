@@ -1009,7 +1009,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("cohere_compass", {"torchvision": "CohereCompassVideoProcessor"}),
         ("cosmos3_edge", {"torchvision": "Cosmos3EdgeVideoProcessor"}),
-        ("embedding_gemma2", "EmbeddingGemma2VideoProcessor"),
+        ("embedding_gemma2", {"torchvision": "EmbeddingGemma2VideoProcessor"}),
         ("ernie4_5_vl_moe", {"torchvision": "Ernie4_5_VLMoeVideoProcessor"}),
         ("gemma4", {"torchvision": "Gemma4VideoProcessor"}),
         ("gemma4_unified", {"torchvision": "Gemma4UnifiedVideoProcessor"}),

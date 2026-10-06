@@ -244,7 +244,6 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         resample: "tvF.InterpolationMode | int | None",
         do_rescale: bool,
@@ -269,8 +268,6 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
         num_frames_per_video = []
 
         for video in videos:
-            if do_convert_rgb:
-                video = self.convert_to_rgb(video)
             if do_resize:
                 video = self.aspect_ratio_preserving_resize(
                     video=video,
