@@ -48,27 +48,23 @@ class MossTranscribeDiarizeAudioConfig(PreTrainedConfig):
     ```"""
 
     model_type = "moss_transcribe_diarize_audio"
-
     attribute_map = {
         "d_model": "hidden_size",
         "encoder_layers": "num_hidden_layers",
         "encoder_attention_heads": "num_attention_heads",
         "encoder_ffn_dim": "intermediate_size",
-        "encoder_layerdrop": "layerdrop",
     }
 
     num_mel_bins: int = 80
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     intermediate_size: int = 4096
-    layerdrop: float | int = 0.0
     activation_function: str = "gelu"
     hidden_size: int = 1024
     dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_dropout: float | int = 0.0
     initializer_range: float = 0.02
-    scale_embedding: bool = False
     max_source_positions: int = 1500
 
 
