@@ -200,12 +200,20 @@ class MossTranscribeDiarizeAudioConfig(AudioFlamingo3EncoderConfig):
     ```"""
 
     model_type = "moss_transcribe_diarize_audio"
+    attribute_map = {
+        "d_model": "hidden_size",
+        "encoder_layers": "num_hidden_layers",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+    }
 
     num_mel_bins: int = 80
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     intermediate_size: int = 4096
     hidden_size: int = 1024
+    layerdrop = AttributeError()
+    scale_embedding = AttributeError()
 
 
 @auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
