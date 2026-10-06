@@ -138,9 +138,6 @@ class GraniteSpeech5CTCConfig(PreTrainedConfig):
         self.initializer_range = self.encoder_config.initializer_range
         super().__post_init__(**kwargs)
 
-    def get_text_config(self, *args, **kwargs):
-        return self.encoder_config
-
     def validate_architecture(self):
         if self.encoder_config.vocab_size != self.vocab_size:
             raise ValueError(

@@ -142,9 +142,6 @@ class GraniteSpeech5CTCConfig(ParakeetCTCConfig):
     # controls the tying of `ctc_head` to the encoder's (self-conditioning) CTC head `out`
     tie_word_embeddings: bool = True
 
-    def get_text_config(self, *args, **kwargs):
-        return self.encoder_config
-
     def validate_architecture(self):
         if self.encoder_config.vocab_size != self.vocab_size:
             raise ValueError(

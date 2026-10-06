@@ -171,6 +171,14 @@ config_class_to_model_tester_map = {
     "Qwen3_5MoeVisionConfig": "Qwen3_5MoeVisionText2TextModelTester",
 }
 
+# Maps config class names to the attribute name of their text sub-config, for models where
+# get_text_config() does not resolve correctly (e.g. the text config is stored under a
+# non-standard attribute name like `encoder_config` rather than `text_config`/`decoder`).
+# Used in the vocab_size propagation loop to keep validate_architecture happy.
+config_class_to_text_sub_config_attr = {
+    "GraniteSpeech5CTCConfig": "encoder_config",  # encoder_config holds the CTC text config
+}
+
 
 # TODO: create a separate map `no_proper_tester` for configs where only a sub-config tester exists
 # (e.g. only ThinkerTester exists but not a full OmniTester). Currently placed in no_model_tester_at_all.
@@ -230,7 +238,8 @@ CONFIGS_WITHOUT_PROCESSOR = {
 # Configs whose Hub checkpoint has not yet been publicly released.
 # Processor building is skipped; tiny models are still created from default config values.
 UNRELEASED_CHECKPOINTS = {
-    "MiniCPMV4_7Config",  # openbmb/MiniCPM-V-4.7 not yet released
+    "MiniCPMV4_7Config",       # openbmb/MiniCPM-V-4.7 not yet released
+    "MiniCPMV4_7VisionConfig",  # sub-config of MiniCPMV4_7Config; same unreleased checkpoint
 }
 
 # Checkpoints for some configs are only available on hub PRs or in subfolders.
@@ -1693,6 +1702,14 @@ def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
             _enc_text = getattr(_enc, "text_config", None)
             if _enc_text is not None and hasattr(_enc_text, k):
                 setattr(_enc_text, k, v)
+        # For models where get_text_config() does not resolve to the right sub-config
+        # (e.g. GraniteSpeech5CTCConfig stores its text config under `encoder_config`),
+        # propagate using the explicit attribute name from config_class_to_text_sub_config_attr.
+        _text_attr = config_class_to_text_sub_config_attr.get(config_class.__name__)
+        if _text_attr is not None:
+            _explicit_text_conf = getattr(tiny_config, _text_attr, None)
+            if _explicit_text_conf is not None and hasattr(_explicit_text_conf, k):
+                setattr(_explicit_text_conf, k, v)
 
     if result["warnings"]:
         logger.warning(result["warnings"][0][0])
