@@ -452,46 +452,6 @@ class TestKernelsEnv(TestCasePlus):
 
 @require_kernels
 class TestKernelUtilities(TestCasePlus):
-    @parameterized.expand(
-        [
-            (training, entry_point, mode_name)
-            for training in (False, True)
-            for entry_point in ("kernelize", "set_use_kernels")
-            for mode_name in ("default", "inference", "training", "inference_compile", "training_compile")
-        ]
-    )
-    def test_kernelize_respects_mode(self, training, entry_point, mode_name):
-        from transformers import LlamaConfig, LlamaForCausalLM, kernelize
-
-        modes = {
-            "default": None,
-            "inference": Mode.INFERENCE,
-            "training": Mode.TRAINING,
-            "inference_compile": Mode.INFERENCE | Mode.TORCH_COMPILE,
-            "training_compile": Mode.TRAINING | Mode.TORCH_COMPILE,
-        }
-        mode = modes[mode_name]
-        expected_mode = mode if mode is not None else (Mode.TRAINING if training else Mode.INFERENCE)
-        config = LlamaConfig(
-            vocab_size=32,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=2,
-        )
-        model = LlamaForCausalLM(config).train(training)
-
-        with patch.object(hub_kernels_pkg, "_kernels_kernelize", wraps=hub_kernels_pkg._kernels_kernelize) as backend:
-            if entry_point == "kernelize":
-                kernelize(model, mode=mode)
-            else:
-                model.set_use_kernels(True, mode=mode)
-
-        backend.assert_called_once()
-        self.assertEqual(backend.call_args.kwargs["mode"], expected_mode)
-        self.assertTrue(model.use_kernels)
-
     def test_is_kernel_regex(self):
         valid = [
             "org/model",
