@@ -39,15 +39,12 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # Install transformers
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,testing,video,audio]
 
-# When installing in editable mode, `transformers` is not recognized as a package.
-# this line must be added in order for python to be aware of transformers.
-RUN cd transformers && python3 setup.py develop
+COPY --from=gpu-common finish-transformers-install.sh /opt/ci/
+RUN sh /opt/ci/finish-transformers-install.sh
 
 # Remove nvml and nvidia-ml-py as it is not compatible with ROCm. apex is not tested on NVIDIA either.
 RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 
-# `kernels` may causes many failing tests
-RUN python3 -m pip uninstall -y kernels
 
 # On ROCm, torchcodec is required to decode audio files. 0.10 matches the
 # torch 2.10 C++ ABI in the base image above;
