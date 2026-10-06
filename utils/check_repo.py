@@ -1199,7 +1199,6 @@ DEPRECATED_OBJECTS = [
     "PretrainedConfig",  # deprecated in favor of PreTrainedConfig
     "BartPretrainedModel",
     "DataCollator",
-    "DataCollatorForSOP",
     "NerPipeline",
     "OwlViTFeatureExtractor",
     "PretrainedBartModel",

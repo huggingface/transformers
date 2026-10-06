@@ -72,9 +72,7 @@ _import_structure = {
         "DataCollatorForMultipleChoice",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
-        "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
-        "DataCollatorForWholeWordMask",
         "DataCollatorWithFlattening",
         "DataCollatorWithPadding",
         "DefaultDataCollator",
@@ -501,9 +499,7 @@ if TYPE_CHECKING:
         DataCollatorForPermutationLanguageModeling as DataCollatorForPermutationLanguageModeling,
     )
     from .data.data_collator import DataCollatorForSeq2Seq as DataCollatorForSeq2Seq
-    from .data.data_collator import DataCollatorForSOP as DataCollatorForSOP
     from .data.data_collator import DataCollatorForTokenClassification as DataCollatorForTokenClassification
-    from .data.data_collator import DataCollatorForWholeWordMask as DataCollatorForWholeWordMask
     from .data.data_collator import DataCollatorWithFlattening as DataCollatorWithFlattening
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
