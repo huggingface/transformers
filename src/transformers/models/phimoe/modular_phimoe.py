@@ -23,7 +23,6 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
@@ -64,17 +63,10 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config)
         mscale = attention_scaling if mscale is None else mscale
-        inv_freq_expanded = (
-            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * mscale
-            sin = emb.sin() * mscale
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * mscale
+        sin = emb.sin() * mscale
         return cos.to(x.dtype), sin.to(x.dtype)
 
 
