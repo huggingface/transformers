@@ -99,6 +99,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 2048
