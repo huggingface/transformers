@@ -11,9 +11,8 @@ RUN apt update && \
     apt install -y --no-install-recommends \
     libaio-dev \
     git \
+    curl \
     # These are required to build deepspeed.
-    python3-dev \
-    python-is-python3 \
     rocrand-dev \
     rocthrust-dev \
     rocblas-dev \
@@ -23,6 +22,16 @@ RUN apt update && \
     hipblaslt-dev && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Python comes from uv, at the version in the repo's `.python-version` (passed as a build arg by the build
+# workflow), instead of Ubuntu 22.04's 3.10. `python`, `python3` and `pip` all resolve to the venv.
+ARG PYTHON_VERSION
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip ninja "pydantic>=2.0.0"
 RUN python3 -m pip uninstall -y apex torch torchvision torchaudio

@@ -1,4 +1,8 @@
-FROM rocm/pytorch:rocm7.2.2_ubuntu22.04_py3.10_pytorch_release_2.10.0
+# check=skip=InvalidDefaultArgInFrom
+# `PYTHON_VERSION` comes from the repo's `.python-version` (passed as a build arg by the build workflow): the base
+# image ships torch in its own Python, so it has to be picked for that version.
+ARG PYTHON_VERSION
+FROM rocm/pytorch:rocm7.2_ubuntu22.04_py${PYTHON_VERSION}_pytorch_release_2.10.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -49,11 +53,16 @@ RUN python3 -m pip uninstall -y kernels
 # torch 2.10 C++ ABI in the base image above;
 RUN python3 -m pip install --no-cache-dir "torchcodec==0.10"
 
-# Install pre-built flash-attention wheel from AMD's mirror. Wheel is pinned
-# to the (ROCm, Ubuntu, Python, torch) ABI of the base image above; bumping
-# the base image generally requires a matching wheel from AMD.
-RUN python3 -m pip install --no-cache-dir \
-    https://rocm.frameworks-devreleases.amd.com/whl/gfx942-gfx950/flash_attn-2.8.3-cp310-cp310-linux_x86_64.whl
+# Build flash-attention (CK backend) from source: AMD's mirror only has pre-built wheels for Python 3.10.
+# The commit is the one AMD's `flash_attn-2.8.3+rocm7.2.0.0e60e39` wheel was built from, and `GPU_ARCHS` the same
+# MI300/MI355 targets (no GPU is visible at build time, so the default `native` can't be used).
+ARG FLASH_ATTN_COMMIT='0e60e39473e8'
+RUN git clone https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention && \
+    cd /tmp/flash-attention && \
+    git checkout ${FLASH_ATTN_COMMIT} && \
+    git submodule update --init --depth 1 csrc/composable_kernel && \
+    GPU_ARCHS="gfx942;gfx950" python3 -m pip install --no-cache-dir --no-build-isolation -v . && \
+    cd / && rm -rf /tmp/flash-attention
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 

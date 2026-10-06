@@ -22,10 +22,20 @@ ARG PYTORCH='2.13.0'
 ARG CUDA='cu126'
 
 RUN apt update
-# On top of what the general test image installs: `libaio-dev` for DeepSpeed's async I/O, and
-# `python-is-python3` because DeepSpeed's `zero_to_fp32.py` is executed directly and its shebang is
-# `#!/usr/bin/env python`, which Ubuntu does not provide (the previous `nvcr.io` base image did).
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs libaio-dev python-is-python3
+# On top of what the general test image installs: `libaio-dev` for DeepSpeed's async I/O.
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng ffmpeg git-lfs libaio-dev curl
+
+# Python comes from uv, at the version in the repo's `.python-version` (passed as a build arg by the build
+# workflow), instead of Ubuntu 22.04's 3.10. `python`, `python3` and `pip` all resolve to the venv
+# (DeepSpeed's `zero_to_fp32.py` is executed directly and its shebang is `#!/usr/bin/env python`).
+ARG PYTHON_VERSION
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 RUN git lfs install
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
