@@ -212,11 +212,11 @@ class ZayaCCAProjection(nn.Module):
             hidden_states = hidden_states * conv_mask[:, :, None].to(hidden_states.dtype)
 
         # Retrieve conv state if there is a cache. It may be None if the layer is not initialized.
-        if past_key_values is None:
-            cached_qk_states = None
-        else:
+        if past_key_values is not None:
             cached_qk_states = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_v_state = past_key_values.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            cached_qk_states, recurrent_v_state = None, None
 
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)

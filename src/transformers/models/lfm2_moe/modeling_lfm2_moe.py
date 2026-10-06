@@ -443,10 +443,10 @@ class Lfm2MoeShortConv(nn.Module):
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
 
-        if past_key_values is None:
-            conv_state = None
-        else:
+        if past_key_values is not None:
             conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state = None
 
         if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
