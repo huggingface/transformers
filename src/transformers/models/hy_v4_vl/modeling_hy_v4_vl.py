@@ -829,30 +829,41 @@ class HYV4VLVisionPatchMerger(nn.Module):
             kernel_size=config.spatial_merge_size,
             stride=config.spatial_merge_size,
         )
-        self.act = ACT2FN[config.hidden_act]
+        self.proj_act = ACT2FN[config.hidden_act]
         self.proj_out = nn.Conv2d(self.hidden_size, config.out_hidden_size, kernel_size=1)
         self.image_newline = nn.Parameter(torch.empty(config.out_hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+    def _reshape_features(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         height, width = int(size[0]), int(size[1])
-        hidden_states = self.norm(hidden_states)
-        # Frames are merged independently
-        hidden_states = hidden_states.reshape(-1, height, width, self.config.hidden_size).permute(0, 3, 1, 2)
-        hidden_states = self.proj_out(self.act(self.proj_conv(hidden_states)))
+        # Frames are merged independently.
+        return hidden_states.reshape(-1, height, width, self.config.hidden_size).permute(0, 3, 1, 2)
 
-        hidden_states = hidden_states.permute(0, 2, 3, 1)
-        num_frames, merged_height = hidden_states.shape[0], hidden_states.shape[1]
-        # One newline embedding per merged row
+    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+        hidden_states = self.before_rms(hidden_states)
+        dtype = hidden_states.dtype
+        hidden_states = self._reshape_features(hidden_states, size)
+        hidden_states = self.proj_conv(hidden_states)
+        hidden_states = self.proj_act(hidden_states)
+        hidden_states = self.proj_out(hidden_states)
+        batch_size, channels, height, width = hidden_states.shape
         hidden_states = torch.cat(
             [
                 hidden_states,
-                self.image_newline.reshape(1, 1, 1, self.out_hidden_size).expand(
-                    num_frames, merged_height, 1, self.out_hidden_size
-                ),
+                self.image_newline.reshape(1, channels, 1, 1)
+                .expand(batch_size, channels, height, 1)
+                .to(dtype, non_blocking=True),
             ],
-            dim=2,
+            dim=-1,
         )
+        hidden_states = hidden_states.reshape(batch_size, channels, -1).permute(0, 2, 1)
+        return self._postprocess_features(hidden_states, dtype)
+
+    def _postprocess_features(self, hidden_states: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
         return hidden_states.reshape(1, -1, self.out_hidden_size)
+
+    @property
+    def before_rms(self):
+        return self.norm
 
 
 class HYV4VLVisionMLP(nn.Module):

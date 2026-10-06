@@ -151,6 +151,102 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        filtered_inputs_dict = {}
+        for key, value in inputs_dict.items():
+            if key == "pixel_values":
+                filtered_inputs_dict[key] = value[: batch_size * self.model_tester.num_image_patches]
+            elif key == "image_grid_thw":
+                filtered_inputs_dict[key] = value[:batch_size]
+            elif key == "position_ids":
+                continue
+            elif isinstance(value, torch.Tensor):
+                filtered_inputs_dict[key] = value[:batch_size, ...]
+            else:
+                filtered_inputs_dict[key] = value
+
+        text_gen_config = config.get_text_config(decoder=True)
+        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
+            text_gen_config.pad_token_id = (
+                text_gen_config.eos_token_id
+                if isinstance(text_gen_config.eos_token_id, int)
+                else text_gen_config.eos_token_id[0]
+            )
+        text_gen_config.eos_token_id = None
+        text_gen_config.forced_eos_token_id = None
+
+        return config, filtered_inputs_dict
+
+    def test_patch_merger_preserves_projection_and_boundary_tokens(self):
+        from transformers.models.hunyuan_vl.modeling_hunyuan_vl import HunYuanVLVisionPatchMerger
+
+        config = self.model_tester.get_vision_config()
+        for dtype in (torch.float32, torch.bfloat16):
+            for batch_size, height, width, merge_size in ((1, 2, 6, 1), (2, 6, 4, 2)):
+                with self.subTest(dtype=dtype, batch_size=batch_size, merge_size=merge_size):
+                    config.spatial_merge_size = merge_size
+                    merger = HunYuanVLVisionPatchMerger(config).to(device=torch_device, dtype=dtype)
+                    for name in ("image_newline", "image_begin", "image_end", "image_sep"):
+                        torch.nn.init.normal_(getattr(merger, name), std=0.1)
+                    reference = copy.deepcopy(merger)
+                    reference.load_state_dict(merger.state_dict(), strict=True)
+                    self.assertEqual(
+                        set(merger.state_dict()),
+                        {
+                            "proj_conv.weight",
+                            "proj_conv.bias",
+                            "proj_out.weight",
+                            "proj_out.bias",
+                            "mlp.weight",
+                            "mlp.bias",
+                            "image_newline",
+                            "image_begin",
+                            "image_end",
+                            "image_sep",
+                            "before_rms.weight",
+                            "after_rms.weight",
+                        },
+                    )
+                    hidden = torch.randn(
+                        batch_size, height * width, config.hidden_size * 2, device=torch_device, dtype=dtype
+                    )
+                    hidden = hidden[..., ::2].detach().requires_grad_(True)
+                    reference_hidden = hidden.detach().clone().requires_grad_(True)
+                    expected = reference.before_rms(reference_hidden).permute(0, 2, 1)
+                    expected = expected.reshape(batch_size, config.hidden_size, height, width)
+                    expected = reference.proj_out(reference.proj_act(reference.proj_conv(expected)))
+                    channels, merged_height = expected.shape[1:3]
+                    newline = reference.image_newline.view(1, channels, 1, 1).expand(
+                        batch_size, channels, merged_height, 1
+                    )
+                    expected = torch.cat((expected, newline.to(dtype)), dim=-1)
+                    expected = reference.mlp(expected.reshape(batch_size, channels, -1).permute(0, 2, 1))
+                    begin = reference.image_begin.view(1, 1, -1).expand(batch_size, 1, -1).to(dtype)
+                    end = reference.image_end.view(1, 1, -1).expand(batch_size, 1, -1).to(dtype)
+                    expected = reference.after_rms(torch.cat((begin, expected, end), dim=1))
+                    actual = merger(hidden, size=(height, width))
+                    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+                    gradient = torch.randn_like(actual)
+                    actual.backward(gradient)
+                    expected.backward(gradient)
+                    torch.testing.assert_close(hidden.grad, reference_hidden.grad)
+                    for name, parameter in merger.named_parameters():
+                        expected_grad = reference.get_parameter(name).grad
+                        if expected_grad is None:
+                            self.assertIsNone(parameter.grad)
+                        else:
+                            torch.testing.assert_close(parameter.grad, expected_grad)
+
+    def test_patch_merger_preserves_spatial_checks(self):
+        from transformers.models.hunyuan_vl.modeling_hunyuan_vl import HunYuanVLVisionPatchMerger
+
+        config = self.model_tester.get_vision_config()
+        merger = HunYuanVLVisionPatchMerger(config).to(torch_device)
+        for height, width, message in ((1, 4, "Spatial height"), (4, 1, "Spatial width")):
+            with self.subTest(height=height, width=width), self.assertRaisesRegex(ValueError, message):
+                merger(torch.zeros(1, height * width, config.hidden_size, device=torch_device), size=(height, width))
+
     def test_auto_model_uses_base_model(self):
         config = self.model_tester.get_config()
         model = AutoModel.from_config(config).to(self.model_tester.device)

@@ -37,6 +37,7 @@ from ..hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessor
 from ..hunyuan_vl.modeling_hunyuan_vl import (
     HunYuanVLRMSNorm,
     HunYuanVLVisionPatchEmbed,
+    HunYuanVLVisionPatchMerger,
     HunYuanVLVisionTransformer,
 )
 from ..hy_v4.configuration_hy_v4 import HYV4Config
@@ -231,9 +232,9 @@ class HYV4VLVisionPatchEmbed(HunYuanVLVisionPatchEmbed):
         return patch_pos_embed.permute(0, 2, 3, 1).reshape(1, -1, self.embed_dim).to(embeddings.dtype)
 
 
-class HYV4VLVisionPatchMerger(nn.Module):
+class HYV4VLVisionPatchMerger(HunYuanVLVisionPatchMerger):
     def __init__(self, config: HYV4VLVisionConfig):
-        super().__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.spatial_merge_size = config.spatial_merge_size
         self.hidden_size = config.hidden_size * config.spatial_merge_size**2
@@ -246,29 +247,20 @@ class HYV4VLVisionPatchMerger(nn.Module):
             kernel_size=config.spatial_merge_size,
             stride=config.spatial_merge_size,
         )
-        self.act = ACT2FN[config.hidden_act]
+        self.proj_act = ACT2FN[config.hidden_act]
         self.proj_out = nn.Conv2d(self.hidden_size, config.out_hidden_size, kernel_size=1)
         self.image_newline = nn.Parameter(torch.empty(config.out_hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
-        height, width = int(size[0]), int(size[1])
-        hidden_states = self.norm(hidden_states)
-        # Frames are merged independently
-        hidden_states = hidden_states.reshape(-1, height, width, self.config.hidden_size).permute(0, 3, 1, 2)
-        hidden_states = self.proj_out(self.act(self.proj_conv(hidden_states)))
+    @property
+    def before_rms(self):
+        return self.norm
 
-        hidden_states = hidden_states.permute(0, 2, 3, 1)
-        num_frames, merged_height = hidden_states.shape[0], hidden_states.shape[1]
-        # One newline embedding per merged row
-        hidden_states = torch.cat(
-            [
-                hidden_states,
-                self.image_newline.reshape(1, 1, 1, self.out_hidden_size).expand(
-                    num_frames, merged_height, 1, self.out_hidden_size
-                ),
-            ],
-            dim=2,
-        )
+    def _reshape_features(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+        height, width = int(size[0]), int(size[1])
+        # Frames are merged independently.
+        return hidden_states.reshape(-1, height, width, self.config.hidden_size).permute(0, 3, 1, 2)
+
+    def _postprocess_features(self, hidden_states: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
         return hidden_states.reshape(1, -1, self.out_hidden_size)
 
 

@@ -534,6 +534,48 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(padded_positions[:, :, 3:], positions)
         torch.testing.assert_close(padded_deltas, deltas)
 
+    @parameterized.expand([(1, 2, 2, 2), (1, 2, 6, 2), (3, 6, 4, 2), (2, 1, 3, 1)])
+    def test_patch_merger_matches_conv_reference(self, frames, height, width, merge_size):
+        from transformers.models.hy_v4_vl.modeling_hy_v4_vl import HYV4VLVisionPatchMerger
+
+        config = self.model_tester.get_vision_config()
+        config.spatial_merge_size = merge_size
+        for dtype in (torch.float32, torch.bfloat16):
+            with self.subTest(dtype=dtype):
+                merger = HYV4VLVisionPatchMerger(config).to(device=torch_device, dtype=dtype)
+                torch.nn.init.normal_(merger.image_newline, std=0.1)
+                channels = config.hidden_size
+                merged_channels = channels * merge_size**2
+                shapes = {
+                    "norm.weight": (channels,),
+                    "proj_conv.weight": (merged_channels, channels, merge_size, merge_size),
+                    "proj_conv.bias": (merged_channels,),
+                    "proj_out.weight": (config.out_hidden_size, merged_channels, 1, 1),
+                    "proj_out.bias": (config.out_hidden_size,),
+                    "image_newline": (config.out_hidden_size,),
+                }
+                self.assertEqual({key: tuple(value.shape) for key, value in merger.state_dict().items()}, shapes)
+                self.assertIs(merger.before_rms, merger.norm)
+                reference = copy.deepcopy(merger)
+                reference.load_state_dict(merger.state_dict(), strict=True)
+                hidden = torch.randn(1, frames * height * width, channels * 2, device=torch_device, dtype=dtype)
+                hidden = hidden[..., ::2].detach().requires_grad_(True)
+                reference_hidden = hidden.detach().clone().requires_grad_(True)
+                expected = reference.norm(reference_hidden)
+                expected = expected.reshape(-1, height, width, channels).permute(0, 3, 1, 2)
+                expected = reference.proj_out(reference.proj_act(reference.proj_conv(expected)))
+                expected = expected.permute(0, 2, 3, 1)
+                newline = reference.image_newline.view(1, 1, 1, -1).expand(frames, height // merge_size, 1, -1)
+                expected = torch.cat((expected, newline), dim=2).reshape(1, -1, config.out_hidden_size)
+                actual = merger(hidden, size=(height, width))
+                torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+                gradient = torch.randn_like(actual)
+                actual.backward(gradient)
+                expected.backward(gradient)
+                torch.testing.assert_close(hidden.grad, reference_hidden.grad)
+                for name, parameter in merger.named_parameters():
+                    torch.testing.assert_close(parameter.grad, reference.get_parameter(name).grad)
+
     def test_packed_features_have_one_newline_per_merged_row(self):
         config = self.model_tester.get_config()
         model = HYV4VLModel(config).to(torch_device).eval()
