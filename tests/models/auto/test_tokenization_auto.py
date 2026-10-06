@@ -485,12 +485,10 @@ class AutoTokenizerTest(unittest.TestCase):
             base_tokenizer.save_pretrained(tmp_dir)
 
             custom_tokens = [f"[CUSTOM_{i}]" for i in range(5)]
+            sorted_vocab = sorted(base_tokenizer.get_vocab().items(), key=lambda x: x[1])
             vocab_file_path = os.path.join(tmp_dir, "vocab.txt")
-            with open(vocab_file_path, encoding="utf-8") as f:
-                existing_vocab_lines = f.readlines()
-            existing_vocab_size = sum(1 for line in existing_vocab_lines if line.rstrip("\n"))
             with open(vocab_file_path, "w", encoding="utf-8") as f:
-                f.writelines(existing_vocab_lines)
+                f.writelines(token + "\n" for token, _ in sorted_vocab)
                 f.writelines(token + "\n" for token in custom_tokens)
 
             tokenizer_reloaded = AutoTokenizer.from_pretrained(tmp_dir)
@@ -498,7 +496,7 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer_reloaded, BertTokenizer)
         self.assertEqual(
             tokenizer_reloaded.vocab_size,
-            existing_vocab_size + len(custom_tokens),
+            len(sorted_vocab) + len(custom_tokens),
             "AutoTokenizer must load the extended vocab.txt rather than the tokenizer.json "
             "when a custom/extended vocabulary is present (regression for issue #48967).",
         )
