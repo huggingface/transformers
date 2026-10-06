@@ -110,6 +110,38 @@ python xla_spawn.py --num_cores 8 pytorch/summarization/run_summarization.py \
     ...
 ```
 
+### Run a script on Hugging Face Jobs
+
+The example scripts declare their dependencies in a [PEP 723](https://peps.python.org/pep-0723/) `# /// script` header, so they run on [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs) straight from their GitHub URL. You rent a GPU for the length of the run and skip setting up a local environment.
+
+[Install](https://huggingface.co/docs/huggingface_hub/en/guides/cli#getting-started) the `hf` CLI and run `hf auth login`. Pass the script URL to `hf jobs uv run` and put the script arguments after it.
+
+- `--flavor`: pick the hardware
+- `--timeout`: set the timeout limit (30 minutes by default)
+- `-s HF_TOKEN`: forward your token so `--push_to_hub` works
+
+The `--` before the URL keeps Job flags and script flags apart, so a script argument that shares a name with an `hf` flag, such as `--token`, goes to the script.
+
+```bash
+hf jobs uv run --flavor a10g-small --timeout 30m -s HF_TOKEN -- \
+    https://raw.githubusercontent.com/huggingface/transformers/main/examples/pytorch/summarization/run_summarization.py \
+    --model_name_or_path google-t5/t5-small \
+    --do_train \
+    --do_eval \
+    --dataset_name abisee/cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --max_train_samples 500 \
+    --max_eval_samples 100 \
+    --output_dir finetuned-t5-cnn_dailymail \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --push_to_hub \
+    --predict_with_generate
+```
+
+This trains on 500 examples and finishes in about three minutes. For the full run, drop `--max_train_samples` and `--max_eval_samples` and raise `--timeout`. The header installs Transformers from `main`, so the run uses the same code as the script. See [Train Models on Jobs](https://huggingface.co/docs/hub/jobs-training) for hardware, checkpoints, and multi-GPU runs.
+
 ## Accelerate
 
 [Accelerate](https://huggingface.co/docs/accelerate) is designed to simplify distributed training while offering complete visibility into the PyTorch training loop. If you're planning on training with a script with Accelerate, use the `_no_trainer.py` version of the script.
