@@ -4044,10 +4044,9 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif getattr(self.model, "_device_mesh", None) is not None and not _is_peft_model(self.model):
+        elif getattr(self.model, "_device_mesh", None) is not None:
             # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
-            # is collective, so every rank saves; only the main process writes, the others leave at the
-            # closing barrier. (PEFT models fall through to the adapter-only save below.)
+            # is collective, only the main process writes.
             self._save(output_dir)
 
         elif self.args.should_save:
@@ -4081,7 +4080,7 @@ class Trainer:
                     state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
                 )
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            self.model.save_pretrained(output_dir, state_dict=state_dict, is_main_process=self.args.should_save)
 
         # A non-writer rank of a model sharded at load time is only here for the collectives above.
         if not self.args.should_save:
