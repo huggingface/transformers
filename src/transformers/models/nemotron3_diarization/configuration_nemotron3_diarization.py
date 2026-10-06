@@ -32,6 +32,8 @@ class Nemotron3DiarizationAudioConfig(PreTrainedConfig):
     subsampling_factor (`int`, *optional*, defaults to 8):
         Number of consecutive spectrogram frames stacked into one encoder frame. The classifier upsamples its
         outputs by the same factor, so speaker activity is predicted at the spectrogram frame rate.
+    use_qk_norm (`bool`, *optional*, defaults to `False`):
+        Whether to apply a layer norm to the queries and keys of each attention head, before the rotary embedding.
     """
 
     model_type = "nemotron3_diarization_audio"
@@ -52,9 +54,11 @@ class Nemotron3DiarizationAudioConfig(PreTrainedConfig):
     use_qk_norm: bool = False
 
     def __post_init__(self, **kwargs):
+        kwargs.setdefault("partial_rotary_factor", 1.0)
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-        kwargs.setdefault("partial_rotary_factor", 1.0)
+
+        kwargs.setdefault("partial_rotary_factor", 0.5)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

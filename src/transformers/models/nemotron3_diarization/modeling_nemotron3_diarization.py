@@ -33,7 +33,13 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+)
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nemotron3_diarization import (
@@ -425,7 +431,8 @@ class Nemotron3DiarizationAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
-        # CODEPATH: the Nemotron-3.5-Transcribe ASR encoder normalizes queries and keys, Nemotron-3-Diarization does not.
+        # CODEPATH: the Nemotron 3.5 Transcribe speech recognition encoder normalizes queries and keys, the
+        # Nemotron-3-Diarization encoder does not.
         self.q_norm = nn.LayerNorm(self.head_dim) if config.use_qk_norm else nn.Identity()
         self.k_norm = nn.LayerNorm(self.head_dim) if config.use_qk_norm else nn.Identity()
 

@@ -40,6 +40,7 @@ if is_torch_available():
         AutoModelForAudioFrameClassification,
         AutoProcessor,
         Nemotron3DiarizationAudioConfig,
+        Nemotron3DiarizationAudioModel,
         Nemotron3DiarizationConfig,
         Nemotron3DiarizationForAudioFrameClassification,
         Nemotron3DiarizationHeadConfig,
@@ -237,6 +238,27 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         streaming_logits = torch.cat(step_logits, dim=1)
         self.assertEqual(streaming_logits.shape, offline_logits.shape)
         torch.testing.assert_close(streaming_logits, offline_logits, atol=1e-5, rtol=1e-5)
+
+    def test_audio_model_qk_norm_and_partial_rotary(self):
+        """The audio encoder options of the Nemotron 3.5 Transcribe speech recognition encoder."""
+        config = Nemotron3DiarizationAudioConfig(
+            num_mel_bins=8,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=32,
+            use_qk_norm=True,
+            partial_rotary_factor=0.5,
+        )
+        model = Nemotron3DiarizationAudioModel(config).to(torch_device).eval()
+        head_dim = config.hidden_size // config.num_attention_heads
+        # only half of each head is rotated
+        self.assertEqual(model.rotary_emb.inv_freq.shape[0], head_dim // 4)
+        self.assertIsInstance(model.layers[0].self_attn.q_norm, torch.nn.LayerNorm)
+        self.assertIsInstance(model.layers[0].self_attn.k_norm, torch.nn.LayerNorm)
+        with torch.no_grad():
+            outputs = model(floats_tensor([2, 64, config.num_mel_bins]))
+        self.assertEqual(outputs.last_hidden_state.shape, (2, 64 // config.subsampling_factor, config.hidden_size))
 
     def test_streaming_rejects_invalid_lookahead(self):
         config, input_features, _ = self.model_tester.prepare_config_and_inputs()
