@@ -28,13 +28,14 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     slow,
     torch_device,
 )
 
 from ...alm_tester import ALMModelTest, ALMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -145,24 +146,19 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
 
 
 @require_torch
-class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.TestCase):
+class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    checkpoint = "itazap/MOSS-Transcribe-Diarize-HF"
+
     @classmethod
     def setUpClass(cls):
-        cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "itazap/MOSS-Transcribe-Diarize-HF"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
         cls.model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
             cls.checkpoint, device_map=torch_device, dtype="auto"
         )
 
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        cleanup(torch_device, gc_collect=True)
-
     def setUp(self):
-        # Fixture files are named after the test they belong to, e.g. `test_single_batch_sub_30`
-        # loads `expected_results_single_batch_sub_30.json`.
+        super().setUp()
+
         fixture_name = self._testMethodName.removeprefix("test_")
         path = (
             Path(__file__).parent.parent.parent
@@ -178,7 +174,9 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
         reproducer: https://gist.github.com/itazap/6045ee5b1c4737c5623d5701de68081a
         """
         inputs = self.processor.apply_transcription_request(
-            "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+            ),
         ).to(self.model.device, dtype=self.model.dtype)
         torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(self.expected_outputs["input_ids"]))
 
@@ -195,7 +193,9 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
         reproducer: https://gist.github.com/itazap/e551c66d2d928be5027c2aa832bc8123
         """
         inputs = self.processor.apply_transcription_request(
-            "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3"
+            ),
         ).to(self.model.device, dtype=self.model.dtype)
         torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(self.expected_outputs["input_ids"]))
 
@@ -213,8 +213,12 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
         """
         inputs = self.processor.apply_transcription_request(
             [
-                "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
-                "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+                url_to_local_path(
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3"
+                ),
             ],
         ).to(self.model.device, dtype=self.model.dtype)
         torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(self.expected_outputs["input_ids"]))

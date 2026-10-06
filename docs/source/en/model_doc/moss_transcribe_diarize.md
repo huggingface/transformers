@@ -352,6 +352,11 @@ print(transcription)
 
 [[autodoc]] MossTranscribeDiarizeAudioConfig
 
+## MossTranscribeDiarizeAudioModel
+
+[[autodoc]] MossTranscribeDiarizeAudioModel
+    - forward
+
 ## MossTranscribeDiarizeFeatureExtractor
 
 [[autodoc]] MossTranscribeDiarizeFeatureExtractor
