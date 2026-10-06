@@ -637,7 +637,7 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_save = True
 
         # A skipped final attempt has no on_step_end event to finalize step-based strategies.
-        if args.max_steps <= 0 and state.optimizer_step_attempts is not None and not control.should_training_stop:
+        if args.max_steps <= 0 and not control.should_training_stop:
             return self._maybe_stop_training(args, state, control)
 
         return control

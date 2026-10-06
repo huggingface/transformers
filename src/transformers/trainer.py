@@ -1693,18 +1693,16 @@ class Trainer:
             has_data_position = (
                 self.state.train_dataloader_epoch is not None and self.state.train_dataloader_batches_seen is not None
             )
-            epochs_trained = (
-                self.state.train_dataloader_epoch
-                if has_data_position
-                else int(self.state.optimizer_step_attempts // num_update_steps_per_epoch)
-            )
-            if not self.args.ignore_data_skip:
-                steps_trained_in_current_epoch = (
-                    self.state.train_dataloader_batches_seen
-                    if has_data_position
-                    else (self.state.optimizer_step_attempts % num_update_steps_per_epoch)
-                    * self.args.gradient_accumulation_steps
-                )
+            if has_data_position:
+                epochs_trained = self.state.train_dataloader_epoch
+                if not self.args.ignore_data_skip:
+                    steps_trained_in_current_epoch = self.state.train_dataloader_batches_seen
+            else:
+                epochs_trained = self.state.optimizer_step_attempts // num_update_steps_per_epoch
+                if not self.args.ignore_data_skip:
+                    steps_trained_in_current_epoch = (
+                        self.state.optimizer_step_attempts % num_update_steps_per_epoch
+                    ) * self.args.gradient_accumulation_steps
         else:
             self.state.optimizer_step_attempts = 0
 
@@ -1965,10 +1963,11 @@ class Trainer:
                     # get leaning rate before update
                     learning_rate = self._get_learning_rate()
 
-                    if not optimizer_step_was_skipped:
-                        # Delay optimizer scheduling until metrics are generated
-                        if not isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)):
-                            self.lr_scheduler.step()
+                    # Delay optimizer scheduling until metrics are generated
+                    if not optimizer_step_was_skipped and not isinstance(
+                        self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)
+                    ):
+                        self.lr_scheduler.step()
 
                     model.zero_grad()
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
