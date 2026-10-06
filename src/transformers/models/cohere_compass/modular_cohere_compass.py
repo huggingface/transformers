@@ -37,7 +37,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
@@ -230,18 +229,11 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = (
-            inv_freq[None, None, :, None]
-            .expand(3, position_ids.shape[1], -1, 1)
-            .to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+        # One row of positions per M-RoPE axis: (num_axes, bs, positions)
+        position_ids = position_ids.expand(3, -1, -1)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * attention_scaling
+        sin = freqs.sin() * attention_scaling
 
         sin = self.recomposition_frequencies(sin, layer_type)
         cos = self.recomposition_frequencies(cos, layer_type)

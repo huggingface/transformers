@@ -30,7 +30,7 @@ from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -41,7 +41,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
     Gemma3ForCausalLM,
@@ -320,11 +320,11 @@ class InklingConfig(PreTrainedConfig):
 
 
 class InklingModelOutputWithPast(Gemma3ModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class InklingCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class InklingRMSNorm(LlamaRMSNorm):
@@ -728,6 +728,7 @@ class InklingPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": InklingDecoderLayer,
         "attentions": InklingAttention,
+        "router_logits": OutputRecorder(InklingTopkRouter, index=0),
     }
 
     @torch.no_grad()
@@ -792,7 +793,7 @@ class InklingTextModel(InklingPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -834,7 +835,7 @@ class InklingTextModel(InklingPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -905,6 +906,7 @@ class InklingForCausalLM(Gemma3ForCausalLM):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1274,6 +1276,7 @@ class InklingModel(InklingPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1402,6 +1405,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
