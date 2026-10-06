@@ -47,7 +47,6 @@ test_to_result_name = {
     "Models": "model",
     "Trainer & DDP & FSDP": "trainer_and_fsdp",
     "PyTorch pipelines": "torch_pipeline",
-    "Examples directory": "example",
     "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
     "Kernels": "kernels",
@@ -1299,7 +1298,6 @@ if __name__ == "__main__":
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
-        del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
         del additional_files["DeepSpeed"]
