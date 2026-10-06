@@ -218,6 +218,7 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
                 # - an EP group holds ep_size / tp_size distinct batches
                 # - the efsdp reduce then sums efsdp_size copies of that expert.
                 # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size batches
+                # (the relationsip is efsdp_size = fsdp_size * tp_size / ep_size)
                 module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
                 if torch.distributed.get_backend(expert_mesh.get_group()) != "nccl":
                     # Non-NCCL backends need to sum first, then apply the division otherwise it runtime error.
