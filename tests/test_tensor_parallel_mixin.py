@@ -27,6 +27,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
 
+from .test_fsdp_mixin import _get_distributed_backend, _set_rank_device
+
 
 if is_torchao_available():
     from torchao.quantization import Float8WeightOnlyConfig
@@ -115,6 +117,9 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group
+    _set_rank_device(rank)
+
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
@@ -123,8 +128,11 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
+def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
     """Decorator to initialize distributed environment and spawn processes."""
+    # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
+    if backend is None:
+        backend = _get_distributed_backend()
 
     def _init_distributed_inner(func):
         def wrapper(*args, **kwargs):
@@ -392,7 +400,6 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
 
 def _load_ep_and_reference_models(model_path, model_class):
     """Load EP model and non-EP reference model for comparison."""
-    # All-reduce EP: every rank sees the same tokens, so TP and EP span the same ranks.
     model_ep = model_class.from_pretrained(
         model_path,
         distributed_config=DistributedConfig(tp_size=dist.get_world_size(), ep_size=dist.get_world_size()),

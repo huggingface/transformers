@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
+    require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -58,6 +59,8 @@ if is_torch_available():
         MixtralForCausalLM,
         PreTrainedConfig,
         QuantizedCache,
+        Qwen3VLConfig,
+        Qwen3VLForConditionalGeneration,
         StaticCache,
         convert_and_export_with_cache,
         pipeline,
@@ -69,6 +72,7 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
+        QuantoQuantizedLayer,
         StaticLayer,
         StaticSlidingWindowLayer,
     )
@@ -180,6 +184,50 @@ class CacheTest(unittest.TestCase):
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
+
+    @require_optimum_quanto
+    def test_quantized_layer_beam_reorder(self):
+        """
+        `reorder_cache` must reorder the quantized states as well, not only the residual cache. It used to index the
+        (emptied) residual cache while guarding on the total sequence length, so it either raised or silently left
+        the quantized states in the previous beam order.
+        """
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+        # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
+        row_values = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1)
+
+        def states(order, seq_len):
+            # Row `i` is filled with the constant of the original row `order[i]`, as the model would produce it
+            return row_values.index_select(0, order).expand(4, 2, seq_len, 8).clone()
+
+        order = torch.arange(4)
+        layer.update(states(order, 5), states(order, 5))
+
+        # Reorder on every step, with duplicated indices (`beam_idx` is a gather, several beams may pick the same
+        # source beam) and crossing the residual cache flushes, which bake the pending reordering in.
+        for beam_idx in [[1, 0, 3, 2], [2, 2, 0, 1], [3, 1, 2, 0], [0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 1, 3]]:
+            beam_idx = torch.tensor(beam_idx)
+            layer.reorder_cache(beam_idx)
+            order = order.index_select(0, beam_idx)
+            keys, values = layer.update(states(order, 1), states(order, 1))
+            # Every cached position of a row must hold that row's constant, whatever the beam shuffling
+            expected = row_values.index_select(0, order).expand_as(keys)
+            torch.testing.assert_close(keys, expected, rtol=0, atol=1e-2)
+            torch.testing.assert_close(values, expected, rtol=0, atol=1e-2)
+
+    @require_optimum_quanto
+    def test_quantized_layer_reset(self):
+        """`reset` must also drop the quantized states, which hold most of the cache."""
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+
+        # 5 tokens for a residual length of 4: the first flush has happened, so most of the cache is quantized
+        layer.update(torch.rand(4, 2, 5, 8), torch.rand(4, 2, 5, 8))
+        layer.reset()
+
+        self.assertEqual(layer.get_seq_length(), 0)
+        keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
+        self.assertEqual(keys.shape[-2], 3)
+        self.assertEqual(layer.get_seq_length(), 3)
 
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
@@ -320,6 +368,39 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(cache, StaticCache)
         self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 8])
 
+    def test_chunked_prefill_multi_axis_position_ids(self):
+        """
+        Regression test for #49318: models with multi-axis rope position ids, such as Qwen3-VL's `(4, batch, seq)`.
+        The chunked prefill sliced each chunk's position ids on their second dim, the batch on such models, so the
+        second chunk had no rows. It must slice the last dim, the sequence, and match an unchunked prefill.
+        """
+        config = Qwen3VLConfig(
+            text_config={
+                "hidden_size": 32,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 2,
+                "head_dim": 16,
+                "num_hidden_layers": 2,
+                "intermediate_size": 64,
+                "vocab_size": 99,
+                "rope_parameters": {"rope_type": "default", "mrope_section": [2, 3, 3], "mrope_interleaved": True},
+            },
+            vision_config={
+                "depth": 1,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_heads": 2,
+                "out_hidden_size": 32,
+            },
+        )
+        model = Qwen3VLForConditionalGeneration(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        generation_kwargs = {"max_new_tokens": 2, "do_sample": False, "cache_implementation": "static"}
+
+        expected = model.generate(inputs, **generation_kwargs)
+        out = model.generate(inputs, **generation_kwargs, prefill_chunk_size=2)
+        self.assertTrue(torch.equal(out, expected))
+
     def test_dynamic_layers_reset_drops_their_states(self):
         """
         Regression test: `reset` used to zero the dynamic layers' states in place, inherited from the static layers.
@@ -361,6 +442,14 @@ def _skip_on_failed_cache_prerequisites(test, cache_implementation):
                 test.skipTest("Offloaded static caches require exactly 1 accelerator")
 
 
+def _set_sliding_window(config, cache_implementation):
+    """
+    Sets the sliding window on `config`, from which the cache layer types are inferred: the sliding cache
+    implementations need one to build sliding layers, and the other ones must not have one.
+    """
+    config.sliding_window = 256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
+
+
 class CacheIntegrationTest(unittest.TestCase):
     """Fast cache integration tests that share the same small model"""
 
@@ -371,12 +460,17 @@ class CacheIntegrationTest(unittest.TestCase):
         cls.model = AutoModelForCausalLM.from_pretrained(
             "HuggingFaceTB/SmolLM2-135M-Instruct", device_map="auto", dtype=torch.float16
         )
-        cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
+
+    def setUp(self):
+        # The model is shared across tests, so the sliding window one of them opts into through
+        # `_set_sliding_window` must not leak into the next one. `SmolLM2` has no sliding window of its own.
+        self.model.config.sliding_window = None
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_batched(self, cache_implementation):
         """Sanity check: caches' `.update` function expects batched inputs"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
+        _set_sliding_window(self.model.config, cache_implementation)
 
         EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
 
@@ -423,6 +517,7 @@ class CacheIntegrationTest(unittest.TestCase):
         (an output sequence contains multiple beam indices).
         """
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
+        _set_sliding_window(self.model.config, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
             # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
@@ -453,7 +548,7 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    @parameterized.expand([("quanto"), ("HQQ")])
+    @parameterized.expand([("quanto"), ("hqq")])
     def test_quantized_cache_generation(self, backend):
         """Tests that QuantizedCache works as expected for both `quanto` and `hqq` backends."""
         if backend == "quanto":
@@ -462,7 +557,7 @@ class CacheIntegrationTest(unittest.TestCase):
             axis_key, axis_value = 0, 0
             # This output is taken from a run with the same parameters, and is known to be correct
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
-        elif backend == "HQQ":
+        elif backend == "hqq":
             if not is_hqq_available():
                 self.skipTest("HQQ is not available")
             axis_key, axis_value = 1, 1
@@ -497,10 +592,35 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # Check that something is actually quantized
 
+    @require_optimum_quanto
+    def test_quantized_cache_config_is_not_mutated(self):
+        """
+        Tests that `generate` does not consume the entries of the `cache_config` it is given, which would silently
+        change the cache of any subsequent call sharing that dict.
+        """
+        inputs = self.tokenizer(["The cat"], return_tensors="pt").to(self.model.device)
+        cache_config = {"backend": "quanto", "nbits": 4, "q_group_size": 16, "residual_length": 4}
+        expected_cache_config = cache_config.copy()
+
+        for _ in range(2):
+            gen_out = self.model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=3,
+                return_dict_in_generate=True,
+                cache_implementation="quantized",
+                cache_config=cache_config,
+                disable_compile=True,
+            )
+            self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
+            self.assertEqual(len(gen_out.past_key_values.layers), self.model.config.num_hidden_layers)
+            self.assertEqual(cache_config, expected_cache_config)
+
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
         """Tests that adding extra left-padding does not affect the generation with the cache"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
+        _set_sliding_window(self.model.config, cache_implementation)
 
         EXPECTED_GENERATION = ["The cat's whiskers are also a sign of anxiety."]
 
@@ -878,9 +998,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         # pytorch_model.bin in the original repo (wrong wte.weight bytes → wrong golden outputs)
         model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM-for-CacheHardIntegrationTest"
         pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
-        pipe.model.config.sliding_window = (
-            256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
-        )
+        _set_sliding_window(pipe.model.config, cache_implementation)
         out = pipe(
             "hello world",
             cache_implementation=cache_implementation,

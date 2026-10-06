@@ -83,6 +83,7 @@ class YoutuConfig(DeepseekV3Config):
     # remove unused attribute
     n_shared_experts = AttributeError()
     n_routed_experts = AttributeError()
+    output_router_logits = AttributeError()
     routed_scaling_factor = AttributeError()
     n_group = AttributeError()
     topk_group = AttributeError()
