@@ -844,6 +844,13 @@ def pipeline(
         model_kwargs = {}
 
     code_revision = kwargs.pop("code_revision", None)
+    if "code_revision" in model_kwargs:
+        if code_revision is not None:
+            raise ValueError(
+                'You cannot use both `pipeline(... code_revision=..., model_kwargs={"code_revision":...})` as those'
+                " arguments might conflict, use only one.)"
+            )
+        code_revision = model_kwargs.pop("code_revision")
     kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
     local_files_only = kwargs.get("local_files_only", False)
 
