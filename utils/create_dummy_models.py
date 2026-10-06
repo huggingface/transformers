@@ -2036,6 +2036,20 @@ def create_tiny_models(
 
     update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"), hub_summary_repo=hub_summary_repo)
 
+    if upload and hub_summary_repo is not None:
+        try:
+            hf_api.upload_file(
+                path_or_fileobj=os.path.join(output_path, "reports", "updated_tiny_model_summary.json"),
+                path_in_repo="tiny_model_summary.json",
+                repo_id=hub_summary_repo,
+                repo_type="model",
+                token=token,
+                commit_message="Update tiny_model_summary.json with newly created models",
+            )
+            logger.warning(f"Hub summary updated at {hub_summary_repo}.")
+        except Exception:
+            logger.warning(f"Failed to update Hub summary at {hub_summary_repo}.\n{traceback.format_exc()}")
+
 
 if __name__ == "__main__":
     # This has to be `spawn` to avoid hanging forever!
