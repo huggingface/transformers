@@ -120,6 +120,7 @@ class NemotronHConfig(PreTrainedConfig):
     mamba_proj_bias: bool = False
     mamba_ssm_cache_dtype: str = "float32"
     n_routed_experts: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     moe_intermediate_size: int = 7688
     moe_shared_expert_intermediate_size: int = 7688

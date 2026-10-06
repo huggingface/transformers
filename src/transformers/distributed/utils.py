@@ -65,6 +65,24 @@ def is_local_dist_rank_0() -> bool:
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
 
+DISTRIBUTED_BACKEND_MAP = {
+    "cuda": "nccl",
+    "cpu": "gloo",
+    "xpu": "xccl",
+    "hpu": "hccl",
+    "neuron": "neuron",
+    "tpu": "tpu_dist",
+}
+
+
+def get_distributed_backend(device_type: str) -> str | None:
+    """Return the `torch.distributed` backend for `device_type`, or `None` if it has no dedicated one."""
+    dist_backend = DISTRIBUTED_BACKEND_MAP.get(device_type)
+    if dist_backend is None:
+        raise ValueError(f"No distributed backend found for device type '{device_type}'")
+    return dist_backend
+
+
 def _ensure_torch_distributed(device_type: str | None = None):
     """Initialize torch.distributed if not already initialized.
 
@@ -83,15 +101,7 @@ def _ensure_torch_distributed(device_type: str | None = None):
             local_rank = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            backend_map = {
-                "cuda": "nccl",
-                "cpu": "gloo",
-                "xpu": "xccl",
-                "hpu": "hccl",
-                "neuron": "neuron",
-                "tpu": "tpu_dist",
-            }
-            backend = backend_map.get(device_type)
+            backend = get_distributed_backend(device_type)
 
             # Bind the accelerator before init so the process group is created with a
             # device_id, otherwise collectives like barrier() warn (and may spin up an
@@ -141,18 +151,20 @@ class TransformersDeviceMesh:
         expert : (pp, efsdp, ep)    experts
 
     Both views cover the same world, so pp * fsdp * tp == pp * efsdp * ep.
-    efsdp is not something you pick, it is whatever is left once ep is fixed:
+    efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
     efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
 
     There is no etp (expert tensor parallel) axis yet meaning experts are never tensor-sharded here.
-    If one were ever added, the identity would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
+    If one were ever added, the relationship would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
     (efsdp = fsdp * tp / (ep * etp))
 
-    When ep_size == tp_size, efsdp and fsdp are the same axis: same size and same rank groups.
+    When ep_size == tp_size, efsdp == fsdp (given the relationship efsdp = fsdp * tp / ep), thus same axis, same size and same groups of ranks.
     In that case experts could reuse the dense mesh's fsdp axis.
-    When ep_size != tp_size, the two axes group different ranks, so experts need their own efsdp axis.
+    When ep_size != tp_size, efsdp != fsdp, so we can't reuse the same mesh as they don't have the same groups of ranks
+    This explains why experts need their own efsdp axis.
 
-    Regarding ep value, We decide to default it to node width (8 on most machines) so all-to-all never leaves the node.
+    Regarding ep value, one can decide to default the value to node width (8 on most machines) so that all-to-all never leaves the node.
+    That has several implications on efsdp value given your setup:
     - On a single node, ep == fsdp * tp thus efsdp = 1, the axis does nothing.
     - On several nodes, we still keep ep at node width, since all-to-all across nodes is expensive.
     However, each node then holds a full copy of the expert group and efsdp is the number of copies, which is where FSDP happens for the experts

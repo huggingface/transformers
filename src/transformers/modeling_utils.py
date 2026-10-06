@@ -1704,7 +1704,8 @@ class PreTrainedModel(
             )
         if not is_torch_flex_attn_available():
             raise ImportError(
-                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0."
+                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0 and"
+                " run on a device other than TPU."
             )
 
         # If no error raise by this point, we can return `True`
