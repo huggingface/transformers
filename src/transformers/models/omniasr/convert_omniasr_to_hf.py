@@ -26,66 +26,18 @@ from fairseq2.runtime.config_registry import get_config
 from fairseq2.runtime.dependency import get_dependency_resolver
 from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
 from omnilingual_asr.models.wav2vec2_llama.config import ModelType, Wav2Vec2LlamaConfig
-from tokenizers import Regex, decoders, normalizers, pre_tokenizers
 
 from transformers import (
     LlamaConfig,
     OmniASRAudioConfig,
     OmniASRConfig,
-    OmniASRCTCConfig,
     OmniASRFeatureExtractor,
     OmniASRForConditionalGeneration,
-    OmniASRForCTC,
-    ParakeetTokenizer,
+    OmniASRProcessor,
+    TokenizersBackend,
     logging,
 )
-from transformers.convert_slow_tokenizer import SpmConverter, import_protobuf
-from transformers.models.omniasr.processing_omniasr import OmniASRProcessor
-
-
-class OmniASRConverter(SpmConverter):
-    def __init__(self, vocab_file):
-        self.original_tokenizer = None
-        self.proto = import_protobuf().ModelProto()
-        with open(vocab_file, "rb") as f:
-            self.proto.ParseFromString(f.read())
-
-    def normalizer(self, proto):
-        return normalizers.Sequence([normalizers.Strip(), normalizers.Replace(Regex(" {2,}"), " ")])
-
-    def pre_tokenizer(self, replacement, add_prefix_space):
-        # `split_by_whitespace`: pieces never cross a whitespace, which starts the piece that follows it.
-        return pre_tokenizers.Split(" ", behavior="merged_with_next")
-
-    def decoder(self, replacement, add_prefix_space):
-        return decoders.Fuse()
-
-
-# Rows reserved right after the tokenizer's vocabulary, in the order the tokenizer declares them: `<extra_id_0>`
-# (the LID marker) and `<extra_id_1>` (audio placeholder). The language tokens follow them, see `language_tokens`.
-NUM_RESERVED_TOKENS = 2
-
-# The language-agnostic mode the original model reaches by looking up row 0 of its language embedding table.
-LANGUAGE_AGNOSTIC = "auto"
-
-# The LLM variant's decoder prompt `audio | lid_marker | language | bos`, from which the transcription is decoded.
-# fmt: off
-CHAT_TEMPLATE = (
-    "{%- for message in messages -%}"
-        "{%- if message['role'] == 'user' -%}"
-            "{%- set ns = namespace(language='" + LANGUAGE_AGNOSTIC + "') -%}"
-            "{%- for item in message['content'] -%}"
-                "{%- if item['type'] == 'audio' -%}<extra_id_1>"
-                "{%- elif item['type'] == 'language' -%}{%- set ns.language = item['language'] | lower -%}"
-                "{%- endif -%}"
-            "{%- endfor -%}"
-            "<extra_id_0><|lang:{{ ns.language }}|><s>"
-        "{%- elif message['role'] == 'assistant' -%}"
-            "{%- for item in message['content'] if item['type'] == 'text' -%}{{ item['text'] }}{%- endfor -%}</s>"
-        "{%- endif -%}"
-    "{%- endfor -%}"
-)
-# fmt: on
+from transformers.convert_slow_tokenizer import OmniASRConverter
 
 
 logging.set_verbosity_info()
@@ -107,10 +59,6 @@ ENCODER_KEY_MAPPING = {
     r"^encoder\.layers\.(\d+)\.ffn\.output_proj\.":         r"{encoder}layers.\1.feed_forward.output_dense.",
 }
 
-CTC_KEY_MAPPING = {
-    r"^final_proj\.": "ctc_head.",
-}
-
 LLM_KEY_MAPPING = {
     r"^final_proj\.":                                         "lm_head.",
     r"^encoder_proj\.":                                       "model.multi_modal_projector.",
@@ -124,23 +72,39 @@ LLM_KEY_MAPPING = {
     r"^llama_decoder\.layers\.(\d+)\.ffn\.inner_proj\.":       r"model.language_model.layers.\1.mlp.up_proj.",
     r"^llama_decoder\.layers\.(\d+)\.ffn\.output_proj\.":      r"model.language_model.layers.\1.mlp.down_proj.",
 }
+
+# Rows reserved right after the tokenizer's vocabulary, in the order the tokenizer declares them: `<extra_id_0>`
+# (the LID marker) and `<extra_id_1>` (audio placeholder). The language tokens follow them, see `language_tokens`.
+NUM_RESERVED_TOKENS = 2
+
+# The language-agnostic mode the original model reaches by looking up row 0 of its language embedding table.
+LANGUAGE_AGNOSTIC = "auto"
+
+# The decoder prompt `audio | lid_marker | language | bos`, from which the transcription is decoded.
+CHAT_TEMPLATE = (
+    "{%- for message in messages -%}"
+        "{%- if message['role'] == 'user' -%}"
+            "{%- set ns = namespace(language='" + LANGUAGE_AGNOSTIC + "') -%}"
+            "{%- for item in message['content'] -%}"
+                "{%- if item['type'] == 'audio' -%}<extra_id_1>"
+                "{%- elif item['type'] == 'language' -%}{%- set ns.language = item['language'] | lower -%}"
+                "{%- endif -%}"
+            "{%- endfor -%}"
+            "<extra_id_0><|lang:{{ ns.language }}|><s>"
+        "{%- elif message['role'] == 'assistant' -%}"
+            "{%- for item in message['content'] if item['type'] == 'text' -%}{{ item['text'] }}{%- endfor -%}</s>"
+        "{%- endif -%}"
+    "{%- endfor -%}"
+)
 # fmt: on
 
 
-def get_key_mapping(model_card):
-    """
-    The mapping of `model_card`: the speech encoder sits under `audio_tower` in OmniASRForCTC, and under
-    `model.audio_tower` in OmniASRForConditionalGeneration (which follows Voxtral's naming).
-    """
-    if "CTC" in model_card:
-        encoder_prefix, head_mapping = "audio_tower.", CTC_KEY_MAPPING
-    else:
-        encoder_prefix, head_mapping = "model.audio_tower.", LLM_KEY_MAPPING
-    encoder_mapping = {
+def get_encoder_key_mapping(encoder_prefix):
+    """The mapping of the speech encoder's weights, which sit under `encoder_prefix` in the Transformers model."""
+    return {
         pattern: replacement.replace("{encoder}", encoder_prefix)
         for pattern, replacement in ENCODER_KEY_MAPPING.items()
     }
-    return {**encoder_mapping, **head_mapping}
 
 
 def convert_state_dict(state_dict, key_mapping):
@@ -162,13 +126,160 @@ def convert_state_dict(state_dict, key_mapping):
     return converted
 
 
-def _convert_model(original_model, hf_model, key_mapping, verbose=False):
+def load_state_dict(hf_model, state_dict):
+    """Load the converted `state_dict` onto `hf_model`, failing loudly on any key left over."""
+    extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
+    extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unnecessary param
+    if len(extra_keys) != 0:
+        raise ValueError(f"{len(extra_keys)} extra keys found: {extra_keys}")
+    missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
+    if len(missing_keys) != 0:
+        raise ValueError(f"{len(missing_keys)} missing keys found: {missing_keys}")
+    hf_model.load_state_dict(state_dict, strict=True)
+    n_params = param_count(hf_model)
+
+    logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
+
+    hf_model.eval()
+    return hf_model
+
+
+def param_count(model):
+    return sum(p[1].numel() for p in model.named_parameters())
+
+
+def _get_pos_conv(hf_model):
+    """Locate the positional convolution, whichever OmniASR class wraps the speech encoder."""
+    for name, module in hf_model.named_modules():
+        if name.endswith("encode_positions"):
+            return module.conv
+    raise ValueError(f"Could not find `encode_positions` in {hf_model.__class__.__name__}.")
+
+
+def apply_weight_norm(hf_model):
+    torch.nn.utils.weight_norm(_get_pos_conv(hf_model), name="weight", dim=2)
+
+
+def remove_weight_norm(hf_model):
+    torch.nn.utils.remove_weight_norm(_get_pos_conv(hf_model), name="weight")
+
+
+def get_device_and_dtype(bfloat16):
+    if not torch.cuda.is_available():
+        logger.warning(
+            "CUDA is not available, conversion will be done on CPU but it is STRONGLY recommended to use GPU for proper removal of weight norm."
+        )
+        device = torch.device("cpu")
+    else:
+        device = torch.device("cuda")
+    dtype = torch.bfloat16 if bfloat16 else torch.float32
+    return device, dtype
+
+
+def get_original_encoder_config(model_card, target_vocab_size):
+    """The original config of the speech encoder (with its CTC head) of `model_card`."""
+    resolver = get_dependency_resolver()
+    if "300m" in model_card.lower():
+        encoder_config_name = "large_lv60k"
+    elif "1b" in model_card.lower():
+        encoder_config_name = "1b"
+    elif "3b" in model_card.lower():
+        encoder_config_name = "3b"
+    elif "7b" in model_card.lower():
+        encoder_config_name = "7b"
+    else:
+        raise ValueError(f"Unsupported size, got {model_card}")
+
+    original_config = get_config(resolver, Wav2Vec2AsrConfig, "base_10h")
+    original_config.encoder_config = get_config(resolver, Wav2Vec2Config, encoder_config_name).encoder_config
+
+    original_config.encoder_config.dropout_p = 0.0
+    original_config.encoder_config.attn_dropout_p = 0.0
+    original_config.encoder_config.ffn_inner_dropout_p = 0.1
+    original_config.encoder_config.layer_drop_p = 0.1
+
+    original_config.use_masking = False
+    original_config.max_temporal_mask_prob = 0.0
+    original_config.max_spatial_mask_prob = 0.0
+    original_config.target_vocab_size = target_vocab_size
+    return original_config
+
+
+def convert_audio_config(original_config):
+    """The `OmniASRAudioConfig` of the speech encoder described by `original_config`."""
+    conv_dim, conv_kernel, conv_stride = zip(*original_config.encoder_config.feature_extractor_layer_descs)
+    if not original_config.encoder_config.feature_extractor_layer_norm_convs:
+        raise ValueError(
+            "OmniASR only implements layer-normed feature extractor convolutions, but the original config has "
+            "`feature_extractor_layer_norm_convs=False`."
+        )
+    return OmniASRAudioConfig(
+        hidden_size=original_config.encoder_config.model_dim,
+        conv_dim=conv_dim,
+        conv_kernel=conv_kernel,
+        conv_stride=conv_stride,
+        conv_bias=original_config.encoder_config.feature_extractor_bias,
+        attention_dropout=original_config.encoder_config.attn_dropout_p,
+        num_hidden_layers=original_config.encoder_config.num_encoder_layers,
+        num_attention_heads=original_config.encoder_config.num_encoder_attn_heads,
+        num_conv_pos_embeddings=original_config.encoder_config.pos_conv_kernel_size,
+        num_conv_pos_embedding_groups=original_config.encoder_config.num_pos_conv_groups,
+        hidden_dropout=original_config.encoder_config.ffn_inner_dropout_p,
+        activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
+        intermediate_size=original_config.encoder_config.ffn_inner_dim,
+        layerdrop=original_config.encoder_config.layer_drop_p,
+    )
+
+
+def get_feature_extractor():
+    return OmniASRFeatureExtractor(
+        feature_size=1,
+        sampling_rate=16000,
+        padding_value=0,
+        do_normalize=True,
+        return_attention_mask=True,
+    )
+
+
+def download_tokenizer(model_card):
+    """Download the SentencePiece model of `model_card`, and return its local path."""
+    # Release v1: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/cards/models/rc_models_v1.yaml
+    # Release v2: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/cards/models/rc_models_v2.yaml
+    if "v2" in model_card:
+        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_written_v2.model"
+    elif model_card in ["omniASR_LLM_7B"]:
+        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_v7.model"
+    else:
+        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer.model"
+    tokenizer_path = os.path.join(os.getcwd(), os.path.basename(tokenizer_url))
+    urllib.request.urlretrieve(tokenizer_url, tokenizer_path)
+    return tokenizer_path
+
+
+def convert_tokenizer(tokenizer_path, padding_side, tokenizer_class=TokenizersBackend):
+    converter = OmniASRConverter(tokenizer_path)
+    trainer_spec = converter.proto.trainer_spec
+    # No special token is appended: the chat template (ALM) and the processor (CTC labels) add them themselves.
+    return tokenizer_class(
+        tokenizer_object=converter.converted(),
+        bos_token=trainer_spec.bos_piece,
+        eos_token=trainer_spec.eos_piece,
+        unk_token=trainer_spec.unk_piece,
+        pad_token=trainer_spec.pad_piece,
+        clean_up_tokenization_spaces=False,
+        padding_side=padding_side,
+    )
+
+
+def _convert_model(original_model, hf_model, verbose=False):
     """Rename the original state dict onto `hf_model` and load it, failing loudly on any key left over."""
 
     state_dict = original_model.state_dict()
     print("Number of keys in original model :", len(state_dict))
     print("Number of keys in HF model       : ", len(hf_model.state_dict()))
 
+    # The speech encoder sits under `model.audio_tower`, following Voxtral's naming.
+    key_mapping = {**get_encoder_key_mapping("model.audio_tower."), **LLM_KEY_MAPPING}
     state_dict = convert_state_dict(state_dict, key_mapping)
 
     # Rearrange Q/K projection weights for RoPE compatibility (interleaved -> half-split)
@@ -225,64 +336,17 @@ def _convert_model(original_model, hf_model, key_mapping, verbose=False):
             state_dict[key] = torch.cat([state_dict[key], padding], dim=0)
             logger.info(f"Padded {key} from {list(src_shape)} to {list(state_dict[key].shape)}")
 
-    # Check for missing or extra keys
-    extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unnecessary param
-    if len(extra_keys) != 0:
-        raise ValueError(f"{len(extra_keys)} extra keys found: {extra_keys}")
-    missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
-    if len(missing_keys) != 0:
-        raise ValueError(f"{len(missing_keys)} missing keys found: {missing_keys}")
-    hf_model.load_state_dict(state_dict, strict=True)
-    n_params = param_count(hf_model)
-
-    logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
-
-    hf_model.eval()
-    del state_dict
-
-    return hf_model
-
-
-def param_count(model):
-    return sum(p[1].numel() for p in model.named_parameters())
-
-
-def _get_pos_conv(hf_model):
-    """Locate the positional convolution, whichever OmniASR class wraps the speech encoder."""
-    for name, module in hf_model.named_modules():
-        if name.endswith("encode_positions"):
-            return module.conv
-    raise ValueError(f"Could not find `encode_positions` in {hf_model.__class__.__name__}.")
-
-
-def apply_weight_norm(hf_model):
-    torch.nn.utils.weight_norm(_get_pos_conv(hf_model), name="weight", dim=2)
-
-
-def remove_weight_norm(hf_model):
-    torch.nn.utils.remove_weight_norm(_get_pos_conv(hf_model), name="weight")
+    return load_state_dict(hf_model, state_dict)
 
 
 @torch.no_grad()
 def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
-    if not torch.cuda.is_available():
-        logger.warning(
-            "CUDA is not available, conversion will be done on CPU but it is STRONGLY recommended to use GPU for proper removal of weight norm."
-        )
-        device = torch.device("cpu")
-    else:
-        device = torch.device("cuda")
+    device, dtype = get_device_and_dtype(bfloat16)
 
-    if not bfloat16:
-        dtype = torch.float32
-    else:
-        dtype = torch.bfloat16
-
-    # Only the CTC and LLM (with language ID) variants are supported, not the streaming ("Unlimited") and zero-shot
-    # LLM variants, whose prompts use other special tokens, nor the self-supervised W2V encoders.
-    if model_card is None or not ("CTC" in model_card or "LLM" in model_card):
-        raise ValueError(f"Only the CTC and LLM variants are supported, got `model_card={model_card!r}`.")
+    # Only the LLM (with language ID) variants are supported, not the streaming ("Unlimited") and zero-shot LLM
+    # variants, whose prompts use other special tokens.
+    if model_card is None or "LLM" not in model_card:
+        raise ValueError(f"Only the LLM variants are supported, got `model_card={model_card!r}`.")
     if "unlimited" in model_card.lower() or "zs" in model_card.lower():
         raise ValueError(f"The streaming and zero-shot LLM variants are not supported, got {model_card!r}.")
 
@@ -290,145 +354,85 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     pipeline = ASRInferencePipeline(model_card=model_card, device=device, dtype=dtype)
     original_model = pipeline.model
     original_tokenizer = pipeline.tokenizer
+    original_config = get_original_encoder_config(model_card, original_tokenizer.vocab_info.size)
 
-    resolver = get_dependency_resolver()
-    if "300m" in model_card.lower():
-        encoder_config_name = "large_lv60k"
-    elif "1b" in model_card.lower():
-        encoder_config_name = "1b"
-    elif "3b" in model_card.lower():
-        encoder_config_name = "3b"
-    elif "7b" in model_card.lower():
-        encoder_config_name = "7b"
-    else:
-        raise ValueError(f"Unsupported size, got {model_card}")
-
-    original_config = get_config(resolver, Wav2Vec2AsrConfig, "base_10h")
-    original_config.encoder_config = get_config(resolver, Wav2Vec2Config, encoder_config_name).encoder_config
-
-    original_config.encoder_config.dropout_p = 0.0
-    original_config.encoder_config.attn_dropout_p = 0.0
-    original_config.encoder_config.ffn_inner_dropout_p = 0.1
-    original_config.encoder_config.layer_drop_p = 0.1
-
-    original_config.use_masking = False
-    original_config.max_temporal_mask_prob = 0.0
-    original_config.max_spatial_mask_prob = 0.0
-    original_config.target_vocab_size = original_tokenizer.vocab_info.size
-
-    if "LLM" in model_card:
-        # v2: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L257
-        # v1: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L229
-        # v2 and v1 are same except for vocab size which we can get programmatically
-        llama_config = LLaMAConfig(
-            model_dim=4096,
-            max_seq_len=8192,
-            vocab_size=original_tokenizer.vocab_info.size,
-            pad_idx=1,
-            num_layers=12,
-            num_attn_heads=8,
-            num_key_value_heads=8,
-            ffn_inner_dim=4096,
-            rope_theta=10_000.0,
-            dropout_p=0.1,
-        )
-        original_config_llm = Wav2Vec2LlamaConfig(wav2vec2_asr_config=original_config, llama_config=llama_config)
-        original_config_llm.lang_embeddings_p = 0.5
-        original_config_llm.n_special_tokens = 1
-        original_config_llm.model_type = ModelType.LLM_ASR_LID
+    # v2: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L257
+    # v1: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L229
+    # v2 and v1 are same except for vocab size which we can get programmatically
+    llama_config = LLaMAConfig(
+        model_dim=4096,
+        max_seq_len=8192,
+        vocab_size=original_tokenizer.vocab_info.size,
+        pad_idx=1,
+        num_layers=12,
+        num_attn_heads=8,
+        num_key_value_heads=8,
+        ffn_inner_dim=4096,
+        rope_theta=10_000.0,
+        dropout_p=0.1,
+    )
+    original_config_llm = Wav2Vec2LlamaConfig(wav2vec2_asr_config=original_config, llama_config=llama_config)
+    original_config_llm.lang_embeddings_p = 0.5
+    original_config_llm.n_special_tokens = 1
+    original_config_llm.model_type = ModelType.LLM_ASR_LID
 
     # 2) Initialize Transformers model
-    conv_dim, conv_kernel, conv_stride = zip(*original_config.encoder_config.feature_extractor_layer_descs)
-    if not original_config.encoder_config.feature_extractor_layer_norm_convs:
-        raise ValueError(
-            "OmniASR only implements layer-normed feature extractor convolutions, but the original config has "
-            "`feature_extractor_layer_norm_convs=False`."
+    # -- Compute intermediate_size according to original: https://github.com/facebookresearch/fairseq2/blob/7f06d6f4f5d497eec02b1a238d2071eb5dc48df3/src/fairseq2/models/transformer/ffn.py#L298-L300
+    intermediate_size = original_config_llm.llama_config.ffn_inner_dim
+    inner_dim_scale = original_config_llm.llama_config.ffn_inner_dim_scale
+    inner_dim_to_multiple = original_config_llm.llama_config.ffn_inner_dim_multiple_of
+    if inner_dim_scale != 1.0:
+        intermediate_size = int(intermediate_size * inner_dim_scale)
+    if inner_dim_to_multiple != 1:
+        intermediate_size = inner_dim_to_multiple * (
+            (intermediate_size + inner_dim_to_multiple - 1) // inner_dim_to_multiple
         )
-    audio_config = OmniASRAudioConfig(
-        hidden_size=original_config.encoder_config.model_dim,
-        conv_dim=conv_dim,
-        conv_kernel=conv_kernel,
-        conv_stride=conv_stride,
-        conv_bias=original_config.encoder_config.feature_extractor_bias,
-        attention_dropout=original_config.encoder_config.attn_dropout_p,
-        num_hidden_layers=original_config.encoder_config.num_encoder_layers,
-        num_attention_heads=original_config.encoder_config.num_encoder_attn_heads,
-        num_conv_pos_embeddings=original_config.encoder_config.pos_conv_kernel_size,
-        num_conv_pos_embedding_groups=original_config.encoder_config.num_pos_conv_groups,
-        hidden_dropout=original_config.encoder_config.ffn_inner_dropout_p,
-        activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
-        intermediate_size=original_config.encoder_config.ffn_inner_dim,
-        layerdrop=original_config.encoder_config.layer_drop_p,
+    # One token per row of the original language embedding table, row 0 being the language-agnostic mode.
+    num_language_embeddings = len(original_model.lang_embeddings.weight)
+    language_tokens = [None] * num_language_embeddings
+    language_tokens[0] = f"<|lang:{LANGUAGE_AGNOSTIC}|>"
+    for code, index in original_model.lang_mapping.items():
+        language_tokens[index] = f"<|lang:{code}|>"
+    if None in language_tokens:
+        raise ValueError(
+            f"`lang_mapping` leaves row {language_tokens.index(None)} of the {num_language_embeddings}-row "
+            "language embedding table unnamed, so it cannot be given a token."
+        )
+
+    # Frame stacking is only used by the zero-shot variant, which is not supported.
+    if original_config_llm.encoder_stacking != 1:
+        raise ValueError(f"`encoder_stacking` must be 1, got {original_config_llm.encoder_stacking}.")
+
+    text_config = LlamaConfig(
+        vocab_size=original_config_llm.llama_config.vocab_size + NUM_RESERVED_TOKENS + num_language_embeddings,
+        hidden_size=original_config_llm.llama_config.model_dim,
+        intermediate_size=intermediate_size,
+        max_position_embeddings=original_config_llm.llama_config.max_seq_len,
+        num_hidden_layers=original_config_llm.llama_config.num_layers,
+        num_attention_heads=original_config_llm.llama_config.num_attn_heads,
+        num_key_value_heads=original_config_llm.llama_config.num_key_value_heads,
+        tie_word_embeddings=original_config_llm.llama_config.tied_embeddings,
+        rms_norm_eps=1e-5,
     )
 
-    if "CTC" in model_card:
-        config = OmniASRCTCConfig(
-            audio_config=audio_config,
-            vocab_size=original_config.target_vocab_size,
-            pad_token_id=pipeline.tokenizer.vocab_info.pad_idx,
-            bos_token_id=pipeline.tokenizer.vocab_info.bos_idx,
-            eos_token_id=pipeline.tokenizer.vocab_info.eos_idx,
-        )
-        hf_model = OmniASRForCTC(config)
-    else:
-        # Compute Llama config
-        # -- Compute intermediate_size according to original: https://github.com/facebookresearch/fairseq2/blob/7f06d6f4f5d497eec02b1a238d2071eb5dc48df3/src/fairseq2/models/transformer/ffn.py#L298-L300
-        intermediate_size = original_config_llm.llama_config.ffn_inner_dim
-        inner_dim_scale = original_config_llm.llama_config.ffn_inner_dim_scale
-        inner_dim_to_multiple = original_config_llm.llama_config.ffn_inner_dim_multiple_of
-        if inner_dim_scale != 1.0:
-            intermediate_size = int(intermediate_size * inner_dim_scale)
-        if inner_dim_to_multiple != 1:
-            intermediate_size = inner_dim_to_multiple * (
-                (intermediate_size + inner_dim_to_multiple - 1) // inner_dim_to_multiple
-            )
-        # One token per row of the original language embedding table, row 0 being the language-agnostic mode.
-        num_language_embeddings = len(original_model.lang_embeddings.weight)
-        language_tokens = [None] * num_language_embeddings
-        language_tokens[0] = f"<|lang:{LANGUAGE_AGNOSTIC}|>"
-        for code, index in original_model.lang_mapping.items():
-            language_tokens[index] = f"<|lang:{code}|>"
-        if None in language_tokens:
-            raise ValueError(
-                f"`lang_mapping` leaves row {language_tokens.index(None)} of the {num_language_embeddings}-row "
-                "language embedding table unnamed, so it cannot be given a token."
-            )
-
-        # Frame stacking is only used by the zero-shot variant, which is not supported.
-        if original_config_llm.encoder_stacking != 1:
-            raise ValueError(f"`encoder_stacking` must be 1, got {original_config_llm.encoder_stacking}.")
-
-        llama_config = LlamaConfig(
-            vocab_size=original_config_llm.llama_config.vocab_size + NUM_RESERVED_TOKENS + num_language_embeddings,
-            hidden_size=original_config_llm.llama_config.model_dim,
-            intermediate_size=intermediate_size,
-            max_position_embeddings=original_config_llm.llama_config.max_seq_len,
-            num_hidden_layers=original_config_llm.llama_config.num_layers,
-            num_attention_heads=original_config_llm.llama_config.num_attn_heads,
-            num_key_value_heads=original_config_llm.llama_config.num_key_value_heads,
-            tie_word_embeddings=original_config_llm.llama_config.tied_embeddings,
-            rope_theta=10000.0,
-            rms_norm_eps=1e-5,
-        )
-
-        # The reserved rows sit right after the base vocabulary, in the order the tokenizer declares them:
-        # `<extra_id_0>` is the LID marker the original model already used, and `<extra_id_1>` is the
-        # placeholder that `OmniASRProcessor` writes into `input_ids` for the audio frames. The language
-        # tokens follow, one per row of the original language embedding table.
-        lid_marker_id = original_config_llm.llama_config.vocab_size
-        config = OmniASRConfig(
-            audio_config=audio_config,
-            text_config=llama_config,
-            bos_token_id=original_config_llm.bos_idx,
-            pad_token_id=original_config_llm.pad_idx,
-            eos_token_id=original_config_llm.eos_idx,
-            audio_token_id=lid_marker_id + 1,
-        )
-        hf_model = OmniASRForConditionalGeneration(config)
-        # None of the tokens past the tokenizer's vocabulary is a valid target: the audio placeholder stands for an
-        # embedding that is scattered in, and the LID marker and language tokens only ever open a prompt. Their
-        # `lm_head` rows are zeroed rather than trained, so they have to be suppressed rather than left to score.
-        hf_model.generation_config.suppress_tokens = list(range(lid_marker_id, config.text_config.vocab_size))
+    # The reserved rows sit right after the base vocabulary, in the order the tokenizer declares them:
+    # `<extra_id_0>` is the LID marker the original model already used, and `<extra_id_1>` is the
+    # placeholder that `OmniASRProcessor` writes into `input_ids` for the audio frames. The language
+    # tokens follow, one per row of the original language embedding table.
+    lid_marker_id = original_config_llm.llama_config.vocab_size
+    config = OmniASRConfig(
+        audio_config=convert_audio_config(original_config),
+        text_config=text_config,
+        bos_token_id=original_config_llm.bos_idx,
+        pad_token_id=original_config_llm.pad_idx,
+        eos_token_id=original_config_llm.eos_idx,
+        audio_token_id=lid_marker_id + 1,
+    )
+    hf_model = OmniASRForConditionalGeneration(config)
+    # None of the tokens past the tokenizer's vocabulary is a valid target: the audio placeholder stands for an
+    # embedding that is scattered in, and the LID marker and language tokens only ever open a prompt. Their
+    # `lm_head` rows are zeroed rather than trained, so they have to be suppressed rather than left to score.
+    hf_model.generation_config.suppress_tokens = list(range(lid_marker_id, config.text_config.vocab_size))
     hf_model.to(device).to(dtype)
 
     # 3) Convert weights
@@ -436,67 +440,31 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     print(f"Total parameters (original): {param_count(original_model)}")
     print(f"Total parameters (HF)      : {param_count(hf_model)}")
 
-    hf_model = _convert_model(original_model, hf_model, get_key_mapping(model_card))
+    hf_model = _convert_model(original_model, hf_model)
     remove_weight_norm(hf_model)
 
     # 4) Prepare processor (feature extraction and tokenizer)
-    feature_extractor = OmniASRFeatureExtractor(
-        feature_size=1,
-        sampling_rate=16000,
-        padding_value=0,
-        do_normalize=True,
-        return_attention_mask=True,
+    tokenizer_path = download_tokenizer(model_card)
+    # The prompts are left-padded, so that decoding continues from each prompt's closing BOS for the whole batch.
+    tokenizer = convert_tokenizer(tokenizer_path, padding_side="left")
+    # The added tokens take the ids that follow the vocabulary, in this order, so they line up with the rows
+    # `config` reserves and with the language embeddings folded into the input embeddings above.
+    tokenizer.add_special_tokens(
+        {"extra_special_tokens": [f"<extra_id_{i}>" for i in range(NUM_RESERVED_TOKENS)] + language_tokens}
     )
 
-    # -- create Transformers-compatible tokenizer
-    # Release v1: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/cards/models/rc_models_v1.yaml
-    # Release v2: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/cards/models/rc_models_v2.yaml
-    if "v2" in model_card:
-        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_written_v2.model"
-    elif model_card in ["omniASR_LLM_7B"]:
-        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_v7.model"
-    else:
-        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer.model"
-    download_dir = os.getcwd()
-    tokenizer_path = os.path.join(download_dir, os.path.basename(tokenizer_url))
-    urllib.request.urlretrieve(tokenizer_url, tokenizer_path)
-    converter = OmniASRConverter(tokenizer_path)
-    trainer_spec = converter.proto.trainer_spec
-    # `ParakeetTokenizer` decodes CTC outputs (collapsing repeats and dropping the pad token, which is the CTC blank),
-    # and appends no special token: the chat template (LLM) and the processor (CTC labels) add them themselves.
-    tokenizer = ParakeetTokenizer(
-        tokenizer_object=converter.converted(),
-        bos_token=trainer_spec.bos_piece,
-        eos_token=trainer_spec.eos_piece,
-        unk_token=trainer_spec.unk_piece,
-        pad_token=trainer_spec.pad_piece,
-        clean_up_tokenization_spaces=False,
-        # The LLM prompts are left-padded, so that decoding continues from each prompt's closing BOS for the whole
-        # batch. The CTC loss does not depend on the padding side.
-        padding_side="left" if "LLM" in model_card else "right",
+    # The chat template writes the decoder prompt, and the convolution geometry counts how many audio placeholders
+    # it holds.
+    processor = OmniASRProcessor(
+        feature_extractor=get_feature_extractor(),
+        tokenizer=tokenizer,
+        chat_template=CHAT_TEMPLATE,
+        conv_kernel=list(config.audio_config.conv_kernel),
+        conv_stride=list(config.audio_config.conv_stride),
     )
-    if "LLM" in model_card:
-        # The added tokens take the ids that follow the vocabulary, in this order, so they line up with the rows
-        # `config` reserves and with the language embeddings folded into the input embeddings above.
-        tokenizer.add_special_tokens(
-            {"extra_special_tokens": [f"<extra_id_{i}>" for i in range(NUM_RESERVED_TOKENS)] + language_tokens}
-        )
-
-    # -- create processor
-    processor_kwargs = {}
-    if "LLM" in model_card:
-        # The chat template writes the decoder prompt, and the convolution geometry counts how many audio
-        # placeholders it holds.
-        processor_kwargs = {
-            "chat_template": CHAT_TEMPLATE,
-            "conv_kernel": list(config.audio_config.conv_kernel),
-            "conv_stride": list(config.audio_config.conv_stride),
-        }
-    processor = OmniASRProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer, **processor_kwargs)
-    if "LLM" in model_card:
-        prompt_ids = [config.audio_token_id, lid_marker_id, config.bos_token_id]
-        if processor.tokenizer.convert_tokens_to_ids(["<extra_id_1>", "<extra_id_0>", "<s>"]) != prompt_ids:
-            raise ValueError(f"The chat template's prompt tokens do not match the config's ids {prompt_ids}.")
+    prompt_ids = [config.audio_token_id, lid_marker_id, config.bos_token_id]
+    if processor.tokenizer.convert_tokens_to_ids(["<extra_id_1>", "<extra_id_0>", "<s>"]) != prompt_ids:
+        raise ValueError(f"The chat template's prompt tokens do not match the config's ids {prompt_ids}.")
 
     # 5) Upload to hub
     if repo_id:
@@ -513,38 +481,18 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 Setup
 ```
 pip install omnilingual-asr
-pip install sentencepiece
-python -m pip uninstall -y torch torchvision torchaudio
-python -m pip install \
-  torch==2.8.0+cu128 \
-  torchvision==0.23.0+cu128 \
-  torchaudio==2.8.0 \
-  --index-url https://download.pytorch.org/whl/cu128
-python -m pip install fairseq2 \
-  --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
 python -m pip install --upgrade huggingface_hub
+# install torch, torchvision, torchaudio, fairseq
 ```
-
-See here for available models: https://github.com/facebookresearch/omnilingual-asr?tab=readme-ov-file#model-architectures
 
 Example conversion:
 ```python
-# -- CTC-variant v2
 python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_CTC_300M_v2 \
-    --repo_id bezzam/omniasr-ctc-300m-v2
-
-# -- LLM-variant v2
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
---model_card omniASR_LLM_300M_v2 \
---repo_id bezzam/omniasr-llm-300m-v2
-
-## release v1
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_CTC_300M \
-    --repo_id bezzam/omniasr-ctc-300m
+    --model_card omniASR_LLM_300M_v2 \
+    --repo_id bezzam/omniasr-llm-300m-v2
 ```
 
+See here for available models: https://github.com/facebookresearch/omnilingual-asr?tab=readme-ov-file#model-architectures
 Original model checkpoints are saved under: ~/.cache/fairseq2/assets/
 """
 

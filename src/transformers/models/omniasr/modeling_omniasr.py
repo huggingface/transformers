@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -26,23 +27,18 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...generation import CompileConfig, GenerationMixin
+from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutput,
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_omniasr import OmniASRAudioConfig, OmniASRConfig, OmniASRCTCConfig
+from .configuration_omniasr import OmniASRAudioConfig, OmniASRConfig
 
 
 # NOTE: Simplified version of Wav2Vec2PositionalConvEmbedding
@@ -64,7 +60,7 @@ class OmniASRPositionalConvEmbedding(nn.Module):
         # Instead of `Wav2Vec2SamePadLayer`, in-line removal of padding
         position_embeddings = position_embeddings[:, :, :-1]
         position_embeddings = self.activation(position_embeddings)
-        return position_embeddings.transpose(1, 2)
+        return hidden_states + position_embeddings.transpose(1, 2)
 
 
 def eager_attention_forward(
@@ -296,12 +292,11 @@ class OmniASREncoderSubsamplingConv1D(nn.Module):
 
 @auto_docstring
 class OmniASRPreTrainedModel(PreTrainedModel):
-    config: OmniASRCTCConfig
+    config: OmniASRConfig
     base_model_prefix = "model"
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _no_split_modules = None
     _supports_flat_attention_mask = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -309,7 +304,6 @@ class OmniASRPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = None
 
     def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
         audio_config = getattr(self.config, "audio_config", self.config)
@@ -351,34 +345,6 @@ class OmniASREncoderModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.Tensor | None = None
 
 
-@auto_docstring(custom_intro="""Outputs of OmniASR CTC model generation.""")
-@dataclass
-class OmniASRCTCGenerateOutput(ModelOutput):
-    """
-    Outputs of OmniASR CTC model generation.
-
-    Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
-            Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-    """
-
-    sequences: torch.LongTensor
-    logits: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
-
-
 # NOTE: similar to `Wav2Vec2Model` but with latest naming conventions like in `ParakeetEncoder`
 @auto_docstring(
     custom_intro="""
@@ -387,7 +353,6 @@ class OmniASRCTCGenerateOutput(ModelOutput):
 )
 class OmniASRAudioModel(OmniASRPreTrainedModel):
     config: OmniASRAudioConfig
-    base_model_prefix = "audio_tower"
     _no_split_modules = ["OmniASREncoderLayer"]
     _can_record_outputs = {
         "attentions": OmniASRAttention,
@@ -439,8 +404,7 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
             attention_mask=output_mask,
         )
 
-        position_embeddings = self.encode_positions(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        hidden_states = self.encode_positions(hidden_states)
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -461,155 +425,6 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
             last_hidden_state=hidden_states,
             attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
         )
-
-
-@auto_docstring(
-    custom_intro="""
-    OmniASR Encoder with a Connectionist Temporal Classification (CTC) head.
-    """
-)
-class OmniASRForCTC(OmniASRPreTrainedModel, GenerationMixin):
-    config: OmniASRCTCConfig
-
-    def __init__(self, config: OmniASRCTCConfig):
-        super().__init__(config)
-        self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
-        self.audio_tower = AutoModel.from_config(config.audio_config)
-
-        self.post_init()
-
-    @auto_docstring
-    @can_return_tuple
-    def forward(
-        self,
-        input_values: torch.Tensor,
-        padding_mask: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutput:
-        r"""
-        padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `input_values`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoProcessor, OmniASRForCTC
-        >>> from datasets import load_dataset, Audio
-
-        >>> model_id = "bezzam/omniasr-ctc-300m-v2"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = OmniASRForCTC.from_pretrained(model_id)
-
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-
-        >>> inputs = processor(ds[0]["audio"]["array"], text=ds[0]["text"])
-        >>> outputs = model(**inputs)
-
-        >>> print(outputs.loss)
-        ```"""
-
-        if labels is not None:
-            kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.audio_tower(
-            input_values=input_values,
-            padding_mask=padding_mask,
-            **kwargs,
-        )
-
-        hidden_states = encoder_outputs.last_hidden_state
-        logits = self.ctc_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
-
-            # assuming that padded tokens are filled with -100 when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    encoder_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
-
-        return CausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-    @torch.no_grad()
-    def generate(
-        self,
-        input_values: torch.Tensor,
-        padding_mask: torch.Tensor | None = None,
-        return_dict_in_generate: bool = False,
-        compile_config: CompileConfig | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> OmniASRCTCGenerateOutput | torch.LongTensor:
-        r"""
-        compile_config ([`~generation.CompileConfig`], *optional*):
-            If provided, `torch.compile` will be applied to the forward calls in the decoding loop.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoProcessor, OmniASRForCTC
-        >>> from datasets import load_dataset, Audio
-
-        >>> model_id = "bezzam/omniasr-ctc-300m-v2"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = OmniASRForCTC.from_pretrained(model_id)
-
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-
-        >>> inputs = processor(ds[0]["audio"]["array"], text=ds[0]["text"])
-        >>> predicted_ids = model.generate(**inputs)
-        >>> transcription = processor.decode(predicted_ids, skip_special_tokens=True)
-
-        >>> print(transcription)
-        ```
-        """
-        model_forward = self.get_compiled_call(compile_config) if compile_config is not None else self.__call__
-
-        kwargs["return_dict"] = True
-        outputs: CausalLMOutput = model_forward(
-            input_values=input_values,
-            padding_mask=padding_mask,
-            **kwargs,
-        )
-
-        # greedy decoding
-        sequences = outputs.logits.argmax(dim=-1)
-
-        # mask out padded tokens
-        if padding_mask is not None:
-            output_mask = self._get_output_attention_mask(padding_mask, target_length=sequences.shape[1])
-            sequences[~output_mask] = self.config.pad_token_id
-
-        if return_dict_in_generate:
-            return OmniASRCTCGenerateOutput(
-                sequences=sequences,
-                logits=outputs.logits,
-                attentions=outputs.attentions,
-                hidden_states=outputs.hidden_states,
-            )
-
-        return sequences
 
 
 @auto_docstring(custom_intro="""Base class for OmniASR outputs, with hidden states and attentions.""")
@@ -817,25 +632,5 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
-        input_values = kwargs.pop("input_values", None)
-        padding_mask = kwargs.pop("padding_mask", None)
 
-        model_inputs = super().prepare_inputs_for_generation(*args, is_first_iteration=is_first_iteration, **kwargs)
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            if input_values is not None:
-                model_inputs["input_values"] = input_values
-            if padding_mask is not None:
-                model_inputs["padding_mask"] = padding_mask
-
-        return model_inputs
-
-
-__all__ = [
-    "OmniASRForCTC",
-    "OmniASRForConditionalGeneration",
-    "OmniASRModel",
-    "OmniASRAudioModel",
-    "OmniASRPreTrainedModel",
-]
+__all__ = ["OmniASRForConditionalGeneration", "OmniASRModel", "OmniASRAudioModel", "OmniASRPreTrainedModel"]

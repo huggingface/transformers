@@ -90,56 +90,6 @@ class OmniASRAudioConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
-@strict
-class OmniASRCTCConfig(PreTrainedConfig):
-    r"""
-    audio_config (`Union[dict, OmniASRAudioConfig]`, *optional*):
-        The config object or dictionary of the audio encoder.
-    ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-        Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-        instance of [`OmniASRForCTC`].
-    ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
-        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-        of [`OmniASRForCTC`].
-
-    Example:
-
-    ```python
-    >>> from transformers import OmniASRForCTC, OmniASRCTCConfig
-
-    >>> # Initializing an OmniASR-CTC configuration
-    >>> configuration = OmniASRCTCConfig()
-
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = OmniASRForCTC(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "omniasr_ctc"
-    sub_configs = {"audio_config": OmniASRAudioConfig}
-
-    vocab_size: int = 10288
-    ctc_loss_reduction: str = "mean"
-    ctc_zero_infinity: bool = False
-    audio_config: dict | PreTrainedConfig | None = None
-    bos_token_id: int | None = 0
-    pad_token_id: int | None = 1
-    eos_token_id: int | None = 2
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config = OmniASRAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = OmniASRAudioConfig()
-        self.initializer_range = self.audio_config.initializer_range
-        super().__post_init__(**kwargs)
-
-
 @auto_docstring(checkpoint="bezzam/omniasr-llm-300m-v2")
 @strict
 class OmniASRConfig(PreTrainedConfig):
@@ -166,6 +116,7 @@ class OmniASRConfig(PreTrainedConfig):
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 10289
+    initializer_range: float = 0.02
     bos_token_id: int | None = 0
     pad_token_id: int | None = 1
     eos_token_id: int | None = 2
@@ -184,14 +135,22 @@ class OmniASRConfig(PreTrainedConfig):
                 vocab_size=11984,
                 hidden_size=4096,
                 intermediate_size=2816,
+                max_position_embeddings=8192,
                 num_hidden_layers=12,
+                num_attention_heads=8,
                 num_key_value_heads=8,
-                rope_theta=10000.0,
                 rms_norm_eps=1e-05,
             )
 
-        self.initializer_range = self.audio_config.initializer_range
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.initializer_range != self.audio_config.initializer_range:
+            raise ValueError(
+                f"`initializer_range` ({self.initializer_range}) must match `audio_config.initializer_range` "
+                f"({self.audio_config.initializer_range})."
+            )
 
-__all__ = ["OmniASRConfig", "OmniASRCTCConfig", "OmniASRAudioConfig"]
+
+__all__ = ["OmniASRConfig", "OmniASRAudioConfig"]

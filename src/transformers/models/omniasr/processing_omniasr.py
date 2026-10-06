@@ -28,6 +28,37 @@ logger = logging.get_logger(__name__)
 # The language token that selects the model's language-agnostic mode, which is also the default.
 LANGUAGE_AGNOSTIC = "auto"
 
+# ISO 639-1 codes (e.g. `"en"`) mapped to the model's language codes, for the languages that have one.
+# fmt: off
+ISO_639_1_TO_LANGUAGE = {
+    "ab": "abk_cyrl", "af": "afr_latn", "ak": "aka_latn", "am": "amh_ethi", "an": "arg_latn", "ar": "arb_arab",
+    "as": "asm_beng", "av": "ava_cyrl", "ay": "ayr_latn", "az": "aze_latn", "ba": "bak_cyrl", "be": "bel_cyrl",
+    "bg": "bul_cyrl", "bi": "bis_latn", "bm": "bam_latn", "bn": "ben_beng", "bo": "bod_tibt", "br": "bre_latn",
+    "bs": "bos_latn", "ca": "cat_latn", "ce": "che_cyrl", "cs": "ces_latn", "cv": "chv_cyrl", "cy": "cym_latn",
+    "da": "dan_latn", "de": "deu_latn", "dv": "div_thaa", "dz": "dzo_tibt", "ee": "ewe_latn", "el": "ell_grek",
+    "en": "eng_latn", "eo": "epo_latn", "es": "spa_latn", "et": "ekk_latn", "eu": "eus_latn", "fa": "fas_arab",
+    "ff": "ful_latn", "fi": "fin_latn", "fj": "fij_latn", "fo": "fao_latn", "fr": "fra_latn", "fy": "fry_latn",
+    "ga": "gle_latn", "gl": "glg_latn", "gn": "grn_latn", "gu": "guj_gujr", "gv": "glv_latn", "ha": "hau_latn",
+    "he": "heb_hebr", "hi": "hin_deva", "hr": "hrv_latn", "ht": "hat_latn", "hu": "hun_latn", "hy": "hye_armn",
+    "hz": "her_latn", "ia": "ina_latn", "id": "ind_latn", "ig": "ibo_latn", "ik": "ipk_latn", "is": "isl_latn",
+    "it": "ita_latn", "ja": "jpn_jpan", "jv": "jav_latn", "ka": "kat_geor", "ki": "kik_latn", "kj": "kua_latn",
+    "kk": "kaz_cyrl", "km": "khm_khmr", "kn": "kan_knda", "ko": "kor_hang", "kr": "knc_latn", "ks": "kas_arab",
+    "ku": "kur_arab", "kv": "kpv_cyrl", "kw": "cor_latn", "ky": "kir_cyrl", "la": "lat_latn", "lb": "ltz_latn",
+    "lg": "lug_latn", "ln": "lin_latn", "lo": "lao_laoo", "lt": "lit_latn", "lv": "lav_latn", "mg": "mlg_latn",
+    "mh": "mah_latn", "mi": "mri_latn", "mk": "mkd_cyrl", "ml": "mal_mlym", "mn": "mon_cyrl", "mr": "mar_deva",
+    "ms": "zsm_latn", "mt": "mlt_latn", "my": "mya_mymr", "nb": "nob_latn", "ne": "nep_deva", "ng": "ndo_latn",
+    "nl": "nld_latn", "nn": "nno_latn", "no": "nob_latn", "ny": "nya_latn", "oc": "oci_latn", "om": "orm_latn",
+    "or": "ory_orya", "os": "oss_cyrl", "pa": "pan_guru", "pl": "pol_latn", "ps": "pus_arab", "pt": "por_latn",
+    "rn": "run_latn", "ro": "ron_latn", "ru": "rus_cyrl", "rw": "kin_latn", "sc": "srd_latn", "sd": "snd_arab",
+    "sg": "sag_latn", "si": "sin_sinh", "sk": "slk_latn", "sl": "slv_latn", "sm": "smo_latn", "sn": "sna_latn",
+    "so": "som_latn", "sq": "als_latn", "sr": "srp_cyrl", "su": "sun_latn", "sv": "swe_latn", "sw": "swh_latn",
+    "ta": "tam_taml", "te": "tel_telu", "tg": "tgk_cyrl", "th": "tha_thai", "ti": "tir_ethi", "tk": "tuk_latn",
+    "tl": "tgl_latn", "tn": "tsn_latn", "tr": "tur_latn", "ts": "tso_latn", "tt": "tat_cyrl", "tw": "twi_latn",
+    "ug": "uig_arab", "uk": "ukr_cyrl", "ur": "urd_arab", "uz": "uzb_latn", "vi": "vie_latn", "wo": "wol_latn",
+    "xh": "xho_latn", "yi": "ydd_hebr", "yo": "yor_latn", "za": "zyb_latn", "zh": "cmn_hans", "zu": "zul_latn",
+}
+# fmt: on
+
 
 class OmniASRProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
     _defaults = {
@@ -52,32 +83,21 @@ class OmniASRProcessor(ProcessorMixin):
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<extra_id_1>"`):
-            The placeholder token that stands for one speech encoder frame in the LLM variant's prompt, i.e. the
-            token of [`OmniASRConfig.audio_token_id`].
+            The placeholder token that stands for one speech encoder frame in the prompt, i.e. the token of
+            [`OmniASRConfig.audio_token_id`].
         conv_kernel (`list[int]`, *optional*):
             Kernel size of each convolution of the speech encoder's feature encoder, i.e.
-            [`OmniASRAudioConfig.conv_kernel`]. Needed by the LLM variant to count the frames an audio input is
-            subsampled to, and therefore how many audio placeholders its prompt holds.
+            [`OmniASRAudioConfig.conv_kernel`]. Needed to count the frames an audio input is subsampled to, and
+            therefore how many audio placeholders its prompt holds. Defaults to `[10, 3, 3, 3, 3, 2, 2]`.
         conv_stride (`list[int]`, *optional*):
             Stride of each convolution of the speech encoder's feature encoder, i.e.
-            [`OmniASRAudioConfig.conv_stride`].
+            [`OmniASRAudioConfig.conv_stride`]. Defaults to `[5, 2, 2, 2, 2, 2, 2]`.
         """
+        self.conv_kernel = conv_kernel if conv_kernel is not None else [10, 3, 3, 3, 3, 2, 2]
+        self.conv_stride = conv_stride if conv_stride is not None else [5, 2, 2, 2, 2, 2, 2]
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
-        self.conv_kernel = list(conv_kernel) if conv_kernel is not None else None
-        self.conv_stride = list(conv_stride) if conv_stride is not None else None
-        # Only the LLM variant is prompted, so only its checkpoints ship a chat template.
-        if self.chat_template is None:
-            # CTC decoding which require tokens to be grouped
-            self.group_tokens = True
-        else:
-            self.group_tokens = False
-            if self.conv_kernel is None or self.conv_stride is None:
-                raise ValueError(
-                    f"{self.__class__.__name__} needs `conv_kernel` and `conv_stride` to count the audio placeholders of "
-                    "the LLM variant's prompt."
-                )
 
     @auto_docstring
     def __call__(
@@ -89,21 +109,16 @@ class OmniASRProcessor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         text (`str`, `list[str]`, *optional*):
-            For the CTC variant, the transcription(s), one per audio input, from which the CTC `labels` are built.
-            For the LLM variant, the prompt(s) rendered by [`~OmniASRProcessor.apply_chat_template`], each holding
-            one `audio_token` per audio input; prefer [`~OmniASRProcessor.apply_transcription_request`].
+            The prompt(s) rendered by [`~OmniASRProcessor.apply_chat_template`], each holding one `audio_token` per
+            audio input; prefer [`~OmniASRProcessor.apply_transcription_request`].
         output_labels (`bool`, *optional*, defaults to `False`):
-            LLM variant only: whether to return `labels` for training, which only cover what follows each prompt's
-            closing BOS, i.e. the assistant's transcription and its EOS.
+            Whether to return `labels` for training, which only cover what follows each prompt's closing BOS, i.e.
+            the assistant's transcription and its EOS.
 
         Returns:
-            [`BatchFeature`]: `input_values` and its `padding_mask`. For the CTC variant, `labels` is added whenever
-            `text` is given. For the LLM variant, the decoder prompt as `input_ids` and its `attention_mask`, and
-            `labels` when `output_labels=True`.
+            [`BatchFeature`]: `input_values` and its `padding_mask`, the decoder prompt as `input_ids` and its
+            `attention_mask`, and `labels` when `output_labels=True`.
         """
-        if self.chat_template is None:
-            return self._call_ctc(audio, text=text, **kwargs)
-
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
@@ -115,29 +130,6 @@ class OmniASRProcessor(ProcessorMixin):
             model_inputs["labels"] = labels
 
         return model_inputs
-
-    def _call_ctc(
-        self,
-        audio: AudioInput,
-        text: TextInput | list[TextInput] | None = None,
-        **kwargs: Unpack[OmniASRProcessorKwargs],
-    ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            OmniASRProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
-
-        if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            labels = encodings["input_ids"]
-            # Mask padding positions with -100 so the CTC loss ignores them.
-            if "attention_mask" in encodings:
-                labels[encodings["attention_mask"] == 0] = -100
-            inputs["labels"] = labels
-
-        return inputs
 
     def validate_inputs(
         self,
@@ -175,7 +167,7 @@ class OmniASRProcessor(ProcessorMixin):
         **kwargs: Unpack[OmniASRProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare inputs for the LLM variant's speech recognition without manually writing the chat template.
+        Prepare inputs for speech recognition without manually writing the chat template.
 
         Args:
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -183,8 +175,9 @@ class OmniASRProcessor(ProcessorMixin):
                 the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
             language (`str` or `list[str]`, *optional*):
                 Language code(s) (e.g. `"eng_Latn"` or `["eng_Latn", "fra_Latn"]`), either one for the whole batch
-                or one per audio. `None` or `"auto"` selects the model's language-agnostic mode; naming the language
-                explicitly gives better transcription quality.
+                or one per audio. ISO 639-1 codes (e.g. `"en"`) are also accepted for the languages that have one.
+                `None` or `"auto"` selects the model's language-agnostic mode; naming the language explicitly gives
+                better transcription quality.
             **kwargs:
                 Additional keyword arguments forwarded to [`~OmniASRProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
@@ -193,11 +186,6 @@ class OmniASRProcessor(ProcessorMixin):
             [`BatchFeature`]: Processor outputs ready to be passed to
             [`OmniASRForConditionalGeneration.generate`].
         """
-        if self.chat_template is None:
-            raise ValueError(
-                f"{self.__class__.__name__} has no chat template: only the LLM variant is prompted. The CTC variant "
-                "takes the audio directly, e.g. `processor(audio)`."
-            )
         audio_items = list(make_list_of_audio_chat_template(audio))
         batch_size = len(audio_items)
         if batch_size == 0:
@@ -212,7 +200,7 @@ class OmniASRProcessor(ProcessorMixin):
         for audio_item, lang in zip(audio_items, language):
             content = [make_audio_chat_template_content(audio_item)]
             if lang is not None:
-                content.append({"type": "language", "language": self._resolve_language(lang)})
+                content.append({"type": "language", "language": lang})
             conversations.append([{"role": "user", "content": content}])
 
         return self.apply_chat_template(
@@ -223,9 +211,36 @@ class OmniASRProcessor(ProcessorMixin):
             **kwargs,
         )
 
+    def apply_chat_template(self, conversation, *args, **kwargs):
+        """
+        Same as [`~ProcessorMixin.apply_chat_template`], but resolves the language codes of the conversation first.
+        The chat template writes the language token as is, so this override is needed to accept ISO 639-1 codes (e.g.
+        `"en"` for `"eng_Latn"`), and to raise on unsupported codes instead of silently writing an unknown token.
+        """
+        is_batched = isinstance(conversation[0], (list, tuple))
+        conversations = [
+            [
+                {
+                    **message,
+                    "content": [
+                        {**item, "language": self._resolve_language(item["language"])}
+                        if item.get("type") == "language"
+                        else item
+                        for item in message["content"]
+                    ],
+                }
+                if isinstance(message.get("content"), list)
+                else message
+                for message in conv
+            ]
+            for conv in (conversation if is_batched else [conversation])
+        ]
+        return super().apply_chat_template(conversations if is_batched else conversations[0], *args, **kwargs)
+
     def _resolve_language(self, language: str) -> str:
-        """Lower-case the language code, and check that the vocabulary holds its token."""
+        """Lower-case the language code, map an ISO 639-1 code, and check that the vocabulary holds its token."""
         code = language.lower()
+        code = ISO_639_1_TO_LANGUAGE.get(code, code)
         if self.tokenizer.convert_tokens_to_ids(f"<|lang:{code}|>") == self.tokenizer.unk_token_id:
             languages = sorted(
                 token[len("<|lang:") : -len("|>")]
@@ -237,18 +252,6 @@ class OmniASRProcessor(ProcessorMixin):
                 f"of the {len(languages)} supported codes, e.g. {languages[:5]}."
             )
         return code
-
-    def decode(self, *args, **kwargs):
-        # CTC decoding collapses runs of identical tokens; the autoregressive LLM variant must keep them.
-        kwargs.setdefault("group_tokens", self.group_tokens)
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        if self.chat_template is None:
-            # CTC variant: the transcription is only tokenized into the CTC `labels`.
-            return self.feature_extractor.model_input_names + ["labels"]
-        return super().model_input_names
 
     @property
     def unused_input_names(self) -> list[str]:

@@ -315,7 +315,7 @@ IGNORE_NON_TESTED = (
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
-        "OmniASRAudioModel",  # Building part of bigger (tested) model. Tested implicitly through OmniASRForCTC.
+        "OmniASRAudioModel",  # Building part of bigger (tested) model. Tested implicitly through OmniASRForConditionalGeneration.
     ]
 )
 

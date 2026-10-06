@@ -1887,6 +1887,26 @@ class CanaryConverter(ParakeetConverter):
         }
 
 
+class OmniASRConverter(SpmConverter):
+    def __init__(self, vocab_file):
+        requires_backends(self, "protobuf")
+
+        self.original_tokenizer = None
+        self.proto = import_protobuf().ModelProto()
+        with open(vocab_file, "rb") as f:
+            self.proto.ParseFromString(f.read())
+
+    def normalizer(self, proto):
+        return normalizers.Sequence([normalizers.Strip(), normalizers.Replace(Regex(" {2,}"), " ")])
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        # `split_by_whitespace`: pieces never cross a whitespace, which starts the piece that follows it.
+        return pre_tokenizers.Split(" ", behavior="merged_with_next")
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Fuse()
+
+
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control

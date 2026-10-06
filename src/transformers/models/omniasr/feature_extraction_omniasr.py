@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 @requires(backends=("torch",))
 class OmniASRFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a OmniASR feature extractor.
+    Constructs an OmniASR feature extractor.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):

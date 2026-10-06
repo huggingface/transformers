@@ -16,7 +16,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoProcessor, OmniASRAudioConfig, OmniASRProcessor
+from transformers import AutoProcessor, OmniASRProcessor
 from transformers.testing_utils import require_librosa, require_torch
 from transformers.utils.import_utils import is_torch_available
 
@@ -34,20 +34,7 @@ AUDIO_URL = url_to_local_path(
 
 
 @require_torch
-class OmniASRCTCProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = OmniASRProcessor
-    audio_input_name = "input_values"
-    text_input_name = "labels"
-    model_id = "bezzam/omniasr-ctc-300m-v2"
-
-    @classmethod
-    def prepare_processor_dict(cls):
-        audio_config = OmniASRAudioConfig()
-        return {"conv_kernel": list(audio_config.conv_kernel), "conv_stride": list(audio_config.conv_stride)}
-
-
-@require_torch
-class OmniASRLLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+class OmniASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = OmniASRProcessor
     audio_input_name = "input_values"
     model_id = "bezzam/omniasr-llm-300m-v2"
@@ -68,7 +55,7 @@ class OmniASRLLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
 
-    # Overridden because the LLM variant needs the audio placeholder in `text`: the common test calls the processor
+    # Overridden because the processor needs the audio placeholder in `text`: the common test calls the processor
     # with the audio alone.
     @parameterized.expand(["text", "images", "videos", "audio"])
     def test_subprocessor_defaults(self, modality):
@@ -112,6 +99,26 @@ class OmniASRLLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for input_ids, code in zip(outputs["input_ids"], ["eng_latn", "fra_latn"]):
             expected = tokenizer.convert_tokens_to_ids(["<extra_id_0>", f"<|lang:{code}|>", tokenizer.bos_token])
             self.assertListEqual(input_ids[-3:].tolist(), expected)
+
+    def test_iso_639_1_language(self):
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
+        messages = [
+            {"role": "user", "content": [{"type": "audio", "path": AUDIO_URL}, {"type": "language", "language": "en"}]}
+        ]
+
+        formatted_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+        self.assertEqual(formatted_prompt, "<extra_id_1><extra_id_0><|lang:eng_latn|><s>")
+
+    @require_librosa
+    def test_apply_transcription_request_iso_639_1_language(self):
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
+
+        outputs = processor.apply_transcription_request(audio=AUDIO_URL, language="en")
+
+        tokenizer = processor.tokenizer
+        expected = tokenizer.convert_tokens_to_ids(["<extra_id_0>", "<|lang:eng_latn|>", tokenizer.bos_token])
+        self.assertListEqual(outputs["input_ids"][0, -3:].tolist(), expected)
 
     @require_librosa
     def test_output_labels(self):
