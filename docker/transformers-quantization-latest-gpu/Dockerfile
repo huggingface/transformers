@@ -19,7 +19,18 @@ ARG PYTORCH='2.11.0'
 ARG CUDA='cu126'
 
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng ffmpeg curl
+
+# Python comes from uv, at the version in the repo's `.python-version` (passed as a build arg by the build
+# workflow), instead of Ubuntu 22.04's 3.10. `python`, `python3` and `pip` all resolve to the venv.
+ARG PYTHON_VERSION
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
