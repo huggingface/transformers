@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Annotated
+
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
+from ...utils.type_validators import strictly_positive
 
 
 class SeamlessM4tAudioProcessorKwargs(AudioKwargs, total=False):
@@ -22,7 +25,7 @@ class SeamlessM4tAudioProcessorKwargs(AudioKwargs, total=False):
         Number of consecutive mel frames stacked into each output frame.
     """
 
-    stride: int
+    stride: Annotated[int, strictly_positive]
 
 
 class SeamlessM4tAudioProcessorMixin:
@@ -56,11 +59,6 @@ class SeamlessM4tAudioProcessorMixin:
 
     stride = 2
     valid_kwargs = SeamlessM4tAudioProcessorKwargs
-
-    def _validate_preprocess_kwargs(self, *, stride, **kwargs):
-        if stride < 1:
-            raise ValueError("SeamlessM4T requires a positive stride.")
-        super()._validate_preprocess_kwargs(**kwargs)
 
     def _compute_batched_features(self, audio, *, audio_ranges, spectrogram_config, stride, padding_value, **kwargs):
         features, frame_counts = super()._compute_batched_features(

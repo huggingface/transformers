@@ -47,11 +47,8 @@ class Gemma4UnifiedAudioProcessorMixin:
 
     audio_samples_per_token = 640
     valid_kwargs = Gemma4UnifiedAudioProcessorKwargs
-
-    def _validate_preprocess_kwargs(self, *, padding_side, **kwargs):
-        super()._validate_preprocess_kwargs(**kwargs)
-        if padding_side != "right":
-            raise ValueError("Gemma4 Unified pads token frames on the right.")
+    # Token frames are padded on the right.
+    frozen_options = ("padding_side",)
 
     def _preprocess(
         self,

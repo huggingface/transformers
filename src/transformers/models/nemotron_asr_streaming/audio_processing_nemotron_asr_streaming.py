@@ -18,9 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_utils import BaseAudioProcessor
 
 
 class NemotronAsrStreamingAudioProcessorMixin:
@@ -54,11 +52,8 @@ class NemotronAsrStreamingAudioProcessorMixin:
     # Unlike Parakeet, Nemotron consumes log-mel features without per-feature
     # standardization. Override the inherited recipe explicitly.
     feature_normalization = None
-
-    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
-        if not do_extract_spectrogram:
-            raise ValueError("Nemotron streaming requires spectrogram extraction.")
-        BaseAudioProcessor._validate_preprocess_kwargs(self, do_extract_spectrogram=do_extract_spectrogram, **kwargs)
+    # The streaming encoder consumes log-mel frames; extraction is not optional.
+    frozen_options = ("do_extract_spectrogram",)
 
     def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         features = output.pop("audio_features")

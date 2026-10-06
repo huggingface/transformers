@@ -50,6 +50,12 @@ def positive_int(value: int | None = None):
         raise ValueError(f"Value must be a positive integer, got {value}")
 
 
+def strictly_positive(value: int | float | None = None):
+    """`Annotated` validator for a number that must be greater than zero (a hop, a stride, a factor)."""
+    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0):
+        raise ValueError(f"Value must be strictly positive, got {value}")
+
+
 @as_validated_field
 def positive_int_field(value: int | None = None):
     """

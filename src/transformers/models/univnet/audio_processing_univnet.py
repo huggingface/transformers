@@ -13,12 +13,14 @@
 # limitations under the License.
 
 from dataclasses import replace
+from typing import Annotated
 
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import _clamp_min
 from ...processing_utils import AudioKwargs
+from ...utils.type_validators import strictly_positive
 
 
 class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
@@ -45,9 +47,9 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
     do_normalize: bool | None
     normalize_min: float
     normalize_max: float
-    compression_factor: float
-    compression_clip_val: float
-    max_length_s: int
+    compression_factor: Annotated[float, strictly_positive]
+    compression_clip_val: Annotated[float, strictly_positive]
+    max_length_s: Annotated[int, strictly_positive]
 
 
 class UnivNetAudioProcessorMixin:
@@ -97,15 +99,6 @@ class UnivNetAudioProcessorMixin:
     max_length_s = 10
     truncation = True
     valid_kwargs = UnivNetAudioProcessorKwargs
-
-    def _validate_preprocess_kwargs(
-        self, *, max_length, max_length_s, compression_factor, compression_clip_val, **kwargs
-    ):
-        if min(max_length_s, compression_factor, compression_clip_val) <= 0:
-            raise ValueError("UnivNet length and compression parameters must be positive.")
-        super()._validate_preprocess_kwargs(
-            max_length=max_length if max_length is not None else int(max_length_s * self.sampling_rate), **kwargs
-        )
 
     def _preprocess(self, audio, *, max_length, max_length_s, **kwargs):
         return super()._preprocess(

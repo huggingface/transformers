@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Annotated
+
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
 from ...audio_utils import SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 from ...utils.import_utils import requires
+from ...utils.type_validators import strictly_positive
 
 
 class MusicgenMelodyAudioProcessorKwargs(AudioKwargs, total=False):
@@ -31,10 +34,10 @@ class MusicgenMelodyAudioProcessorKwargs(AudioKwargs, total=False):
         Length, in seconds, of the audio window the model consumes.
     """
 
-    n_fft: int
-    hop_length: int
-    n_chroma: int
-    chunk_length: int
+    n_fft: Annotated[int, strictly_positive]
+    hop_length: Annotated[int, strictly_positive]
+    n_chroma: Annotated[int, strictly_positive]
+    chunk_length: Annotated[int, strictly_positive]
 
 
 class MusicgenMelodyAudioProcessorMixin:
@@ -82,13 +85,6 @@ class MusicgenMelodyAudioProcessorMixin:
         )
         filters = librosa.filters.chroma(sr=self.sampling_rate, n_fft=n_fft, tuning=0, n_chroma=n_chroma)
         return config, self._astype(self._as_backend_array(filters), "float32")
-
-    def _validate_preprocess_kwargs(self, *, n_fft, hop_length, n_chroma, chunk_length, max_length, **kwargs):
-        if min(n_fft, hop_length, n_chroma, chunk_length) <= 0:
-            raise ValueError("MusicGen Melody FFT, hop, chroma count and chunk length must be positive.")
-        super()._validate_preprocess_kwargs(
-            max_length=max_length if max_length is not None else chunk_length * self.sampling_rate, **kwargs
-        )
 
     def _preprocess(
         self,

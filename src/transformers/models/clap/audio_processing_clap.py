@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import replace
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import numpy as np
 import torch
@@ -23,18 +23,18 @@ from ...audio_processing_base import AudioProcessingMixin, BatchFeature
 from ...audio_utils import SpectrogramConfig
 from ...processing_utils import AudioKwargs
 from ...utils import PaddingStrategy, TensorType
-from ...utils.type_validators import padding_validator
 
 
-# CLAP's legacy spelling of `padding` names the *fill method* for short audio rather than the target
-# length, so `repeatpad`/`repeat`/`pad` are legal values here and the CLAP workflow
-# translates them. The base validator knows only the three length strategies and rejects them, which
-# it did silently until the `Annotated` validators were activated. Widen it for this model rather
-# than teaching the shared validator a CLAP-only vocabulary.
+# CLAP always fills clips to `max_length`, so `padding` cannot name a length strategy other than
+# `max_length`. Its legacy spelling names the *fill method* for short audio instead
+# (`repeatpad`/`repeat`/`pad`), which the workflow translates to `padding_mode`. The shared
+# `padding_validator` knows only the three length strategies; this one replaces it for CLAP.
 def clap_padding_validator(value: bool | str | PaddingStrategy | None = None):
-    if value in ("repeatpad", "repeat", "pad"):
-        return
-    padding_validator(value)
+    if value not in (True, "max_length", PaddingStrategy.MAX_LENGTH, "repeatpad", "repeat", "pad"):
+        raise ValueError(
+            "CLAP fills clips to max_length: `padding` must be True or 'max_length', or one of the fill "
+            "methods 'repeatpad', 'repeat', 'pad' (preferably via `padding_mode`)."
+        )
 
 
 class ClapAudioProcessorKwargs(AudioKwargs, total=False):
@@ -54,8 +54,8 @@ class ClapAudioProcessorKwargs(AudioKwargs, total=False):
         spellings `"repeatpad"`, `"repeat"` and `"pad"` override the fill method for this call.
     """
 
-    truncation_mode: str
-    padding_mode: str
+    truncation_mode: Literal["rand_trunc", "fusion"]
+    padding_mode: Literal["repeatpad", "repeat", "pad"]
     padding: Annotated[bool | str | PaddingStrategy | None, clap_padding_validator]
 
 
@@ -108,17 +108,6 @@ class ClapAudioProcessorMixin:
             self.spectrogram_config = replace(self.spectrogram_config, mel_scale_config=mel_scale_config)
             self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
         self._clap_mel_bank = (self.spectrogram_config, self.mel_filters)
-
-    def _validate_preprocess_kwargs(self, *, truncation_mode, padding_mode, max_length, padding, **kwargs):
-        """Validate the options used by CLAP's crop/fusion workflow."""
-        if truncation_mode not in ("rand_trunc", "fusion"):
-            raise ValueError("CLAP truncation_mode must be 'rand_trunc' or 'fusion'.")
-        if padding not in ("repeatpad", "repeat", "pad", True, "max_length", PaddingStrategy.MAX_LENGTH):
-            raise ValueError("CLAP fills clips to max_length; use padding_mode='repeatpad', 'repeat' or 'pad'.")
-        if padding_mode not in ("repeatpad", "repeat", "pad"):
-            raise ValueError("CLAP padding_mode must be 'repeatpad', 'repeat' or 'pad'.")
-        if max_length is None:
-            raise ValueError("CLAP requires max_length in waveform samples.")
 
     def _preprocess(
         self,

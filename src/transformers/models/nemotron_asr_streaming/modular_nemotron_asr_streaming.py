@@ -20,7 +20,6 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...audio_processing_utils import BaseAudioProcessor
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -894,11 +893,8 @@ class NemotronAsrStreamingAudioProcessorMixin(ParakeetAudioProcessorMixin):
     # Unlike Parakeet, Nemotron consumes log-mel features without per-feature
     # standardization. Override the inherited recipe explicitly.
     feature_normalization = None
-
-    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
-        if not do_extract_spectrogram:
-            raise ValueError("Nemotron streaming requires spectrogram extraction.")
-        BaseAudioProcessor._validate_preprocess_kwargs(self, do_extract_spectrogram=do_extract_spectrogram, **kwargs)
+    # The streaming encoder consumes log-mel frames; extraction is not optional.
+    frozen_options = ("do_extract_spectrogram",)
 
     def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         features = output.pop("audio_features")

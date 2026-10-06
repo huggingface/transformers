@@ -66,11 +66,8 @@ class Phi4MultimodalAudioProcessorMixin:
     audio_downsample_rate = 1
     audio_feat_stride = 1
     valid_kwargs = Phi4MultimodalAudioProcessorKwargs
-
-    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
-        if not do_extract_spectrogram:
-            raise ValueError("Phi4 requires spectrogram extraction to compute audio embedding sizes.")
-        super()._validate_preprocess_kwargs(do_extract_spectrogram=do_extract_spectrogram, **kwargs)
+    # `audio_embed_sizes` is computed from spectrogram frames, so extraction is not optional.
+    frozen_options = ("do_extract_spectrogram",)
 
     def _compute_audio_embed_size(self, audio_frames, *, audio_compression_rate, audio_downsample_rate):
         integer = audio_frames // audio_compression_rate

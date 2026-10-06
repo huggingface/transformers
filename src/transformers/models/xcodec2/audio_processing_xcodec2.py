@@ -13,10 +13,13 @@
 # limitations under the License.
 
 
+from typing import Annotated
+
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
 from ...audio_utils import _array_namespace
 from ...processing_utils import AudioKwargs
+from ...utils.type_validators import strictly_positive
 
 
 class Xcodec2AudioProcessorKwargs(AudioKwargs, total=False):
@@ -29,8 +32,8 @@ class Xcodec2AudioProcessorKwargs(AudioKwargs, total=False):
         Value used to pad the extracted features.
     """
 
-    hop_length: int
-    stride: int
+    hop_length: Annotated[int, strictly_positive]
+    stride: Annotated[int, strictly_positive]
     feature_padding_value: float | int
 
 
@@ -77,6 +80,8 @@ class Xcodec2AudioProcessorMixin:
     stride = 2
     feature_padding_value = 1.0
     valid_kwargs = Xcodec2AudioProcessorKwargs
+    # Dual-codec waveforms are padded on the right.
+    frozen_options = ("padding_side",)
 
     def _prepare_waveform(self, audio_el, **kwargs):
         # the legacy FE appends one zero sample to every waveform before padding
@@ -89,13 +94,6 @@ class Xcodec2AudioProcessorMixin:
 
     def _pad_feature_single(self, feature, max_length, *, feature_padding_value, **kwargs):
         return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=feature_padding_value)
-
-    def _validate_preprocess_kwargs(self, *, padding_side, hop_length, stride, **kwargs):
-        super()._validate_preprocess_kwargs(**kwargs)
-        if padding_side != "right":
-            raise ValueError("Dual-codec waveforms use right padding.")
-        if hop_length <= 0 or stride <= 0:
-            raise ValueError("Codec hop_length and stride must be positive.")
 
     def _select_semantic_waveform(self, original, acoustic, start, end, *, hop_length):
         """XCodec2's semantic encoder sees the acoustic-truncated clip rounded to codec hops."""

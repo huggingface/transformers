@@ -48,6 +48,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
     feature_normalization: str | None = None
     feature_normalization_eps: float = 1e-5
 
+    # Declared options a call may not change: the configured value is the only legal value. For
+    # a workflow that fixes an option its base pipeline otherwise exposes (a codec that only pads
+    # on the right, a waveform model that never extracts a spectrogram). Declared, not coded —
+    # see `_validate_preprocess_kwargs` and docs/adr/0014-declarative-kwargs-validation.md.
+    frozen_options: tuple[str, ...] = ()
+
     # Keys `_finalize_output` adds on top of the derived ones, for `model_input_names`.
     extra_model_input_names: list[str] = []
 
@@ -109,17 +115,23 @@ class BaseAudioProcessor(AudioProcessingMixin):
             kwargs["do_extract_spectrogram"] = True
         return kwargs
 
-    def _validate_preprocess_kwargs(
-        self,
-        sampling_rate: int | None = None,
-        max_length: int | None = None,
-        truncation: bool | None = None,
-        pad_to_multiple_of: int | None = None,
-        return_tensors: str | TensorType | None = None,
-        **kwargs,
-    ):
-        if truncation and max_length is None:
-            raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
+    def _validate_preprocess_kwargs(self, **kwargs):
+        """Enforce `frozen_options` on the merged call kwargs. Final: models do not override this.
+
+        Every other constraint a model has on its options is declared on its kwargs schema and
+        checked by `validate_typed_dict` before this runs — a `Literal` for an enumerated choice,
+        an `Annotated` validator such as `interval(min=0, exclude_min=True)` for a bound. A value
+        derived from other options (`max_length` from a duration) is resolved in
+        `_standardize_kwargs` or by the workflow that uses it, not validated here. Truncation
+        without `max_length` is rejected by `pad`, where the resolved value is known.
+        """
+        for name in self.frozen_options:
+            configured = getattr(self, name)
+            if kwargs.get(name) != configured:
+                raise ValueError(
+                    f"`{name}` is fixed to {configured!r} for {type(self).__name__} and cannot be changed "
+                    f"per call (got {kwargs.get(name)!r})."
+                )
 
     def _serialize_value(self, key, value):
         if key == "spectrogram_config" and hasattr(value, "to_dict"):
@@ -409,8 +421,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
         )
 
         if truncation:
-            # `_validate_preprocess_kwargs` enforces this on the `preprocess` path, but `pad` is public
-            # and callable directly, where that hook never runs.
+            # Checked here, where the resolved value is known, rather than in `_validate_preprocess_kwargs`:
+            # a workflow may derive `max_length` after validation ran (UnivNet, MusicGen Melody), and
+            # `pad` is public and callable directly.
             if max_length is None:
                 raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
             trunc_length = max_length

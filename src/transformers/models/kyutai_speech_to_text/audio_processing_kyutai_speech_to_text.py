@@ -34,11 +34,9 @@ class KyutaiSpeechToTextAudioProcessorMixin:
     audio_silence_prefix_seconds = 1.0
     audio_delay_seconds = 2.5
     valid_kwargs = KyutaiSpeechToTextAudioProcessorKwargs
-
-    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
-        if do_extract_spectrogram:
-            raise ValueError("Kyutai consumes padded waveforms, without spectrogram extraction.")
-        super()._validate_preprocess_kwargs(do_extract_spectrogram=do_extract_spectrogram, **kwargs)
+    # Kyutai consumes padded waveforms, never a spectrogram.
+    do_extract_spectrogram = False
+    frozen_options = ("do_extract_spectrogram",)
 
     def _finalize_output(self, output, *, audio_silence_prefix_seconds, audio_delay_seconds, **kwargs):
         pad_left = int(audio_silence_prefix_seconds * self.sampling_rate)
