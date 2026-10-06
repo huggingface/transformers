@@ -186,7 +186,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
                 if isinstance(vocab, list):
                     vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
-            
+
             _vocab_file = local_kwargs.get("vocab_file")
             if (
                 cls.model is not None
