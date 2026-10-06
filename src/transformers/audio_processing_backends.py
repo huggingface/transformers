@@ -1023,6 +1023,8 @@ def missing_ops(backend_cls, names) -> list[str]:
     op left as the contract's stub counts as missing."""
     if not isinstance(backend_cls, type):
         backend_cls = type(backend_cls)
+    if not isinstance(backend_cls, type):
+        backend_cls = type(backend_cls)
     return [
         name
         for name in names
