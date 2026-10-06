@@ -66,6 +66,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     num_experts: int = 1
+    output_router_logits: bool = False
     moe_topk: int | list[int] = 1
     head_dim: int | None = None
 

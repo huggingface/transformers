@@ -108,6 +108,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
     n_routed_experts: int = 288
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 1536
@@ -147,7 +148,6 @@ class Glm5NextTextConfig(PreTrainedConfig):
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
-    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
 
     index_kpool: int = 16

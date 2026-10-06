@@ -4326,7 +4326,8 @@ class GenerationMixin(ContinuousMixin):
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
                 if position_ids is not None:
-                    model_kwargs["position_ids"] = position_ids[:, past_length:current_length]
+                    # Always slice on `seq-length` (last dim)
+                    model_kwargs["position_ids"] = position_ids[..., past_length:current_length]
                 model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
                 outputs = model_forward(**model_inputs, return_dict=True)
