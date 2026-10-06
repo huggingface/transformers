@@ -87,7 +87,7 @@ distributed_config = DistributedConfig(
 )
 ```
 
-Conversely, when a plan combines `"ep_dispatch_experts"` with an `"ep_router"` rule, the router rule is ignored, since dispatch needs the global expert ids to find each expert's owner. Non-expert rules in the EP plan are ignored too: with dispatch, the EP plan only shards the experts.
+Conversely, override the expert forward rule of a model whose plan uses masking with `"ep_dispatch_experts"` to use token dispatch. The router rule is then ignored, since dispatch needs the global expert ids to find each expert's owner.
 
 ## Token dispatch
 
