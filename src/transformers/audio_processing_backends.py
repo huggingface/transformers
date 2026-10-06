@@ -1210,3 +1210,153 @@ class NumpyOps(AudioOps):
 
 
 register_audio_backend("numpy", NumpyOps)
+
+
+if is_torch_available():
+
+    class TorchOps(AudioOps):
+        """Every op in torch. Tensors live wherever `like` / the input lives; `"float64"` resolves
+        to float32 on MPS, the library's convention (`torch.float64 if device.type != "mps" else
+        torch.float32`, as in ViT-MAE, RT-DETR and Whisper generation), applied once, here."""
+
+        name = "torch"
+
+        _WIDEST_ON_MPS = {"float64": "float32", "complex128": "complex64"}
+
+        @staticmethod
+        def _resolve_dtype(dtype: str, device_type: str) -> str:
+            if device_type == "mps":
+                return TorchOps._WIDEST_ON_MPS.get(dtype, dtype)
+            return dtype
+
+        @staticmethod
+        def _device_of(like):
+            return like.device if isinstance(like, torch.Tensor) else torch.device("cpu")
+
+        # ── plumbing ───────────────────────────────────────────────────────────────────────────
+
+        def asarray(self, x, *, like=None):
+            if isinstance(x, torch.Tensor):
+                result = x
+            elif isinstance(x, np.ndarray):
+                result = torch.from_numpy(x)
+            else:
+                # Sequences (`list[list[float]]`) are a documented input type; go through numpy so
+                # the torch backend accepts everything the numpy one does.
+                result = torch.from_numpy(np.asarray(x))
+            return self.to_device(result, like.device) if isinstance(like, torch.Tensor) else result
+
+        def to_numpy(self, x):
+            return x.detach().cpu().numpy()
+
+        def to_device(self, x, device):
+            device = torch.device(device)
+            if x.device == device:
+                return x
+            if device.type == "cuda" and x.device.type == "cpu":
+                # Pinned staging makes the copy asynchronous, so preprocessing overlaps a model
+                # forward still running on the stream.
+                return x.pin_memory().to(device, non_blocking=True)
+            return x.to(device)
+
+        def astype(self, x, dtype):
+            return x.to(getattr(torch, self._resolve_dtype(dtype, x.device.type)))
+
+        def zeros(self, shape, *, dtype="float32", like=None):
+            device = self._device_of(like)
+            return torch.zeros(shape, dtype=getattr(torch, self._resolve_dtype(dtype, device.type)), device=device)
+
+        def arange(self, n, *, like=None):
+            return torch.arange(n, dtype=torch.int64, device=self._device_of(like))
+
+        # ── assembly ───────────────────────────────────────────────────────────────────────────
+
+        def stack(self, seq):
+            return torch.stack(list(seq))
+
+        def concat(self, seq, axis=-1):
+            return torch.cat(list(seq), dim=axis)
+
+        def pad(self, x, left, right, *, axis=-1, mode="constant", value=0.0):
+            axis = axis % x.ndim
+            if mode == "constant":
+                spec = [0, 0] * (x.ndim - 1 - axis) + [left, right]
+                return torch.nn.functional.pad(x, spec, "constant", value)
+            if mode not in ("reflect", "replicate"):
+                raise ValueError(f"Unknown pad mode {mode!r}.")
+            # `reflect` / `replicate` pad only the last axis of a (batch, channel, length) tensor.
+            moved = x.movedim(axis, -1)
+            flat = moved.reshape(1, -1, moved.shape[-1])
+            padded = torch.nn.functional.pad(flat, (left, right), mode=mode)
+            return padded.reshape(*moved.shape[:-1], padded.shape[-1]).movedim(-1, axis)
+
+        def masked_fill(self, x, mask, value):
+            return x.masked_fill(mask, value)
+
+        # ── elementwise ────────────────────────────────────────────────────────────────────────
+
+        def log(self, x):
+            return torch.log(x)
+
+        def log10(self, x):
+            return torch.log10(x)
+
+        def sqrt(self, x):
+            return torch.sqrt(x)
+
+        def abs(self, x):
+            return torch.abs(x)
+
+        def maximum(self, x, y):
+            return torch.maximum(x, y)
+
+        def clamp_min(self, x, value):
+            return torch.clamp(x, min=value)
+
+        # ── reductions ─────────────────────────────────────────────────────────────────────────
+
+        def sum(self, x, axis):
+            return torch.sum(x, dim=axis)
+
+        def mean(self, x, axis):
+            return torch.mean(x, dim=axis)
+
+        def amax(self, x, axis):
+            return torch.amax(x, dim=axis)
+
+        # ── linear algebra ─────────────────────────────────────────────────────────────────────
+
+        def matmul(self, a, b):
+            return torch.matmul(a, b)
+
+        # ── signal ─────────────────────────────────────────────────────────────────────────────
+
+        def frame(self, x, frame_length, hop):
+            return x.unfold(-1, frame_length, hop)
+
+        def rfft(self, x, n):
+            return torch.fft.rfft(x, n=n)
+
+        def resample(self, x, orig_sr, target_sr):
+            requires_backends(self.resample, ["torchaudio"])
+            import torchaudio
+
+            return torchaudio.functional.resample(x, orig_freq=orig_sr, new_freq=target_sr)
+
+        # ── randomness ─────────────────────────────────────────────────────────────────────────
+
+        def randn(self, shape, *, seed, like=None):
+            device = self._device_of(like)
+            dtype = like.dtype if isinstance(like, torch.Tensor) else torch.float32
+            generator = torch.Generator(device=device).manual_seed(seed)
+            return torch.randn(shape, dtype=dtype, device=device, generator=generator)
+
+        # ── optional ops ───────────────────────────────────────────────────────────────────────
+
+        def bilinear_resize(self, x, size):
+            resized = torch.nn.functional.interpolate(
+                x[None, None], size=list(size), mode="bilinear", align_corners=False
+            )
+            return resized[0, 0]
+
+    register_audio_backend("torch", TorchOps)
