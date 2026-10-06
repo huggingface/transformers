@@ -26,7 +26,7 @@ from transformers import (
 )
 from transformers.testing_utils import require_librosa, require_torch
 
-from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
+from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin, url_to_local_path
 
 
 _CHECKPOINT = "itazap/MOSS-Transcribe-Diarize-HF"
@@ -98,7 +98,9 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
+                        "path": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+                        ),
                     },
                 ],
             },
@@ -245,27 +247,19 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
             self.assertIn(key, helper_outputs)
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
-    def test_feature_extractor_defaults(self):
-        self.skipTest("MossTranscribeDiarizeProcessor requires text and audio together.")
-
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
-        self.skipTest(
-            "MossTranscribeDiarizeProcessor requires audio in the chat template; "
-            "see test_apply_chat_template_matches_processor_call instead."
+        if return_tensors == "np":
+            self.skipTest("MossTranscribeDiarizeProcessor only supports PyTorch tensors")
+        self._test_apply_chat_template(
+            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
 
-    def test_apply_chat_template_assistant_mask(self):
-        self.skipTest(
-            "MossTranscribeDiarizeProcessor requires audio in the chat template; "
-            "not compatible with text-only assistant mask tests."
-        )
-
+    @unittest.skip(
+        reason="MossTranscribeDiarizeProcessor always returns PyTorch tensors, but this test expects lists."
+    )
     def test_apply_chat_template_tool_calls_no_content(self):
-        self.skipTest(
-            "MossTranscribeDiarizeProcessor requires audio in the chat template; "
-            "not compatible with text-only tool-call tests."
-        )
+        pass
 
     @require_torch
     def test_apply_chat_template_batch_with_prepare_audio_inputs(self):
