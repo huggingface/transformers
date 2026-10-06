@@ -61,10 +61,7 @@ _import_structure = {
     "ggml": [
         "GGUF_CONFIG_DEFAULTS_MAPPING",
         "GGUF_CONFIG_MAPPING",
-        "GGUF_TOKENIZER_MAPPING",
         "_gguf_parse_value",
-        "load_dequant_gguf_tensor",
-        "load_gguf",
     ],
     "higgs": [
         "HiggsLinear",
@@ -221,10 +218,7 @@ if TYPE_CHECKING:
     from .ggml import (
         GGUF_CONFIG_DEFAULTS_MAPPING,
         GGUF_CONFIG_MAPPING,
-        GGUF_TOKENIZER_MAPPING,
         _gguf_parse_value,
-        load_dequant_gguf_tensor,
-        load_gguf,
     )
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear

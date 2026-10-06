@@ -19,7 +19,6 @@ from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import init

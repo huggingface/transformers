@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch FlexOlmo model."""
 
+import tempfile
 import unittest
 
 from transformers import is_torch_available
@@ -20,6 +21,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     backend_device_count,
+    get_cpu_ram_total_gib,
     require_torch,
     slow,
     torch_device,
@@ -70,21 +72,15 @@ class FlexOlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            # Originally (when loading in fp32) device_map="auto" filled all GPUs to ~100%, leaving no
-            # room for the ~344 MiB MergeModulelist temporary buffer that fuses per-expert weight shards
-            # into a single gate_up_proj tensor during from_pretrained — causing CUDA OOM on multi-GPU.
-            # A 70% per-GPU max_memory cap was the fix.
-            #
-            # We later switched to bfloat16 to fix a separate OOM that occurred during model.generate()
-            # after the logits forward pass. With bfloat16 the model footprint is halved (~28 GiB vs
-            # ~56 GiB for fp32), so there is naturally enough headroom and the cap is no longer strictly
-            # necessary. We keep it here as a marker: the MergeModulelist OOM is a real problem for large
-            # MoE models loaded with device_map="auto", and a better automatic solution (e.g. reserving
-            # headroom inside the loader itself) would be welcome.
+            # In fp32, device_map="auto" filled GPU memory and left no room for the ~344 MiB
+            # MergeModulelist buffer used while fusing expert shards, causing OOM. A 70% max_memory
+            # cap fixed it. bfloat16 now provides enough headroom, but keep the cap as a reminder that
+            # large MoE loads need reserved temporary memory; ideally the loader would handle this.
             n = backend_device_count(torch_device)
             if n > 0 and torch_device != "cpu":
                 torch_accel = getattr(torch, torch_device)
@@ -92,13 +88,26 @@ class FlexOlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
                 )
                 max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-                max_memory["cpu"] = "60GiB"
+                max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
             else:
                 max_memory = None
+            # offload_folder is added for consistency with other MoE integration tests. For this model,
+            # GPU + CPU already holds the full model so disk offloading won't actually be triggered.
+            cls.offload_dir = tempfile.TemporaryDirectory()
             cls.model = FlexOlmoForCausalLM.from_pretrained(
-                cls.model_id, device_map="auto", max_memory=max_memory, torch_dtype=torch.bfloat16
+                cls.model_id,
+                device_map="auto",
+                max_memory=max_memory,
+                torch_dtype=torch.bfloat16,
+                offload_folder=cls.offload_dir.name,
             )
         return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
 
     @slow
     def test_model_7b_logits(self):

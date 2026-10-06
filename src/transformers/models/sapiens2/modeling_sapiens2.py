@@ -302,7 +302,7 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         num_patches_w = width // patch_width
 
         device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
+        device_type = device.type if isinstance(device.type, str) else "cpu"
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             # Although we could precompute static patch_coords from image_size and patch_size in the config,
@@ -1037,11 +1037,6 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
-            If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Example:
 
         ```python

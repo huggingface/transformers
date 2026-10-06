@@ -40,7 +40,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
         Number of DSA indexer heads.
     layer_types (`list[str]`, *optional*):
         Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"deepseek_sparse_attention"` for MLA (DSA) layers.
+        KDA layers and `"indexed_attention"` for MLA (DSA) layers.
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer mode. Values are `"full"` (run the indexer) or `"shared"`
         (reuse the previous full layer's top-k selection).
@@ -108,6 +108,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
     n_routed_experts: int = 288
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 1536
@@ -147,7 +148,6 @@ class Glm5NextTextConfig(PreTrainedConfig):
     hc_mult: int = 4
     hc_eps: float = 1e-6
     hc_sinkhorn_iters: int = 20
-    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
 
     index_kpool: int = 16
@@ -165,12 +165,11 @@ class Glm5NextTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             self.layer_types = [
-                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
+                "linear_attention" if layer_idx in kda_layers else "indexed_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
         self.layer_types = [
-            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
-            for layer_type in self.layer_types
+            "indexed_attention" if layer_type == "full_attention" else layer_type for layer_type in self.layer_types
         ]
 
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.

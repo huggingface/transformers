@@ -74,12 +74,12 @@ class TestAddNewModelLike(unittest.TestCase):
         cls.tmp_dir.cleanup()
 
     def assertFileIsEqual(self, text: str, filepath: str):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             file_text = f.read()
         self.assertEqual(file_text.strip(), text.strip())
 
     def assertInFile(self, text: str, filepath: str):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             file_text = f.read()
         self.assertTrue(text in file_text)
 

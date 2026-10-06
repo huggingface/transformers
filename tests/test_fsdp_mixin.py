@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
+from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     backend_device_count,
     backend_empty_cache,
@@ -92,8 +93,7 @@ def _get_distributed_device_type():
 
 
 def _get_distributed_backend():
-    backend_map = {"cpu": "gloo", "cuda": "nccl", "xpu": "xccl", "hpu": "hccl"}
-    return backend_map.get(_get_distributed_device_type(), "gloo")
+    return get_distributed_backend(_get_distributed_device_type()) or "gloo"
 
 
 def _get_rank_device(rank):
@@ -162,8 +162,9 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
     os.environ["MASTER_PORT"] = str(port)
 
     _set_determinism(SEED)
-    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank)
+    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
 
     if rank == 0:
         start_time = time.perf_counter()
@@ -184,7 +185,7 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
         status = "FAIL" if any_failed else "PASS"
         output_stream = sys.stderr if any_failed else sys.stdout
         print(f"[FSDP] {status} test: {test_name} ({elapsed:.1f}s)", file=output_stream, flush=True)
-        with open(results_file, "w") as f:
+        with open(results_file, "w", encoding="utf-8") as f:
             json.dump({"error": error or ("Failed on another rank" if any_failed else None)}, f)
 
     backend_empty_cache(_get_distributed_device_type())
@@ -673,7 +674,7 @@ class FSDPTesterMixin(ABC):
                 nprocs=world_size,
             )
 
-            with open(results_file) as f:
+            with open(results_file, encoding="utf-8") as f:
                 result = json.load(f)
         finally:
             if os.path.exists(results_file):

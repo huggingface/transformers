@@ -99,6 +99,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 2048
@@ -156,7 +157,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
         # BC: re-route `num_experts` to `n_routed_experts`
         if (num_experts := kwargs.get("num_experts")) is not None:
             self.n_routed_experts = num_experts

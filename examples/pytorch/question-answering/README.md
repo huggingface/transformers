@@ -41,7 +41,7 @@ on a single tesla V100 16GB.
 ```bash
 python run_qa.py \
   --model_name_or_path google-bert/bert-base-uncased \
-  --dataset_name squad \
+  --dataset_name rajpurkar/squad \
   --do_train \
   --do_eval \
   --per_device_train_batch_size 12 \
@@ -68,7 +68,7 @@ The [`run_qa_beam_search.py`](https://github.com/huggingface/transformers/blob/m
 ```bash
 python run_qa_beam_search.py \
     --model_name_or_path xlnet/xlnet-large-cased \
-    --dataset_name squad \
+    --dataset_name rajpurkar/squad \
     --do_train \
     --do_eval \
     --learning_rate 3e-5 \
@@ -88,7 +88,7 @@ export SQUAD_DIR=/path/to/SQUAD
 
 python run_qa_beam_search.py \
     --model_name_or_path xlnet/xlnet-large-cased \
-    --dataset_name squad_v2 \
+    --dataset_name rajpurkar/squad_v2 \
     --do_train \
     --do_eval \
     --version_2_with_negative \
@@ -112,7 +112,7 @@ This example code fine-tunes T5 on the SQuAD2.0 dataset.
 ```bash
 python run_seq2seq_qa.py \
   --model_name_or_path google-t5/t5-small \
-  --dataset_name squad_v2 \
+  --dataset_name rajpurkar/squad_v2 \
   --context_column context \
   --question_column question \
   --answer_column answers \
@@ -144,7 +144,7 @@ then
 ```bash
 python run_qa_no_trainer.py \
   --model_name_or_path google-bert/bert-base-uncased \
-  --dataset_name squad \
+  --dataset_name rajpurkar/squad \
   --max_seq_length 384 \
   --doc_stride 128 \
   --output_dir ~/tmp/debug_squad
@@ -167,7 +167,7 @@ that will check everything is ready for training. Finally, you can launch traini
 ```bash
 accelerate launch run_qa_no_trainer.py \
   --model_name_or_path google-bert/bert-base-uncased \
-  --dataset_name squad \
+  --dataset_name rajpurkar/squad \
   --max_seq_length 384 \
   --doc_stride 128 \
   --output_dir ~/tmp/debug_squad

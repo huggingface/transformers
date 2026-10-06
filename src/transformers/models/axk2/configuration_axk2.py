@@ -99,6 +99,7 @@ class AXK2Config(PreTrainedConfig):
     num_key_value_heads: int = 32
     n_shared_experts: int = 1
     n_routed_experts: int = 128
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 128
     q_lora_rank: int = 384
@@ -148,7 +149,7 @@ class AXK2Config(PreTrainedConfig):
 
         # Indexer cache needed so DSA to indicate correct cache
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
 
         super().__post_init__(**kwargs)
 
