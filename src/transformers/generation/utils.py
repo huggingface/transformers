@@ -373,17 +373,6 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
     return (input_ids[..., :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
 
-def _move_to_device(value, device: torch.device):
-    """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto `device`."""
-    if isinstance(value, torch.Tensor):
-        return value.to(device)
-    if isinstance(value, dict):
-        return {k: _move_to_device(v, device) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return type(value)(_move_to_device(v, device) for v in value)
-    return value
-
-
 class StopCheck:
     """
     Decides when the decoding loop should stop, and hands each new token to a streamer.
@@ -784,9 +773,19 @@ class GenerationMixin(ContinuousMixin):
         # the generation loop's growing-tensor bookkeeping stays off-device.
         input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds
         if self.device.type != "meta" and input_tensor is not None and input_tensor.device != self.device:
-            model_inputs = _move_to_device(model_inputs, self.device)
+            model_inputs = self._move_to_device(model_inputs)
 
         return model_inputs
+
+    def _move_to_device(self: "GenerativePreTrainedModel", value):
+        """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto the model device."""
+        if isinstance(value, torch.Tensor):
+            return value.to(self.device)
+        if isinstance(value, dict):
+            return {k: self._move_to_device(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return type(value)(self._move_to_device(v) for v in value)
+        return value
 
     def _prepare_model_inputs(
         self: "GenerativePreTrainedModel",
