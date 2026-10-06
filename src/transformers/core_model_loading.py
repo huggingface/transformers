@@ -359,6 +359,48 @@ class Transpose(ConversionOps):
         return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
 
 
+class Unsqueeze(ConversionOps):
+    """Adds a singleton dimension to a tensor."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) != 1 or len(target_patterns) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+        return {target_patterns[0]: tensor.unsqueeze(self.dim)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Squeeze(self.dim)
+
+
+class Squeeze(ConversionOps):
+    """Removes a singleton dimension from a tensor."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) != 1 or len(target_patterns) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+        return {target_patterns[0]: tensor.squeeze(self.dim)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Unsqueeze(self.dim)
+
+
 class Conv3dToLinear(ConversionOps):
     """Conv3d weights → flattened Linear layout."""
 
