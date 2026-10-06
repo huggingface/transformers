@@ -25,6 +25,7 @@ from transformers import (
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -242,7 +243,7 @@ class GteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class GteModelIntegrationTest(unittest.TestCase):
+class GteModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     sentences = ["Plants create oxygen.", "Photosynthesis is a process where plants create oxygen."]
 
     @slow
