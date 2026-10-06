@@ -211,6 +211,13 @@ class ZayaCCAProjection(nn.Module):
         if conv_mask is not None:
             hidden_states = hidden_states * conv_mask[:, :, None].to(hidden_states.dtype)
 
+        # Retrieve conv state if there is a cache. It may be None if the layer is not initialized.
+        if past_key_values is None:
+            cached_qk_states = None
+        else:
+            cached_qk_states = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_v_state = past_key_values.get_recurrent_state(self.layer_idx, state_idx=0)
+
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -225,9 +232,7 @@ class ZayaCCAProjection(nn.Module):
         key_residual = query_residual.view(*input_shape, -1, self.num_key_value_groups, self.head_dim).mean(dim=-2)
 
         qk_states = qk_states.transpose(1, 2)
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
-            cached_qk_states = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+        if cached_qk_states is not None:
             qk_states = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             qk_states = F.pad(qk_states, (self.conv_kernel_size, 0))
@@ -248,8 +253,8 @@ class ZayaCCAProjection(nn.Module):
         # During cached decoding, `recurrent_v_state` is the previous token's delayed projection.
         value_current = self.v_proj_current(hidden_states)
         delayed_v_state = self.v_proj_delayed(hidden_states)
-        if use_precomputed_states:
-            recurrent_v_state = past_key_values.get_recurrent_state(self.layer_idx, state_idx=0).unsqueeze(1)
+        if recurrent_v_state is not None:
+            recurrent_v_state = recurrent_v_state.unsqueeze(1)
         else:
             recurrent_v_state = self.v_proj_delayed(hidden_states.new_zeros(input_shape[0], 1, self.hidden_size))
         value_delayed = torch.cat([recurrent_v_state, delayed_v_state[:, :-1]], dim=1)
