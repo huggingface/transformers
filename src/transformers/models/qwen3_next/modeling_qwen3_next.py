@@ -662,11 +662,11 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         # Set up dimensions for reshapes later
         seq_len = hidden_states.shape[1]
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is None:
-            conv_state, recurrent_state = None, None
-        else:
+        if cache_params is not None:
             conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         projected_states_qkvz = self.in_proj_qkvz(hidden_states)
         projected_states_ba = self.in_proj_ba(hidden_states)
