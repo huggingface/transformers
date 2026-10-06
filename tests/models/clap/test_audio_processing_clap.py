@@ -12,6 +12,7 @@ from __future__ import annotations
 import unittest
 
 import numpy as np
+from huggingface_hub.errors import StrictDataclassFieldValidationError
 
 from transformers.testing_utils import require_torch
 
@@ -38,23 +39,32 @@ class ClapAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
         self.audio_processor_tester = ClapAudioProcessingTester()
         super().setUp()
 
-    def test_fusion_initializes_nested_dict_config(self):
+    def test_legacy_fusion_config_names_its_mel_bank(self):
+        # A legacy fusion config implies torchaudio-default mels; the mapping writes that bank into
+        # the config once, at load. The mode alone never changes the bank.
         for processor_class in self.audio_processing_classes.values():
             with self.subTest(processor_class=processor_class):
-                processor = processor_class(truncation_mode="fusion")
+                processor = processor_class.from_dict({"truncation": "fusion"})
                 mel_config = processor.spectrogram_config.mel_scale_config
+                self.assertEqual(processor.truncation_mode, "fusion")
                 self.assertEqual(mel_config.mel_scale, "htk")
                 self.assertIsNone(mel_config.norm)
                 self.assertEqual(processor.mel_filters.shape[-1], mel_config.n_mels)
-                self.assertEqual(processor_class().spectrogram_config.mel_scale_config.norm, "slaney")
+                restored = processor_class.from_dict(processor.to_dict())
+                self.assertEqual(restored.spectrogram_config.mel_scale_config.mel_scale, "htk")
+                self.assertEqual(
+                    processor_class(truncation_mode="fusion").spectrogram_config.mel_scale_config.norm, "slaney"
+                )
 
-    def test_mode_switching_keeps_config_and_outputs_local(self):
+    def test_mode_switching_keeps_config_and_bank_local(self):
         waveform = np.random.RandomState(0).randn(12000).astype(np.float32)
         for processor_class in self.audio_processing_classes.values():
             processor = processor_class(max_length=4800)
             initial_config = processor.to_dict()
             for mode in ("fusion", "rand_trunc", "fusion"):
                 with self.subTest(processor_class=processor_class, mode=mode):
+                    # Same bank as the instance, so a per-call switch equals a processor configured
+                    # with that mode on the same bank.
                     reference = processor_class(max_length=4800, truncation_mode=mode)
                     np.random.seed(7)
                     expected = reference(waveform, return_tensors="np")
@@ -87,7 +97,8 @@ class ClapAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
             processor = processor_class(max_length=4800)
             for kwargs in incompatible:
                 with self.subTest(processor_class=processor_class, kwargs=kwargs):
-                    with self.assertRaises(ValueError):
+                    # Schema violations (`Literal`, `Annotated`) surface as the hub's strict-dataclass error.
+                    with self.assertRaises((ValueError, StrictDataclassFieldValidationError)):
                         processor(waveform, **kwargs)
 
     def test_custom_workflow_inherits_common_schema(self):

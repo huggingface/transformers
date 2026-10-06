@@ -14,6 +14,7 @@
 
 import math
 import warnings
+from dataclasses import fields
 from typing import TYPE_CHECKING, Any, Unpack
 
 from huggingface_hub.dataclasses import validate_typed_dict
@@ -135,8 +136,33 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _serialize_value(self, key, value):
         if key == "spectrogram_config" and hasattr(value, "to_dict"):
-            return value.to_dict()
+            return self._serialize_spectrogram_config(value)
         return value
+
+    def _serialize_spectrogram_config(self, config: SpectrogramConfig) -> dict:
+        """`to_dict` plus the nested analogue of `_keep_in_dict`: a `None` that overrides a non-`None`
+        class default is kept as an explicit `null`, otherwise `from_dict` merges the saved config onto
+        the class default and silently restores the value the instance had turned off (CLAP's fusion
+        bank has `norm: None` where the class says `"slaney"`)."""
+        serialized = config.to_dict()
+        default = getattr(type(self), "spectrogram_config", None)
+        if default is None:
+            return serialized
+        if isinstance(default, dict):
+            default = SpectrogramConfig.from_dict(default)
+        for name in ("stft_config", "mel_scale_config"):
+            nested, nested_default = getattr(config, name), getattr(default, name)
+            if nested is None or nested_default is None:
+                continue
+            for f in fields(nested):
+                if getattr(nested, f.name) is None and getattr(nested_default, f.name) is not None:
+                    serialized.setdefault(name, {})[f.name] = None
+        for f in fields(config):
+            if f.name in ("stft_config", "mel_scale_config"):
+                continue
+            if getattr(config, f.name) is None and getattr(default, f.name) is not None:
+                serialized[f.name] = None
+        return serialized
 
     def __call__(self, audio: str | list[str] | AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         is_audio_reference = isinstance(audio, str) or (
@@ -181,15 +207,16 @@ class BaseAudioProcessor(AudioProcessingMixin):
         # Placement is a batch step, not a per-waveform hook: `_prepare_waveform` overrides need not
         # remember to forward `device`, and the whole batch crosses to the device in one transfer.
         audio = self._to_device([self._downmix_to_mono(audio_el) for audio_el in audio], device)
-        audio = [self._prepare_waveform(audio_el, **kwargs) for audio_el in audio]
-        # Resample last, so `_resample` always sees a mono waveform in the backend's own array type.
+        # Resample before `_prepare_waveform`, so a hook that reasons in samples (a minimum length, a
+        # reflect multiple, a fill to a clip length) sees the native rate; `_resample` sees a mono
+        # waveform in the backend's own array type either way.
         if sampling_rate != self.sampling_rate:
             logger.warning_once(
                 f"Resampling audio from {sampling_rate} Hz to {self.__class__.__name__}'s native sampling rate "
                 f"of {self.sampling_rate} Hz. Pass audio already sampled at {self.sampling_rate} Hz to skip this."
             )
             audio = [self._resample(audio_el, sampling_rate, self.sampling_rate) for audio_el in audio]
-        return audio
+        return [self._prepare_waveform(audio_el, **kwargs) for audio_el in audio]
 
     def _prepare_audio_structure(self, audio: AudioInput, sampling_rate: int | None = None) -> tuple[list, int]:
         """Resolve `audio` to a list of waveforms, plus the rate those waveforms are actually at.

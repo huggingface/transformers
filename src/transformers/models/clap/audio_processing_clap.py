@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import replace
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import AudioProcessingMixin, BatchFeature
-from ...audio_utils import SpectrogramConfig
+from ...audio_processing_base import BatchFeature
 from ...processing_utils import AudioKwargs
-from ...utils import PaddingStrategy, TensorType
+from ...utils import PaddingStrategy
 
 
 # CLAP always fills clips to `max_length`, so `padding` cannot name a length strategy other than
@@ -37,10 +35,25 @@ def clap_padding_validator(value: bool | str | PaddingStrategy | None = None):
         )
 
 
+def _clap_truncation_to_mode_and_mel_bank(value, config_dict):
+    # Legacy configs name the mode `truncation` and carry no mel-bank description; the bank was
+    # implied by the mode. Fusion checkpoints were trained on torchaudio-default mels (htk scale,
+    # no norm), the others on librosa defaults (slaney/slaney, the class default). State the bank
+    # once, at load, so the processor never re-derives it: the config decides which bank exists.
+    config_dict.setdefault("truncation_mode", value)
+    if value == "fusion":
+        mel = config_dict.setdefault("spectrogram_config", {}).setdefault("mel_scale_config", {})
+        mel.setdefault("mel_scale", "htk")
+        mel.setdefault("norm", None)
+
+
+_clap_truncation_to_mode_and_mel_bank.legacy_target = "truncation_mode"
+
+
 class ClapAudioProcessorKwargs(AudioKwargs, total=False):
     r"""
     spectrogram_config (`dict` or [`~audio_utils.SpectrogramConfig`], *optional*):
-        STFT and mel geometry. The truncation mode selects the mel scale and normalization.
+        STFT and mel geometry, including which mel bank the checkpoint was trained with.
     max_length (`int`, *optional*, defaults to 480000):
         Target clip length in waveform samples.
     dither (`float`, *optional*, defaults to 0.0):
@@ -60,13 +73,20 @@ class ClapAudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class ClapAudioProcessorMixin:
+    """CLAP's HTSAT encoder consumes a fixed 1001 x 64 log-mel image: 10 s at 48 kHz, hop 480.
+
+    `_preprocess` makes one from any clip. A short clip is filled to the clip length (tiled, then
+    zero-filled). A long clip follows the checkpoint's mode: `rand_trunc` mels a random 10 s
+    window, `fusion` mels the whole clip and returns four views of it (a bilinear shrink plus three
+    random crops). `is_longer` flags the clips whose fusion crops are real.
+    """
+
     sampling_rate = 48000
     max_length = 480000
     return_padding_mask = False
-    # Released checkpoints tile short audio (`padding_mode="repeatpad"`). In `rand_trunc` mode HTSAT
-    # mels the waveform itself with librosa defaults (slaney scale, slaney norm); `fusion`
-    # checkpoints were trained on precomputed torchaudio-default mels (htk scale, no norm), which
-    # `_set_attributes` swaps in.
+    # Released checkpoints tile short audio (`padding_mode="repeatpad"`). The mel bank is the
+    # checkpoint's: librosa defaults (slaney scale, slaney norm) below; fusion checkpoints carry
+    # torchaudio defaults (htk, no norm) in their config, written there by the legacy mapping.
     spectrogram_config = {
         "stft_config": {"n_fft": 1024, "hop_length": 480, "power": 2.0, "fft_dtype": "complex64"},
         "mel_scale_config": {
@@ -86,7 +106,7 @@ class ClapAudioProcessorMixin:
         # Hub configs spell these `padding`/`truncation`; the modern names are the CLAP-specific
         # `padding_mode`/`truncation_mode`, leaving `padding`/`truncation` their base meaning.
         "padding": "padding_mode",
-        "truncation": "truncation_mode",
+        "truncation": _clap_truncation_to_mode_and_mel_bank,
         "top_db": "spectrogram_config.floor_below_peak",
         # The original CLAP recipe always zero-fills and emits is_longer rather than a mask.
         "padding_value": None,
@@ -95,104 +115,68 @@ class ClapAudioProcessorMixin:
         "max_length_s": None,
     }
     extra_model_input_names = ["is_longer"]
-    _excluded_dict_keys = AudioProcessingMixin._excluded_dict_keys | {"_clap_mel_bank"}
 
     truncation_mode = "rand_trunc"
     padding_mode = "repeatpad"
     valid_kwargs = ClapAudioProcessorKwargs
 
-    def _set_attributes(self, **kwargs):
-        super()._set_attributes(**kwargs)
-        if self.truncation_mode == "fusion":
-            mel_scale_config = replace(self.spectrogram_config.mel_scale_config, mel_scale="htk", norm=None)
-            self.spectrogram_config = replace(self.spectrogram_config, mel_scale_config=mel_scale_config)
-            self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
-        self._clap_mel_bank = (self.spectrogram_config, self.mel_filters)
+    def _standardize_kwargs(self, **kwargs):
+        kwargs = super()._standardize_kwargs(**kwargs)
+        # Legacy call spelling: `padding` naming the fill method rather than a length strategy.
+        if kwargs.get("padding") in ("repeatpad", "repeat", "pad"):
+            kwargs["padding_mode"] = kwargs["padding"]
+            kwargs["padding"] = True
+        return kwargs
 
     def _preprocess(
-        self,
-        audio: list[torch.Tensor] | list[np.ndarray],
-        truncation_mode: str,
-        padding_mode: str,
-        max_length: int,
-        spectrogram_config: SpectrogramConfig,
-        return_tensors: str | TensorType | None,
-        padding: bool | str | PaddingStrategy,
-        **kwargs: Any,
-    ) -> BatchFeature:
-        """CLAP's two recipes: crop waveforms for one view, or fuse full-clip mels into four views.
-
-        Each clip returns its features and metadata together. The backend handles the numerical
-        extraction; CLAP owns the order of cropping, filling, extraction and view construction.
-        """
-        if padding in ("repeatpad", "repeat", "pad"):
-            padding_mode = padding
-        # The original extractor chooses its filter bank by the *call's* mode. Keep that choice
-        # local, including when a caller switches modes or supplies a spectrogram config.
-        mel_scale, norm = ("htk", None) if truncation_mode == "fusion" else ("slaney", "slaney")
-        mel_config = spectrogram_config.mel_scale_config
-        if mel_config is None:
-            raise ValueError("CLAP requires a mel-scale configuration.")
-        if mel_config.mel_scale != mel_scale or mel_config.norm != norm:
-            spectrogram_config = replace(
-                spectrogram_config, mel_scale_config=replace(mel_config, mel_scale=mel_scale, norm=norm)
-            )
-        cached_config, cached_filters = self._clap_mel_bank
-        mel_filters = (
-            cached_filters if spectrogram_config is cached_config else self._mel_filter_bank(spectrogram_config)
-        )
+        self, audio, *, max_length, truncation_mode, padding_mode, spectrogram_config, return_tensors, **kwargs
+    ):
+        chunk_frames = max_length // spectrogram_config.stft_config.hop_length + 1
         features, is_longer = [], []
         for waveform in audio:
-            views, longer = self._get_input_mel(
-                waveform,
-                max_length=max_length,
-                truncation_mode=truncation_mode,
-                padding_mode=padding_mode,
-                spectrogram_config=spectrogram_config,
-                mel_filters=mel_filters,
-                **kwargs,
-            )
-            features.append(views)
+            longer = waveform.shape[-1] > max_length
+            if longer and truncation_mode == "rand_trunc":
+                waveform = self._random_window(waveform, max_length)
+            else:
+                waveform = self._fill(waveform, max_length, padding_mode)
+            mel = self.spectrogram(waveform, spectrogram_config=spectrogram_config, **kwargs)
+            if truncation_mode == "fusion":
+                mel, longer = self._fusion_views(mel, chunk_frames)
+            else:
+                mel = mel[None]
+            features.append(mel)
             is_longer.append(longer)
-
-        # HTSAT's fusion path expects at least one selected clip even in an all-short batch.
         if truncation_mode == "fusion" and not any(is_longer):
+            # HTSAT's fusion path expects at least one selected clip even in an all-short batch.
             is_longer[np.random.randint(0, len(is_longer))] = True
         return BatchFeature(
-            {"audio_features": features, "is_longer": [[longer] for longer in is_longer]},
+            {"audio_features": self._stack(features), "is_longer": [[longer] for longer in is_longer]},
             tensor_type=return_tensors,
         )
 
-    def _get_input_mel(self, waveform, *, max_length, truncation_mode, padding_mode, spectrogram_config, **kwargs):
-        """Return one clip's mel views and fusion/cropping metadata without storing call state."""
-        length = waveform.shape[-1]
-        if length == 0:
-            raise ValueError("CLAP requires a non-empty waveform.")
-        longer = length > max_length
-        if longer and truncation_mode == "rand_trunc":
-            start = np.random.randint(0, length - max_length + 1)
-            waveform = waveform[start : start + max_length]
-        elif length < max_length:
-            if padding_mode in ("repeat", "repeatpad"):
-                repeats = max_length // length + (padding_mode == "repeat")
-                waveform = self._concat_last([waveform] * repeats)[:max_length]
-            waveform = self._pad_axis(waveform, 0, max_length - waveform.shape[-1], axis=-1, value=0.0)
+    def _random_window(self, waveform, max_length):
+        start = np.random.randint(0, waveform.shape[-1] - max_length + 1)
+        return waveform[..., start : start + max_length]
 
-        mel = super().spectrogram(waveform, spectrogram_config=spectrogram_config, **kwargs)
-        if truncation_mode == "rand_trunc":
-            return mel[None], longer
-        chunk_frames = max_length // spectrogram_config.stft_config.hop_length + 1
-        # An overlong waveform can still fit in the same number of mel frames.
+    def _fill(self, waveform, max_length, padding_mode):
+        """Bring a short clip to `max_length`: tile it (`repeat`, `repeatpad`), then zero-fill."""
+        length = waveform.shape[-1]
+        if length >= max_length:
+            return waveform
+        if padding_mode in ("repeat", "repeatpad"):
+            repeats = max_length // length + (padding_mode == "repeat")
+            waveform = self._concat_last([waveform] * repeats)[..., :max_length]
+        return self._pad_axis(waveform, 0, max_length - waveform.shape[-1], axis=-1, value=0.0)
+
+    def _fusion_views(self, mel, chunk_frames):
+        """Four `chunk_frames` views of a whole-clip mel, and whether the crops are real."""
+        # An overlong clip can still fit in `chunk_frames`; it is then shown four times, unfused.
         if mel.shape[0] <= chunk_frames:
             return self._stack([mel] * 4), False
-        return self._random_mel_fusion(mel, chunk_frames), True
-
-    def _random_mel_fusion(self, mel, chunk_frames):
-        """A bilinear shrink of the whole mel plus three random `chunk_frames` crops (front, middle, back)."""
         ranges = np.array_split(list(range(0, mel.shape[0] - chunk_frames + 1)), 3)
         starts = [np.random.choice(r if len(r) else [0]) for r in ranges]
         crops = [mel[start : start + chunk_frames] for start in starts]
-        return self._stack([self._bilinear_shrink(mel, chunk_frames)] + crops)
+        return self._stack([self._bilinear_shrink(mel, chunk_frames)] + crops), True
 
     def _bilinear_shrink(self, mel, chunk_frames):
         mel_tensor = torch.as_tensor(mel)[None, None]
