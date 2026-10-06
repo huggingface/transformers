@@ -26,8 +26,8 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
 from urllib.parse import urlparse
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 from packaging import version
 
 from .utils import (

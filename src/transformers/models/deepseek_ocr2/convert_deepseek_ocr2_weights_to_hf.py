@@ -132,7 +132,7 @@ def convert_weights(input_dir: str, output_dir: str, hub_repo_id: str | None = N
     os.makedirs(output_dir, exist_ok=True)
 
     # Config
-    with open(os.path.join(input_dir, "config.json")) as f:
+    with open(os.path.join(input_dir, "config.json"), encoding="utf-8") as f:
         raw_config = json.load(f)
 
     config = DeepseekOcr2Config.from_dict(convert_config(raw_config))
@@ -218,7 +218,7 @@ def main():
 
     Usage:
         # Step 1: Download the original checkpoint
-        huggingface-cli download deepseek-ai/DeepSeek-OCR-2 --local-dir /path/to/DeepSeek-OCR-2
+        hf download deepseek-ai/DeepSeek-OCR-2 --local-dir /path/to/DeepSeek-OCR-2
 
         # Step 2: Convert to native transformers format
         python convert_deepseek_ocr2_weights_to_hf.py \\

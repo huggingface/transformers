@@ -227,7 +227,7 @@ _WEIGHT_KEY_DROPS = (
 
 
 def _read_json(directory: str) -> dict:
-    with open(os.path.join(directory, "config.json")) as f:
+    with open(os.path.join(directory, "config.json"), encoding="utf-8") as f:
         return json.load(f)
 
 

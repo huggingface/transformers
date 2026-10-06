@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -23,7 +22,6 @@ from parameterized import parameterized
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
-    backend_empty_cache,
     get_device_properties,
     require_accelerate,
     require_torch_accelerator,
@@ -34,6 +32,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -83,7 +83,7 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
     and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
     "Skipping FP8QuantizerTest because it is not supported on GPU with capability < 8.9",
 )
-class FP8QuantizerTest(unittest.TestCase):
+class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
     quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
@@ -122,24 +122,12 @@ class FP8QuantizerTest(unittest.TestCase):
         """
         Setup quantized model
         """
+        super().setUpClass()
         cls.quantization_config = FineGrainedFP8Config()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
         )
-
-    def setup(self):
-        """
-        Clear also on each setup (e.g. if a different model is used than the base cls one)
-        """
-        gc.collect()
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @parameterized.expand(
         [

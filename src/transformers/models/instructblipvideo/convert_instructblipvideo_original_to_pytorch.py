@@ -20,8 +20,8 @@ URL: https://github.com/salesforce/LAVIS/tree/main/projects/instructblipvideo
 import argparse
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub.utils import httpx
 
 # pip3 install salesforce-lavis
 # I'm actually installing a slightly modified version: pip3 install git+https://github.com/nielsrogge/LAVIS.git@fix_lavis_float32 (there's also the fix_lavis branch)

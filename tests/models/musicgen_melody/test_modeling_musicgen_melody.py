@@ -33,7 +33,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     get_device_properties,
     is_torch_available,
     is_torchaudio_available,
@@ -49,6 +48,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -1046,16 +1046,10 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 
 @require_torch
 @require_torchaudio
-class MusicgenMelodyIntegrationTests(unittest.TestCase):
+class MusicgenMelodyIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def processor(self):
@@ -1310,7 +1304,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
 
 @require_torch
 @require_torchaudio
-class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
+class MusicgenMelodyStereoIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-stereo-melody").to(

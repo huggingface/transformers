@@ -17,12 +17,10 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
-from ...test_processing_common import url_to_local_path
 
 
 if is_vision_available():
@@ -34,62 +32,17 @@ if is_torch_available():
 
 
 class Idefics3ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=40,
-        do_resize=True,
-        size=None,
-        max_image_size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-        do_pad=True,
-        do_image_splitting=True,
-        resample=PILImageResampling.LANCZOS,
-    ):
-        self.size = size if size is not None else {"longest_edge": max_resolution}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.num_images = num_images
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.resample = resample
-        self.do_image_splitting = do_image_splitting
-        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 20}
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.do_pad = do_pad
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_resolution", 40)
+        kwargs.setdefault("num_images", 1)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "max_image_size": self.max_image_size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_pad": self.do_pad,
-            "do_image_splitting": self.do_image_splitting,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("do_image_splitting", True)
+        kwargs.setdefault("size", {"longest_edge": 40})
+        kwargs.setdefault("max_image_size", {"longest_edge": 20})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         effective_nb_images = (
@@ -159,30 +112,7 @@ class Idefics3ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Idefics3ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "resample"))
-            self.assertTrue(hasattr(image_processing, "do_image_splitting"))
-            self.assertTrue(hasattr(image_processing, "max_image_size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "do_image_splitting"))
+    image_processor_tester_class = Idefics3ImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -276,77 +206,6 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 tuple(encoded_images.shape),
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
-
-    @require_vision
-    @require_torch
-    def test_backends_equivalence(self):
-        """Override base class test to also compare rows and cols."""
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
-
-        dummy_image = load_image(
-            url_to_local_path(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-            )
-        )
-        dummy_image = dummy_image.resize((100, 150))
-
-        encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
-            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt", return_row_col_info=True)
-
-        backend_names = list(encodings.keys())
-        reference_backend = backend_names[0]
-        for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(
-                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
-            )
-            self._assert_tensors_equivalence(
-                encodings[reference_backend].pixel_attention_mask.float(),
-                encodings[backend_name].pixel_attention_mask.float(),
-            )
-            self.assertEqual(encodings[reference_backend].rows, encodings[backend_name].rows)
-            self.assertEqual(encodings[reference_backend].cols, encodings[backend_name].cols)
-
-    @require_vision
-    @require_torch
-    def test_backends_equivalence_batched(self):
-        """Override base class test to use BICUBIC resample and also compare rows and cols."""
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
-
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
-            )
-
-        dummy_images = self.image_processor_tester.prepare_image_inputs(
-            equal_resolution=False, num_images=5, torchify=True
-        )
-        # pop some images to have non homogenous batches:
-        indices_to_pop = [i if np.random.random() < 0.5 else None for i in range(len(dummy_images))]
-        for i in indices_to_pop:
-            if i is not None:
-                dummy_images[i].pop()
-
-        encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
-            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt", return_row_col_info=True)
-
-        backend_names = list(encodings.keys())
-        reference_backend = backend_names[0]
-        for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(
-                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values, atol=3e-1
-            )
-            self._assert_tensors_equivalence(
-                encodings[reference_backend].pixel_attention_mask.float(),
-                encodings[backend_name].pixel_attention_mask.float(),
-            )
-            self.assertEqual(encodings[reference_backend].rows, encodings[backend_name].rows)
-            self.assertEqual(encodings[reference_backend].cols, encodings[backend_name].cols)
 
     def test_get_num_patches_without_images(self):
         for image_processing_class in self.image_processing_classes.values():

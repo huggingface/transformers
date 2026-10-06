@@ -110,12 +110,6 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip(
-        "Gemma3 has no base model prefix which causes issues when loading base model from saved task model checkpoint"
-    )
-    def test_load_with_mismatched_shapes(self):
-        pass
-
     def test_bidirectional_sliding_window_survives_save_and_reload(self):
         config = Gemma3TextConfig(sliding_window=512, use_bidirectional_attention=True)
         self.assertEqual(config.sliding_window, 257)
@@ -201,7 +195,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         # Gemma3 uses padding mask for bidirectional attention on image tokens
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_id] = 1
@@ -223,6 +217,53 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+
+    @parameterized.expand([(2, False), (3, False), (2, True), (3, True)])
+    def test_generate_preserves_multi_image_groups(self, expand_size, do_sample):
+        """Compare expanded preencoded image groups with independently expanded raw-image inputs."""
+        set_seed(42)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        with torch.no_grad():
+            # Gemma3 initializes this projector to zero, so all images would have identical features.
+            # Nonzero weights are needed to detect incorrect image ordering, not just shape mismatches.
+            model.model.multi_modal_projector.mm_input_projection_weight.normal_(
+                std=config.text_config.initializer_range
+            )
+
+        # Create input with two images per sample from inputs where each sample has only one image
+        inputs = {
+            key: inputs_dict[key][:2].reshape(1, -1) for key in ["input_ids", "attention_mask", "token_type_ids"]
+        }
+        inputs["pixel_values"] = inputs_dict["pixel_values"][:2]
+        reference_inputs = {
+            key: inputs[key].repeat_interleave(expand_size, dim=0)
+            for key in ["input_ids", "attention_mask", "token_type_ids"]
+        }
+        reference_inputs["pixel_values"] = inputs["pixel_values"].repeat(expand_size, 1, 1, 1)
+        generation_kwargs = {
+            "max_new_tokens": 1,
+            "eos_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        with torch.no_grad():
+            reference = model.generate(**reference_inputs, do_sample=False, **generation_kwargs)
+            image_outputs = model.get_image_features(pixel_values=inputs.pop("pixel_values"), return_dict=True)
+            self.assertFalse(torch.equal(image_outputs.pooler_output[0], image_outputs.pooler_output[1]))
+
+            expected_image_features = image_outputs.pooler_output.repeat(expand_size, 1, 1)
+            inputs["mm_encoder_outputs"] = {"image": image_outputs}
+            outputs = model.generate(
+                **inputs,
+                num_beams=1 if do_sample else expand_size,
+                num_return_sequences=expand_size,
+                do_sample=do_sample,
+                **generation_kwargs,
+            )
+        # Image ouptut are expanded in-place as we passed it to generation with beam-search
+        torch.testing.assert_close(image_outputs.pooler_output, expected_image_features, rtol=0, atol=0)
+        torch.testing.assert_close(outputs.logits[0], reference.logits[0], rtol=1e-4, atol=1e-5)
 
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
@@ -309,10 +350,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
-
-    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
-    def test_load_with_mismatched_shapes(self):
-        pass
 
     def test_automodelforcausallm(self):
         """
@@ -524,7 +561,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                         ],
                 ("cuda", (8,6)):
                     [
-                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with turquoise water and a blue sky in the background. It looks like a',
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
                         "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown"
                     ],
                 ("rocm", (9, 4)):
@@ -644,7 +681,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                     'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a'
                     ],
                 ("cuda", (8, 6)): [
-                    "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There\u2019s a bright blue sky with some white clouds in the",
+                    "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the",
                     'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a'
                 ],
                 ("rocm", (9, 4)) : [
@@ -721,7 +758,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
-                ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data streams, a boundless flow,\nA silent world, where patterns grow.\nAlgorithms hum, a watchful eye,\nLearning'],
+                ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("rocm", 9): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
             }
         )  # fmt: skip

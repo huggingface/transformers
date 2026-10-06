@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     CaptureStdout,
     Expectations,
-    cleanup,
     require_deterministic_for_xpu,
     require_torch,
     slow,
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -871,14 +871,8 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
 
 
 @require_torch
-class DiffusionGemmaIntegrationTest(unittest.TestCase):
+class DiffusionGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     _model_path = "google/diffusiongemma-26B-A4B-it"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_diffusion_gemma_chat_template(self):

@@ -14,8 +14,12 @@
 
 import json
 import os
+import warnings
 from dataclasses import asdict, dataclass
 from typing import Literal
+
+from ..utils import is_torch_greater_or_equal
+from .utils import _get_torch_distributed_rank
 
 
 @dataclass
@@ -29,11 +33,13 @@ class DistributedConfig:
             `WORLD_SIZE // (other_parallel_size)`. If `None` and no `tp_plan` is set, defaults to 1.
         tp_plan (`dict[str, str]` or `"auto"`, *optional*):
             Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
-            model's predefined `base_model_tp_plan`. Pass a dictionary to override the predefined plan.
+            model's predefined `base_model_tp_plan`. Pass a dictionary to override individual rules of that plan;
+            unspecified rules are kept.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
-            Route MoE models through the expert-parallel path (``base_model_ep_plan``).
+            Deprecated alias for `ep_size=tp_size` when `ep_size` is omitted, removed in v5.20. An explicit
+            `ep_size` takes precedence. This flag does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -42,6 +48,15 @@ class DistributedConfig:
             Whether to enable mixed precision for FSDP2.
         pp_size (`int`, *optional*):
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
+        ep_size (`int`, *optional*):
+            Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
+            a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
+            `ep_size=tp_size`; token dispatch (`"ep_dispatch_experts"`) also allows `ep_size > tp_size`.
+        ep_plan (`dict[str, str]`, *optional*):
+            Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
+            dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
+            `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
+            `"ep_dispatch_experts"` rule selects all-to-all token dispatch instead of router masking and all-reduce.
     """
 
     tp_size: int | None = None
@@ -52,10 +67,41 @@ class DistributedConfig:
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
+    ep_size: int | None = None
+    ep_plan: dict[str, str] | None = None
+
+    @property
+    def efsdp_size(self) -> int:
+        """
+        The number of ranks that own the same experts and FSDP-shard them between each other.
+        Dense and expert parameters are laid out over the same world size:
+
+            pp x fsdp x tp == pp x efsdp x ep   =>   efsdp = fsdp x tp // ep
+
+        Experts are not tensor-parallel, so EP and expert-FSDP together cover all the ranks that
+        dense parameters split between FSDP and TP. Example with 16 ranks, ep=8:
+
+            ep groups    : {0..7} {8..15}          the 8 ranks of a group together hold all experts
+                                                   (num_experts / 8 each), tokens are routed within it
+            efsdp groups : {0,8} {1,9} ... {7,15}  each pair holds the same experts, FSDP-sharded
+                                                   on dim 0 (the expert dim) and all-gathered for compute
+
+        - ep == tp       : efsdp == fsdp
+        - ep == fsdp * tp: efsdp == 1, every expert lives whole on a single rank
+
+        Sharding over `efsdp` is applied by the EP token-dispatch path (`ep_dispatch_experts`).
+        """
+        return self.fsdp_size * self.tp_size // self.ep_size
 
     def __post_init__(self):
-        if self.tp_plan is None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
-            return
+        self._resolve_parallelism()
+        self._validate_mesh_config()
+
+    def _resolve_parallelism(self):
+        """Resolve parallel sizes and legacy EP settings."""
+        for value in (self.tp_size, self.fsdp_size, self.pp_size, self.ep_size):
+            if value is not None and value < 1:
+                raise ValueError(f"Parallelism sizes must be >= 1, got {value}.")
 
         if self.fsdp_size is None:
             self.fsdp_size = 1
@@ -73,11 +119,51 @@ class DistributedConfig:
         elif self.tp_size is None:
             self.tp_size = 1
 
-        if self.tp_size > 1 and self.fsdp_size > 1 and self.pp_size > 1:
+        if self.enable_expert_parallel and self.ep_size is None:
+            self.ep_size = self.tp_size
+            if _get_torch_distributed_rank() == 0:
+                warnings.warn(
+                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
+                    f"Use ep_size={self.ep_size} instead.",
+                    FutureWarning,
+                    stacklevel=4,
+                )
+
+        if self.ep_size is None:
+            self.ep_size = 1
+        # Retain the legacy attribute for callers; internal EP decisions use ep_size.
+        self.enable_expert_parallel = self.ep_size > 1
+
+    def _validate_mesh_config(self):
+        """Validate mesh sizes before the model's expert plan is available."""
+        if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
+            raise ValueError("`ep_plan` must be a dictionary or None.")
+
+        if self.ep_size > 1:
+            if self.ep_size % self.tp_size:
+                raise ValueError("`ep_size` must be a multiple of `tp_size`.")
+            if (self.fsdp_size * self.tp_size) % self.ep_size:
+                raise ValueError("`ep_size` must divide `fsdp_size * tp_size`.")
+
+        if self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(
-                "FSDP+TP+PP is not supported yet. "
-                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N) or DistributedConfig(pp_size=N), not all three. "
-                "Only 1D support is available for now."
+                "Combining FSDP with pipeline parallelism is not supported yet. "
+                "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
+            )
+
+    def _validate_resolved_ep_plan(self, ep_plan: dict[str, str]):
+        """Validate the layout against the resolved EP plan, once the model's defaults and overrides are merged."""
+        if self.ep_size <= 1 or not ep_plan:
+            return
+
+        if "ep_dispatch_experts" in ep_plan.values():
+            if self.pp_size > 1:
+                raise ValueError("Combining token dispatch with pipeline parallelism is not supported/tested yet.")
+            if not is_torch_greater_or_equal("2.7"):
+                raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
+        elif {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()) and self.ep_size != self.tp_size:
+            raise ValueError(
+                "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
             )
 
     @classmethod

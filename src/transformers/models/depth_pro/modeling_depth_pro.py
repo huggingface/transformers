@@ -648,7 +648,7 @@ class DepthProModel(DepthProPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, DepthProModel
 
@@ -1028,16 +1028,13 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthProDepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, DepthProForDepthEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
