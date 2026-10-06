@@ -37,7 +37,6 @@ job_to_test_map = {
     "run_models_gpu": "Models",
     "run_trainer_and_fsdp_gpu": "Trainer & DDP & FSDP",
     "run_pipelines_torch_gpu": "PyTorch pipelines",
-    "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
     "run_kernels_gpu": "Kernels",
@@ -1295,7 +1294,6 @@ if __name__ == "__main__":
     # Additional runs
     additional_files = {
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
-        "Examples directory": "run_examples_gpu_test_reports",
         "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
         "Kernels": "run_kernels_gpu_test_reports",
     }

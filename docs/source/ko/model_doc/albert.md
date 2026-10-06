@@ -100,43 +100,35 @@ for token_id in top_k[0]:
 
 <PipelineTag pipeline="text-classification"/>
 
-- [`AlbertForSequenceClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification)에서 지원됩니다.
-
-- [`TFAlbertForSequenceClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification)에서 지원됩니다.
-
-- [`FlaxAlbertForSequenceClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
+- [`FlaxAlbertForSequenceClassification`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
 - [텍스트 분류 작업 가이드](../tasks/sequence_classification)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="token-classification"/>
 
-- [`AlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification)에서 지원됩니다.
+- [`TFAlbertForTokenClassification`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
 
-- [`TFAlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
-
-- [`FlaxAlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification)에서 지원됩니다.
 - 🤗 Hugging Face의 [토큰 분류](https://huggingface.co/course/chapter7/2?fw=pt) 강좌
 - [토큰 분류 작업 가이드](../tasks/token_classification)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`AlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
-- [`TFAlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
-- [`FlaxAlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
+- [`AlbertForMaskedLM`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
+- [`TFAlbertForMaskedLM`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
+- [`FlaxAlbertForMaskedLM`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
 - 🤗 Hugging Face의 [마스킹 언어 모델링](https://huggingface.co/course/chapter7/3?fw=pt) 강좌
 - [마스킹 언어 모델링 작업 가이드](../tasks/masked_language_modeling)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="question-answering"/>
 
-- [`AlbertForQuestionAnswering`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
-- [`TFAlbertForQuestionAnswering`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
-- [`FlaxAlbertForQuestionAnswering`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering)에서 지원됩니다.
+- [`AlbertForQuestionAnswering`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
+- [`TFAlbertForQuestionAnswering`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
 - [질의응답](https://huggingface.co/course/chapter7/7?fw=pt) 🤗 Hugging Face 강좌의 챕터.
 - [질의응답 작업 가이드](../tasks/question_answering)에서 모델 사용법을 확인하세요.
 
 **다중 선택(Multiple choice)**
 
-- [`AlbertForMultipleChoice`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
-- [`TFAlbertForMultipleChoice`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
+- [`AlbertForMultipleChoice`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
+- [`TFAlbertForMultipleChoice`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
 
 - [다중 선택 작업 가이드](../tasks/multiple_choice)에서 모델 사용법을 확인하세요.
 

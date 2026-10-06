@@ -44,7 +44,7 @@ Audio Spectrogram Transformerの使用を開始するのに役立つ公式のHug
 <PipelineTag pipeline="audio-classification"/>
 
 - ASTを用いた音声分類の推論を説明するノートブックは[こちら](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/AST)で見ることができます。
-- [`ASTForAudioClassification`]は、この[例示スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification)と[ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb)によってサポートされています。
+- [`ASTForAudioClassification`]は、この[ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb)によってサポートされています。
 - こちらも参照：[音声分類タスク](../tasks/audio_classification)。
 
 ここに参考資料を提出したい場合は、気兼ねなくPull Requestを開いてください。私たちはそれをレビューいたします！参考資料は、既存のものを複製するのではなく、何か新しいことを示すことが理想的です。

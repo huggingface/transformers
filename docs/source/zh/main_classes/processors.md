@@ -74,9 +74,6 @@ rendered properly in your Markdown viewer.
 
 请注意，由于测试集上有“gold”标签，因此评估是在测试集上进行的。
 
-使用这些processor的示例在 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 脚本中提供。
-
-
 ## SQuAD
 
 [斯坦福问答数据集（SQuAD）](https://rajpurkar.github.io/SQuAD-explorer//) 是一个评估模型在问答上性能的基准测试。有两个版本，v1.1 和 v2.0。第一个版本（v1.1）与论文 [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://huggingface.co/papers/1606.05250) 一同发布。第二个版本（v2.0）与论文 [Know What You Don't Know: Unanswerable Questions for SQuAD](https://huggingface.co/papers/1806.03822) 一同发布。
@@ -142,5 +139,3 @@ features = squad_convert_examples_to_features(
     is_training=not evaluate,
 )
 ```
-
-另一个使用这些processor的示例在 [run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) 脚本中提供。

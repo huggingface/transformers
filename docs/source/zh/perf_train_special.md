@@ -34,23 +34,7 @@ rendered properly in your Markdown viewer.
 pip install torch torchvision torchaudio
 ```
 
-[`TrainingArguments`]类默认使用`mps`设备(如果可用)因此无需显式设置设备。例如，您可以直接运行[run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py)脚本，在无需进行任何修改的情况下自动启用 MPS 后端。
-
-```diff
-export TASK_NAME=mrpc
-
-python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path google-bert/bert-base-cased \
-  --task_name $TASK_NAME \
-- --use_mps_device \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/ \
-```
+[`TrainingArguments`]类默认使用`mps`设备(如果可用)因此无需显式设置设备。
 
 用于[分布式设置](https://pytorch.org/docs/stable/distributed.html#backends)的后端(如`gloo`和`nccl`)不支持`mps`设备，这也意味着使用 MPS 后端时只能在单个 GPU 上进行训练。
 

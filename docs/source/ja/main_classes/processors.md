@@ -86,8 +86,6 @@ QQP、QNLI、RTE、WNLI。
 
 テストセットにはゴールドラベルが付いているため、評価はテストセットで行われますのでご了承ください。
 
-これらのプロセッサを使用する例は、[run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) スクリプトに示されています。
-
 ## SQuAD
 
 [The Stanford Question Answering Dataset (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//) は、次のベンチマークです。
@@ -156,5 +154,3 @@ features = squad_convert_examples_to_features(
     is_training=not evaluate,
 )
 ```
-
-これらのプロセッサを使用する別の例は、[run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) スクリプトに示されています。

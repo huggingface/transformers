@@ -28,25 +28,7 @@ All distributed examples use [Intel MPI](https://www.intel.com/content/www/us/en
 <hfoptions id="distrib-cpu">
 <hfoption id="single CPU">
 
-[`Trainer`] supports bf16 mixed precision training on CPU. Prefer bf16 over fp16 for CPU training because it's more numerically stable. Pass `--bf16` to enable PyTorch's CPU autocast and `--use_cpu` to force CPU training. The example below runs the [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) script.
-
-```bash
-python run_qa.py \
- --model_name_or_path google-bert/bert-base-uncased \
- --dataset_name rajpurkar/squad \
- --do_train \
- --do_eval \
- --per_device_train_batch_size 12 \
- --learning_rate 3e-5 \
- --num_train_epochs 2 \
- --max_seq_length 384 \
- --doc_stride 128 \
- --output_dir /tmp/debug_squad/ \
- --bf16 \
- --use_cpu
-```
-
-You can pass the same parameters to [`TrainingArguments`] directly.
+[`Trainer`] supports bf16 mixed precision training on CPU. Prefer bf16 over fp16 for CPU training because it's more numerically stable. Pass `--bf16` to enable PyTorch's CPU autocast and `--use_cpu` to force CPU training. You can pass the same parameters to [`TrainingArguments`] directly.
 
 ```py
 from transformers import TrainingArguments
@@ -61,33 +43,15 @@ training_args = TrainingArguments(
 </hfoption>
 <hfoption id="distributed CPU (single node)">
 
-On a dual-socket CPU, run one process per socket. Keeping memory accesses local to each socket improves throughput. The example below launches two processes on a single machine with one process per socket.
+On a dual-socket CPU, run one process per socket. Keeping memory accesses local to each socket improves throughput.
 
 > [!TIP]
 > Set `OMP_NUM_THREADS` to the number of physical cores on one socket, minus one core reserved for the OS. For example, on a 24-core socket set `OMP_NUM_THREADS=23`.
 
-```bash
-export MASTER_ADDR=127.0.0.1
-mpirun -n 2 -genv OMP_NUM_THREADS=23 \
-python3 run_qa.py \
- --model_name_or_path google-bert/bert-large-uncased \
- --dataset_name rajpurkar/squad \
- --do_train \
- --do_eval \
- --per_device_train_batch_size 12 \
- --learning_rate 3e-5 \
- --num_train_epochs 2 \
- --max_seq_length 384 \
- --doc_stride 128 \
- --output_dir /tmp/debug_squad/
-```
-
 </hfoption>
 <hfoption id="distributed CPU (multiple nodes)">
 
-Scale training to four processes across two Xeon machines (`node0` and `node1`) using a hostfile that lists each node's IP address. The `-n 4` flag sets the total number of processes. `-ppn 2` sets two processes per node (one per socket).
-
-Run this script from `node0`, which acts as the main process.
+Scale training to four processes across two Xeon machines (`node0` and `node1`) using a hostfile that lists each node's IP address.
 
 > [!TIP]
 > Set `OMP_NUM_THREADS` to the number of physical cores on one socket, minus one core reserved for the OS. For example, on a 24-core socket set `OMP_NUM_THREADS=23`.
@@ -98,27 +62,6 @@ Create a hostfile with the IP address of each node.
 cat hostfile
 xxx.xxx.xxx.xxx #node0 ip
 xxx.xxx.xxx.xxx #node1 ip
-```
-
-Then run the training script.
-
-```bash
-export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
-mpirun -f hostfile -n 4 -ppn 2 \
- -genv OMP_NUM_THREADS=23 \
-python3 run_qa.py \
- --model_name_or_path google-bert/bert-large-uncased \
- --dataset_name rajpurkar/squad \
- --do_train \
- --do_eval \
- --per_device_train_batch_size 12 \
- --learning_rate 3e-5 \
- --num_train_epochs 2 \
- --max_seq_length 384 \
- --doc_stride 128 \
- --output_dir /tmp/debug_squad/ \
- --use_cpu \
- --bf16
 ```
 
 </hfoption>
@@ -150,12 +93,9 @@ RUN apt-get update -y && \
 
 WORKDIR /workspace
 
-# Download and extract the transformers code
-ARG HF_TRANSFORMERS_VER="4.46.0"
-RUN pip install --no-cache-dir \
-    transformers==${HF_TRANSFORMERS_VER} && \
-    mkdir transformers && \
-    curl -sSL --retry 5 https://github.com/huggingface/transformers/archive/refs/tags/v${HF_TRANSFORMERS_VER}.tar.gz | tar -C transformers --strip-components=1 -xzf -
+# Install Transformers and copy your training script into the image
+RUN pip install --no-cache-dir transformers
+COPY train.py /workspace/train.py
 ```
 
 Build the image and push it to a registry accessible from your cluster's nodes before deploying.
@@ -164,7 +104,7 @@ Build the image and push it to a registry accessible from your cluster's nodes b
 
 [PyTorchJob](https://www.kubeflow.org/docs/components/training/user-guides/pytorch/) is a Kubernetes custom resource that manages PyTorch distributed training jobs. It handles worker pod lifecycle, restart policy, and process coordination. Your training script only needs to handle the model and data.
 
-The example yaml file below sets up four workers running the [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) script with bf16 enabled.
+The example yaml file below sets up four workers running a training script with bf16 enabled.
 
 When setting CPU resource limits and requests, use [CPU units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu) where one unit equals one physical core or virtual core. Set both limits and requests to the same value for a `Guaranteed` [quality of service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod). Leave some cores unallocated for kubelet and system processes. Set `OMP_NUM_THREADS` to match the number of allocated CPU units so PyTorch uses all available cores.
 
@@ -194,18 +134,14 @@ spec:
               command: ["/bin/bash", "-c"]
               args:
                 - >-
-                  cd /workspace/transformers;
-                  pip install -r /workspace/transformers/examples/pytorch/question-answering/requirements.txt;
-                  torchrun /workspace/transformers/examples/pytorch/question-answering/run_qa.py \
+                  cd /workspace;
+                  torchrun train.py \
                     --model_name_or_path distilbert/distilbert-base-uncased \
-                    --dataset_name rajpurkar/squad \
                     --do_train \
                     --do_eval \
                     --per_device_train_batch_size 12 \
                     --learning_rate 3e-5 \
                     --num_train_epochs 2 \
-                    --max_seq_length 384 \
-                    --doc_stride 128 \
                     --output_dir /tmp/pvc-mount/output_$(date +%Y%m%d_%H%M%S) \
                     --bf16;
               env:

@@ -37,18 +37,6 @@ jobs:
       report_repo_id: optimum-amd/transformers_daily_ci
     secrets: inherit
 
-  example-ci:
-    name: Example CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main
-    with:
-      job: run_examples_gpu
-      slack_report_channel: "#transformers-ci-daily-amd"
-      runner: mi250
-      docker: huggingface/transformers-pytorch-amd-gpu
-      ci_event: Scheduled CI (AMD) - mi250
-      report_repo_id: optimum-amd/transformers_daily_ci
-    secrets: inherit
-
   deepspeed-ci:
     name: DeepSpeed CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@63657f571a92cc9759159442936061c51d6d9ae4 # main

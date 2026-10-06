@@ -241,7 +241,6 @@ pipeline(
 
 - Această bibliotecă nu este un toolbox de block-uri pentru construirea rețelelor neuronale. Codul din fișierele modelelor nu este refactorizat cu mai multă abstractizare pentru ca cercetătorii să poată utiliza rapid fiecare dintre modele fără să aibă de-a face cu fișiere/abstractizări adiționale.
 - API-ul de antrenare este optimizat pentru utilizarea cu modele PyTorch oferite de Transformers. Pentru loop-uri generice de machine learning, utilizează o bibliotecă precum [Accelerate](https://huggingface.co/docs/accelerate).
-- [Script-urile de exemplu](https://github.com/huggingface/transformers/tree/main/examples) sunt doar *exemple*. S-ar putea ca acestea să nu funcționeze în toate cazurile și va trebui să adaptezi codul pentru ca acestea să funcționeze.
 
 ## 100 de proiecte folosind Transformers
 

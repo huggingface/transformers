@@ -73,8 +73,6 @@ Transformers 라이브러리에서 프로세서는 두 가지 의미로 사용�
 
 테스트 세트에 골드 레이블이 제공되므로, 평가는 테스트 세트에서 수행됩니다.
 
-이러한 프로세서를 사용하는 예시는 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 스크립트에 제공되어 있습니다.
-
 
 ## SQuAD[[squad]]
 
@@ -141,5 +139,3 @@ features = squad_convert_examples_to_features(
     is_training=not evaluate,
 )
 ```
-
-이러한 프로세서를 사용하는 또 다른 예시는 [run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) 스크립트에 제공되어 있습니다.

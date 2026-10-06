@@ -315,6 +315,6 @@ if __name__ == "__main__":
         prof.export_chrome_trace(filename)
 
 # Example usage:
-# python examples/pytorch/continuous_batching.py --attn sdpa --add-prefix --samples 10 --compare
-# python examples/pytorch/continuous_batching.py --attn flash_attention_2 -mp none --add-prefix --samples 500
-# python examples/pytorch/continuous_batching.py -mp none -cg yes --samples 10 --max-new-tokens 32 --profile profile_wip.json
+# python examples/generate/continuous_batching.py --attn sdpa --add-prefix --samples 10 --compare
+# python examples/generate/continuous_batching.py --attn flash_attention_2 -mp none --add-prefix --samples 500
+# python examples/generate/continuous_batching.py -mp none -cg yes --samples 10 --max-new-tokens 32 --profile profile_wip.json
