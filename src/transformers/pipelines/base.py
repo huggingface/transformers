@@ -919,13 +919,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             self.generation_config = copy.deepcopy(self.model.generation_config)
             defaults = getattr(self, "_default_generation_config", None)
             defaults = {} if defaults is None else _generation_params(defaults)
-            # If the tokenizer has a pad token but the model doesn't, set it so that `generate` is aware of it.
-            if self.tokenizer is not None and self.tokenizer.pad_token_id is not None:
-                defaults["pad_token_id"] = self.tokenizer.pad_token_id
             ignored_defaults = _IGNORED_GENERATION_DEFAULTS.get(self.model.config.model_type, ())
             self.generation_config.update(**{k: v for k, v in defaults.items() if k not in ignored_defaults})
             # The model's parameters go on top, e.g. Whisper's `max_length=448` unsets the default `max_new_tokens`
             self._update_generation_config(self.generation_config, **_generation_params(self.model.generation_config))
+            # If the tokenizer has a pad token but the model doesn't, set it so that `generate` is aware of it.
+            if (
+                self.tokenizer is not None
+                and self.tokenizer.pad_token_id is not None
+                and self.generation_config.pad_token_id is None
+                and "pad_token_id" not in ignored_defaults
+            ):
+                self.generation_config.pad_token_id = self.tokenizer.pad_token_id
             # Update the generation config with task specific params if they exist.
             # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
             #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
