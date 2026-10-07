@@ -194,7 +194,7 @@ class ExportedGenerator(GenerationMixin):
 
     Example:
         exported_artifacts = OnnxExporter().export_for_generation(model, inputs,
-                                                        OnnxConfig(dynamic=True, external_data=False),
+                                                        OnnxConfig(dynamic=True),
                                                         generation_config=generation_config)
         runtime = exported_artifacts.runtime()
         ids = runtime.generate(input_ids=prompt, max_new_tokens=32)

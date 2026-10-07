@@ -15,7 +15,6 @@
 import copy
 from dataclasses import dataclass
 from enum import Enum
-from os import PathLike
 from typing import Any
 
 
@@ -80,25 +79,16 @@ class OnnxConfig(DynamoConfig):
     Configuration class for exporting models to ONNX via `torch.onnx.export`. Inherits the [`DynamoConfig`] fields.
 
     Args:
-        output_path (`str` or `PathLike`, *optional*):
-            Output `.onnx` path. When `None`, the `ONNXProgram` is kept in memory.
         opset_version (`int`, *optional*):
             ONNX opset to target. Defaults to the latest one the installed `onnxscript` supports.
-        external_data (`bool`, *optional*, defaults to `True`):
-            Store weights in a `.onnx_data` sidecar; required past the 2 GB protobuf limit.
         optimize (`bool`, *optional*, defaults to `True`):
             Run `onnxscript` optimisation passes on the exported graph.
-        export_params (`bool`, *optional*, defaults to `True`):
-            Embed weights in the graph; `False` exports a weight-free graph.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
-    output_path: str | PathLike | None = None
     opset_version: int | None = None
-    external_data: bool = True
     optimize: bool = True
-    export_params: bool = True
 
 
 @dataclass
@@ -144,10 +134,8 @@ class OpenVINOConfig(DynamoConfig):
     [`DynamoConfig`] fields.
 
     Args:
-        output_path (`str` or `PathLike`, *optional*):
-            Output `.xml` path (`.bin` alongside). When `None`, the `openvino.Model` is kept in memory.
         compress_to_fp16 (`bool`, *optional*, defaults to `False`):
-            Compress `float32` weights to `float16` when saving (off by default for its narrower range).
+            Compress the converted model's `float32` weights to `float16` (off by default for its narrower range).
         stateful (`bool`, *optional*, defaults to `True`):
             Fold round-tripped state (KV cache, SSM states) into internal variables carried across `infer()`
             calls, with a `beam_idx` input for beam search. Set `False` for targets without stateful support
@@ -156,6 +144,5 @@ class OpenVINOConfig(DynamoConfig):
 
     export_format: ExportFormat = ExportFormat.OPENVINO
 
-    output_path: str | PathLike | None = None
     compress_to_fp16: bool = False
     stateful: bool = True

@@ -201,9 +201,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         torch.manual_seed(0)
         prompt = torch.randint(0, 64, (1, 4))
         decode_model, decode_inputs = self._decompose_static_decode(self._tiny_model(), prompt)
-        exported = OnnxExporter().export(
-            decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True, external_data=False)
-        )
+        exported = OnnxExporter().export(decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True))
         graph = exported.artifact.model_proto.graph
         cache_names = {node.name[len("input.") :] for node in graph.input if node.name.startswith("input.")}
         self.assertTrue(cache_names, "decode graph exposes no cache inputs")
@@ -227,9 +225,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         prompt = torch.randint(0, 64, (1, 4))
         inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
 
-        exported = OnnxExporter().export_for_generation(
-            model, copy.deepcopy(inputs), config=OnnxConfig(dynamic=True, external_data=False)
-        )
+        exported = OnnxExporter().export_for_generation(model, copy.deepcopy(inputs), config=OnnxConfig(dynamic=True))
         in_memory = exported.runtime(device="cpu").generate(**inputs, max_new_tokens=4, do_sample=False)
 
         with tempfile.TemporaryDirectory() as directory:
@@ -290,9 +286,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         with torch.no_grad():
             expected = model(**copy.deepcopy(inputs)).logits
 
-        exported = OnnxExporter().export(
-            model, copy.deepcopy(inputs), config=OnnxConfig(dynamic=True, external_data=False)
-        )
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), config=OnnxConfig(dynamic=True))
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             loaded = AutoExportedModel.from_pretrained(directory, device="cpu")

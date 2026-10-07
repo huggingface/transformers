@@ -87,7 +87,7 @@ class OpenVINOExporter(DynamoExporter):
 
     >>> exporter = OpenVINOExporter()
     >>> ov_model = exporter.export(model, inputs, config=OpenVINOConfig(dynamic=True))
-    >>> exporter.export(model, inputs, config=OpenVINOConfig(output_path="model.xml"))
+    >>> exporter.save_artifact(ov_model, "model.xml")  # save to disk
     ```
     """
 
@@ -127,19 +127,15 @@ class OpenVINOExporter(DynamoExporter):
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
 
         if config.compress_to_fp16:
-            # Before saving, so the in-memory model matches what lands on disk.
             compress_model_transformation(ov_model)
-
-        if config.output_path is not None:
-            # `save_model` would otherwise halve `f32` weights on its own.
-            openvino.save_model(ov_model, config.output_path, compress_to_fp16=False)
 
         # Precision, cache layout and mask rank aren't in the IR; they travel in `metadata`.
         return ov_model, metadata
 
     @classmethod
     def save_artifact(cls, artifact, path) -> None:
-        """Write the `.xml` graph and `.bin` weights at the precision the model already holds."""
+        """Write the `.xml` graph and `.bin` weights at the precision the model already holds (`save_model` would
+        otherwise halve `float32` weights on its own)."""
         openvino.save_model(artifact, path, compress_to_fp16=False)
 
 

@@ -81,7 +81,7 @@ class OnnxExporter(DynamoExporter):
     >>> exporter = OnnxExporter()
     >>> onnx_program = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
     >>> outputs = onnx_program(**inputs)  # run in-memory
-    >>> exporter.export(model, inputs, config=OnnxConfig(output_path="model.onnx"))  # save to disk
+    >>> exporter.save_artifact(onnx_program, "model.onnx")  # save to disk
     ```
     """
 
@@ -107,14 +107,11 @@ class OnnxExporter(DynamoExporter):
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
-                f=config.output_path,
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_get_onnx_translation_table(),
                 opset_version=config.opset_version,
-                external_data=config.external_data,
-                export_params=config.export_params,
                 optimize=config.optimize,
             )
 

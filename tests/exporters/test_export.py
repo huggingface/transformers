@@ -946,7 +946,7 @@ class ExportTesterMixin:
             return DynamoExporter(), DynamoConfig(dynamic=dynamic)
         if backend == "onnx":
             optimize = not _scoped(ONNX_DISABLE_OPTIMIZE, model_class, dynamic)
-            return OnnxExporter(), OnnxConfig(dynamic=dynamic, optimize=optimize, external_data=False)
+            return OnnxExporter(), OnnxConfig(dynamic=dynamic, optimize=optimize)
         if backend == "openvino":
             return OpenVINOExporter(), OpenVINOConfig(dynamic=dynamic)
         # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
