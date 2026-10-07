@@ -787,6 +787,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
     "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
+    "cv-utils": {"repo_id": "kernels-community/cv-utils", "version": 2},
 }
 
 # Flash attention version -> major version of its hub kernel repo. Flash attention flavors that are not
@@ -898,23 +899,15 @@ def load_and_register_attn_kernel(
 
 
 def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _KERNEL_MODULE_MAPPING):
-    if kernel_name in mapping:
-        # A cached `None` means the load already failed once; do not hit the Hub again on every call.
+    if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
         return mapping[kernel_name]
     if kernel_name not in _HUB_KERNEL_MAPPING:
         logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
-    repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
-    if not ALLOW_ALL_KERNELS and not repo_id.startswith("kernels-community/"):
-        # Not cached: the answer changes inside `allow_all_hub_kernels()`.
-        logger.warning_once(
-            f"Kernel {kernel_name} is hosted in {repo_id}, outside `kernels-community`, so its code is not run by "
-            "default. Wrap the call in `transformers.integrations.hub_kernels.allow_all_hub_kernels()` to trust it."
-        )
-        return None
     if is_kernels_available() and _kernels_enabled:
         try:
+            repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
             # Default version as it's mandatory
@@ -923,10 +916,12 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
             kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS)
             mapping[kernel_name] = kernel
-        except Exception as error:
-            # Missing repo, no network, or torch built without an accelerator backend; fall back to slow path.
+        except FileNotFoundError as e:
             mapping[kernel_name] = None
-            logger.warning_once(f"Failed to load kernel {kernel_name}: {error}")
+            logger.warning_once(f"Failed to load kernel {kernel_name}: {e}")
+        except AssertionError:
+            # Happens when torch is built without an accelerator backend; fall back to slow path.
+            mapping[kernel_name] = None
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
@@ -953,21 +948,20 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-_PROCESSING_KERNEL_ADAPTERS: dict[str, Callable] = {}
+_PROCESSING_KERNEL_ADAPTERS: dict[str, tuple[str, Callable]] = {}
 
 
-def register_processing_kernel(name: str, repo_id: str, version: int | str = 1, revision: str | None = None):
+def register_processing_kernel(name: str, kernel_name: str):
     """
-    Register a Hub kernel as an implementation of the processing op `name`, e.g. a processor's resize.
+    Register the kernel `kernel_name` of `_HUB_KERNEL_MAPPING` as an implementation of the processing op `name`.
 
     Processing ops have no common signature to swap, so the decorated function is an adapter: it receives the loaded
     kernel module followed by the arguments of the op, and returns the kernel result, or `None` when the kernel
     cannot handle these arguments so that the caller keeps its default implementation.
     """
-    _HUB_KERNEL_MAPPING[name] = {"repo_id": repo_id, "version": version, "revision": revision}
 
     def register(adapter: Callable) -> Callable:
-        _PROCESSING_KERNEL_ADAPTERS[name] = adapter
+        _PROCESSING_KERNEL_ADAPTERS[name] = (kernel_name, adapter)
         return adapter
 
     return register
@@ -975,10 +969,12 @@ def register_processing_kernel(name: str, repo_id: str, version: int | str = 1, 
 
 def run_processing_kernel(name: str, *args, **kwargs):
     """Run the kernel registered for the processing op `name`, or return `None` if the default path should be used."""
-    adapter = _PROCESSING_KERNEL_ADAPTERS.get(name)
-    if adapter is None or not _kernels_enabled or not is_torch_available() or not torch.cuda.is_available():
+    if name not in _PROCESSING_KERNEL_ADAPTERS or not _kernels_enabled:
         return None
-    kernel = lazy_load_kernel(name)
+    if not is_torch_available() or not torch.cuda.is_available():
+        return None
+    kernel_name, adapter = _PROCESSING_KERNEL_ADAPTERS[name]
+    kernel = lazy_load_kernel(kernel_name)
     if kernel is None:
         return None
     return adapter(kernel, *args, **kwargs)
