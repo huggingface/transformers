@@ -130,14 +130,19 @@ class UnivNetAudioProcessorMixin:
         return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
     def _spectrum_magnitude(self, stft_out, spectrogram_config, *, magnitude_floor, **kwargs):
-        # The legacy extractor adds its floor inside the sqrt, in float32 (the spectrum has been
-        # rounded through complex64 by `fft_dtype`), then takes the root in float64 and rounds it
-        # through float32. The float32 arithmetic is kept explicit for a backend whose spectrum is
-        # not complex64.
+        # The legacy extractor squares, sums and adds its floor in float32 on the complex64 buffer
+        # (`fft_dtype`); `computation_dtype="float64"` is for the mel stage, so this override
+        # deliberately does not widen. The float32 casts make that explicit for a backend whose
+        # spectrum is not complex64.
         real = self.ops.astype(self.ops.real(stft_out), "float32")
         imag = self.ops.astype(self.ops.imag(stft_out), "float32")
-        presqrt = self.ops.astype(real * real + imag * imag + magnitude_floor, "float64")
-        return self.ops.astype(self.ops.astype(self.ops.sqrt(presqrt), "float32"), "float64")
+        floored_power = real * real + imag * imag + magnitude_floor
+        # the root is taken in float64 (`.double().sqrt()`) and rounded through float32 (`.float()`)
+        magnitudes_f64 = self.ops.sqrt(self.ops.astype(floored_power, "float64"))
+        magnitudes_f32 = self.ops.astype(magnitudes_f64, "float32")
+        # float64 out: the legacy mel GEMM promoted to its float64 filters, and the torch
+        # `_project_to_mel` casts the filters to the feature dtype
+        return self.ops.astype(magnitudes_f32, "float64")
 
     def _shape_log_features(
         self, features, spectrogram_config, *, do_normalize, normalize_min, normalize_max, **kwargs

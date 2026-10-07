@@ -896,17 +896,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
         """Magnitude (`power=1`) or power (`power=2`) spectrum of the complex STFT.
 
-        With a `computation_dtype` the spectrum is widened first, so a complex64 FFT yields float64
-        magnitudes; `magnitude_mode="sqrt_sum_squares"` is the NeMo form, an ulp away from `abs`.
-        Without one the magnitudes keep the spectrum's dtype: the log stage casts to float32.
+        With a `computation_dtype` the spectrum is first cast to the complex of `computation_dtype`
+        (a complex64 FFT yields float64 magnitudes; a float64 window with `"float32"` narrows);
+        `magnitude_mode="sqrt_sum_squares"` is the NeMo form, a few ulp away from `abs`. Without
+        one the magnitudes keep the spectrum's dtype: the log stage casts to float32.
         """
         stft_cfg = spectrogram_config.stft_config
         if spectrogram_config.computation_dtype:
             stft_out = self.ops.astype(stft_out, _COMPLEX_OF[spectrogram_config.computation_dtype])
         if stft_cfg.magnitude_mode == "sqrt_sum_squares":
-            # The legacy NeMo form reduced over a stacked real/imag axis (`view_as_real(x).pow(2).sum(-1)`),
-            # which materialised a contiguous tensor; the mel GEMM's accumulation order follows the
-            # layout (measured: 1 float32 ulp on Parakeet, Cohere and Nemotron without the copy).
+            # contiguous: the mel GEMM's accumulation order follows this operand's layout (measured:
+            # 1 float32 ulp on parakeet, cohere_asr and nemotron_asr_streaming without it; the legacy
+            # NeMo reduction materialised a contiguous tensor).
             real, imag = self.ops.real(stft_out), self.ops.imag(stft_out)
             magnitudes = self.ops.sqrt(self.ops.contiguous(real * real + imag * imag))
         else:
