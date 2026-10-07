@@ -128,10 +128,9 @@ class Step3p7TextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
@@ -162,6 +161,7 @@ class Step3p7TextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 8
     num_local_experts: int = 128
+    output_router_logits: bool = False
     rope_parameters: RopeParameters | dict | None = None
     base_config_key = "text_config"
     mlp_layer_types: list[str] | None = None
