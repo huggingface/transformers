@@ -35,7 +35,6 @@ from test_module.custom_configuration import CustomConfig  # noqa E402
 classvar_fields = {
     "base_config_key",
     "sub_configs",
-    "keys_to_ignore_at_inference",
     "attribute_map",
     "base_model_tp_plan",
     "base_model_fsdp_plan",
@@ -185,6 +184,10 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsNotNone(config)
 
     def test_saving_with_custom_fields(self):
+        """
+        Verifies that the serialized `json` file contains only keys that are
+        different from the class defaults. Defaults are not serialized!
+        """
         config = BertConfig(foo=-1)
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
@@ -219,6 +222,12 @@ class ConfigTestUtils(unittest.TestCase):
             self.assertEqual(json_dict["output_attentions"], True)
             self.assertEqual(json_dict["is_encoder_decoder"], True)
 
+    def test_saving_with_custom_fields_nested_configs(self):
+        """
+        Verifies that the serialized `json` file contains only keys that are
+        different from the class defaults for nested config and its subconfigs.
+        Defaults are not serialized!
+        """
         # For nested configs we follow the same rules per each sub-config
         config = Florence2Config()
         config.text_config.foo = -1

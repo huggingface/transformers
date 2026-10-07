@@ -184,12 +184,28 @@ class SubConfigSpec:
         init_kwargs: dict | None = None,
         optional: bool = False,
     ):
+        """
+        Specification for initializing sub-configs within a composite configuration class.
+
+        Args:
+            config_class (`PretrainedConfig` or `type`):
+                The config class used to instantiate the subconfig (e.g. `Qwen2VLVisionConfig`)
+                or `AutoConfig` if subconfig should be resolved dynamically from input kwargs.`
+            model_type (`str`, *optional*):
+                Must be provided only if `config_class=AutoConfig` - indicates a default model type associated
+                with the subconfig.
+            init_kwargs (`dict`, *optional*):
+                Additional keyword arguments to pass when instantiating the subconfig.
+            optional (`bool`, *optional*, defaults to `False`):
+                Whether this subconfig is optional in the composite model hierarchy. If not optional,
+                an error is raised when it's explicitly set to `None` in input kwargs.
+        """
         self.init_kwargs = init_kwargs if init_kwargs is not None else {}
         self.config_class = config_class
         self.optional = optional
 
-        # we can have `AutoConfig` with a default model-type (eg. LLaVA), or the subconfig
-        # is already a specific class (eg. Qwen2VLVisionConfig) which has a `model_type` attr
+        # we can have `AutoConfig` with a default model-type (eg. LLaVA), or a subconfig
+        # with `cls.model_type` attr set to non-empty value (e.g. Qwen2VLVisionConfig)
         if model_type is None and not hasattr(config_class, "model_type"):
             raise ValueError(
                 "You have to provide either a valid `model_type` or an specific `config_class` "
@@ -254,6 +270,21 @@ class SubConfigSpec:
     def default_config(self):
         return self.get_config_class(self.model_type)(**self.init_kwargs)
 
+    def default_config_fields(self):
+        """
+        Collect default subconfig kwargs resolved from subconfig's dataclass defaults
+        and `self.init_kwargs`
+        """
+
+        default_subconfig_class = (
+            self.get_config_class(self.model_type)
+            if not issubclass(self.config_class, PreTrainedConfig)
+            else self.config_class
+        )
+        subconfig_default_fields = default_subconfig_class.default_config_fields()
+        subconfig_default_fields.update(self.init_kwargs)
+        return subconfig_default_fields
+
 
 # a small helper for BC - substitutes a class attribute
 class classproperty(property):
@@ -281,8 +312,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
-    - **keys_to_ignore_at_inference** (`list[str]`) -- A list of keys to ignore by default when looking at dictionary
-      outputs of the model during inference.
     - **attribute_map** (`dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
       naming of attributes.
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
@@ -363,7 +392,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     base_config_key: ClassVar[str] = ""
     sub_configs_defaults: ClassVar[dict[str, SubConfigSpec]] = {}
 
-    keys_to_ignore_at_inference: ClassVar[list[str]] = ["past_key_values"]
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
     base_model_fsdp_plan: ClassVar[dict[Any, str]] = {
@@ -1446,14 +1474,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             for key, specs in cls.sub_configs_defaults.items():
                 # Backbone configs are special as they sometimes hold timm-configs that can't be resolved via `AutoConfig`
                 if key != "backbone_config":
-                    default_subconfig_class = (
-                        specs.get_config_class(specs.model_type)
-                        if not issubclass(specs.config_class, PreTrainedConfig)
-                        else specs.config_class
-                    )
-                    subconfig_default_fields = default_subconfig_class.default_config_fields()
-                    subconfig_default_fields.update(specs.init_kwargs)
-                    default_config_fields[key] = subconfig_default_fields
+                    default_config_fields[key] = specs.default_config_fields()
 
         return default_config_fields
 

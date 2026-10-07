@@ -353,15 +353,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         # Config can't be init without params, raises warning on incoherent defaults
-        self.config_tester.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_subfolder()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_arguments_init()
-        self.config_tester.create_and_test_config_from_pretrained_custom_kwargs()
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_model
     def test_model(self):
@@ -469,15 +461,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def test_config(self):
         # Config can't be init without params, raises warning on incoherent defaults
-        self.config_tester.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_subfolder()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_composite()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_arguments_init()
-        self.config_tester.create_and_test_config_from_pretrained_custom_kwargs()
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model
     def test_model(self):
