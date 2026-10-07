@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -568,14 +568,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        if isinstance(logits_to_keep, int):
-            slice_indices = slice(-logits_to_keep, None)
-            hidden_states = hidden_states[:, slice_indices, :]
-        elif logits_to_keep.dtype == torch.bool:
-            hidden_states = hidden_states[logits_to_keep]
-        else:
-            hidden_states = hidden_states[:, logits_to_keep, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
 
         logits = self.lm_head(hidden_states)
 

@@ -31,7 +31,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -1140,13 +1140,7 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        if isinstance(logits_to_keep, int):
-            slice_indices = slice(-logits_to_keep, None)
-            hidden_states = hidden_states[:, slice_indices, :]
-        elif logits_to_keep.dtype == torch.bool:
-            hidden_states = hidden_states[logits_to_keep]
-        else:
-            hidden_states = hidden_states[:, logits_to_keep, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
 
         logits = self.lm_head(hidden_states)
 

@@ -26,7 +26,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.llama.modeling_llama import LlamaRotaryEmbedding
 from ...models.mistral.modeling_mistral import (
     MistralAttention,
@@ -712,13 +712,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         )
 
         hidden_states = outputs.last_hidden_state
-        if isinstance(logits_to_keep, int):
-            slice_indices = slice(-logits_to_keep, None)
-            hidden_states = hidden_states[:, slice_indices, :]
-        elif logits_to_keep.dtype == torch.bool:
-            hidden_states = hidden_states[logits_to_keep]
-        else:
-            hidden_states = hidden_states[:, logits_to_keep, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
 
         logits = self.lm_head(hidden_states)
 

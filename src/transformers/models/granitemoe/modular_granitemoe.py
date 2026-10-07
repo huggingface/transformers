@@ -21,7 +21,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -278,13 +278,7 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
 
         # Only compute necessary logits
         hidden_states = outputs.last_hidden_state
-        if isinstance(logits_to_keep, int):
-            slice_indices = slice(-logits_to_keep, None)
-            hidden_states = hidden_states[:, slice_indices, :]
-        elif logits_to_keep.dtype == torch.bool:
-            hidden_states = hidden_states[logits_to_keep]
-        else:
-            hidden_states = hidden_states[:, logits_to_keep, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
 
         logits = self.lm_head(hidden_states)
         logits = logits / self.config.logits_scaling

@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     DUMMY_INPUTS,
@@ -2233,14 +2233,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = reformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        if isinstance(logits_to_keep, int):
-            slice_indices = slice(-logits_to_keep, None)
-            hidden_states = hidden_states[:, slice_indices, :]
-        elif logits_to_keep.dtype == torch.bool:
-            hidden_states = hidden_states[logits_to_keep]
-        else:
-            hidden_states = hidden_states[:, logits_to_keep, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
 
         logits = self.lm_head(hidden_states)
 

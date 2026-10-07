@@ -28,7 +28,7 @@ from ...integrations import use_kernel_func_from_hub_with_fallback, use_kerneliz
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_mamba2 import Mamba2Config
 
@@ -909,14 +909,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = mamba2_outputs[0]
-        # Only compute necessary logits
-        if isinstance(logits_to_keep, int):
-            slice_indices = slice(-logits_to_keep, None)
-            hidden_states = hidden_states[:, slice_indices, :]
-        elif logits_to_keep.dtype == torch.bool:
-            hidden_states = hidden_states[logits_to_keep]
-        else:
-            hidden_states = hidden_states[:, logits_to_keep, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
 
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
