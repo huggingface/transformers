@@ -111,10 +111,11 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id}
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
             [
-                self.batch_size * self.num_image_tokens,
+                batch_size * self.num_image_tokens,
                 self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
@@ -122,8 +123,9 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids)
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
-        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device)}
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)}
 
 
 @require_torch

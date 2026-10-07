@@ -67,6 +67,10 @@ The KDA layers run on a pure PyTorch implementation by default. Installing
 [`kernels`](https://github.com/huggingface/kernels) (`pip install -U kernels`) and passing `use_kernels=True`
 in `from_pretrained` makes them dispatch to custom kernels instead, which is considerably faster for long sequences.
 
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## KimiLinearConfig
 
 [[autodoc]] KimiLinearConfig

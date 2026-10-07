@@ -243,10 +243,11 @@ class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
         self.in_channels = self.num_channels
         self.out_hidden_size = self.hidden_size
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                batch_size * (self.image_size**2) // (self.patch_size**2),
                 self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
@@ -264,11 +265,12 @@ class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids)
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -349,10 +351,6 @@ class Qwen3_5MoeModelTest(VLMModelTest, unittest.TestCase):
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
     )
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
-
-    @unittest.skip("Qwen3.5-MoE hybrid linear-attention cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
         pass
 
     def _get_conv_state_shape(self, batch_size: int, config):

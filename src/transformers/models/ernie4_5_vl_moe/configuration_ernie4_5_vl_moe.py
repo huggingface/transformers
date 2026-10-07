@@ -107,14 +107,12 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.text_moe.gate": "ep_router",
         "layers.*.mlp.text_moe.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.text_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
-        "layers.*.mlp.vision_moe.gate": "ep_router",
+        "layers.*.mlp.text_moe.experts": "ep_dispatch_experts",
         "layers.*.mlp.vision_moe.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.vision_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
+        "layers.*.mlp.vision_moe.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 103424

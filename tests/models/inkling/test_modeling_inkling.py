@@ -114,9 +114,10 @@ class InklingAudio2TextModelTester(ALMModelTester):
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # Quantized mel frames: (num_audios, num_frames, n_mel_bins)
-        return ids_tensor([self.batch_size, self.feat_seq_length, self.n_mel_bins], self.mel_vocab_size)
+        return ids_tensor([batch_size, self.feat_seq_length, self.n_mel_bins], self.mel_vocab_size)
 
     def get_audio_embeds_mask(self, audio_mask):
         return audio_mask
@@ -195,10 +196,6 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Audio placeholder embeddings are replaced when audio inputs are provided")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("Accelerate does not create a device map when the entire tiny model fits on CPU")
     def test_cpu_offload(self):
         pass
@@ -223,10 +220,6 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
         reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Inkling uses a custom hybrid cache that is incompatible with quantized cache")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(
@@ -268,10 +261,11 @@ class InklingVision2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # One packed patch per image placeholder: (num_patches, time, height, width, channels)
         return floats_tensor(
-            [self.batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
+            [batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
         )
 
     def get_vision_config(self):
@@ -367,18 +361,10 @@ class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Image placeholder embeddings are replaced when pixel values are provided")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(
         reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Inkling uses a custom hybrid cache that is incompatible with quantized cache")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(

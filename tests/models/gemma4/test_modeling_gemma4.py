@@ -261,12 +261,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # (num_audios, num_frames, num_mel_bins)
-        return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
+        return floats_tensor([batch_size, self.feat_seq_length, self.num_mel_bins])
 
-    def create_audio_mask(self):
-        return super().create_audio_mask().bool()
+    def create_audio_mask(self, batch_size: int | None = None):
+        return super().create_audio_mask(batch_size).bool()
 
     def get_audio_embeds_mask(self, audio_mask):
         # Each of the two stride-2 subsampling convs keeps every other mask position
@@ -419,10 +420,11 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # (num_images, max_num_patches, patch_size * patch_size * num_channels)
         num_patches = self.num_image_tokens * self.pooling_kernel_size**2
-        return floats_tensor([self.batch_size, num_patches, self.patch_size**2 * self.num_channels])
+        return floats_tensor([batch_size, num_patches, self.patch_size**2 * self.num_channels])
 
     def create_image_position_ids(self, num_images):
         # (num_images, max_num_patches, 2) grid of (x, y) coords for a non-square image
@@ -439,7 +441,7 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
         modality_inputs["image_position_ids"] = self.create_image_position_ids(self.batch_size)
         return input_ids, modality_inputs
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == config.image_token_id] = 1
         return {"mm_token_type_ids": mm_token_type_ids}
