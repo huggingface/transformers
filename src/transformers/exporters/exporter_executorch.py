@@ -152,7 +152,7 @@ class ExecutorchExporter(DynamoExporter):
                 transform_passes=_get_transform_passes(config.backend),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
+                config=_get_backend_config(config, model)
             )
 
         return executorch_programs_manager
@@ -197,21 +197,30 @@ def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     )
 
 
-def _get_backend_config(config):
+def _get_backend_config(config, model):
     """Build the ``ExecutorchBackendConfig`` for ``to_executorch``, or ``None`` for defaults.
 
-    Only overrides the memory-planning pass when the caller changed an ``alloc_*`` flag. Turning off
-    ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
+    Enables reinplace for Whisper on XNNPACK, with ExecuTorch's in-place result lifetime fix.
+    Turning off ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
     (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
     """
-    if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
+    run_reinplace_pass = (
+        config.backend == "xnnpack" and isinstance(model, PreTrainedModel) and model.config.model_type == "whisper"
+    )
+    if (
+        config.alloc_graph_input
+        and config.alloc_graph_output
+        and config.alloc_mutable_buffers
+        and not run_reinplace_pass
+    ):
         return None
     return ExecutorchBackendConfig(
+        run_reinplace_pass=run_reinplace_pass,
         memory_planning_pass=MemoryPlanningPass(
             alloc_graph_input=config.alloc_graph_input,
             alloc_graph_output=config.alloc_graph_output,
             alloc_mutable_buffers=config.alloc_mutable_buffers,
-        )
+        ),
     )
 
 
@@ -739,9 +748,15 @@ def _patch_dim_order_from_stride(_original):
     so the sort still produces *a* dim order when the comparison is unbacked —
     the exact order on unbacked dims doesn't affect correctness, just memory layout.
     """
-    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
+    from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode, guard_or_false, guard_or_true
 
-    def patch(stride):
+    def patch(stride, sizes=None):
+        if sizes is not None:
+            try:
+                return _original(stride, sizes)
+            except GuardOnDataDependentSymNode:
+                pass
+
         for s in stride:
             if guard_or_false(s == 0):
                 raise ValueError("0 in strides is not supported for ExecuTorch.")
