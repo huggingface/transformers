@@ -1425,21 +1425,6 @@ def _patch_feature_vector_attention_mask(original):
     return patch
 
 
-@register_patch("openvino", "torch.empty_permuted")
-def _patch_empty_permuted(original):
-    """Replace ``torch.empty_permuted(size, physical_layout, ...)`` with plain ``torch.empty(size, ...)``.
-
-    OV's frontend has no ``aten.empty_permuted`` lowering. The op exists only to hint a memory
-    layout (stride) — the values are uninitialised either way, and downstream reads see the same
-    logical content. ``torch.empty`` is enough.
-    """
-
-    def patch(size, physical_layout, **kwargs):
-        return torch.empty(size, **kwargs)
-
-    return patch
-
-
 @register_patch("openvino", "torch.polar")
 def _patch_polar(original):
     """Build ``polar(abs, angle)`` as ``complex(abs*cos(angle), abs*sin(angle))``.
