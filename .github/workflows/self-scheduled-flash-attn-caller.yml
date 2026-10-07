@@ -66,5 +66,5 @@ jobs:
       report_repo_id: hf-internal-testing/transformers_flash_attn_ci
       commit_sha: ${{ github.sha }}
       pytest_marker: "flash_attn_test or flash_attn_3_test or flash_attn_4_test or all_flash_attn_test"
-      subdirs: ${{ github.ref == 'refs/heads/fix_flash_attn_docker_clean' && 'llama mistral qwen2 gemma2 llava' || '' }}
+      subdirs: ${{ github.ref == 'refs/heads/fix_flash_attn_docker_clean' && "['llama', 'mistral', 'qwen2', 'gemma2', 'llava']" || '' }}
     secrets: inherit
