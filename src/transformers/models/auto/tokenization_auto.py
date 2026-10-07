@@ -446,6 +446,7 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
     "stepfun-ai/step-3.7-*",
+    "coherelabs/tiny-aya-*",
 ]
 
 

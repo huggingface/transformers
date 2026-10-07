@@ -1043,6 +1043,40 @@ class NopConfig(PreTrainedConfig):
             tokenizer_tok.decode(tok_ids),
         )
 
+    @require_tokenizers
+    def test_auto_skips_incorrect_hub_tokenizer_class_cohere(self):
+        """These checkpoints' hub tokenizer_config.json incorrectly sets tokenizer_class=CohereTokenizerFast.
+        AutoTokenizer should use the TokenizersBackend instead for tiny-aya models,
+        matching the hub's tokenizer.json."""
+        from tokenizers import Regex, Tokenizer, models, pre_tokenizers
+
+        with tempfile.TemporaryDirectory() as d:
+            original_cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                repo_id = "coherelabs/tiny-aya-earth"
+                os.makedirs(repo_id, exist_ok=True)
+
+                with open(os.path.join(repo_id, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                    f.write('{"tokenizer_class": "CohereTokenizerFast", "model_type": "cohere2"}')
+                with open(os.path.join(repo_id, "config.json"), "w", encoding="utf-8") as f:
+                    f.write('{"model_type": "cohere2", "_name_or_path": "coherelabs/tiny-aya-earth"}')
+
+                vocab = {c: i for i, c in enumerate("1234567")}
+                vocab.update({"23": 7, "234": 8, "56": 9, "567": 10})
+                merges = [("2", "3"), ("23", "4"), ("5", "6"), ("56", "7")]
+                tok = Tokenizer(models.BPE(vocab=vocab, merges=merges))
+                # digits are grouped in threes from the right, like tiny-aya's tokenizer.json
+                tok.pre_tokenizer = pre_tokenizers.Split(Regex(r"\d{1,3}(?=(?:\d{3})*\b)"), behavior="isolated")
+                tok.save(os.path.join(repo_id, "tokenizer.json"))
+
+                auto_tok = AutoTokenizer.from_pretrained(repo_id)
+                self.assertIsInstance(auto_tok, TokenizersBackend)
+                tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
+                self.assertEqual(auto_tok.tokenize("1234567"), tokenizer_tok.tokenize("1234567"))
+            finally:
+                os.chdir(original_cwd)
+
     TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
         "rhymes-ai/Aria",
         "Salesforce/blip2-flan-t5-xl",
