@@ -887,8 +887,8 @@ class AudioOps:
       takes its dtype from it). It may be `None`.
     - `dtype` is a numpy-style name: ``"float32"``, ``"float64"``, ``"int32"``, ``"int64"``,
       ``"bool"``, ``"complex64"``, ``"complex128"``. A backend resolves ``"float64"`` to its widest
-      available float for the array's device (float32 on torch/MPS and on MLX GPUs) and
-      ``"complex128"`` likewise (MLX has no complex128 anywhere). `dtype_name` reports the name an
+      available float for the array's device (for example float32 on an Apple GPU) and
+      ``"complex128"`` likewise (some backends have no complex128 at all). `dtype_name` reports the name an
       array actually has.
     - Axes follow numpy; ``axis=-1`` is the sample / frame axis. Reductions take `axis` as an int,
       a tuple of ints or `None` (all axes) and honour `keepdims`.
@@ -898,9 +898,11 @@ class AudioOps:
       beyond it. `randn`'s `shape` is a tuple.
 
     Array protocol — what the base may do with a backend array besides calling ops:
-    - arithmetic with another array of the same dtype or with a Python scalar: ``+ - * /``;
-    - comparisons ``< <= > >= ==`` giving bool arrays, and ``~`` on bool arrays;
-    - indexing with ints, slices, `None` and `...` (views or copies, never relied on for aliasing);
+    - arithmetic between two arrays of the same dtype or between an array and a Python scalar on
+      either side: ``+ - * /``, and unary ``-``;
+    - comparisons ``< <= > >= == !=`` giving bool arrays, and ``~ & |`` on bool arrays;
+    - indexing with ints, slices with a positive step, `None` and `...` (views or copies; never
+      rely on aliasing — torch rejects negative steps, so reversal is not part of the protocol);
     - the attributes ``.shape`` and ``.ndim``.
     Nothing else: no item assignment (build with `masked_fill`, `concat`, `arange`), no `.dtype`
     (use `dtype_name`), no method-style reductions (use the ops).
@@ -959,7 +961,7 @@ class AudioOps:
         raise NotImplementedError
 
     def swapaxes(self, x, axis1, axis2):
-        """`x` with two axes exchanged (a view where the backend allows it)."""
+        """`x` with two axes exchanged (may be a view)."""
         raise NotImplementedError
 
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
@@ -994,21 +996,21 @@ class AudioOps:
         raise NotImplementedError
 
     def pow(self, x, exponent):
-        """Elementwise ``x ** exponent`` for a Python scalar `exponent`."""
+        """Elementwise ``x ** exponent`` for a Python scalar `exponent`. Float input."""
         raise NotImplementedError
 
     # ── reductions ─────────────────────────────────────────────────────────────────────────────
 
     def sum(self, x, axis, *, keepdims=False):
-        """Sum over `axis` (int, tuple of ints, or `None` for all axes)."""
+        """Sum over `axis` (int, tuple of ints, or `None` for all axes). `axis=()` is not allowed (likewise for `mean` and `amax`)."""
         raise NotImplementedError
 
     def mean(self, x, axis, *, keepdims=False):
-        """Mean over `axis` (int, tuple of ints, or `None`). Float input only."""
+        """Mean over `axis` (int, tuple of ints, or `None`; `axis=()` is not allowed). Float input only."""
         raise NotImplementedError
 
     def amax(self, x, axis, *, keepdims=False):
-        """Maximum over `axis` (int, tuple of ints, or `None`)."""
+        """Maximum over `axis` (int, tuple of ints, or `None`; `axis=()` is not allowed)."""
         raise NotImplementedError
 
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
@@ -1035,7 +1037,7 @@ class AudioOps:
 
     def resample(self, x, orig_sr, target_sr):
         """Resample the last axis from `orig_sr` to `target_sr` Hz with the backend's resampler,
-        keeping the dtype. Output length is ``len * target_sr // orig_sr``: resamplers disagree on
+        keeping the dtype. Sample rates are ints. Output length is ``len * target_sr // orig_sr``: resamplers disagree on
         the last sample at non-integer ratios, so every backend trims to that rule. Resamplers are
         different filters (soxr, torchaudio, scipy polyphase); they agree to ~3e-4 relative on
         band-limited audio, away from the edges."""
@@ -1045,7 +1047,7 @@ class AudioOps:
 
     def randn(self, shape, *, seed=None, like=None):
         """Standard normal samples of the tuple `shape`, in `like`'s dtype (float32 when `like` is
-        `None`) and on its device. An integer `seed` gives a private stream seeded with it; `None`
+        `None`; `like` must be a float array) and on its device. An integer `seed` gives a private stream seeded with it; `None`
         draws from the library's global stream (so `torch.manual_seed` / `np.random.seed` apply).
         Streams differ between backends and between devices; only moments match."""
         raise NotImplementedError
@@ -1207,13 +1209,13 @@ class NumpyOps(AudioOps):
     # ── reductions ─────────────────────────────────────────────────────────────────────────────
 
     def sum(self, x, axis, *, keepdims=False):
-        return np.sum(x, axis=axis, keepdims=keepdims)
+        return np.asarray(np.sum(x, axis=axis, keepdims=keepdims))
 
     def mean(self, x, axis, *, keepdims=False):
-        return np.mean(x, axis=axis, keepdims=keepdims)
+        return np.asarray(np.mean(x, axis=axis, keepdims=keepdims))
 
     def amax(self, x, axis, *, keepdims=False):
-        return np.amax(x, axis=axis, keepdims=keepdims)
+        return np.asarray(np.amax(x, axis=axis, keepdims=keepdims))
 
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
 
