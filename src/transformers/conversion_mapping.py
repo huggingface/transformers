@@ -1874,6 +1874,14 @@ def _build_checkpoint_conversion_mapping():
     # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
     mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
 
+    mapping["bailing_hybrid"] = mapping["qwen2_moe"].copy()
+    mapping["bailing_hybrid"] += [
+        WeightRenaming(r"^model\.word_embeddings\.", "model.embed_tokens."),
+        WeightRenaming(r"\.attention\.", ".self_attn."),
+        WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.mlp\.gate\.expert_bias$", ".mlp.gate.e_score_correction_bias"),
+    ]
+
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
