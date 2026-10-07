@@ -226,6 +226,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "1e-3 tolerance but far from structural."
         ),
         "BitBackbone": "Same ORT accumulation as `BitModel` (~0.0048 across the feature maps).",
+        "BitForImageClassification": "Same ORT accumulation as `BitModel` (~0.0013 on the logits).",
         "ClapModel": "Same ORT accumulation as `BitModel` (~0.0033 on the contrastive logits).",
         "CLIPSegForImageSegmentation": "Same ORT accumulation as `BitModel` (~0.0059 on the decoder logits).",
         "FlavaForPreTraining": "Same ORT accumulation as `BitModel` (~0.0039 on the contrastive logits).",
