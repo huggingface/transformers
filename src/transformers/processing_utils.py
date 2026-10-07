@@ -2013,43 +2013,34 @@ class ProcessorMixin(PushToHubMixin):
                 content = message.get("content") or []
                 if isinstance(content, str):
                     continue
-                visuals = [block for block in content if block["type"] in ["image", "video"]]
-                audio_fnames = [
-                    block[key]
-                    for block in content
-                    for key in ["audio", "url", "path"]
-                    if key in block and block["type"] == "audio"
-                ]
-                image_fnames = [
-                    info[key]
-                    for info in visuals
-                    for key in ["image", "url", "path", "base64"]
-                    if key in info and info["type"] == "image"
-                ]
-                video_fnames = [
-                    info[key]
-                    for info in visuals
-                    for key in ["video", "url", "path"]
-                    if key in info and info["type"] == "video"
-                ]
-                images.extend(image_fnames)
-                videos.extend(video_fnames)
 
+                new_content = []  # don't modify user's dict in-place!
+
+                # Single pass so that audio keeps the exact order of the conversation.
                 # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                # FIXME: should follow order inside conversation!
-                batch_audios.extend(load_audio(fname, **audio_loading_params) for fname in audio_fnames)
+                for block, next_block in zip(content, [*content[1:], None]):
+                    new_content.append(block)
+                    block_type = block["type"]
+                    if block_type == "image":
+                        images.extend(block[key] for key in ["image", "url", "path", "base64"] if key in block)
+                    elif block_type == "video":
+                        video_fnames = [block[key] for key in ["video", "url", "path"] if key in block]
+                        videos.extend(video_fnames)
+                        if load_audio_from_video:
+                            batch_audios.extend(load_audio(fname, **audio_loading_params) for fname in video_fnames)
+                            # One audio entry per video, right after it, so the template emits the `audio` token in the same spot.
+                            # Deprecated since we dont want to dummy-insert, let users choose where to put audio!
+                            if next_block != {"type": "audio"}:
+                                new_content.append({"type": "audio"})
+                                logger.warning_once(
+                                    "When setting `load_audio_from_video=True` you must add an empty `audio` entry after each video in the conversation. "
+                                    "From v5.25 the entry will NOT be added automatically when calling `processor.apply_chat_template()`"
+                                )
+                    elif block_type == "audio":
+                        audio_fnames = [block[key] for key in ["audio", "url", "path"] if key in block]
+                        batch_audios.extend(load_audio(fname, **audio_loading_params) for fname in audio_fnames)
 
-                if load_audio_from_video:
-                    for fname in video_fnames:
-                        # This updates the template in-place and adds audio entry to ensure `audio` token is added by jinja
-                        # Deprecated since we dont want to dummy-append at the end, let users choose where to put audio!
-                        if {"type": "audio"} not in message["content"]:
-                            message["content"].append({"type": "audio"})
-                            logger.warning(
-                                "When setting `load_audio_from_video=True` you must add an empty `audio` entry in the conversation. "
-                                "From v5.25 the entry will NOT be added automatically when calling `processor.apply_chat_template()`"
-                            )
-                        batch_audios.append(load_audio(fname, **audio_loading_params))
+                message["content"] = new_content
 
             # Currently all processors can accept nested list of batches, but not flat list of visuals
             # So we'll make a batched list of images and let the processor handle it
