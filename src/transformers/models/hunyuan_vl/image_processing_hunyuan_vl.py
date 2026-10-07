@@ -29,6 +29,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...integrations.hub_kernels import run_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -286,9 +287,42 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def _resize_normalize_patchify_kernel(self, *args, **kwargs):
-        """The kernel writes the Qwen2-VL patch order and resamples with `resample`, HunYuanVL needs neither."""
-        return None
+    def _resize_normalize_patchify_kernel(
+        self,
+        images,
+        size,
+        resample,
+        rescale_factor,
+        image_mean,
+        image_std,
+        patch_size,
+        temporal_patch_size,
+        merge_size,
+    ):
+        """Row-major patches are the kernel layout with `merge_size=1`, resampled with BICUBIC like `resize`."""
+        target_sizes = [
+            smart_resize(
+                image.shape[-2],
+                image.shape[-1],
+                factor=patch_size * merge_size,
+                min_pixels=size.shortest_edge,
+                max_pixels=size.longest_edge,
+            )
+            for image in images
+        ]
+        return run_processing_kernel(
+            "resize_normalize_patchify",
+            images,
+            target_sizes,
+            [[index] for index in range(len(images))],
+            PILImageResampling.BICUBIC,
+            rescale_factor,
+            image_mean,
+            image_std,
+            patch_size,
+            1,
+            temporal_patch_size,
+        )
 
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None

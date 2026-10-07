@@ -27,6 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
+from ...integrations.hub_kernels import run_processing_kernel
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -212,6 +213,48 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
             )
         )
         return flatten_patches, grid_h, grid_w
+
+    def _resize_normalize_patchify_kernel(
+        self,
+        images,
+        size,
+        resample,
+        rescale_factor,
+        image_mean,
+        image_std,
+        patch_size,
+        temporal_patch_size,
+        merge_size,
+    ):
+        """Row by row patches are the kernel layout with `merge_size=1`, viewed as `(C * T, P, P)` blocks."""
+        target_sizes = [
+            smart_resize(
+                image.shape[-2],
+                image.shape[-1],
+                factor=patch_size * merge_size,
+                min_pixels=size.shortest_edge,
+                max_pixels=size.longest_edge,
+            )
+            for image in images
+        ]
+        kernel_output = run_processing_kernel(
+            "resize_normalize_patchify",
+            images,
+            target_sizes,
+            [[index] for index in range(len(images))],
+            resample,
+            rescale_factor,
+            image_mean,
+            image_std,
+            patch_size,
+            1,
+            temporal_patch_size,
+        )
+        if kernel_output is None:
+            return None
+        pixel_values, image_grid_thw = kernel_output
+        channels = images[0].shape[0]
+        return pixel_values.view(-1, channels * temporal_patch_size, patch_size, patch_size), image_grid_thw
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
