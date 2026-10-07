@@ -71,8 +71,10 @@ else:
 logger = logging.get_logger(__name__)
 
 _SAMPLING_PARAMS = {"temperature", "top_k", "top_p", "min_p", "top_h", "typical_p", "epsilon_cutoff", "eta_cutoff"}
-# Pipeline defaults that some models' `generate()` doesn't take from the generation config, and would be overridden by:
-# Bark's sub-models have their own generation configs, and Kyutai's generation length follows the audio length
+# Pipeline defaults that are dropped when the user or the model sets a parameter they conflict with
+_CONFLICTING_PARAMS = {"max_new_tokens": {"max_length"}}
+# Pipeline defaults that would override how some models' `generate()` sets these parameters: Bark's sub-models have
+# their own generation configs, and Kyutai's generation length follows the audio length
 _IGNORED_GENERATION_DEFAULTS = {
     "bark": {"max_new_tokens", "pad_token_id"},
     "kyutai_speech_to_text": {"max_new_tokens"},
@@ -83,20 +85,6 @@ def _generation_params(generation_config) -> dict:
     """The parameters set in `generation_config`."""
     params = generation_config.to_diff_dict()
     return {key: value for key, value in params.items() if not key.startswith("_") and key != "transformers_version"}
-
-
-def _warn_if_generation_config_with_params(params: dict):
-    """Mirrors the deprecation in `generate()` of passing a `generation_config` together with generation parameters."""
-    # Some pipelines take generation parameters in nested dicts
-    params = {**params, **(params.get("generate_kwargs") or {}), **(params.get("forward_params") or {})}
-    if params.get("generation_config") is None:
-        return
-    if generation_params := sorted(params.keys() & vars(GenerationConfig()).keys()):
-        logger.warning_once(
-            f"Passing `generation_config` together with generation-related arguments=({generation_params}) is "
-            "deprecated and will be removed in future versions. Please pass either a `generation_config` object OR "
-            "all generation parameters explicitly, but not both."
-        )
 
 
 def no_collate_fn(items):
@@ -813,6 +801,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     # Pipelines that call `generate` have shared logic, e.g. preparing the generation config.
     _pipeline_calls_generate = False
+    # Parameters of the pipeline that are named like generation parameters but aren't any (e.g. `top_k` as a number of
+    # answers). They are handled like the other pipeline parameters, rather than passed to `generate()`.
+    _non_generation_params: tuple[str, ...] = ()
 
     default_input_names = None
 
@@ -906,45 +897,23 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             self.model.to(self.device)
 
         # If it's a generation pipeline and the model can generate:
-        # 1 - create a local generation config. This is done to avoid side-effects on the model as we apply local
-        # tweaks to the generation config.
+        # 1 - set aside the generation parameters, which apply to every call (see `_prepare_generate_kwargs`).
         # 2 - load the assistant model if it is passed.
         if self._pipeline_calls_generate and self.model.can_generate():
             self.assistant_model, self.assistant_tokenizer = load_assistant_model(
                 self.model, kwargs.pop("assistant_model", None), kwargs.pop("assistant_tokenizer", None)
             )
             self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
-            # Priority order: kwargs > user_generation_config > task_specific_params > model.generation_config >
-            # pipeline defaults. The global defaults are left to `generate()`, so it can tell which values were set.
-            self.generation_config = copy.deepcopy(self.model.generation_config)
+            generation_keys = {key for key in vars(GenerationConfig()) if not key.startswith("_")}
+            generation_keys.difference_update(self._non_generation_params)
+            generation_keys.add("generation_config")
+            self._generate_kwargs = {key: kwargs.pop(key) for key in generation_keys & kwargs.keys()}
             defaults = getattr(self, "_default_generation_config", None)
-            defaults = {} if defaults is None else _generation_params(defaults)
-            ignored_defaults = _IGNORED_GENERATION_DEFAULTS.get(self.model.config.model_type, ())
-            self.generation_config.update(**{k: v for k, v in defaults.items() if k not in ignored_defaults})
-            # The model's parameters go on top, e.g. Whisper's `max_length=448` unsets the default `max_new_tokens`
-            self._update_generation_config(self.generation_config, **_generation_params(self.model.generation_config))
-            # If the tokenizer has a pad token but the model doesn't, set it so that `generate` is aware of it.
-            if (
-                self.tokenizer is not None
-                and self.tokenizer.pad_token_id is not None
-                and self.generation_config.pad_token_id is None
-                and "pad_token_id" not in ignored_defaults
-            ):
-                self.generation_config.pad_token_id = self.tokenizer.pad_token_id
-            # Update the generation config with task specific params if they exist.
-            # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
-            #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
-            task_specific_params = getattr(self.model.config, "task_specific_params", None)
-            if task_specific_params is not None and task in task_specific_params:
-                this_task_params = task_specific_params.get(task)
-                if "prefix" in this_task_params:
-                    self.prefix = this_task_params.pop("prefix")
-                self.generation_config.update(**this_task_params)
-            _warn_if_generation_config_with_params(kwargs)
-            if (user_generation_config := kwargs.pop("generation_config", None)) is not None:
-                params = _generation_params(user_generation_config)
-                self._update_generation_config(self.generation_config, allow_custom_entries=True, **params)
-            kwargs = self._update_generation_config(self.generation_config, **kwargs)
+            self._generation_defaults = {} if defaults is None else _generation_params(defaults)
+            if self.tokenizer is not None and self.tokenizer.pad_token_id is not None:
+                self._generation_defaults["pad_token_id"] = self.tokenizer.pad_token_id
+            for key in _IGNORED_GENERATION_DEFAULTS.get(self.model.config.model_type, ()):
+                self._generation_defaults.pop(key, None)
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)
@@ -1082,39 +1051,48 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             yield
 
-    def _update_generation_config(self, generation_config: GenerationConfig, **kwargs) -> dict:
+    def _prepare_generate_kwargs(self, generate_kwargs: dict, **overrides) -> dict:
         """
-        `generation_config.update(**kwargs)`, where setting one kind of length unsets the other (e.g. `max_length`
-        unsets `max_new_tokens`), and `do_sample=False` resets the sampling-only parameters to the model's.
-        """
-        for length, new_tokens in (("max_length", "max_new_tokens"), ("min_length", "min_new_tokens")):
-            if (length in kwargs) != (new_tokens in kwargs):
-                kwargs = {length: None, new_tokens: None, **kwargs}
-        unused_kwargs = generation_config.update(**kwargs)
-        if kwargs.get("do_sample") is False:
-            for key in _SAMPLING_PARAMS - kwargs.keys():
-                setattr(generation_config, key, getattr(self.model.generation_config, key, None))
-        return unused_kwargs
+        Returns the `generate()` kwargs for this call. They hold the user's generation parameters as passed, so that
+        `generate()` handles them as in a direct call: the call's parameters, on top of those passed at init unless the
+        call passes a `generation_config`, which then replaces them. The pipeline adds its `overrides`, and its defaults
+        for the parameters that neither the user nor the model's generation config set (the sampling ones only when
+        sampling).
 
-    def _prepare_generate_kwargs(self, generate_kwargs: dict) -> dict:
+        What the pipeline adds goes in a copy of the user's `generation_config` if there is one, as `generate()`
+        deprecates passing one together with generation parameters.
         """
-        Returns the `generate()` kwargs for this call: the call's kwargs, on top of the `self.generation_config` values
-        that differ from the model's own generation config. Passing them as kwargs rather than as a `generation_config`
-        lets `generate()` tell them apart from its defaults, and model-specific `generate()` methods (e.g. Whisper's,
-        which takes `temperature` itself) receive them as in a direct call.
-        """
-        generate_kwargs = dict(generate_kwargs)
-        if (call_generation_config := generate_kwargs.pop("generation_config", None)) is not None:
-            generate_kwargs = {**_generation_params(call_generation_config), **generate_kwargs}
-        generation_config = copy.deepcopy(self.generation_config)
-        self._update_generation_config(generation_config, **generate_kwargs)
-        model_params = vars(self.model.generation_config)
-        changed_params = {
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs = {**self._generate_kwargs, **generate_kwargs}
+        user_config = generate_kwargs.get("generation_config")
+        is_set = generate_kwargs.keys() | _generation_params(self.model.generation_config).keys()
+        if user_config is not None:
+            is_set |= _generation_params(user_config).keys()
+        added_params = {
             key: value
-            for key, value in vars(generation_config).items()
-            if not key.startswith("_") and value != model_params.get(key)
+            for key, value in self._generation_defaults.items()
+            if not ({key} | _CONFLICTING_PARAMS.get(key, set())) & is_set
         }
-        return {**changed_params, **generate_kwargs}
+        if not self._get_generation_param({**added_params, **generate_kwargs}, "do_sample"):
+            added_params = {key: value for key, value in added_params.items() if key not in _SAMPLING_PARAMS}
+        added_params.update(overrides)
+        if user_config is None:
+            return {**generate_kwargs, **added_params}
+        user_config = copy.deepcopy(user_config)
+        user_config.update(**added_params)
+        return {**generate_kwargs, "generation_config": user_config}
+
+    def _get_generation_param(self, generate_kwargs: dict, key: str):
+        """
+        The value of the generation parameter `key` in a `generate()` call with `generate_kwargs`, or `None` if
+        `generate()` would use its global default.
+        """
+        if key in generate_kwargs:
+            return generate_kwargs[key]
+        for generation_config in (generate_kwargs.get("generation_config"), self.model.generation_config):
+            if (value := getattr(generation_config, key, None)) is not None:
+                return value
+        return None
 
     def ensure_tensor_on_device(self, **inputs):
         """
@@ -1305,7 +1283,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 batch_size = self._batch_size
 
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
-        _warn_if_generation_config_with_params(forward_params)
 
         # Fuse __init__ params and __call__ params without modifying the __init__ ones.
         preprocess_params = {**self._preprocess_params, **preprocess_params}

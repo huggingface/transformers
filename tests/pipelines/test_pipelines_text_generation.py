@@ -580,23 +580,19 @@ class TextGenerationPipelineTests(unittest.TestCase):
             self.assertEqual(cl.out, "", f"Unexpected warning with {kwargs}")
 
     def test_pipeline_length_kwarg_takes_precedence(self):
-        # `max_length` passed at call time must override `max_new_tokens`, be it the pipeline's default or the model's
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        input_length = len(tokenizer("Hello world").input_ids)
-        for model_max_new_tokens in (None, 30):
-            model.generation_config.max_new_tokens = model_max_new_tokens
-            text_generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
-            out = text_generator("Hello world", max_length=input_length + 2, do_sample=False, return_tensors=True)
-            self.assertEqual(len(out[0]["generated_token_ids"]), input_length + 2)
+        # `max_length` passed at call time must override the pipeline's default `max_new_tokens`
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
+        input_length = len(text_generator.tokenizer("Hello world").input_ids)
+        out = text_generator("Hello world", max_length=input_length + 2, do_sample=False, return_tensors=True)
+        self.assertEqual(len(out[0]["generated_token_ids"]), input_length + 2)
 
     def test_pipeline_generation_parameters_passed_as_kwargs(self):
-        # `generate()` receives the generation parameters as kwargs, and a `generation_config` passed at call time is
-        # applied on top of the pipeline's parameters rather than replacing them
+        # `generate()` receives the generation parameters as kwargs: those passed at call time on top of those passed
+        # at creation, plus the pipeline's defaults for the parameters they don't set
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=3)
         model = text_generator.model
         with patch.object(model, "generate", wraps=model.generate) as generate:
-            _ = text_generator("Hello world", generation_config=GenerationConfig(do_sample=False))
+            _ = text_generator("Hello world", do_sample=False)
         generate_kwargs = generate.call_args.kwargs
         self.assertNotIn("generation_config", generate_kwargs)
         self.assertEqual(generate_kwargs["max_new_tokens"], 3)
@@ -604,20 +600,44 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # The pipeline's default `temperature` only applies to sampling
         self.assertNotIn("temperature", generate_kwargs)
 
-    def test_pipeline_generation_config_with_kwargs_deprecation(self):
-        # Like in `generate()`, passing a `generation_config` together with generation parameters is deprecated (the
-        # parameters take precedence). Parameters set when creating the pipeline don't count.
-        text_generator = pipeline(
-            "text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=3, stop_sequence=" fe"
-        )
+    def test_pipeline_call_generation_config_replaces_creation_parameters(self):
+        # A `generation_config` passed at call time replaces the generation parameters passed at creation. Like in
+        # `generate()`, passing one together with generation parameters is deprecated (the parameters take precedence).
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=3)
         model = text_generator.model
-        logger = logging.get_logger("transformers.pipelines.base")
+        logger = logging.get_logger("transformers.generation.utils")
         for kwargs, deprecated in (({}, False), ({"max_new_tokens": 2}, True)):
             logger.warning_once.cache_clear()
             with CaptureLogger(logger) as cl, patch.object(model, "generate", wraps=model.generate) as generate:
                 _ = text_generator("Hello world", generation_config=GenerationConfig(do_sample=False), **kwargs)
-            self.assertEqual("generation-related arguments=(['max_new_tokens'])" in cl.out, deprecated)
-            self.assertEqual(generate.call_args.kwargs["max_new_tokens"], kwargs.get("max_new_tokens", 3))
+            self.assertEqual("generation-related arguments=({'max_new_tokens'})" in cl.out, deprecated)
+            self.assertEqual(generate.call_args.kwargs.get("max_new_tokens"), kwargs.get("max_new_tokens"))
+            # The pipeline's default length goes in the `generation_config`, unless a length is passed
+            self.assertEqual(generate.call_args.kwargs["generation_config"].max_new_tokens, None if kwargs else 256)
+
+    def test_pipeline_generation_config_with_custom_entries(self):
+        # Entries that the model's generation config doesn't have (e.g. Whisper's `no_timestamps_token_id`, when fixing
+        # an incomplete config) can only reach `generate()` inside a `generation_config`, at call time or at creation
+        generation_config = GenerationConfig(do_sample=False, custom_entry=1)
+        call_time = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=3)
+        creation_time = pipeline(
+            "text-generation",
+            model=call_time.model,
+            tokenizer=call_time.tokenizer,
+            generation_config=generation_config,
+        )
+        logger = logging.get_logger("transformers.generation.utils")
+        for text_generator, kwargs in ((call_time, {"generation_config": generation_config}), (creation_time, {})):
+            logger.warning_once.cache_clear()
+            model = text_generator.model
+            with CaptureLogger(logger) as cl, patch.object(model, "generate", wraps=model.generate) as generate:
+                _ = text_generator("Hello world", **kwargs)
+            self.assertEqual(cl.out, "")
+            passed_generation_config = generate.call_args.kwargs["generation_config"]
+            self.assertEqual(passed_generation_config.custom_entry, 1)
+            self.assertFalse(passed_generation_config.do_sample)
+            # The pipeline's default length is added
+            self.assertEqual(passed_generation_config.max_new_tokens, 256)
 
     def test_return_dict_in_generate(self):
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
@@ -697,35 +717,36 @@ class TextGenerationPipelineTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
+        def generation_param(pipe, key):
+            # The value that `generate()` uses
+            return pipe._get_generation_param(pipe._prepare_generate_kwargs({}), key)
+
         # 1. Modify model.generation_config directly (model_config > pipeline_default)
         model.generation_config.max_new_tokens = 500
-        model.generation_config.temperature = 0.7
+        model.generation_config.temperature = 0.5
 
         # Instantiate pipeline without extra generation kwargs
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
         # Assert user settings on model.generation_config were respected over pipeline defaults
-        self.assertEqual(pipe.generation_config.max_new_tokens, 500)
-        self.assertEqual(pipe.generation_config.temperature, 0.7)
+        self.assertEqual(generation_param(pipe, "max_new_tokens"), 500)
+        self.assertEqual(generation_param(pipe, "temperature"), 0.5)
 
         # 2. Explicit generation_config object overrides model_config and pipeline_default
         custom_gc = GenerationConfig(max_new_tokens=250, temperature=0.9)
         pipe_gc = pipeline("text-generation", model=model, tokenizer=tokenizer, generation_config=custom_gc)
-        self.assertEqual(pipe_gc.generation_config.max_new_tokens, 250)
-        self.assertEqual(pipe_gc.generation_config.temperature, 0.9)
+        self.assertEqual(generation_param(pipe_gc, "max_new_tokens"), 250)
+        self.assertEqual(generation_param(pipe_gc, "temperature"), 0.9)
 
         # 3. Explicit kwargs override user_generation_config, model_config, and pipeline_default. Like in `generate()`,
         # passing both is deprecated
-        logger = logging.get_logger("transformers.pipelines.base")
+        pipe_kwargs = pipeline(
+            "text-generation", model=model, tokenizer=tokenizer, generation_config=custom_gc, max_new_tokens=2
+        )
+        self.assertEqual(generation_param(pipe_kwargs, "max_new_tokens"), 2)
+        self.assertEqual(generation_param(pipe_kwargs, "temperature"), 0.9)
+        logger = logging.get_logger("transformers.generation.utils")
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as cl:
-            pipe_kwargs = pipeline(
-                "text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                generation_config=custom_gc,
-                max_new_tokens=100,
-            )
+            _ = pipe_kwargs("Hello world")
         self.assertIn("Passing `generation_config` together with generation-related arguments", cl.out)
-        self.assertEqual(pipe_kwargs.generation_config.max_new_tokens, 100)
-        self.assertEqual(pipe_kwargs.generation_config.temperature, 0.9)

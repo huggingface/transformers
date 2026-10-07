@@ -159,8 +159,8 @@ class TextToAudioPipeline(Pipeline):
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
             # Check if generation_config has semantic_config (BarkGenerationConfig) or use default
             max_length = 256
-            if hasattr(self.generation_config, "semantic_config"):
-                max_length = getattr(self.generation_config.semantic_config, "max_input_semantic_length", 256)
+            if hasattr(self.model.generation_config, "semantic_config"):
+                max_length = getattr(self.model.generation_config.semantic_config, "max_input_semantic_length", 256)
             new_kwargs = {
                 "max_length": max_length,
                 "add_special_tokens": False,
@@ -213,7 +213,7 @@ class TextToAudioPipeline(Pipeline):
 
             # `generate_kwargs` take precedence over `forward_params`. Dict output facilitates postprocessing.
             forward_params = self._prepare_generate_kwargs(
-                {"return_dict_in_generate": True, **forward_params, **generate_kwargs}
+                {**forward_params, **generate_kwargs}, return_dict_in_generate=True
             )
 
             if self.model.config.model_type in ["csm"]:

@@ -338,8 +338,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         # Parameter used in more than one place
         # in some models like whisper, the generation config has a `return_timestamps` key
-        if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
-            return_timestamps = return_timestamps or self.generation_config.return_timestamps
+        generation_config = getattr(self.model, "generation_config", None)
+        if getattr(generation_config, "return_timestamps", False):
+            return_timestamps = return_timestamps or generation_config.return_timestamps
 
         if return_timestamps is not None:
             # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
@@ -538,7 +539,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
 
             # custom processing for Whisper timestamps and word-level timestamps
-            return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
+            return_timestamps = return_timestamps or getattr(self.model.generation_config, "return_timestamps", False)
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = bool(return_timestamps)
                 if return_timestamps == "word":
@@ -586,7 +587,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     if segments and segments[0]:
                         result = segments[0][0]["result"]
                         full_seq = result["sequences"] if isinstance(result, dict) else result
-                        gen_config = generate_kwargs.get("generation_config", self.generation_config)
+                        gen_config = generate_kwargs.get("generation_config", self.model.generation_config)
                         if hasattr(gen_config, "lang_to_id"):
                             lang_ids = set(gen_config.lang_to_id.values())
                             for token_id in full_seq.tolist():

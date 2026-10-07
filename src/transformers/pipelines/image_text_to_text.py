@@ -389,8 +389,7 @@ class ImageTextToTextPipeline(Pipeline):
             model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
         )  # for decoder-only models
 
-        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
-        generate_kwargs["return_dict_in_generate"] = False
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs, return_dict_in_generate=False)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
 

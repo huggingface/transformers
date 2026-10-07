@@ -238,6 +238,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     """
 
     _pipeline_calls_generate = True
+    # The number of answers, not the sampling parameter
+    _non_generation_params = ("top_k",)
     _load_processor = False
     _load_image_processor = None
     _load_feature_extractor = None
