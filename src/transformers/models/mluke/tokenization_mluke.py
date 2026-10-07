@@ -242,14 +242,15 @@ class MLukeTokenizer(TokenizersBackend):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        # we add 2 special tokens for downstream tasks
+        # we add 2 special tokens for downstream tasks.
+        # v5: add SPIECE_UNDERLINE prefix to add a leading space in decoded output
         entity_1_token = (
-            AddedToken(entity_1_token, lstrip=False, rstrip=False)
+            AddedToken(SPIECE_UNDERLINE + entity_1_token, lstrip=False, rstrip=False)
             if isinstance(entity_1_token, str)
             else entity_1_token
         )
         entity_2_token = (
-            AddedToken(entity_2_token, lstrip=False, rstrip=False)
+            AddedToken(SPIECE_UNDERLINE + entity_2_token, lstrip=False, rstrip=False)
             if isinstance(entity_2_token, str)
             else entity_2_token
         )
@@ -450,40 +451,6 @@ class MLukeTokenizer(TokenizersBackend):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
-
-    def _decode(
-        self,
-        token_ids: int | list[int],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool | None = None,
-        spaces_between_special_tokens: bool = True,
-        **kwargs,
-    ) -> str:
-        # Entity marker tokens are special, however they require being joined with spaces like normal
-        # vocab tokens despite not having a `_` prefix.
-        if isinstance(token_ids, int):
-            token_ids = [token_ids]
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        entity_markers = {str(self.entity_1_token), str(self.entity_2_token)}
-
-        sub_texts = []
-        current_sub_text = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_tokens:
-                continue
-            if token in entity_markers:
-                if current_sub_text:
-                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-                    current_sub_text = []
-                sub_texts.append(token)
-            else:
-                current_sub_text.append(token)
-        if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        text = " ".join(sub_texts) if spaces_between_special_tokens else "".join(sub_texts)
-
-        return text
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
