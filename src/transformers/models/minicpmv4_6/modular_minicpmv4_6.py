@@ -37,7 +37,6 @@ from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attentio
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
-    get_vision_merged_shape,
     get_vision_nearest_position_ids,
     get_vision_window_index,
 )
@@ -316,29 +315,26 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
             cu_seqlens=window_cu_seqlens.to(device),
             max_seqlen=window_max_seqlens,
         )
-        hidden_states = hidden_states[:, torch.argsort(window_index), :]
-        hidden_states = residual + hidden_states
+        hidden_states = residual[:, window_index, :] + hidden_states
 
-        # Vectorised window merge: reshape (1, batch*seq_per_img, D) → (batch, seq_per_img, D)
-        # and lift per-image (h, w) from target_sizes[0]. This assumes the input batch was
-        # packed with uniform per-image sizes (the standard NaViT preprocessing output).
-        batch_size = target_sizes.shape[0]
         window_h, window_w = self.window_kernel_size
+        window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
-        seq_per_img = hidden_states.shape[1] // batch_size
-        patch = hidden_states.view(batch_size, seq_per_img, embed_dim)
-        merged_h, merged_w = get_vision_merged_shape(target_sizes, self.window_kernel_size, kwargs=kwargs)
-
-        patch_5d = patch.view(batch_size, merged_h, window_h, merged_w, window_w, embed_dim).permute(0, 1, 3, 2, 4, 5)
-        flat = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w * embed_dim)
-        residual = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w, embed_dim).mean(dim=1)
+        torch_compilable_check(
+            window_cu_seqlens.numel() - 1 == hidden_states.shape[1] // window_size,
+            f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}",
+        )
+        patch = hidden_states.reshape(-1, window_size, embed_dim)
+        flat = patch.flatten(1)
+        patch_residual = patch.mean(dim=1)
 
         hidden_state = self.pre_norm(flat)
         hidden_state = self.linear_1(hidden_state)
         hidden_state = self.act(hidden_state)
         hidden_state = self.linear_2(hidden_state)
+        hidden_state = (hidden_state + patch_residual).unsqueeze(0)
 
-        return (hidden_state + residual).unsqueeze(0)
+        return hidden_state
 
 
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
