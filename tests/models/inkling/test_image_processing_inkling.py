@@ -16,11 +16,8 @@ import unittest
 
 import numpy as np
 
-from transformers import InklingImageProcessor
-from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
-from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
@@ -33,88 +30,23 @@ if is_vision_available():
 
 
 class InklingImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        do_normalize=False,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        size=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.0, 0.0, 0.0]
-        self.image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
-        self.do_convert_rgb = do_convert_rgb
-        self.size = size if size is not None else {"height": 40, "width": 40}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 40, "width": 40})
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_normalize", False)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "size": self.size,
-        }
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        self.image_processing_classes = {"torchvision": InklingImageProcessor}
-        self.image_processor_tester = InklingImageProcessingTester(self)
+    image_processor_tester_class = InklingImageProcessingTester
 
     @unittest.skip("Inkling patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
     def test_call_numpy_4_channels(self):
         pass
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "size"))
-
-    def test_image_processor_defaults(self):
-        for image_processing_class in self.image_processing_classes.values():
-            proc = image_processing_class()
-            self.assertEqual(proc.size["height"], 40)
-            self.assertEqual(proc.size["width"], 40)
-            self.assertTrue(proc.do_normalize)
-            self.assertTrue(proc.do_convert_rgb)
-            self.assertEqual(list(proc.image_mean), list(OPENAI_CLIP_MEAN))
-            self.assertEqual(list(proc.image_std), list(OPENAI_CLIP_STD))
-            self.assertEqual(proc.resample, PILImageResampling.LANCZOS)
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 40, "width": 40})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 16, "width": 16}
-            )
-            self.assertEqual(image_processor.size, {"height": 16, "width": 16})
 
     def test_output_keys(self):
         for image_processing_class in self.image_processing_classes.values():

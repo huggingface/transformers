@@ -52,6 +52,67 @@ from .configuration_minicpmv4_7 import MiniCPMV4_7Config, MiniCPMV4_7VisionConfi
 logger = logging.get_logger(__name__)
 
 
+class MiniCPMV4_7VisionEmbeddings(nn.Module):
+    """
+    This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
+    resolution.
+
+    The modifications are adapted from [Patch n' Pack: NaViT, a Vision Transformer for any Aspect Ratio and Resolution](https://huggingface.co/papers/2307.06304)
+    which allows treating images in their native aspect ratio and without the need to resize them to the same
+    fixed size. In particular, we start from the original pre-trained SigLIP model
+    (which uses images of fixed-size square images) and adapt it by training on images of variable resolutions.
+    """
+
+    def __init__(self, config: MiniCPMV4_7VisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches_per_side = self.image_size // self.patch_size
+        self.num_patches = self.num_patches_per_side**2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        target_sizes: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        patch_embeds = self.patch_embedding(pixel_values)
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+        pos_ids = get_vision_nearest_position_ids(target_sizes, self.num_patches_per_side, kwargs=kwargs)
+        pos_ids = pos_ids.to(self.position_embedding.weight.device)
+        position_embeddings = self.position_embedding(pos_ids).unsqueeze(0)
+        embeddings = embeddings + position_embeddings
+        return embeddings
+
+
+class MiniCPMV4_7VisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -178,6 +239,68 @@ class MiniCPMV4_7VisionAttention(nn.Module):
         return attn_output, None
 
 
+class MiniCPMV4_7VisionEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniCPMV4_7VisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = MiniCPMV4_7VisionAttention(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = MiniCPMV4_7VisionMLP(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class MiniCPMV4_7VisionEncoder(nn.Module):
+    """Transformer encoder consisting of `config.num_hidden_layers` [`MiniCPMV4_7VisionEncoderLayer`] layers."""
+
+    def __init__(self, config: MiniCPMV4_7VisionConfig):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([MiniCPMV4_7VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    # Ignore copy
+    @auto_docstring
+    def forward(
+        self,
+        inputs_embeds,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask,
+                **kwargs,
+            )
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
     def __init__(self, config: MiniCPMV4_7VisionConfig):
         super().__init__()
@@ -273,129 +396,6 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         hidden_state = (hidden_state + patch_residual).unsqueeze(0)
 
         return hidden_state
-
-
-class MiniCPMV4_7VisionEmbeddings(nn.Module):
-    """
-    This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
-    resolution.
-
-    The modifications are adapted from [Patch n' Pack: NaViT, a Vision Transformer for any Aspect Ratio and Resolution](https://huggingface.co/papers/2307.06304)
-    which allows treating images in their native aspect ratio and without the need to resize them to the same
-    fixed size. In particular, we start from the original pre-trained SigLIP model
-    (which uses images of fixed-size square images) and adapt it by training on images of variable resolutions.
-    """
-
-    def __init__(self, config: MiniCPMV4_7VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            padding="valid",
-        )
-
-        self.num_patches_per_side = self.image_size // self.patch_size
-        self.num_patches = self.num_patches_per_side**2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        target_sizes: torch.IntTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        patch_embeds = self.patch_embedding(pixel_values)
-        embeddings = patch_embeds.flatten(2).transpose(1, 2)
-
-        pos_ids = get_vision_nearest_position_ids(target_sizes, self.num_patches_per_side, kwargs=kwargs)
-        pos_ids = pos_ids.to(self.position_embedding.weight.device)
-        position_embeddings = self.position_embedding(pos_ids).unsqueeze(0)
-        embeddings = embeddings + position_embeddings
-        return embeddings
-
-
-class MiniCPMV4_7VisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class MiniCPMV4_7VisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MiniCPMV4_7VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.self_attn = MiniCPMV4_7VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MiniCPMV4_7VisionMLP(config)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class MiniCPMV4_7VisionEncoder(nn.Module):
-    """Transformer encoder consisting of `config.num_hidden_layers` [`MiniCPMV4_7VisionEncoderLayer`] layers."""
-
-    def __init__(self, config: MiniCPMV4_7VisionConfig):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([MiniCPMV4_7VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    # Ignore copy
-    @auto_docstring
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask,
-                **kwargs,
-            )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class MiniCPMV4_7VisionPreTrainedModel(PreTrainedModel):
@@ -681,6 +681,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -695,32 +696,43 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            # Pixels are always `1` in first dim due to NaViT packing, and we don't
-            # want to waste compute processing the same image `num_beams` times. Hack until
-            # @raushan adds support for encoding images once same way as in enc-dec models
-            num_beams = pixel_values.shape[0]
-            vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
-            image_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if (
+            mm_encoder_outputs.get("image") is None
+            and pixel_values is not None
+            and self.config.image_token_id is not None
+        ):
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values[:1], target_sizes, downsample_mode=downsample_mode
+            )
+
+        if (
+            mm_encoder_outputs.get("video") is None
+            and pixel_values_videos is not None
+            and self.config.video_token_id is not None
+        ):
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
-        if pixel_values_videos is not None:
-            num_beams = pixel_values_videos.shape[0]
-            vision_output = self.get_video_features(
-                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
-            )
-            video_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        if mm_encoder_outputs.get("video") is not None:
+            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
@@ -1227,6 +1239,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1254,6 +1267,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             use_cache=use_cache,
             downsample_mode=downsample_mode,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1316,37 +1330,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["target_sizes_videos"] = target_sizes_videos
         return model_inputs
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        target_sizes: torch.LongTensor | None = None,
-        target_sizes_videos: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Taking these as explicit arguments keeps them out of the dim-0 `repeat_interleave` that
-        # `super()` applies to every tensor left in `model_kwargs`: `target_sizes*` are indexed by
-        # crop instead of by batch item, and canvas M-RoPE position ids are `(3, batch, seq)` so they
-        # expand along dim 1. Note that `mm_token_type_ids` is deliberately *not* listed here: it is
-        # `(batch, seq)`, so the default dim-0 expansion is exactly what it needs.
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-
-        if target_sizes is not None:
-            model_kwargs["target_sizes"] = target_sizes
-        if target_sizes_videos is not None:
-            model_kwargs["target_sizes_videos"] = target_sizes_videos
-        if position_ids is not None:
-            batch_dim = 1 if position_ids.ndim == 3 else 0
-            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
-        return input_ids, model_kwargs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- canvas M-RoPE needs 4D position ids [text, T, H, W].

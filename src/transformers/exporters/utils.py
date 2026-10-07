@@ -55,7 +55,18 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-    from torch._prims_common import is_contiguous_or_false
+
+    try:
+        from torch._prims_common import is_contiguous_or_false
+    except ImportError:  # `is_contiguous_or_false` was added in torch 2.9
+        from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
+
+        def is_contiguous_or_false(a: torch.Tensor) -> bool:
+            # Like torch>=2.9's version, answer False instead of raising on data-dependent shapes.
+            try:
+                return bool(a.is_contiguous())
+            except GuardOnDataDependentSymNode:
+                return False
 
     from .. import masking_utils
     from ..modeling_utils import PreTrainedModel

@@ -78,7 +78,7 @@ def parse_args():
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default="cifar10",
+        default="uoft-cs/cifar10",
         help="Name of a dataset from the datasets package",
     )
     parser.add_argument(

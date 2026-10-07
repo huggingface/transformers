@@ -20,51 +20,17 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPDocLayoutV2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.0, 0.0, 0.0],
-        image_std=[1.0, 1.0, 1.0],
-    ):
-        size = size if size is not None else {"height": 40, "width": 40}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 40, "width": 40})
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-        }
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PPDocLayoutV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = PPDocLayoutV2ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = PPDocLayoutV2ImageProcessingTester
 
     @unittest.skip(
         reason="PPDocLayoutV2 uses antialias=False which is not supported for 4-channel images consistently"
