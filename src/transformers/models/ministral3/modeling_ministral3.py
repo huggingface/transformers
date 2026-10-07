@@ -213,9 +213,7 @@ class Ministral3DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Ministral3Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
         self.self_attn = Ministral3Attention(config=config, layer_idx=layer_idx)
-
         self.mlp = Ministral3MLP(config)
         self.input_layernorm = Ministral3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Ministral3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

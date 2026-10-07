@@ -35,7 +35,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma.modeling_gemma import GemmaMLP
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
@@ -147,7 +147,11 @@ class Qwen2MoeDecoderLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class Qwen2MoePreTrainedModel(MixtralPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen2MoeTopKRouter, index=0),
+        "hidden_states": Qwen2MoeDecoderLayer,
+        "attentions": Qwen2MoeAttention,
+    }
 
 
 @auto_docstring

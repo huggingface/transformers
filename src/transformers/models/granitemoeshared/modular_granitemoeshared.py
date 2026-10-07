@@ -129,15 +129,26 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
 
 
 class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
-    pass
+    config: GraniteMoeSharedConfig
+    _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
 
 
 class GraniteMoeSharedModel(GraniteMoeModel):
-    pass
+    def __init__(self, config: GraniteMoeSharedConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [GraniteMoeSharedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class GraniteMoeSharedForCausalLM(GraniteMoeForCausalLM):
-    pass
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
+    def __init__(self, config: GraniteMoeSharedConfig):
+        super().__init__(config)
+        self.model = GraniteMoeSharedModel(config)
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 __all__ = ["GraniteMoeSharedForCausalLM", "GraniteMoeSharedModel", "GraniteMoeSharedPreTrainedModel"]

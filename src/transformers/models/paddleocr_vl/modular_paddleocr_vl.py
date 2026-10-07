@@ -283,7 +283,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict
 class PaddleOCRTextConfig(Ernie4_5Config):
-    pass
+    model_type = "paddleocr_vl_text"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")

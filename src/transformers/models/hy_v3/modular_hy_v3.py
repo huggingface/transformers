@@ -250,7 +250,13 @@ class HYV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class HYV3Model(MiniMaxM2Model):
-    pass
+    def __init__(self, config: HYV3Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [HYV3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = HYV3RotaryEmbedding(config=config)
 
 
 class HYV3ForCausalLM(LlamaForCausalLM):
