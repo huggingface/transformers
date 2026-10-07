@@ -228,9 +228,7 @@ class Gemma3CausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
 
 
 class Gemma3TextScaledWordEmbedding(GemmaTextScaledWordEmbedding):
-    """
-    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
-    """
+    pass
 
 
 class Gemma3MLP(Gemma2MLP):
@@ -409,7 +407,6 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
@@ -645,9 +642,6 @@ def create_masks_for_vision_model(
 
 
 class Gemma3Model(PaliGemmaModel):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    accepts_loss_kwargs = False
-
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         del self.text_config_dtype
