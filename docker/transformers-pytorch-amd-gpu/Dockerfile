@@ -25,11 +25,11 @@ RUN TV_VERSION=$(python3 -c "import torchvision; print(torchvision.__version__.s
 
 RUN python3 -m pip install --no-cache-dir --no-build-isolation git+https://github.com/facebookresearch/detectron2.git
 
+# The build workflow passes the commit being built, so this clone (and every layer after it) is redone for each new
+# commit instead of being reused from the cache.
 ARG REF=main
 WORKDIR /
 
-# Invalidate docker cache from here if new commit is available.
-ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # Install transformers
