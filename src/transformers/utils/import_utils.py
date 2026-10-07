@@ -1187,9 +1187,7 @@ def is_torchcodec_available() -> bool:
     return _is_package_available("torchcodec")[0]
 
 
-lru_cache
-
-
+@lru_cache
 def is_torchcodec_greater_or_equal(library_version: str) -> bool:
     if not is_torchcodec_available():
         return False
