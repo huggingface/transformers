@@ -84,14 +84,15 @@ class StftConfig(DataclassDict):
     center: bool | str = True
     pad_mode: str = "reflect"
     normalized: bool | str = False
-    onesided: bool = True
+    onesided: bool = True  # must stay True (validated); kept for hub configs
     periodic: bool = True
     blackman_coeff: float = 0.42
     left_align_fft: bool = False
     window_dtype: str | None = None
     extra_samples_per_frame: int = 0
-    # None: FFT in the waveform dtype; "float64": frames upcast at the FFT boundary; "native": no cast;
-    # "complex64": the FFT output is rounded through complex64 before the float64 magnitudes.
+    # None: FFT in the frames' dtype, no rounding; "float64": frames upcast at the FFT boundary;
+    # "complex64": a float64 spectrum is rounded through complex64 before the magnitudes (the legacy
+    # numpy spectrogram() wrote into a complex64 buffer).
     fft_dtype: str | None = None
     magnitude_mode: str | None = None
 

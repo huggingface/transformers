@@ -75,6 +75,8 @@ class UnivNetAudioProcessorMixin:
             "window_fn": "hann",
             "periodic": True,
             "power": 1.0,
+            # the legacy numpy `spectrogram()` wrote its FFT into a complex64 buffer
+            "fft_dtype": "complex64",
         },
         "mel_scale_config": {
             "n_mels": 100,
@@ -124,7 +126,7 @@ class UnivNetAudioProcessorMixin:
         # UnivNet reflect-pads by (n_fft - hop_length) / 2 instead of centring the frames
         stft_cfg = spectrogram_config.stft_config
         pad_amount = int((stft_cfg.n_fft - stft_cfg.hop_length) / 2)
-        audio = self._reflect_pad(audio, pad_amount)
+        audio = self.ops.pad(audio, pad_amount, pad_amount, mode="reflect")
         return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
     def _shape_log_features(
@@ -137,15 +139,9 @@ class UnivNetAudioProcessorMixin:
 
 
 class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
-    def _reflect_pad(self, audio, pad_amount):
-        # torch reflect-pads the last axis only from a batched input, unlike `np.pad`
-        if audio.ndim == 1:
-            return torch.nn.functional.pad(audio[None], (pad_amount, pad_amount), mode="reflect")[0]
-        return torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
-
     def _spectrum_magnitude(self, stft_out, spectrogram_config, *, magnitude_floor, **kwargs):
-        # round-trip through complex64/float32 like the legacy FE, so the float64 magnitudes
-        # match bit-exactly (the numpy sibling stays in float64 throughout)
+        # `fft_dtype="complex64"` already rounded the spectrum; the legacy FE then squared and summed
+        # in float32, so narrow again (exact) and keep that arithmetic in float32
         stft_out = stft_out.to(torch.complex64)
         presqrt = stft_out.real**2 + stft_out.imag**2 + magnitude_floor
         return presqrt.double().sqrt().float().double()

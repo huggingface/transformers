@@ -31,6 +31,10 @@ from .tokenization_utils_base import TruncationStrategy
 from .utils import PaddingStrategy, TensorType, logging
 
 
+_PAD_MODES = {"constant": "constant", "reflect": "reflect", "edge": "replicate", "replicate": "replicate"}
+_COMPLEX_OF = {"float32": "complex64", "float64": "complex128"}
+
+
 if TYPE_CHECKING:
     import torch
 
@@ -628,46 +632,29 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return features
 
     def _waveform_to_spectrum(self, audio, *, spectrogram_config, dither, audio_ranges=None, **kwargs):
-        """Convert waveforms with samples on the last axis to ``(..., frequency, frames)`` spectra."""
+        """Convert waveforms with samples on the last axis to ``(..., frequency, frames)`` magnitudes."""
         self._validate_spectrogram_config(spectrogram_config)
-        frames_on_win_length = self._frames_on_win_length(spectrogram_config)
         stft_cfg = spectrogram_config.stft_config
-
         audio = self._condition_waveform_for_stft(
-            audio,
-            spectrogram_config=spectrogram_config,
-            dither=dither,
-            audio_ranges=audio_ranges,
+            audio, spectrogram_config=spectrogram_config, dither=dither, audio_ranges=audio_ranges
         )
         window, frame_length = self._stft_window(audio, spectrogram_config=spectrogram_config)
-
-        if frames_on_win_length:
-            frames = self._frame_waveform(
-                audio,
-                window,
-                frame_length + stft_cfg.extra_samples_per_frame,
-                stft_cfg,
-            )
-            frames = self._process_frames(
-                frames, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs
-            )
-            stft_out = self._stft_framed(frames, window, frame_length, stft_cfg)
-        else:
-            stft_out = self._stft_native(audio, window, frame_length, stft_cfg)
-
-        magnitudes = self._spectrum_magnitude(
-            stft_out,
-            spectrogram_config,
-            audio_ranges=audio_ranges,
-            **kwargs,
+        frames = self._frame_waveform(audio, frame_length + stft_cfg.extra_samples_per_frame, stft_cfg)
+        frames = self._process_frames(
+            frames, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs
         )
+        stft_out = self._stft_framed(frames, window, stft_cfg)
+        if spectrogram_config.computation_dtype:
+            # the magnitudes are taken in `computation_dtype`, so hand them the matching complex dtype;
+            # a no-op unless `fft_dtype="complex64"` narrowed a float64 spectrum
+            stft_out = self.ops.astype(stft_out, _COMPLEX_OF[spectrogram_config.computation_dtype])
+        magnitudes = self._spectrum_magnitude(stft_out, spectrogram_config, audio_ranges=audio_ranges, **kwargs)
         return self._cast_stft_output(magnitudes, spectrogram_config)
 
     def _validate_spectrogram_config(self, spectrogram_config: SpectrogramConfig) -> None:
         stft_cfg = spectrogram_config.stft_config
-        if spectrogram_config.mel_scale_config is not None and not stft_cfg.onesided:
-            raise ValueError("onesided=False is only supported for spectrograms without a mel projection.")
-        frames_on_win_length = self._frames_on_win_length(spectrogram_config)
+        if not stft_cfg.onesided:
+            raise ValueError("onesided=False is not supported; no model needs the mirrored half of the spectrum.")
         if stft_cfg.extra_samples_per_frame:
             if stft_cfg.extra_samples_per_frame != 1:
                 raise ValueError(
@@ -681,23 +668,16 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 raise ValueError("remove_dc_offset is not supported with extra_samples_per_frame.")
         elif spectrogram_config.preemphasis_mode == "htk_per_frame":
             raise ValueError("preemphasis_mode='htk_per_frame' requires extra_samples_per_frame=1.")
-        if stft_cfg.fft_dtype is not None:
-            if stft_cfg.fft_dtype not in ("float64", "native", "complex64"):
-                raise ValueError(
-                    f"fft_dtype must be None, 'float64', 'native' or 'complex64', got {stft_cfg.fft_dtype!r}."
-                )
-            if not frames_on_win_length and stft_cfg.fft_dtype != "complex64":
-                raise ValueError(
-                    "fft_dtype applies to the manual-framing path only; this configuration uses the native STFT."
-                )
+        if stft_cfg.fft_dtype not in (None, "float64", "complex64"):
+            raise ValueError(f"fft_dtype must be None, 'float64' or 'complex64', got {stft_cfg.fft_dtype!r}.")
         if stft_cfg.pad < 0:
             raise ValueError(f"pad must be non-negative, got {stft_cfg.pad}.")
 
     def _condition_waveform_for_stft(self, audio, *, spectrogram_config: SpectrogramConfig, dither, audio_ranges):
         """Apply waveform operations in their numerically significant order before STFT framing."""
         stft_cfg = spectrogram_config.stft_config
-        if spectrogram_config.computation_dtype and stft_cfg.fft_dtype in (None, "complex64"):
-            # with `fft_dtype="float64"` / `"native"`, the cast happens at the FFT boundary instead
+        if spectrogram_config.computation_dtype and stft_cfg.fft_dtype != "float64":
+            # with `fft_dtype="float64"` the cast happens at the FFT boundary instead
             audio = self._astype(audio, spectrogram_config.computation_dtype)
         if dither > 0:
             audio = self._dither_waveform(audio, audio_ranges, dither=dither)
@@ -706,7 +686,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if spectrogram_config.preemphasis is not None and spectrogram_config.preemphasis_mode == "waveform":
             audio = self._preemphasize_waveform(audio, spectrogram_config.preemphasis, audio_ranges)
         if stft_cfg.pad:
-            audio = self._pad_axis(audio, stft_cfg.pad, stft_cfg.pad, axis=-1, value=0.0)
+            audio = self.ops.pad(audio, stft_cfg.pad, stft_cfg.pad)
         return audio
 
     def _host_window(self, stft_cfg) -> np.ndarray | None:
@@ -833,13 +813,20 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     # ── Spectrogram backend ──────────────────────────────────────────────
 
-    def _frame_waveform(self, audio, window, frame_length, stft_cfg):
-        """Extract overlapping frames from the audio signal.
-
-        Handles center padding and dtype promotion. Returns frames of shape
-        (..., num_frames, frame_length). Implemented by backend subclasses.
-        """
-        raise NotImplementedError
+    def _frame_waveform(self, audio, frame_length, stft_cfg):
+        """Centre-pad as configured and cut `(..., n_frames, frame_length)` frames, in the audio dtype."""
+        if stft_cfg.center == "left":
+            audio = self.ops.pad(audio, stft_cfg.win_length // 2, 0)  # semicausal (USM/Gemma): zeros prepended only
+        elif stft_cfg.center:
+            half = frame_length // 2
+            mode = _PAD_MODES[stft_cfg.pad_mode]
+            if mode == "reflect" and half > audio.shape[-1] - 1:
+                raise ValueError(
+                    f"Cannot reflect-pad {half} samples on each side of a {audio.shape[-1]}-sample clip; "
+                    "reflect padding needs at least frame_length // 2 + 1 samples."
+                )
+            audio = self.ops.pad(audio, half, half, mode=mode)
+        return self.ops.frame(audio, frame_length, stft_cfg.hop_length)
 
     def _process_frames(self, frames, *, spectrogram_config, **kwargs):
         """Hook: per-frame signal conditioning after frame extraction.
@@ -879,19 +866,37 @@ class BaseAudioProcessor(AudioProcessingMixin):
         (ASR models: Parakeet/Cohere/Nemotron). Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _stft_framed(self, frames, window, frame_length, stft_cfg):
-        """Apply window, zero-pad, FFT, and normalize. Returns complex STFT of shape (..., freq, time).
-        Implemented by backend subclasses."""
-        raise NotImplementedError
+    def _stft_framed(self, frames, window, stft_cfg):
+        """Window, FFT and normalise `frames`; returns the complex spectrum as ``(..., freq, frames)``.
+
+        The frames are promoted to the wider of their dtype and the window's at the multiplication
+        (what both old leaves did through array promotion). `rfft` zero-pads a `win_length` frame to
+        `n_fft` on the right, so a left-aligned window needs no explicit pad. The result is a view
+        (`swapaxes`), never a contiguous copy: a copy shifts the mel GEMM by an ulp against legacy.
+        """
+        common = np.result_type(self.ops.dtype_name(frames), self.ops.dtype_name(window)).name
+        frames = self.ops.astype(frames, common) * self.ops.astype(window, common)
+        if stft_cfg.fft_dtype == "float64":
+            frames = self.ops.astype(frames, "float64")
+        spec = self.ops.rfft(frames, stft_cfg.n_fft)
+        if stft_cfg.fft_dtype == "complex64" and self.ops.dtype_name(spec) == "complex128":
+            # the legacy numpy `spectrogram()` wrote its FFT into a complex64 buffer; the caller widens
+            # again when the magnitudes are taken in float64
+            spec = self.ops.astype(spec, "complex64")
+        if stft_cfg.normalized in (True, "window"):
+            # the norm in the window's working dtype, as both old backends did; a Python float keeps `spec`'s dtype
+            norm = self.ops.sqrt(self.ops.sum(self.ops.pow(window, 2.0), None))
+            spec = spec / float(self.ops.to_numpy(norm))
+        elif stft_cfg.normalized == "frame_length":
+            spec = spec / math.sqrt(stft_cfg.n_fft)
+        elif stft_cfg.normalized is not False:
+            raise ValueError(f"Invalid normalized value: {stft_cfg.normalized!r}")
+        return self.ops.swapaxes(spec, -1, -2)
 
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):
         """Additive dither, applied when the merged ``dither`` is nonzero. Backend defaults add
         unseeded Gaussian noise; deterministic implementations (Cohere-ASR) override.
         ``audio_ranges`` is ``None`` on unbatched calls. Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _stft_native(self, audio, window, frame_length, stft_cfg):
-        """Native STFT (e.g. torch.stft). Returns complex output. Implemented by backend subclasses."""
         raise NotImplementedError
 
     def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):

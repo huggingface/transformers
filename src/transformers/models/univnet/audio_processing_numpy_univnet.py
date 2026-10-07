@@ -19,11 +19,10 @@ from .audio_processing_univnet import UnivNetAudioProcessorMixin
 
 
 class UnivNetAudioProcessorNumpy(UnivNetAudioProcessorMixin, NumpyAudioBackend):
-    def _reflect_pad(self, audio, pad_amount):
-        pad_width = [(0, 0)] * (audio.ndim - 1) + [(pad_amount, pad_amount)]
-        return np.pad(audio, pad_width, mode="reflect")
-
     def _spectrum_magnitude(self, stft_out, spectrogram_config, *, magnitude_floor, **kwargs):
+        # `fft_dtype="complex64"` already rounded the spectrum; the legacy FE squared and summed in
+        # float32 from that buffer, so narrow again (exact) and keep that arithmetic in float32
+        stft_out = stft_out.astype(np.complex64)
         return np.sqrt(np.real(stft_out) ** 2 + np.imag(stft_out) ** 2 + magnitude_floor)
 
     def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
