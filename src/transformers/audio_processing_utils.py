@@ -644,15 +644,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             frames, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs
         )
         stft_out = self._stft_framed(frames, window, stft_cfg)
-        if spectrogram_config.computation_dtype:
-            # the magnitudes are taken in `computation_dtype`, so hand them the matching complex dtype.
-            # A no-op on torch and for every numpy model with a legacy numpy oracle (their spectrum is
-            # already the complex of `computation_dtype`, or `fft_dtype="complex64"` narrowed it and
-            # float64 magnitudes widen it back); with `computation_dtype="float32"` and a float64
-            # window it narrows the spectrum to complex64.
-            stft_out = self.ops.astype(stft_out, _COMPLEX_OF[spectrogram_config.computation_dtype])
-        magnitudes = self._spectrum_magnitude(stft_out, spectrogram_config, audio_ranges=audio_ranges, **kwargs)
-        return self._cast_stft_output(magnitudes, spectrogram_config)
+        return self._spectrum_magnitude(stft_out, spectrogram_config, audio_ranges=audio_ranges, **kwargs)
 
     def _validate_spectrogram_config(self, spectrogram_config: SpectrogramConfig) -> None:
         stft_cfg = spectrogram_config.stft_config
@@ -775,10 +767,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
             # `rfft(n=n_fft)` zero-pad on the right, instead of centring the window in an `n_fft` frame
             or spectrogram_config.stft_config.left_align_fft
         )
-
-    def _cast_stft_output(self, magnitudes, spectrogram_config):
-        """Cast STFT output to the desired output dtype. Default: no-op."""
-        return magnitudes
 
     def _frame_count(self, lengths, stft_cfg):
         """Frames the framing yields for `lengths` samples, excluding the extra centered frame."""
@@ -906,9 +894,24 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
-        """Convert complex STFT output to a real-valued magnitude spectrogram.
-        Implemented by backend subclasses. Overridable for custom magnitude computation (e.g. Parakeet)."""
-        raise NotImplementedError
+        """Magnitude (`power=1`) or power (`power=2`) spectrum of the complex STFT.
+
+        With a `computation_dtype` the spectrum is widened first, so a complex64 FFT yields float64
+        magnitudes; `magnitude_mode="sqrt_sum_squares"` is the NeMo form, an ulp away from `abs`.
+        Without one the magnitudes keep the spectrum's dtype: the log stage casts to float32.
+        """
+        stft_cfg = spectrogram_config.stft_config
+        if spectrogram_config.computation_dtype:
+            stft_out = self.ops.astype(stft_out, _COMPLEX_OF[spectrogram_config.computation_dtype])
+        if stft_cfg.magnitude_mode == "sqrt_sum_squares":
+            # `view_as_real(x).pow(2).sum(-1).sqrt()` in NeMo: the same bits as `real * real + imag * imag`,
+            # but a reduction, so on torch it leaves the FFT's strided layout for a contiguous one, which
+            # the mel GEMM's accumulation order then follows. Keep it a reduction.
+            real, imag = self.ops.real(stft_out), self.ops.imag(stft_out)
+            magnitudes = self.ops.sqrt(self.ops.sum(self.ops.stack([real * real, imag * imag]), 0))
+        else:
+            magnitudes = self.ops.abs(stft_out)
+        return self.ops.pow(magnitudes, stft_cfg.power) if stft_cfg.power != 1.0 else magnitudes
 
     def _project_to_mel(self, *args, **kwargs):
         """Apply mel filterbank to spectrogram features."""

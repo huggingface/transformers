@@ -129,6 +129,16 @@ class UnivNetAudioProcessorMixin:
         audio = self.ops.pad(audio, pad_amount, pad_amount, mode="reflect")
         return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
+    def _spectrum_magnitude(self, stft_out, spectrogram_config, *, magnitude_floor, **kwargs):
+        # The legacy extractor adds its floor inside the sqrt, in float32 (the spectrum has been
+        # rounded through complex64 by `fft_dtype`), then takes the root in float64 and rounds it
+        # through float32. The float32 arithmetic is kept explicit for a backend whose spectrum is
+        # not complex64.
+        real = self.ops.astype(self.ops.real(stft_out), "float32")
+        imag = self.ops.astype(self.ops.imag(stft_out), "float32")
+        presqrt = self.ops.astype(real * real + imag * imag + magnitude_floor, "float64")
+        return self.ops.astype(self.ops.astype(self.ops.sqrt(presqrt), "float32"), "float64")
+
     def _shape_log_features(
         self, features, spectrogram_config, *, do_normalize, normalize_min, normalize_max, **kwargs
     ):
@@ -139,13 +149,6 @@ class UnivNetAudioProcessorMixin:
 
 
 class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
-    def _spectrum_magnitude(self, stft_out, spectrogram_config, *, magnitude_floor, **kwargs):
-        # `fft_dtype="complex64"` already rounded the spectrum; the legacy FE then squared and summed
-        # in float32, so narrow again (exact) and keep that arithmetic in float32
-        stft_out = stft_out.to(torch.complex64)
-        presqrt = stft_out.real**2 + stft_out.imag**2 + magnitude_floor
-        return presqrt.double().sqrt().float().double()
-
     def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         # No mel-scale clamp, as in the numpy sibling. Match the filters to the feature dtype:
         # unlike numpy, `torch.matmul` refuses mixed dtypes rather than promoting.

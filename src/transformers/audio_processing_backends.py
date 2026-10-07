@@ -66,22 +66,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):
         return audio + (dither * np.random.randn(*audio.shape)).astype(audio.dtype)
 
-    def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
-        # `computation_dtype` names the dtype the upstream FE took magnitudes in, as it does in the
-        # torch leaf and in the mel-filter leaves below. It was previously read as a flag -- any
-        # truthy value meant float64 -- so a config asking for float32 silently got float64 here
-        # while torch honoured it, one field with two meanings.
-        power = spectrogram_config.stft_config.power
-        dtype = np.dtype(spectrogram_config.computation_dtype) if spectrogram_config.computation_dtype else None
-        if spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
-            real = np.real(stft_out).astype(dtype, copy=False) if dtype else np.real(stft_out)
-            imag = np.imag(stft_out).astype(dtype, copy=False) if dtype else np.imag(stft_out)
-            magnitudes = np.sqrt(real**2 + imag**2)
-            return magnitudes**power if power != 1.0 else magnitudes
-        if dtype:
-            return np.abs(stft_out, dtype=dtype) ** power
-        return np.abs(stft_out) ** power
-
     # ── Mel scale & normalization ─────────────────────────────────────────
     #
     # The base `_mel_filter_bank` dispatcher (audio_processing_utils) resolves geometry
@@ -317,40 +301,6 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):
         noise = torch.randn(audio.shape, dtype=audio.dtype, device=audio.device)
         return audio + dither * noise
-
-    def _cast_stft_output(self, magnitudes, spectrogram_config):
-        if spectrogram_config.computation_dtype:
-            return magnitudes
-        return magnitudes.float()
-
-    def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
-        # TODO(audio-processor): reinstate the contiguity fix once the perf/parity trade-off is
-        # decided. `torch.stft` returns a non-contiguous tensor and `abs() ** power` keeps that
-        # layout, so the downstream `mel_filters.T @ magnitudes` matmul can fall onto a slow
-        # strided-GEMM path (~8x slower on a ROCm build). Upstream fixed that in the legacy
-        # `WhisperFeatureExtractor` (#47351) and it was ported here in 55db94210b, adding
-        # `.contiguous()` to both returns below.
-        #
-        # It was reverted because it is NOT value-neutral, contrary to what that commit claimed.
-        # Contiguity preserves the values exactly but changes which GEMM kernel and blocking the
-        # mel projection selects, which changes accumulation order and shifts float32 results by
-        # ~1 ulp. That breaks bit-exact parity against the legacy numpy feature extractors for
-        # `whisper`, `voxtral_realtime`, `audio_spectrogram_transformer` and `speech_to_text`
-        # (the last amplifies 1 ulp to 4.77e-06 through its per-utterance CMVN).
-        #
-        # Bit-equality is the correctness guide for now; trading it for throughput is a separate,
-        # explicitly-motivated decision. Do not re-add this without resolving that.
-        #
-        # Note: the `test-spectrogram` harness does NOT catch this class of change — its kaldi and
-        # torchaudio families stay green because the reference libraries consume the same
-        # contiguous layout we produce. Only the numpy legacy extractors pin the strided
-        # accumulation order, so run the parity suite (`./validate`) for any layout change.
-        power = spectrogram_config.stft_config.power
-        if spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
-            # NeMo-derived form; differs from `abs()` in the last ulp
-            magnitudes = torch.view_as_real(stft_out).pow(2).sum(-1).sqrt()
-            return magnitudes.pow(power) if power != 1.0 else magnitudes
-        return stft_out.abs() ** power
 
     # ── Mel scale & normalization ─────────────────────────────────────────
     #
@@ -877,7 +827,9 @@ class NumpyOps(AudioOps):
         return np.asarray(np.maximum(x, np.asarray(value, dtype=x.dtype)))
 
     def pow(self, x, exponent):
-        return np.asarray(np.power(x, exponent))
+        # the operator, not `np.power`: numpy fast-paths a scalar 2 to `square` and 0.5 to `sqrt`, as
+        # the legacy extractors' `** power` did, and the ufunc does not
+        return np.asarray(x**exponent)
 
     # ── reductions ─────────────────────────────────────────────────────────────────────────────
 

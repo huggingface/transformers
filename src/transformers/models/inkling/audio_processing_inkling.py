@@ -15,7 +15,7 @@
 import math
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import _clamp_min
+from ...audio_processing_utils import _COMPLEX_OF
 
 
 def _hop_length_from_token_duration(value, config_dict):
@@ -97,9 +97,12 @@ class InklingAudioProcessorMixin:
         # The legacy extractor clamps at 1e-10 *inside* the sqrt
         # (`magnitudes.pow(2).sum(-1).clamp_min(1e-10).sqrt()`), not at the config's `mel_floor`
         # after it. Moving the clamp or using `mel_floor` here breaks bit-equality.
-        magnitudes = _clamp_min(stft_out.real**2 + stft_out.imag**2, 1e-10) ** 0.5
+        if spectrogram_config.computation_dtype:
+            stft_out = self.ops.astype(stft_out, _COMPLEX_OF[spectrogram_config.computation_dtype])
+        real, imag = self.ops.real(stft_out), self.ops.imag(stft_out)
+        magnitudes = self.ops.pow(self.ops.clamp_min(real * real + imag * imag, 1e-10), 0.5)
         power = spectrogram_config.stft_config.power
-        return magnitudes**power if power != 1.0 else magnitudes
+        return self.ops.pow(magnitudes, power) if power != 1.0 else magnitudes
 
     def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:
         # Inkling right-pads to a whole number of hops, so it emits ceil(length / hop) frames.
