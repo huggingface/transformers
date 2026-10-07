@@ -93,11 +93,17 @@ class MistralAttention(LlamaAttention):
 
 
 class MistralDecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: MistralConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
+        self.mlp = MistralMLP(config)
 
 
 class MistralPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": MistralDecoderLayer,
+        "attentions": MistralAttention,
+    }
 
 
 class MistralModel(LlamaModel):

@@ -292,7 +292,10 @@ class GlmOcrVisionModel(Glm4vVisionModel):
 
 
 class GlmOcrTextModel(Glm4vTextModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": GlmOcrTextDecoderLayer,
+        "attentions": GlmOcrTextAttention,
+    }
 
 
 class GlmOcrModel(Glm4vModel):

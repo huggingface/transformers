@@ -20,6 +20,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -82,7 +83,11 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
 
 
 class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, index=0),
+        "hidden_states": Qwen3MoeDecoderLayer,
+        "attentions": Qwen3MoeAttention,
+    }
 
 
 class Qwen3MoeModel(MixtralModel):

@@ -15,6 +15,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -167,7 +168,19 @@ class Mistral4Attention(DeepseekV3Attention):
 
 
 class Mistral4DecoderLayer(DeepseekV3DecoderLayer):
-    pass
+    def __init__(self, config: Mistral4Config, layer_idx: int):
+        nn.Module.__init__(self)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = Mistral4Attention(config=config, layer_idx=layer_idx)
+
+        if layer_idx >= config.first_k_dense_replace:
+            self.mlp = Mistral4MoE(config)
+        else:
+            self.mlp = Mistral4MLP(config)
+
+        self.input_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class Mistral4PreTrainedModel(PreTrainedModel):

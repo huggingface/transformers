@@ -165,7 +165,10 @@ class DiffLlamaAttention(LlamaAttention):
 
 
 class DiffLlamaDecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: DiffLlamaConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = DiffLlamaAttention(config=config, layer_idx=layer_idx)
 
 
 class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):

@@ -211,7 +211,14 @@ class Glm4vMoeTextExperts(DeepseekV3Experts):
 
 
 class Glm4vMoeTextMoE(Glm4MoeMoE):
-    pass
+    def __init__(self, config: Glm4vMoeTextConfig):
+        super().__init__(config)
+        self.config = config
+        self.experts = Glm4vMoeTextExperts(config)
+        self.gate = Glm4vMoeTextTopkRouter(config)
+        self.shared_experts = Glm4vMoeTextMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
 
 class Glm4vMoeTextMLP(Glm4MoeMLP):

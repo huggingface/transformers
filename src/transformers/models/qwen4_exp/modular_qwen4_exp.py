@@ -1038,7 +1038,8 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
 
 @auto_docstring
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
-    pass
+    _no_split_modules = ["Qwen4ExpVisionBlock"]
+    config: Qwen4ExpVisionConfig
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):

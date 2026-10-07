@@ -183,6 +183,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
+
     sub_configs = {
         "text_config": T5Gemma2TextConfig,
         "vision_config": SiglipVisionConfig,

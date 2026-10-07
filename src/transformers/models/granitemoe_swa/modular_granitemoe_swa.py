@@ -149,7 +149,9 @@ class GraniteMoeSWAAttention(GraniteSWAAttention):
 
 
 class GraniteMoeSWADecoderLayer(GraniteMoeSharedDecoderLayer):
-    pass
+    def __init__(self, config: GraniteMoeSWAConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = GraniteMoeSWAAttention(config=config, layer_idx=layer_idx)
 
 
 class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):

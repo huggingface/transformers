@@ -332,7 +332,10 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
 
 
 class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
-    pass
+    def __init__(self, config: Zamba2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
+        self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class Zamba2HybridLayer(ZambaHybridLayer):

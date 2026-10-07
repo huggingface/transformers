@@ -761,8 +761,14 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
             init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
-class AriaTextModel(LlamaModel):
-    pass
+class AriaTextModel(OlmoeModel):
+    def __init__(self, config: AriaTextConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [AriaTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.gradient_checkpointing = False
+        self.post_init()
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):

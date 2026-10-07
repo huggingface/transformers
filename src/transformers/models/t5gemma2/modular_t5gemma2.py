@@ -62,6 +62,7 @@ from ..gemma3.modeling_gemma3 import (
     create_sliding_window_causal_mask,
     eager_attention_forward,
 )
+from ..siglip import SiglipVisionConfig
 from ..t5gemma.modeling_t5gemma import (
     T5GemmaClassificationHead,
     T5GemmaEncoderLayer,
@@ -102,7 +103,12 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
 @strict
 class T5Gemma2EncoderConfig(Gemma3Config):
-    pass
+    model_type = "t5gemma2_encoder"
+
+    sub_configs = {
+        "text_config": T5Gemma2TextConfig,
+        "vision_config": SiglipVisionConfig,
+    }
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
