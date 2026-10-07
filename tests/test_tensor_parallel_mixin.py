@@ -587,17 +587,15 @@ class TensorParallelTesterMixin(ABC):
         )
         for model_class in moe_classes:
             model = model_class(copy.deepcopy(config))
-            param_names = {name for name, _ in model.named_parameters()}  # a tied tensor once, under its first name
-            expert_weights = {
-                f"{name}.{param_name}"
-                for name, module in model.named_modules()
-                if hasattr(module, "_is_expert_parallel")
-                for param_name, param in module.named_parameters(recurse=False)
-                if param.ndim == 3 and f"{name}.{param_name}" in param_names
-            }
-            plans = {"TP": model._tp_plan if has_tp_plan else None, "EP": model._ep_plan}
-            plans = {kind: plan for kind, plan in plans.items() if plan}
-            self.assertTrue(plans, f"{model_class.__name__} is an MoE model without a TP or an EP plan")
+            experts = {name for name, module in model.named_modules() if hasattr(module, "_is_expert_parallel")}
+            expert_weights = [
+                name
+                for name, param in model.named_parameters()
+                if param.ndim == 3 and name.rpartition(".")[0] in experts
+            ]
+            # an MoE whose experts implementation is switchable must ship an EP plan, a TP one is optional
+            self.assertTrue(model._ep_plan, f"{model_class.__name__} is an MoE model without an EP plan")
+            plans = {"EP": model._ep_plan, **({"TP": model._tp_plan} if has_tp_plan else {})}
             for kind, plan in plans.items():
                 unsharded = sorted(n for n in expert_weights if _get_parameter_plan(n, plan, is_weight=True) is None)
                 self.assertFalse(
