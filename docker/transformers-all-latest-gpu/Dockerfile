@@ -108,20 +108,26 @@ RUN python3 -m pip install --no-cache-dir quanto
 # Install FA2:
 #
 # FA2 is built from source because Dao-AILab stopped publishing wheels for torch>=2.9.
-# Key optimisations vs the naive `pip install flash-attn --no-build-isolation`:
+# Key changes vs the naive `pip install flash-attn --no-build-isolation`:
 #   1. ninja       – parallel compilation (without it the build falls back to sequential make)
-#   2. wheel       – force-reinstall so the pip-managed wheel (>=0.43) is used instead of
-#                    the Ubuntu 22.04 system wheel (0.37.1) that still imports pkg_resources,
-#                    which was removed in setuptools>=83 (pulled in by torch>=2.13).
-#   3. SKIP_CK_BUILD=True  – skip ROCm composable_kernel submodule; on NVIDIA it is useless
+#   2. wheel       – force-reinstall the pip-managed wheel (>=0.43) instead of the Ubuntu 22.04
+#                    system wheel (0.37.1) that still imports pkg_resources, which was removed in
+#                    setuptools>=83 (pulled in by torch>=2.13). Correctness fix, not a speed opt.
+#   3. C++20       – torch>=2.14 requires C++20; FA2 v2.8.3.post1 still ships -std=c++17 in its
+#                    setup.py, so we patch it with sed before building.
+#   4. SKIP_CK_BUILD=True  – skip ROCm composable_kernel submodule; on NVIDIA it is useless
 #                    but setup.py unconditionally sets SKIP_CK_BUILD=False, causing ~1100
 #                    extra .cu files to be compiled.
-#   4. csrc/cutlass – init only the CUTLASS submodule (headers required by flash_attn kernels).
-#   5. FLASH_ATTN_CUDA_ARCHS='80' – compile only for Ampere (SM 8.0/8.6, covers A10G & A100);
-#                    skips Hopper (90), Blackwell (100/120) and cuts compile time ~4×.
-#   6. Dynamic MAX_JOBS / NVCC_THREADS – derived from available RAM so the build never OOMs
+#   5. csrc/cutlass – init only the CUTLASS submodule (headers required by flash_attn kernels).
+#   6. FLASH_ATTN_CUDA_ARCHS='80' – compile only for Ampere (SM 8.0/8.6, covers A10G & A100);
+#                    skips Hopper (90), Blackwell (100/120) and cuts compile time ~4× (biggest
+#                    speedup along with ninja).
+#   7. Dynamic MAX_JOBS / NVCC_THREADS – derived from available RAM so the build never OOMs
 #                    on the CI runner (formula: floor(RAM_GB/2.8), capped at nproc, then
 #                    split as NVCC_THREADS=4 / MAX_JOBS=product÷4).
+#   8. --allow-unsupported-compiler – CUDA 13.0 dropped GCC 11 from its supported-compiler
+#                    matrix; Ubuntu 22.04 ships GCC 11 by default, so NVCC hard-errors without
+#                    this flag even though GCC 11 compiles FA2 fine in practice.
 #
 # FA3 and FA4 are skipped — FA3/FA4 require Hopper/Blackwell; our runners use Ampere (A10G).
 RUN if [ "$FLASH_ATTN" != "false" ]; then \
@@ -155,7 +161,7 @@ RUN if [ "$FLASH_ATTN" != "false" ]; then \
         python3 -m pip install --no-cache-dir dist/*.whl; \
         cd /tmp && rm -rf flash-attention; \
     else \
-        echo "Skipping FA install (FLASH_ATTN=${FLASH_ATTN})"; \
+        echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN})"; \
     fi
 
 # TODO (ydshieh): check this again
