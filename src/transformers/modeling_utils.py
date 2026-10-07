@@ -59,7 +59,6 @@ from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
 from .distributed.utils import (
-    _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
     is_local_dist_rank_0,
 )
@@ -4997,7 +4996,14 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model.tp_plan if _is_torch_distributed_initialized() else []
+
+    sharded_plans = []
+    distributed_config = getattr(model.config, "distributed_config", None)
+    if _is_torch_distributed_initialized() and distributed_config is not None:
+        if distributed_config.tp_size > 1:
+            sharded_plans.append((model.tp_plan, distributed_config.tp_size))
+        if distributed_config.ep_size > 1:
+            sharded_plans.append((model.ep_plan, distributed_config.ep_size))
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -5013,9 +5019,9 @@ def get_total_byte_count(
 
         param_byte_count = param.numel() * dtype_size
 
-        if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
-            param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
+        for plan, shard_size in sharded_plans:
+            if _get_parameter_plan(param_name, plan, is_weight=True) is not None:
+                param_byte_count //= shard_size
 
         total_byte_count[device] += param_byte_count
     return total_byte_count
