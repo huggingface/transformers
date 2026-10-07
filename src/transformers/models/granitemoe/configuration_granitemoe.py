@@ -46,10 +46,9 @@ class GraniteMoeConfig(PreTrainedConfig):
     model_type = "granitemoe"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
-        "layers.*.block_sparse_moe.router": "ep_router",
         "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
         "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+        "layers.*.block_sparse_moe.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 32000

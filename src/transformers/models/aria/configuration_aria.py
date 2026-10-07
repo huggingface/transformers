@@ -82,10 +82,9 @@ class AriaTextConfig(PreTrainedConfig):
     head_dim: int | None = None
     base_config_key = "text_config"
     base_model_ep_plan = {
-        "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     moe_num_experts: int = 8
     moe_topk: int = 2
