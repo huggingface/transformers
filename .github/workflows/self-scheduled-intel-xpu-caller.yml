@@ -70,7 +70,6 @@ jobs:
       docker: huggingface/xpu_ci
       ci_event: Scheduled CI (Intel) - XPU
       report_repo_id: optimum-intel-internal-testing/transformers_xpu_daily_ci
-      env_file: /etc/podinfo/gha-gpu-isolation-settings
       commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
       subdirs: '["bert", "gpt2", "vit", "t5"]'
     secrets: inherit
