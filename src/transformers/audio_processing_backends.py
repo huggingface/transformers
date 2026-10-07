@@ -883,13 +883,27 @@ class AudioOps:
     disagree, the code wins.
 
     Conventions:
-    - `like` is an existing backend array whose device (and, where it matters, dtype) the new
-      array should share. It may be `None`.
+    - `like` is an existing backend array whose *device* the new array should share (`randn` also
+      takes its dtype from it). It may be `None`.
     - `dtype` is a numpy-style name: ``"float32"``, ``"float64"``, ``"int32"``, ``"int64"``,
       ``"bool"``, ``"complex64"``, ``"complex128"``. A backend resolves ``"float64"`` to its widest
-      available float for the array's device (float32 on torch/MPS), and ``"complex128"`` likewise.
-    - Axes follow numpy; ``axis=-1`` is the sample / frame axis.
-    - Ops return backend arrays, except `to_numpy`.
+      available float for the array's device (float32 on torch/MPS and on MLX GPUs) and
+      ``"complex128"`` likewise (MLX has no complex128 anywhere). `dtype_name` reports the name an
+      array actually has.
+    - Axes follow numpy; ``axis=-1`` is the sample / frame axis. Reductions take `axis` as an int,
+      a tuple of ints or `None` (all axes) and honour `keepdims`.
+    - Ops return backend arrays, except `to_numpy` and `dtype_name`.
+    - Binary ops (`maximum`, `matmul`, arithmetic) require operands of the *same* dtype; the base
+      casts with `astype(x, dtype_name(y))` first. `masked_fill`'s mask broadcasts *to* `x`, never
+      beyond it. `randn`'s `shape` is a tuple.
+
+    Array protocol — what the base may do with a backend array besides calling ops:
+    - arithmetic with another array of the same dtype or with a Python scalar: ``+ - * /``;
+    - comparisons ``< <= > >= ==`` giving bool arrays, and ``~`` on bool arrays;
+    - indexing with ints, slices, `None` and `...` (views or copies, never relied on for aliasing);
+    - the attributes ``.shape`` and ``.ndim``.
+    Nothing else: no item assignment (build with `masked_fill`, `concat`, `arange`), no `.dtype`
+    (use `dtype_name`), no method-style reductions (use the ops).
     """
 
     name: str = ""
@@ -897,7 +911,7 @@ class AudioOps:
     # ── plumbing ───────────────────────────────────────────────────────────────────────────────
 
     def asarray(self, x, *, like=None):
-        """Backend array from a numpy array, a sequence, or an existing backend array (no copy)."""
+        """Backend array from a numpy array, a sequence, or an existing backend array. May copy; never rely on aliasing."""
         raise NotImplementedError
 
     def to_numpy(self, x):
@@ -910,6 +924,10 @@ class AudioOps:
 
     def astype(self, x, dtype):
         """`x` cast to `dtype` (see the class docstring for the widest-float rule)."""
+        raise NotImplementedError
+
+    def dtype_name(self, x) -> str:
+        """The numpy-style name of `x`'s dtype (``"float32"``, ``"complex64"``, ``"bool"``, ...)."""
         raise NotImplementedError
 
     def zeros(self, shape, *, dtype="float32", like=None):
@@ -940,6 +958,10 @@ class AudioOps:
         """`x` with `value` written where the boolean `mask` (broadcastable) is true."""
         raise NotImplementedError
 
+    def swapaxes(self, x, axis1, axis2):
+        """`x` with two axes exchanged (a view where the backend allows it)."""
+        raise NotImplementedError
+
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
 
     def log(self, x):
@@ -955,6 +977,14 @@ class AudioOps:
         """Magnitude; for complex input the modulus, in the matching real dtype."""
         raise NotImplementedError
 
+    def real(self, x):
+        """Real part of a complex array, in the matching real dtype."""
+        raise NotImplementedError
+
+    def imag(self, x):
+        """Imaginary part of a complex array, in the matching real dtype."""
+        raise NotImplementedError
+
     def maximum(self, x, y):
         """Elementwise maximum of two broadcastable arrays."""
         raise NotImplementedError
@@ -963,15 +993,22 @@ class AudioOps:
         """Elementwise ``max(x, value)`` for a scalar `value`."""
         raise NotImplementedError
 
+    def pow(self, x, exponent):
+        """Elementwise ``x ** exponent`` for a Python scalar `exponent`."""
+        raise NotImplementedError
+
     # ── reductions ─────────────────────────────────────────────────────────────────────────────
 
-    def sum(self, x, axis):
+    def sum(self, x, axis, *, keepdims=False):
+        """Sum over `axis` (int, tuple of ints, or `None` for all axes)."""
         raise NotImplementedError
 
-    def mean(self, x, axis):
+    def mean(self, x, axis, *, keepdims=False):
+        """Mean over `axis` (int, tuple of ints, or `None`). Float input only."""
         raise NotImplementedError
 
-    def amax(self, x, axis):
+    def amax(self, x, axis, *, keepdims=False):
+        """Maximum over `axis` (int, tuple of ints, or `None`)."""
         raise NotImplementedError
 
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
@@ -990,20 +1027,27 @@ class AudioOps:
         raise NotImplementedError
 
     def rfft(self, x, n):
-        """Real FFT of the last axis, `n` points, one-sided. The output precision matches the
-        input's (float32 → complex64, float64 → complex128); callers wanting a wider FFT cast first."""
+        """Real FFT of the last axis, `n` points, one-sided, unnormalised ("backward"). `n` shorter
+        than the axis truncates, longer zero-pads. The output precision matches the input's
+        (float32 → complex64, float64 → complex128 where the backend has it); callers wanting a
+        wider FFT cast first."""
         raise NotImplementedError
 
     def resample(self, x, orig_sr, target_sr):
-        """Resample the last axis from `orig_sr` to `target_sr` Hz with the backend's resampler."""
+        """Resample the last axis from `orig_sr` to `target_sr` Hz with the backend's resampler,
+        keeping the dtype. Output length is ``len * target_sr // orig_sr``: resamplers disagree on
+        the last sample at non-integer ratios, so every backend trims to that rule. Resamplers are
+        different filters (soxr, torchaudio, scipy polyphase); they agree to ~3e-4 relative on
+        band-limited audio, away from the edges."""
         raise NotImplementedError
 
     # ── randomness ─────────────────────────────────────────────────────────────────────────────
 
-    def randn(self, shape, *, seed, like=None):
-        """Standard normal samples of `shape`, in `like`'s dtype and on its device, from a stream
-        seeded with the integer `seed`. Streams differ between backends; only moments match.
-        float32 when `like` is `None`; `like` must be a float array."""
+    def randn(self, shape, *, seed=None, like=None):
+        """Standard normal samples of the tuple `shape`, in `like`'s dtype (float32 when `like` is
+        `None`) and on its device. An integer `seed` gives a private stream seeded with it; `None`
+        draws from the library's global stream (so `torch.manual_seed` / `np.random.seed` apply).
+        Streams differ between backends and between devices; only moments match."""
         raise NotImplementedError
 
 
@@ -1051,7 +1095,10 @@ def get_audio_backend(name: str) -> type[AudioOps]:
     try:
         return _AUDIO_BACKENDS[name]
     except KeyError:
-        raise ValueError(f"Unknown audio backend {name!r}. Registered backends: {sorted(_AUDIO_BACKENDS)}.") from None
+        raise ValueError(
+            f"Unknown audio backend {name!r}. Registered backends: {sorted(_AUDIO_BACKENDS)}. An outside "
+            "backend registers itself when its module is imported (e.g. `import mlx_audio.transformers_backend`)."
+        ) from None
 
 
 def register_audio_op(backend: str, name: str):
@@ -1096,6 +1143,9 @@ class NumpyOps(AudioOps):
     def astype(self, x, dtype):
         return x.astype(np.dtype(dtype), copy=False)
 
+    def dtype_name(self, x):
+        return x.dtype.name
+
     def zeros(self, shape, *, dtype="float32", like=None):
         return np.zeros(shape, dtype=np.dtype(dtype))
 
@@ -1122,6 +1172,9 @@ class NumpyOps(AudioOps):
     def masked_fill(self, x, mask, value):
         return np.where(mask, np.asarray(value, dtype=x.dtype), x)
 
+    def swapaxes(self, x, axis1, axis2):
+        return np.swapaxes(x, axis1, axis2)
+
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
 
     def log(self, x):
@@ -1136,22 +1189,31 @@ class NumpyOps(AudioOps):
     def abs(self, x):
         return np.abs(x)
 
+    def real(self, x):
+        return np.real(x)
+
+    def imag(self, x):
+        return np.imag(x)
+
     def maximum(self, x, y):
         return np.maximum(x, y)
 
     def clamp_min(self, x, value):
         return np.maximum(x, np.asarray(value, dtype=x.dtype))
 
+    def pow(self, x, exponent):
+        return np.power(x, exponent)
+
     # ── reductions ─────────────────────────────────────────────────────────────────────────────
 
-    def sum(self, x, axis):
-        return np.sum(x, axis=axis)
+    def sum(self, x, axis, *, keepdims=False):
+        return np.sum(x, axis=axis, keepdims=keepdims)
 
-    def mean(self, x, axis):
-        return np.mean(x, axis=axis)
+    def mean(self, x, axis, *, keepdims=False):
+        return np.mean(x, axis=axis, keepdims=keepdims)
 
-    def amax(self, x, axis):
-        return np.amax(x, axis=axis)
+    def amax(self, x, axis, *, keepdims=False):
+        return np.amax(x, axis=axis, keepdims=keepdims)
 
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
 
@@ -1174,17 +1236,21 @@ class NumpyOps(AudioOps):
         requires_backends(self.resample, ["soxr"])
         import soxr
 
+        if orig_sr == target_sr:
+            return x
         # soxr wants (samples, channels); flatten leading axes to channels and restore them.
         leading = x.shape[:-1]
         flat = x.reshape(-1, x.shape[-1]).T
         out = soxr.resample(np.ascontiguousarray(flat), orig_sr, target_sr, quality="HQ").T
-        return out.reshape(*leading, out.shape[-1])
+        out = out.reshape(*leading, out.shape[-1])
+        return out[..., : x.shape[-1] * target_sr // orig_sr]  # the contract's length rule
 
     # ── randomness ─────────────────────────────────────────────────────────────────────────────
 
-    def randn(self, shape, *, seed, like=None):
+    def randn(self, shape, *, seed=None, like=None):
         dtype = like.dtype if like is not None else np.float32
-        return np.random.RandomState(seed).standard_normal(shape).astype(dtype, copy=False)
+        stream = np.random if seed is None else np.random.RandomState(seed)
+        return stream.standard_normal(shape).astype(dtype, copy=False)
 
     # ── optional ops ───────────────────────────────────────────────────────────────────────────
 
@@ -1288,6 +1354,9 @@ if is_torch_available():
         def astype(self, x, dtype):
             return x.to(self._torch_dtype(dtype, x.device.type))
 
+        def dtype_name(self, x):
+            return str(x.dtype).removeprefix("torch.")
+
         def zeros(self, shape, *, dtype="float32", like=None):
             device = self._device_of(like)
             return torch.zeros(shape, dtype=self._torch_dtype(dtype, device.type), device=device)
@@ -1320,6 +1389,9 @@ if is_torch_available():
         def masked_fill(self, x, mask, value):
             return x.masked_fill(mask, value)
 
+        def swapaxes(self, x, axis1, axis2):
+            return x.transpose(axis1, axis2)
+
         # ── elementwise ────────────────────────────────────────────────────────────────────────
 
         def log(self, x):
@@ -1334,22 +1406,35 @@ if is_torch_available():
         def abs(self, x):
             return torch.abs(x)
 
+        def real(self, x):
+            return torch.real(x)
+
+        def imag(self, x):
+            return torch.imag(x)
+
         def maximum(self, x, y):
             return torch.maximum(x, y)
 
         def clamp_min(self, x, value):
             return torch.clamp(x, min=value)
 
+        def pow(self, x, exponent):
+            return torch.pow(x, exponent)
+
         # ── reductions ─────────────────────────────────────────────────────────────────────────
 
-        def sum(self, x, axis):
-            return torch.sum(x, dim=axis)
+        @staticmethod
+        def _dims(x, axis):
+            return tuple(range(x.ndim)) if axis is None else axis
 
-        def mean(self, x, axis):
-            return torch.mean(x, dim=axis)
+        def sum(self, x, axis, *, keepdims=False):
+            return torch.sum(x, dim=self._dims(x, axis), keepdim=keepdims)
 
-        def amax(self, x, axis):
-            return torch.amax(x, dim=axis)
+        def mean(self, x, axis, *, keepdims=False):
+            return torch.mean(x, dim=self._dims(x, axis), keepdim=keepdims)
+
+        def amax(self, x, axis, *, keepdims=False):
+            return torch.amax(x, dim=self._dims(x, axis), keepdim=keepdims)
 
         # ── linear algebra ─────────────────────────────────────────────────────────────────────
 
@@ -1369,14 +1454,17 @@ if is_torch_available():
             requires_backends(self.resample, ["torchaudio"])
             import torchaudio
 
-            return torchaudio.functional.resample(x, orig_freq=orig_sr, new_freq=target_sr)
+            out = torchaudio.functional.resample(x, orig_freq=orig_sr, new_freq=target_sr)
+            return out[..., : x.shape[-1] * target_sr // orig_sr]  # the contract's length rule
 
         # ── randomness ─────────────────────────────────────────────────────────────────────────
 
-        def randn(self, shape, *, seed, like=None):
+        def randn(self, shape, *, seed=None, like=None):
             # Streams differ by device as well as by backend: the same seed gives different numbers on CPU and CUDA.
             device = self._device_of(like)
             dtype = like.dtype if isinstance(like, torch.Tensor) else torch.float32
+            if seed is None:
+                return torch.randn(shape, dtype=dtype, device=device)  # the global stream (`torch.manual_seed`)
             generator = torch.Generator(device=device).manual_seed(seed)
             return torch.randn(shape, dtype=dtype, device=device, generator=generator)
 
