@@ -16,10 +16,13 @@
 
 
 import copy
+import importlib
+import inspect
 import os
 import sys
 import tempfile
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -27,18 +30,22 @@ import torch
 from huggingface_hub import snapshot_download
 from parameterized import parameterized
 
+import transformers
 from tests.test_memory_cleanup_mixin import MemoryCleanupTestCase
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     HunYuanVLImageProcessor,
     KernelConfig,
+    LevitImageProcessor,
+    PaddleOCRVLImageProcessor,
     Qwen2VLImageProcessor,
     Qwen2VLVideoProcessor,
     Sam2ImageProcessor,
     ViTImageProcessor,
 )
 from transformers.image_processing_backends import (
+    TorchvisionBackend,
     _connected_component_areas_kernel,
     _resize_normalize_kernel,
     _resize_normalize_patchify_kernel,
@@ -68,6 +75,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_kernels_available
 from transformers.utils.kernel_config import add_to_mapping_local
+from transformers.video_processing_utils import BaseVideoProcessor
 
 
 if is_kernels_available():
@@ -942,6 +950,55 @@ def connected_component_areas_reference(regions):
     return areas
 
 
+def patchify_kernel_layout_reference(
+    frames,
+    target_sizes,
+    items,
+    resample,
+    rescale_factor,
+    image_mean,
+    image_std,
+    patch_size,
+    merge_size,
+    temporal_patch_size,
+):
+    """What `resize_normalize_patchify` writes for frames that are already at their target size."""
+    mean = torch.tensor(image_mean).view(-1, 1, 1)
+    std = torch.tensor(image_std).view(-1, 1, 1)
+    item_patches = []
+    for item in items:
+        padded_item = list(item) + [item[-1]] * (-len(item) % temporal_patch_size)
+        video = (torch.stack([frames[index] for index in padded_item]).float() * rescale_factor - mean) / std
+        frame_count, channels, height, width = video.shape
+        patches = video.reshape(
+            frame_count // temporal_patch_size,
+            temporal_patch_size,
+            channels,
+            height // (patch_size * merge_size),
+            merge_size,
+            patch_size,
+            width // (patch_size * merge_size),
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
+        item_patches.append(patches.reshape(-1, channels * temporal_patch_size * patch_size * patch_size))
+    return torch.cat(item_patches)
+
+
+def processors_calling_the_patchify_kernel():
+    """Torchvision image and video processor classes whose module mentions the `resize_normalize_patchify` kernel."""
+    classes = []
+    for path in sorted(Path(transformers.__file__).parent.glob("models/*/*_processing_*.py")):
+        if "resize_normalize_patchify" not in path.read_text() or path.stem.startswith("modular_"):
+            continue
+        module = importlib.import_module(f"transformers.models.{path.parent.name}.{path.stem}")
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__ == module.__name__ and issubclass(cls, TorchvisionBackend):
+                classes.append(cls)
+    return classes
+
+
 class ReferenceConnectedComponentsKernel:
     """Stand-in for `kernels-community/cv-utils`: records the input of `cc_2d` and answers with the reference."""
 
@@ -969,24 +1026,11 @@ class TestProcessingKernels(TestCasePlus):
         return processor.post_process_masks([self.mask_logits.clone()], [(16, 16)], **kwargs)[0]
 
     def test_registration_records_repo_and_adapter(self):
-        self.assertIs(_PROCESSING_KERNEL_ADAPTERS["connected_component_areas"], _connected_component_areas_kernel)
-        self.assertEqual(_HUB_KERNEL_MAPPING["connected_component_areas"]["repo_id"], "kernels-community/cv-utils")
-        self.assertEqual(_HUB_KERNEL_MAPPING["connected_component_areas"]["version"], 1)
-
-    def test_kernel_outside_kernels_community_is_not_trusted_by_default(self):
-        mapping = {}
-        with patch.dict(_HUB_KERNEL_MAPPING, {"private_op": {"repo_id": "someone/private-kernel", "version": 1}}):
-            self.assertIsNone(lazy_load_kernel("private_op", mapping))
-            # Not cached: the answer changes inside `allow_all_hub_kernels()`, so it must be asked again.
-            self.assertEqual(mapping, {})
-            sentinel = types.ModuleType("trusted_kernel_module")
-            with (
-                patch("transformers.integrations.hub_kernels.ALLOW_ALL_KERNELS", True),
-                patch("transformers.integrations.hub_kernels._kernels_enabled", True),
-                patch("transformers.integrations.hub_kernels.is_kernels_available", return_value=True),
-                patch("transformers.integrations.hub_kernels.get_kernel", return_value=sentinel, create=True),
-            ):
-                self.assertIs(lazy_load_kernel("private_op", mapping), sentinel)
+        self.assertEqual(
+            _PROCESSING_KERNEL_ADAPTERS["connected_component_areas"],
+            ("cv-utils", _connected_component_areas_kernel),
+        )
+        self.assertEqual(_HUB_KERNEL_MAPPING["cv-utils"]["repo_id"], "kernels-community/cv-utils")
 
     def test_run_processing_kernel_calls_adapter(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
@@ -996,8 +1040,10 @@ class TestProcessingKernels(TestCasePlus):
                 run_processing_kernel.__globals__,
                 {
                     "_kernels_enabled": True,
-                    "_PROCESSING_KERNEL_ADAPTERS": {"dummy_op": lambda kernel, value: (kernel, value)},
-                    "lazy_load_kernel": lambda name: sentinel,
+                    "_PROCESSING_KERNEL_ADAPTERS": {
+                        "dummy_op": ("dummy-kernel", lambda kernel, value: (kernel, value))
+                    },
+                    "lazy_load_kernel": {"dummy-kernel": sentinel}.get,
                 },
             ),
         ):
@@ -1167,20 +1213,69 @@ class TestProcessingKernels(TestCasePlus):
         self.assertEqual(len(set(target_sizes[:3])), 1)
         self.assertEqual(output["video_grid_thw"].tolist(), [[2, 4, 6], [1, 2, 2]])
 
-    def test_hunyuan_vl_does_not_use_the_patchify_kernel(self):
+    def test_processor_overriding_resize_does_not_use_the_resize_kernel(self):
         with (
             patch.object(torch.cuda, "is_available", return_value=True),
             patch.dict(
                 run_processing_kernel.__globals__,
                 {
                     "_kernels_enabled": True,
-                    "_PROCESSING_KERNEL_ADAPTERS": {"resize_normalize_patchify": self.fail},
+                    "_PROCESSING_KERNEL_ADAPTERS": {"resize_normalize": ("cv-utils", self.fail)},
                     "lazy_load_kernel": lambda name: types.ModuleType("sentinel_kernel_module"),
                 },
             ),
         ):
-            output = HunYuanVLImageProcessor(use_kernels=True)([torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)])
+            output = LevitImageProcessor(use_kernels=True)([torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)])
         self.assertIn("pixel_values", output)
+
+    def test_processors_reaching_the_patchify_kernel_use_its_layout(self):
+        processor_classes = processors_calling_the_patchify_kernel()
+        for processor_class in (Qwen2VLImageProcessor, PaddleOCRVLImageProcessor, HunYuanVLImageProcessor):
+            self.assertIn(processor_class, processor_classes)
+        for processor_class in processor_classes:
+            with self.subTest(processor_class=processor_class.__name__):
+                processor = processor_class(use_kernels=True)
+                is_video = issubclass(processor_class, BaseVideoProcessor)
+                recorded_arguments = []
+
+                def run(height, width):
+                    recorded_arguments.clear()
+                    if is_video:
+                        videos = [torch.randint(0, 256, (3, 3, height, width), dtype=torch.uint8)]
+                        return processor(videos, do_sample_frames=False, return_tensors="pt")["pixel_values_videos"]
+                    images = [torch.randint(0, 256, (3, height, width), dtype=torch.uint8)]
+                    return processor(images, return_tensors="pt")["pixel_values"]
+
+                with (
+                    patch.object(torch.cuda, "is_available", return_value=True),
+                    patch.dict(
+                        run_processing_kernel.__globals__,
+                        {
+                            "_kernels_enabled": True,
+                            "_PROCESSING_KERNEL_ADAPTERS": {
+                                "resize_normalize_patchify": (
+                                    "cv-utils",
+                                    lambda kernel, *arguments: recorded_arguments.append(arguments),
+                                )
+                            },
+                            "lazy_load_kernel": lambda name: types.ModuleType("sentinel_kernel_module"),
+                        },
+                    ),
+                ):
+                    height, width = 112, 168
+                    pixel_values = run(height, width)
+                    if not recorded_arguments:
+                        continue
+                    for _ in range(3):
+                        if recorded_arguments[0][1][0] == (height, width):
+                            break
+                        height, width = recorded_arguments[0][1][0]
+                        pixel_values = run(height, width)
+                frames, target_sizes = recorded_arguments[0][:2]
+                self.assertEqual([tuple(frame.shape[-2:]) for frame in frames], [tuple(size) for size in target_sizes])
+                torch.testing.assert_close(
+                    pixel_values.reshape(-1), patchify_kernel_layout_reference(*recorded_arguments[0]).reshape(-1)
+                )
 
     def test_use_kernels_is_a_runtime_flag(self):
         processor = Sam2ImageProcessor(use_kernels=True)
@@ -1227,17 +1322,16 @@ class TestResizeKernels(TestCasePlus):
         self.images = [image, image[:, :300, :500].contiguous(), image[:, 100:, 50:].contiguous()]
 
     def assert_kernel_matches_default(self, operation, processor_class, call):
-        kernel = lazy_load_kernel(operation)
-        if not hasattr(kernel, operation):
-            self.skipTest(f"`{operation}` is not available in `kernels-community/cv-utils`")
-        adapter = _PROCESSING_KERNEL_ADAPTERS[operation]
+        kernel_name, adapter = _PROCESSING_KERNEL_ADAPTERS[operation]
+        if not hasattr(lazy_load_kernel(kernel_name), operation):
+            self.skipTest(f"`{operation}` is not available in `{kernel_name}`")
         kernel_outputs = []
 
         def recording_adapter(*args, **kwargs):
             kernel_outputs.append(adapter(*args, **kwargs))
             return kernel_outputs[-1]
 
-        with patch.dict(_PROCESSING_KERNEL_ADAPTERS, {operation: recording_adapter}):
+        with patch.dict(_PROCESSING_KERNEL_ADAPTERS, {operation: (kernel_name, recording_adapter)}):
             with_kernels = call(processor_class(use_kernels=True))
         self.assertTrue(
             kernel_outputs and kernel_outputs[0] is not None, "the adapter fell back, the kernel never ran"

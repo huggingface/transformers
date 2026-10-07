@@ -325,7 +325,7 @@ Image and video processors can run some of their operations with Hub kernels fro
 | Operation | What the kernel does | Processors |
 |---|---|---|
 | Resize and normalize | Resizes a batch of images of different sizes in one launch, then rescales and normalizes in the same pass. | Processors that use the default [`TorchvisionBackend`] preprocessing, such as ViT, CLIP and SigLIP |
-| Resize, normalize and patchify | Writes each resized and normalized pixel directly at its place in the flattened patch sequence, for images and video frames. | Qwen2-VL and Qwen3-VL image and video processors, and the processors built on them (Cohere Compass, ERNIE 4.5 VL, GLM-Image, MiniMax-M3-VL) |
+| Resize, normalize and patchify | Writes each resized and normalized pixel directly at its place in the flattened patch sequence, for images and video frames. | Qwen2-VL and Qwen3-VL image and video processors, and the processors built on them (Cohere Compass, ERNIE 4.5 VL, GLM-Image, HunYuanVL, MiniMax-M3-VL, PaddleOCR-VL) |
 | Connected components | Measures the area of every connected region of a mask, to fill small holes and remove small islands. | SAM 2 and SAM 3 image processors (`max_hole_area`, `max_sprinkle_area`) |
 
 ```py
@@ -341,13 +341,13 @@ The resize kernels round to `uint8` after each pass, like the default torchvisio
 
 ### Registering a processing kernel
 
-Processing operations have no shared signature to swap, so a kernel is plugged in through an adapter instead of a `kernelize` pass. `register_processing_kernel` maps an operation name to a Hub repository, and the decorated adapter receives the loaded kernel module followed by the arguments of the operation. Return `None` for arguments the kernel cannot handle, and the caller keeps its default implementation.
+Processing operations have no shared signature to swap, so a kernel is plugged in through an adapter instead of a `kernelize` pass. `register_processing_kernel` maps an operation name to a kernel of `_HUB_KERNEL_MAPPING` in `integrations/hub_kernels.py`, and the decorated adapter receives the loaded kernel module followed by the arguments of the operation. Return `None` for arguments the kernel cannot handle, and the caller keeps its default implementation.
 
 ```py
 from transformers.integrations.hub_kernels import register_processing_kernel
 
 
-@register_processing_kernel("my_op", repo_id="kernels-community/my-processing-kernel", version=1)
+@register_processing_kernel("my_op", kernel_name="my-processing-kernel")
 def my_op_kernel(kernel, images):
     if images[0].device.type != "cuda":
         return None

@@ -73,7 +73,7 @@ if is_torch_available():
     from .integrations.hub_kernels import register_processing_kernel, run_processing_kernel
 else:
 
-    def register_processing_kernel(name, repo_id, version=1, revision=None):
+    def register_processing_kernel(name, kernel_name):
         return lambda adapter: adapter
 
     def run_processing_kernel(name, *args, **kwargs):
@@ -95,7 +95,7 @@ logger = logging.get_logger(__name__)
 _KERNEL_DEVICE_TYPE = "cuda"
 
 
-@register_processing_kernel("connected_component_areas", repo_id="kernels-community/cv-utils", version=1)
+@register_processing_kernel("connected_component_areas", kernel_name="cv-utils")
 def _connected_component_areas_kernel(kernel, regions):
     """Area of the 8-connected component of every pixel of a boolean `(batch_size, 1, height, width)` tensor."""
     if regions.device.type != _KERNEL_DEVICE_TYPE:
@@ -129,7 +129,7 @@ def _resize_kernel_arguments(images, resample, rescale_factor, image_mean, image
     return interpolation, image_mean, image_std, rescale_factor
 
 
-@register_processing_kernel("resize_normalize", repo_id="kernels-community/cv-utils", version=1)
+@register_processing_kernel("resize_normalize", kernel_name="cv-utils")
 def _resize_normalize_kernel(kernel, images, size, crop_size, resample, rescale_factor, image_mean, image_std):
     """Resize every image to `size`, center crop to `crop_size` when given, then rescale and normalize."""
     arguments = _resize_kernel_arguments(images, resample, rescale_factor, image_mean, image_std)
@@ -161,7 +161,7 @@ def _resize_normalize_kernel(kernel, images, size, crop_size, resample, rescale_
     )
 
 
-@register_processing_kernel("resize_normalize_patchify", repo_id="kernels-community/cv-utils", version=1)
+@register_processing_kernel("resize_normalize_patchify", kernel_name="cv-utils")
 def _resize_normalize_patchify_kernel(
     kernel,
     frames,
@@ -502,7 +502,18 @@ class TorchvisionBackend(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         """Preprocess using Torchvision backend (fast, GPU-accelerated)."""
-        if self.use_kernels and do_resize and do_rescale and do_normalize and not do_pad:
+        kernel_replaces_default_methods = all(
+            getattr(type(self), name) is getattr(TorchvisionBackend, name)
+            for name in ("resize", "center_crop", "rescale_and_normalize", "rescale", "normalize")
+        )
+        if (
+            self.use_kernels
+            and kernel_replaces_default_methods
+            and do_resize
+            and do_rescale
+            and do_normalize
+            and not do_pad
+        ):
             pixel_values = run_processing_kernel(
                 "resize_normalize",
                 images,
