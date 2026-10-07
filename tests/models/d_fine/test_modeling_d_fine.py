@@ -42,8 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import DFineForObjectDetection, DFineModel
-    from transformers.loss.loss_d_fine import DFineLoss
-    from transformers.loss.loss_utils import LOSS_MAPPING
+    from transformers.models.d_fine.modeling_d_fine import DFineLoss
 
 if is_vision_available():
     from PIL import Image
