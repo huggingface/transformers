@@ -42,69 +42,18 @@ if is_vision_available():
 
 
 class VitMatteImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_rescale=True,
-        rescale_factor=0.5,
-        do_pad=True,
-        size_divisor=10,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_pad = do_pad
-        self.size_divisor = size_divisor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("rescale_factor", 0.5)
+        kwargs.setdefault("size_divisor", 10)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_pad": self.do_pad,
-            "size_divisor": self.size_divisor,
-        }
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = VitMatteImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "size_divisor"))
+    image_processor_tester_class = VitMatteImageProcessingTester
 
     def test_call_numpy(self):
         # create random numpy tensors

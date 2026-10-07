@@ -306,10 +306,10 @@ https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_layer_
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/dac"
 
-with open(FIXTURES_DIR / "expected_integration.json") as f:
+with open(FIXTURES_DIR / "expected_integration.json", encoding="utf-8") as f:
     EXPECTED_INTEGRATION = json.load(f)
 
-with open(FIXTURES_DIR / "expected_integration_batch.json") as f:
+with open(FIXTURES_DIR / "expected_integration_batch.json", encoding="utf-8") as f:
     EXPECTED_INTEGRATION_BATCH = json.load(f)
 
 

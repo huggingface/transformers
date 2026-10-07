@@ -22,7 +22,7 @@ A multiple choice task is similar to question answering, except several candidat
 
 This guide will show you how to:
 
-1. Finetune [BERT](https://huggingface.co/google-bert/bert-base-uncased) on the `regular` configuration of the [SWAG](https://huggingface.co/datasets/swag) dataset to select the best answer given multiple options and some context.
+1. Finetune [BERT](https://huggingface.co/google-bert/bert-base-uncased) on the `regular` configuration of the [SWAG](https://huggingface.co/datasets/allenai/swag) dataset to select the best answer given multiple options and some context.
 2. Use your finetuned model for inference.
 
 Before you begin, make sure you have all the necessary libraries installed:
@@ -46,7 +46,7 @@ Start by loading the `regular` configuration of the SWAG dataset from the 🤗 D
 ```py
 >>> from datasets import load_dataset
 
->>> swag = load_dataset("swag", "regular")
+>>> swag = load_dataset("allenai/swag", "regular")
 ```
 
 Then take a look at an example:

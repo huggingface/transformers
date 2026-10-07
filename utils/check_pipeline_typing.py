@@ -36,7 +36,7 @@ TASK_PATTERN = "task: str | None = None"
 
 
 def main(pipeline_file_path: str, fix_and_overwrite: bool = False):
-    with open(pipeline_file_path, "r") as file:
+    with open(pipeline_file_path, "r", encoding="utf-8") as file:
         content = file.read()
 
     # extract generated code in between <generated-code> and </generated-code>
@@ -75,7 +75,7 @@ def main(pipeline_file_path: str, fix_and_overwrite: bool = False):
         content = content.replace(wrapped_current_generated_code, wrapped_new_generated_code)
 
         # write content to file
-        with open(pipeline_file_path, "w") as file:
+        with open(pipeline_file_path, "w", encoding="utf-8") as file:
             file.write(content)
 
     elif new_generated_code != current_generated_code and not fix_and_overwrite:

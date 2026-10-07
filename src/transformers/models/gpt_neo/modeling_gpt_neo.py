@@ -212,7 +212,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
-        device_type = query.device.type if query.device.type != "mps" else "cpu"
+        device_type = query.device.type
         if query.dtype == torch.float32:
             if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)

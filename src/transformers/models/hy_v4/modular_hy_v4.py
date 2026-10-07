@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -139,6 +139,7 @@ class HYV4Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float = 0.0
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     num_experts_per_tok: int = 8
     routed_scaling_factor: float = 2.827
@@ -176,7 +177,7 @@ class HYV4Config(PreTrainedConfig):
                 self.num_hidden_layers - 1, 0
             )
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
         if self.indexer_types is None:
             self.indexer_types = [
                 "full" if layer_idx == 0 or (layer_idx - 1) % 4 == 0 else "shared"
@@ -386,7 +387,7 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Independent HC implementation with forced fp32 application"""
         # Key difference is to force fp32 in any case
-        device_type = hidden_streams.device.type if hidden_streams.device.type != "mps" else "cpu"
+        device_type = hidden_streams.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = hidden_streams.flatten(2).float()
             # Norm as residual
@@ -408,7 +409,7 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
 class HYV4HyperHead(DeepseekV4HyperHead):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
-        device_type = x.device.type if x.device.type != "mps" else "cpu"
+        device_type = x.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = x.flatten(2).float()
             # Norm as residual
@@ -525,7 +526,7 @@ class HYV4Model(Glm4MoeLiteModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -550,7 +551,7 @@ class HYV4Model(Glm4MoeLiteModel):
                 "position_ids": position_ids,
                 "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
-            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -561,7 +562,7 @@ class HYV4Model(Glm4MoeLiteModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping["deepseek_sparse_attention"],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -573,7 +574,7 @@ class HYV4Model(Glm4MoeLiteModel):
         # Difference with the HC head at the end
         hidden_states = self.norm(self.hc_head(hidden_states))
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -606,8 +607,8 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        outputs: BaseModelOutputWithPast = self.model(
+    ) -> MoeCausalLMOutputWithPast:
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -634,12 +635,13 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
