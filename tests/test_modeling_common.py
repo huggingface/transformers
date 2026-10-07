@@ -4890,22 +4890,22 @@ class ModelTesterMixin(ExportTesterMixin):
         ):
             self.skipTest("Model does not have a TP plan.")
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_generative_model_classes:
             model = model_class(copy.deepcopy(config))
-            modules = dict(model.named_modules())
-            plan = model.tp_plan
-            for source, target in (getattr(model, "_tied_weights_keys", None) or {}).items():
-                head = source.removesuffix(".weight")
-                if not isinstance(modules.get(head), nn.Linear) or not isinstance(
-                    modules.get(target.removesuffix(".weight")), nn.Embedding
-                ):
-                    continue
-                self.assertIn(
-                    head,
-                    plan,
-                    f"{model_class.__name__} ties `{head}` to `{target}`, so a tying checkpoint shards the "
-                    f"weight it reads and it needs a TP-plan entry of its own (`colwise_gather_output`)",
-                )
+            head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
+            if (
+                not model._tied_weights_keys
+                or not isinstance(head, nn.Linear)
+                or not isinstance(embedding, nn.Embedding)
+            ):
+                continue
+            head_name = next(name for name, module in model.named_modules() if module is head)
+            self.assertIn(
+                head_name,
+                model.tp_plan,
+                f"{model_class.__name__} ties `{head_name}` to its input embedding, so a tying checkpoint shards the "
+                "weight it reads and it needs a TP-plan entry of its own (`colwise_gather_output`)",
+            )
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion

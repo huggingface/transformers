@@ -243,9 +243,13 @@ class ColwiseParallel(TensorParallelLayer):
         if self.should_use_local_tensors(module) and self.use_local_output and output_is_local_shard:
             return output
         if not isinstance(output, DTensor):
-            weight = module._parameters.get("weight")
-            if isinstance(weight, DTensor):
-                size = weight.shape[1] if isinstance(module, torch.nn.Embedding) else weight.shape[-2]
+            # the module's declared width, which a packed or quantized weight's shape may not show
+            size = (
+                module.embedding_dim
+                if isinstance(module, torch.nn.Embedding)
+                else getattr(module, "out_features", None)
+            )
+            if size is not None:
                 output = _from_local_last_dim_shard(output, mesh, Shard(-1), size)
             else:
                 output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
@@ -296,10 +300,10 @@ class RowwiseParallel(TensorParallelLayer):
         if self.should_use_local_tensors(module) and input_has_desired_layout and not isinstance(x, DTensor):
             return args, kwargs
         if not isinstance(x, DTensor):
-            weight = module._parameters.get("weight")
-            if isinstance(self.input_layouts, Shard) and isinstance(weight, DTensor):
-                # the input is this rank's slice of in_features, the weight's (sharded) last dim
-                x = _from_local_last_dim_shard(x, mesh, self.input_layouts, weight.shape[-1])
+            # the input is this rank's slice of the module's declared `in_features`
+            size = getattr(module, "in_features", None)
+            if isinstance(self.input_layouts, Shard) and size is not None:
+                x = _from_local_last_dim_shard(x, mesh, self.input_layouts, size)
             else:
                 x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
