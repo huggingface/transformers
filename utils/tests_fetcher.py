@@ -563,20 +563,31 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
+def _iter_descendants(config, seen: set[str]):
+    """Yield the model_type of every sub-config under `config`, at any depth, each once."""
+    specs = getattr(config, "sub_configs_defaults", None) or {}
+    for spec in specs.values():
+        model_type = getattr(spec, "model_type", None)
+        if not model_type or model_type in seen:
+            continue
+        seen.add(model_type)
+        yield model_type
+        yield from _iter_descendants(spec, seen)
+
+
 @cache
 def _get_backbone_map() -> dict[str, frozenset[str]]:
     """
-    {composite_model_dir: {backbone_model_dir, ...}} built from `sub_configs_defaults[...].model_type`.
+    {composite_model_dir: {backbone_model_dir, ...}} built from `sub_configs_defaults[...].model_type`,
+    following nesting at any depth (`a` -> `b` -> `c` gives `a: {b, c}`).
     Cached: the config imports are the expensive part, so do them at most once per process.
     """
-
     mapping = {}
     for model_type in CONFIG_MAPPING:
         parent = model_type_to_module_name(model_type)
         config_cls = CONFIG_MAPPING[model_type]  # imports only this config module
-        specs = getattr(config_cls, "sub_configs_defaults", None) or {}
         children = {
-            model_type_to_module_name(spec.model_type) for spec in specs.values() if getattr(spec, "model_type", None)
+            model_type_to_module_name(descendant) for descendant in _iter_descendants(config_cls, {model_type})
         }
         children.discard(parent)
         if children:
