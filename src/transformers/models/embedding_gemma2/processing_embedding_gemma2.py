@@ -48,7 +48,7 @@ class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 @requires(backends=("vision",))
-class EmbeddingGemma2Processor(OmniModalProcessorMixin):
+class EmbeddingGemma2Processor(ProcessorMixin, OmniModalProcessorMixin):
     valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
 
     def __init__(
