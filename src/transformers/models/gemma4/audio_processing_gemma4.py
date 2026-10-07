@@ -37,8 +37,8 @@ class Gemma4AudioProcessorMixin:
             "power": 1.0,
             "center": "left",
             "extra_samples_per_frame": 1,
-            # `np.fft.rfft` always promotes to complex128 regardless of float32 input, so the
-            # legacy magnitudes are float64. "native" left the FFT in complex64.
+            # the legacy `np.fft.rfft` promoted its float32 frames to complex128, so the legacy
+            # magnitudes are float64; without this the FFT would stay in the frames' float32
             "fft_dtype": "float64",
         },
         "mel_scale_config": {

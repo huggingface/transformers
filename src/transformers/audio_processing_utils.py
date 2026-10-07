@@ -645,8 +645,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         )
         stft_out = self._stft_framed(frames, window, stft_cfg)
         if spectrogram_config.computation_dtype:
-            # the magnitudes are taken in `computation_dtype`, so hand them the matching complex dtype;
-            # a no-op unless `fft_dtype="complex64"` narrowed a float64 spectrum
+            # the magnitudes are taken in `computation_dtype`, so hand them the matching complex dtype.
+            # A no-op on torch and for every numpy model with a legacy numpy oracle (their spectrum is
+            # already the complex of `computation_dtype`, or `fft_dtype="complex64"` narrowed it and
+            # float64 magnitudes widen it back); with `computation_dtype="float32"` and a float64
+            # window it narrows the spectrum to complex64.
             stft_out = self.ops.astype(stft_out, _COMPLEX_OF[spectrogram_config.computation_dtype])
         magnitudes = self._spectrum_magnitude(stft_out, spectrogram_config, audio_ranges=audio_ranges, **kwargs)
         return self._cast_stft_output(magnitudes, spectrogram_config)
@@ -765,9 +768,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
             )
             or spectrogram_config.remove_dc_offset
             or bool(spectrogram_config.stft_config.extra_samples_per_frame)
-            or spectrogram_config.stft_config.center == "left"  # truthy string would center-pad natively
-            # A native STFT frames on `n_fft`; left-aligning the window inside the FFT buffer
-            # means the framing must use `win_length`, which only the manual path can do.
+            or spectrogram_config.stft_config.center == "left"  # a truthy string must not centre-pad
+            # left-aligning the window inside the FFT buffer means framing on `win_length` and letting
+            # `rfft(n=n_fft)` zero-pad on the right, instead of centring the window in an `n_fft` frame
             or spectrogram_config.stft_config.left_align_fft
         )
 
