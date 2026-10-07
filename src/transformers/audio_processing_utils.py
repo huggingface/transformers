@@ -31,10 +31,6 @@ from .tokenization_utils_base import TruncationStrategy
 from .utils import PaddingStrategy, TensorType, logging
 
 
-_PAD_MODES = {"constant": "constant", "reflect": "reflect", "edge": "replicate", "replicate": "replicate"}
-_COMPLEX_OF = {"float32": "complex64", "float64": "complex128"}
-
-
 if TYPE_CHECKING:
     import torch
 
@@ -44,6 +40,10 @@ logger = logging.get_logger(__name__)
 
 # Config spellings of the window names `AudioOps.window` takes.
 _WINDOW_ALIASES = {"hann_window": "hann", "hamming_window": "hamming", "blackman_window": "blackman"}
+# Config spellings of `pad_mode` (numpy's `"edge"` included) mapped to the modes `AudioOps.pad` takes.
+_PAD_MODES = {"constant": "constant", "reflect": "reflect", "edge": "replicate", "replicate": "replicate"}
+# The complex dtype that carries a spectrum whose magnitudes are taken in the given float dtype.
+_COMPLEX_OF = {"float32": "complex64", "float64": "complex128"}
 
 
 class BaseAudioProcessor(AudioProcessingMixin):
@@ -673,6 +673,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
             raise ValueError("preemphasis_mode='htk_per_frame' requires extra_samples_per_frame=1.")
         if stft_cfg.fft_dtype not in (None, "float64", "complex64"):
             raise ValueError(f"fft_dtype must be None, 'float64' or 'complex64', got {stft_cfg.fft_dtype!r}.")
+        if stft_cfg.pad_mode not in _PAD_MODES:
+            raise ValueError(f"pad_mode must be one of {sorted(_PAD_MODES)}, got {stft_cfg.pad_mode!r}.")
         if stft_cfg.pad < 0:
             raise ValueError(f"pad must be non-negative, got {stft_cfg.pad}.")
 
@@ -817,7 +819,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     # ── Spectrogram backend ──────────────────────────────────────────────
 
     def _frame_waveform(self, audio, frame_length, stft_cfg):
-        """Centre-pad as configured and cut `(..., n_frames, frame_length)` frames, in the audio dtype."""
+        """Centre- or left-pad as `center` configures and cut `(..., n_frames, frame_length)` frames, in the audio dtype."""
         if stft_cfg.center == "left":
             audio = self.ops.pad(audio, stft_cfg.win_length // 2, 0)  # semicausal (USM/Gemma): zeros prepended only
         elif stft_cfg.center:
@@ -872,9 +874,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _stft_framed(self, frames, window, stft_cfg):
         """Window, FFT and normalise `frames`; returns the complex spectrum as ``(..., freq, frames)``.
 
-        The frames are promoted to the wider of their dtype and the window's at the multiplication
-        (what both old leaves did through array promotion). `rfft` zero-pads a `win_length` frame to
-        `n_fft` on the right, so a left-aligned window needs no explicit pad. The result is a view
+        Promotion rule: frames and window are cast to the wider of their two dtypes (numpy's
+        `result_type`) before the multiplication, so a float64 window lifts float32 frames to float64
+        and a float32 window keeps them in float32. `rfft` zero-pads a `win_length` frame to `n_fft`
+        on the right, so a left-aligned window needs no explicit pad. The result is a view
         (`swapaxes`), never a contiguous copy: a copy shifts the mel GEMM by an ulp against legacy.
         """
         common = np.result_type(self.ops.dtype_name(frames), self.ops.dtype_name(window)).name
@@ -887,7 +890,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             # again when the magnitudes are taken in float64
             spec = self.ops.astype(spec, "complex64")
         if stft_cfg.normalized in (True, "window"):
-            # the norm in the window's working dtype, as both old backends did; a Python float keeps `spec`'s dtype
+            # the norm is summed in the window's dtype; dividing by a Python float keeps `spec`'s dtype
             norm = self.ops.sqrt(self.ops.sum(self.ops.pow(window, 2.0), None))
             spec = spec / float(self.ops.to_numpy(norm))
         elif stft_cfg.normalized == "frame_length":
