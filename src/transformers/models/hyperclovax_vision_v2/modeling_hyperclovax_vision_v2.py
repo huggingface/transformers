@@ -24,7 +24,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import accepts_precomputed_kwargs
@@ -345,9 +345,9 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         # Key difference: additional logits scaling applied
-        logits = self.lm_head(hidden_states[:, slice_indices, :]) * self.config.text_config.logits_scaling
+        logits = self.lm_head(hidden_states) * self.config.text_config.logits_scaling
 
         loss = None
         if labels is not None:
