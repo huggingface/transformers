@@ -559,6 +559,12 @@ class AudioOps:
         """`x` with two axes exchanged (may be a view)."""
         raise NotImplementedError
 
+    def contiguous(self, x):
+        """Return `x` in row-major contiguous memory; a copy only if needed. Layout is observable: a
+        GEMM over a strided operand accumulates in a different order, which is why a stage may
+        require it."""
+        raise NotImplementedError
+
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
 
     def log(self, x):
@@ -793,6 +799,9 @@ class NumpyOps(AudioOps):
 
     def swapaxes(self, x, axis1, axis2):
         return np.swapaxes(x, axis1, axis2)
+
+    def contiguous(self, x):
+        return np.ascontiguousarray(x)
 
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
     #
@@ -1042,6 +1051,9 @@ if is_torch_available():
 
         def swapaxes(self, x, axis1, axis2):
             return x.transpose(axis1, axis2)
+
+        def contiguous(self, x):
+            return x.contiguous()
 
         # ── elementwise ────────────────────────────────────────────────────────────────────────
 

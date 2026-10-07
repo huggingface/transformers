@@ -904,11 +904,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if spectrogram_config.computation_dtype:
             stft_out = self.ops.astype(stft_out, _COMPLEX_OF[spectrogram_config.computation_dtype])
         if stft_cfg.magnitude_mode == "sqrt_sum_squares":
-            # `view_as_real(x).pow(2).sum(-1).sqrt()` in NeMo: the same bits as `real * real + imag * imag`,
-            # but a reduction, so on torch it leaves the FFT's strided layout for a contiguous one, which
-            # the mel GEMM's accumulation order then follows. Keep it a reduction.
+            # The legacy NeMo form reduced over a stacked real/imag axis (`view_as_real(x).pow(2).sum(-1)`),
+            # which materialised a contiguous tensor; the mel GEMM's accumulation order follows the
+            # layout (measured: 1 float32 ulp on Parakeet, Cohere and Nemotron without the copy).
             real, imag = self.ops.real(stft_out), self.ops.imag(stft_out)
-            magnitudes = self.ops.sqrt(self.ops.sum(self.ops.stack([real * real, imag * imag]), 0))
+            magnitudes = self.ops.sqrt(self.ops.contiguous(real * real + imag * imag))
         else:
             magnitudes = self.ops.abs(stft_out)
         return self.ops.pow(magnitudes, stft_cfg.power) if stft_cfg.power != 1.0 else magnitudes
