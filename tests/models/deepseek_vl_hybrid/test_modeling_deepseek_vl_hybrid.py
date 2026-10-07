@@ -38,10 +38,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
 
 
-if is_torch_available():
-    import torch
-
-
 class DeepseekVLHybridModelTester:
     def __init__(
         self,
@@ -52,6 +48,7 @@ class DeepseekVLHybridModelTester:
         initializer_range=0.02,
         is_training=True,
         use_cache=False,
+        image_token_id=3,
         text_config={
             "num_hidden_layers": 2,
             "vocab_size": 99,
@@ -103,14 +100,14 @@ class DeepseekVLHybridModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.high_res_image_size = high_res_vision_config["image_size"]
         self.image_size = vision_config["image_size"]
-        self.num_image_tokens = vision_config["image_size"] // vision_config["patch_size"]
+        self.num_image_tokens = 16
         self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = self.vocab_size - 1
+        self.image_token_id = image_token_id
 
     def get_config(self):
         return DeepseekVLHybridConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+            text_config=self.text_config.copy(),
+            vision_config=self.vision_config.copy(),
             high_res_vision_config=self.high_res_vision_config,
             image_token_id=self.image_token_id,
         )
@@ -138,6 +135,7 @@ class DeepseekVLHybridModelTester:
             ]
         )
         # fill image_tokens
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_id
 
         return config, input_ids, attention_mask, pixel_values, high_res_pixel_values
@@ -174,50 +172,6 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def setUp(self):
         self.model_tester = DeepseekVLHybridModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekVLHybridConfig, has_text_modality=False)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["high_res_pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["high_res_pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:

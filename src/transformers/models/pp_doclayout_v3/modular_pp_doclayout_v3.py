@@ -578,23 +578,14 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords = x_coords.to(dtype)
     y_coords = y_coords.to(dtype)
 
+    finfo_max = torch.full((), torch.finfo(dtype).max, dtype=dtype, device=mask.device)
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    x_min = torch.where(mask, x_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    y_min = torch.where(mask, y_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     unnormalized_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
 
@@ -1336,12 +1327,6 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python

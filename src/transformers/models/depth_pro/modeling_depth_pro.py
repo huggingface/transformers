@@ -1028,9 +1028,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthProDepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
 
         ```python

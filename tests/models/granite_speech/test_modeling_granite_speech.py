@@ -68,7 +68,7 @@ class GraniteSpeechModelTester(ALMModelTester):
 
         super().__init__(parent, **kwargs)
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         # GraniteSpeech expects [B, seq_len, features] (time-first), unlike the standard [B, features, seq_len]
         return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
 

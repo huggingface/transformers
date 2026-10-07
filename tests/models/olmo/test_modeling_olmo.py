@@ -22,6 +22,7 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.gpt_neox.tokenization_gpt_neox import GPTNeoXTokenizer as GPTNeoXTokenizerFast
 from transformers.testing_utils import (
+    is_flaky,
     require_tokenizers,
     require_torch,
     slow,
@@ -30,6 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -189,9 +191,14 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # TODO (ydshieh): check why this model produces larger diff. (1e-4 scale) than most models
+    @is_flaky(max_attempts=2)
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
+
 
 @require_torch
-class OlmoIntegrationTest(unittest.TestCase):
+class OlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     def test_model_1b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]

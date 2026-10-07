@@ -349,8 +349,8 @@ class TrainingArguments:
             Number of steps to wait before calling `torch.<device>.empty_cache()`. If left unset or set to None, cache will not be emptied.
             This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
-            Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
-            CUDA Out-of-Memory errors.
+            Whether to find a training batch size that will fit into memory automatically through exponential decay,
+            avoiding CUDA Out-of-Memory errors. The evaluation batch size is not adjusted.
 
         > Logging & Monitoring Training
 
@@ -971,7 +971,7 @@ class TrainingArguments:
     auto_find_batch_size: bool = field(
         default=False,
         metadata={
-            "help": "Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding CUDA Out-of-Memory errors."
+            "help": "Whether to find a training batch size that will fit into memory automatically through exponential decay, avoiding CUDA Out-of-Memory errors. The evaluation batch size is not adjusted."
         },
     )
 
@@ -2218,7 +2218,7 @@ class TrainingArguments:
             weight_decay (`float`, *optional*, defaults to 0):
                 The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in the
                 optimizer.
-            num_train_epochs(`float`, *optional*, defaults to 3.0):
+            num_epochs (`float`, *optional*, defaults to 3.0):
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):

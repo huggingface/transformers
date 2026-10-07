@@ -204,6 +204,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 batch_num_image_tokens.append(num_image_tokens)
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
 
+        if video_sizes is not None:
+            patches_height_width = int(math.sqrt(self.num_image_tokens))
+            pooled_height_width = math.ceil(patches_height_width / 2)
+            num_video_tokens = [
+                (num_frames * pooled_height_width * pooled_height_width) + 1 for num_frames, _, _ in video_sizes
+            ]
+            vision_data.update({"num_video_tokens": num_video_tokens})
+
         return MultiModalData(**vision_data)
 
 

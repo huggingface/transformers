@@ -24,14 +24,29 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
 )
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput
-from .processing_gemma4_unified import Gemma4UnifiedVideoProcessorKwargs
+
+
+class Gemma4UnifiedVideoProcessorKwargs(VideosKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        Size of each image patch in pixels.
+    max_soft_tokens (`int`, *optional*):
+        Maximum number of soft (vision) tokens per video frame.
+        Must be one of {70, 140, 280, 560, 1120}.
+    pooling_kernel_size (`int`, *optional*):
+        Spatial pooling kernel size applied after patchification.
+    """
+
+    patch_size: int
+    max_soft_tokens: int
+    pooling_kernel_size: int
 
 
 _SUPPORTED_SOFT_TOKENS = (70, 140, 280, 560, 1120)
@@ -214,7 +229,7 @@ class Gemma4UnifiedVideoProcessor(BaseVideoProcessor):
     max_soft_tokens = 70
     pooling_kernel_size = 3
     valid_kwargs = Gemma4UnifiedVideoProcessorKwargs
-    model_input_names = ["pixel_values_videos", "video_position_ids"]
+    model_input_names = ["pixel_values_videos", "video_position_ids", "num_frames_per_video"]
 
     def __init__(self, **kwargs: Unpack[Gemma4UnifiedVideoProcessorKwargs]):
         super().__init__(**kwargs)
@@ -292,6 +307,7 @@ class Gemma4UnifiedVideoProcessor(BaseVideoProcessor):
         pixel_values = []
         position_ids = []
         num_soft_tokens_per_video = []
+        num_frames_per_video = []
 
         for video in videos:
             if do_resize:
@@ -312,6 +328,7 @@ class Gemma4UnifiedVideoProcessor(BaseVideoProcessor):
             patch_height = video.shape[-2] // patch_size
             patch_width = video.shape[-1] // patch_size
             patches = convert_video_to_patches(video, patch_size)
+            num_frames_per_video.append(num_frames)
 
             # Step 4: Compute teacher-level position IDs
             device = video.device
@@ -335,13 +352,15 @@ class Gemma4UnifiedVideoProcessor(BaseVideoProcessor):
             pixel_values.append(merged_patches)
             position_ids.append(merged_positions)
 
-        # Stack into batch tensors
-        pixel_values = torch.stack(pixel_values, dim=0)
-        position_ids = torch.stack(position_ids, dim=0)
+        # Concatenate along the frame axis rather than stacking on a new video axis, so that videos with
+        # different frame counts can be batched together. `num_frames_per_video` splits it back per video.
+        pixel_values = torch.cat(pixel_values, dim=0)
+        position_ids = torch.cat(position_ids, dim=0)
 
         data = {
             "pixel_values_videos": pixel_values,
             "video_position_ids": position_ids,
+            "num_frames_per_video": num_frames_per_video,
             "num_soft_tokens_per_video": num_soft_tokens_per_video,
         }
         return BatchFeature(data=data, tensor_type=return_tensors)

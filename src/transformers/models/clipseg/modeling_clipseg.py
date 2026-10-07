@@ -1008,7 +1008,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         conditional_embeddings: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        labels: torch.LongTensor | None = None,
+        labels: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CLIPSegOutput:
@@ -1018,10 +1018,9 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
             The conditional embeddings for the query images. If provided, the model will use this instead of computing
             the embeddings from the conditional_pixel_values.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth segmentation masks, with values in `[0, 1]` and the same spatial size as `logits`. A binary
+            cross-entropy loss is computed between the predicted logits and these masks.
 
         Examples:
 

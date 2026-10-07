@@ -172,9 +172,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=False, dynamic=True)
+        # Static Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )

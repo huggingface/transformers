@@ -35,50 +35,13 @@ if is_vision_available():
 
 
 class Gemma4ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        do_normalize=False,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        patch_size=6,
-        max_soft_tokens=70,
-        pooling_kernel_size=1,
-    ):
-        super().__init__()
-        image_mean = image_mean if image_mean is not None else [0.0, 0.0, 0.0]
-        image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.patch_size = patch_size
-        self.max_soft_tokens = max_soft_tokens
-        self.pooling_kernel_size = pooling_kernel_size
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 6)
+        kwargs.setdefault("max_soft_tokens", 70)
+        kwargs.setdefault("pooling_kernel_size", 1)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "patch_size": self.patch_size,
-            "max_soft_tokens": self.max_soft_tokens,
-            "pooling_kernel_size": self.pooling_kernel_size,
-        }
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images=None):
         """Return the expected per-image output shape: (max_patches, patch_pixels)."""
@@ -91,30 +54,11 @@ class Gemma4ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Gemma4ImageProcessingTester(self)
+    image_processor_tester_class = Gemma4ImageProcessingTester
 
     @unittest.skip("Gemma4 patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
     def test_call_numpy_4_channels(self):
         pass
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        """Test that all expected attributes are present."""
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "max_soft_tokens"))
-            self.assertTrue(hasattr(image_processing, "pooling_kernel_size"))
 
     def test_image_processor_defaults(self):
         """Test default parameter values for Gemma4 matching VARASP_SL280_K3."""
@@ -127,15 +71,6 @@ class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(list(proc.image_mean), [0.0, 0.0, 0.0])
             self.assertEqual(list(proc.image_std), [1.0, 1.0, 1.0])
             self.assertEqual(proc.resample, 3)
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.patch_size, 6)
-            self.assertEqual(image_processor.max_soft_tokens, 70)
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, patch_size=18)
-            self.assertEqual(image_processor.patch_size, 18)
 
     def test_output_keys(self):
         """Test that the output contains pixel_values, image_position_ids, and num_soft_tokens_per_image."""

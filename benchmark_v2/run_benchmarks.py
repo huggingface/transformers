@@ -100,10 +100,10 @@ if __name__ == "__main__":
     # If a config file is provided, read it and use the configs therein. They will still be adapted to the given arguments.
     if args.config_file is not None:
         if args.config_file.endswith(".json"):
-            with open(args.config_file, "r") as f:
+            with open(args.config_file, "r", encoding="utf-8") as f:
                 config_as_dicts = [json.load(f)]
         elif args.config_file.endswith(".jsonl"):
-            with open(args.config_file, "r") as f:
+            with open(args.config_file, "r", encoding="utf-8") as f:
                 config_as_dicts = [json.loads(line) for line in f if line.startswith("{")]
         else:
             raise ValueError(f"Unsupported config file format: {args.config_file}")

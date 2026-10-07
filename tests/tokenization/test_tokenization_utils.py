@@ -313,6 +313,24 @@ class TokenizerUtilsTest(unittest.TestCase):
             self.assertIn("benign_repo_token", vocab)
             self.assertNotIn("secret_leaked_token", vocab)
 
+    def test_additional_special_tokens_are_preserved_when_extra_tokens_are_configured(self):
+        for empty_container in [{}, []]:
+            with tempfile.TemporaryDirectory() as repo:
+                with open(os.path.join(repo, "vocab.txt"), "w", encoding="utf-8") as f:
+                    f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]))
+                with open(os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "tokenizer_class": "BertTokenizer",
+                            "additional_special_tokens": ["<deprecated>"],
+                            "extra_special_tokens": empty_container,
+                        },
+                        f,
+                    )
+
+                tokenizer = BertTokenizer.from_pretrained(repo)
+                self.assertIn("<deprecated>", tokenizer.all_special_tokens)
+
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):

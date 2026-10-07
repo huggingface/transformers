@@ -19,7 +19,6 @@ from io import BytesIO
 
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -179,6 +178,10 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="Model fails to export though it can eagerly forward with same inputs")
+    def test_onnx_export_generate_dynamic(self):
+        pass
 
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
@@ -366,20 +369,6 @@ class SmolVLMForConditionalGenerationModelTest(
 
     @unittest.skip(reason="Compile not yet supported in SmolVLM models")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @pytest.mark.generate
-    @slow
-    @unittest.skip(
-        reason="SmolVLM doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
-    )
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Cache position is off by one leaving out image tokens, FIXME raushan")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token

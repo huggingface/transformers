@@ -51,7 +51,7 @@ can easily be loaded on each distributed device.
 ### Demo
 
 In this demo run we pre-train a `"base-sized"` Wav2Vec2 model simply only on the validation
-and test data of [librispeech_asr](https://huggingface.co/datasets/librispeech_asr).
+and test data of [librispeech_asr](https://huggingface.co/datasets/openslr/librispeech_asr).
 
 The demo is run on two Titan RTX (24 GB RAM each). In case you have less RAM available 
 per device, consider reducing `--batch_size` and/or the `--max_duration_in_seconds`.
@@ -59,7 +59,7 @@ per device, consider reducing `--batch_size` and/or the `--max_duration_in_secon
 
 ```bash
 accelerate launch run_wav2vec2_pretraining_no_trainer.py \
-	--dataset_name="librispeech_asr" \
+	--dataset_name="openslr/librispeech_asr" \
 	--dataset_config_names clean clean \
 	--dataset_split_names validation test \
 	--model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
@@ -88,11 +88,11 @@ The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/wav
 ### Base
 
 To pre-train `"base-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) 
-on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
+on [librispeech_asr](https://huggingface.co/datasets/openslr/librispeech_asr), the following command can be run:
 
 ```bash
 accelerate launch run_wav2vec2_pretraining_no_trainer.py \
-	--dataset_name=librispeech_asr \
+	--dataset_name=openslr/librispeech_asr \
 	--dataset_config_names clean clean other \
 	--dataset_split_names train.100 train.360 train.500 \
 	--model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
@@ -126,11 +126,11 @@ The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/tes
 ### Large
 
 To pre-train `"large-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-large-lv60](https://huggingface.co/facebook/wav2vec2-large-lv60), 
-on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
+on [librispeech_asr](https://huggingface.co/datasets/openslr/librispeech_asr), the following command can be run:
 
 ```bash
 accelerate launch run_wav2vec2_pretraining_no_trainer.py \
-	--dataset_name=librispeech_asr \
+	--dataset_name=openslr/librispeech_asr \
 	--dataset_config_names clean clean other \
 	--dataset_split_names train.100 train.360 train.500 \
 	--output_dir=./test \

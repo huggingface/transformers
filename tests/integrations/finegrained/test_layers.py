@@ -362,12 +362,12 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         module, whose entry shards nothing — so a scale with no entry of its own stays whole while
         its weight is this rank's expert slice, and every rank but the first reads another rank's
         scales."""
-        from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+        from transformers.distributed.tensor_parallel import _get_parameter_plan
 
         plan = self._planned()
 
         def style(name):
-            return _get_parameter_tp_plan(f"layers.3.mlp.experts.{name}", plan)
+            return _get_parameter_plan(f"layers.3.mlp.experts.{name}", plan)
 
         for proj in ("gate_up_proj", "down_proj"):
             for name in (proj, f"{proj}_scale_inv", f"{proj}_weight_global_scale", f"{proj}_activation_scale"):
@@ -379,7 +379,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
     def test_intra_expert_entries_follow_the_projection_axis(self):
         """Under intra-expert TP the experts stay whole and the projection's own axis splits, so the scale grid
         follows its weight while the per-expert globals stay replicated."""
-        from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+        from transformers.distributed.tensor_parallel import _get_parameter_plan
 
         base = {
             "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
@@ -389,7 +389,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         plan = self._planned(raw=base)
 
         def style(name):
-            return _get_parameter_tp_plan(f"layers.3.mlp.experts.{name}", plan)
+            return _get_parameter_plan(f"layers.3.mlp.experts.{name}", plan)
 
         # the weight keeps the style the MODEL declared — `packed_colwise` is the strided split a
         # concatenated `[gate; up]` checkpoint needs, since the interleave into the kernels' row
@@ -407,9 +407,9 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         # a natively INTERLEAVED layout declares `colwise`, and its companions split contiguously
         inter = dict(base, **{"layers.*.mlp.experts.gate_up_proj": "colwise"})
         plan_i = self._planned(raw=inter)
-        self.assertEqual(_get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj", plan_i), "colwise")
+        self.assertEqual(_get_parameter_plan("layers.3.mlp.experts.gate_up_proj", plan_i), "colwise")
         self.assertEqual(
-            _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan_i),
+            _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan_i),
             "moe_experts_colwise",
         )
 
@@ -417,7 +417,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         """`mlp.up_proj` and `mlp.shared_experts.down_proj` end in the same words as the stacked expert
         projections but are plain 2-D linears that colwise/rowwise already shard right; an expert-axis style
         would shard a dim they do not have."""
-        from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+        from transformers.distributed.tensor_parallel import _get_parameter_plan
 
         plan = self._planned(
             raw={
@@ -443,7 +443,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         self.assertEqual(strays, [], f"invented dense scale entries: {strays}")
         # the stacked experts still get theirs
         self.assertEqual(
-            _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
+            _get_parameter_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
             "moe_experts_packed_colwise",
         )
 

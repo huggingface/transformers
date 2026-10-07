@@ -940,7 +940,7 @@ def retrieve_artifact(artifact_path: str, gpu: str | None):
         files = os.listdir(artifact_path)
         for file in files:
             try:
-                with open(os.path.join(artifact_path, file)) as f:
+                with open(os.path.join(artifact_path, file), encoding="utf-8") as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
                 raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
@@ -1398,7 +1398,7 @@ if __name__ == "__main__":
     if job_name == "run_models_gpu":
         if "warnings_in_ci" in available_artifacts:
             directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
-            with open(os.path.join(directory, "selected_warnings.json")) as fp:
+            with open(os.path.join(directory, "selected_warnings.json"), encoding="utf-8") as fp:
                 selected_warnings = json.load(fp)
 
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
@@ -1422,7 +1422,7 @@ if __name__ == "__main__":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
-        with open(event_payload_path) as fp:
+        with open(event_payload_path, encoding="utf-8") as fp:
             event_payload = json.load(fp)
             # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
@@ -1580,7 +1580,7 @@ if __name__ == "__main__":
 
             report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w", encoding="utf-8") as fp:
                 fp.write(report)
 
             # upload

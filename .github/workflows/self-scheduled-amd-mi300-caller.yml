@@ -39,6 +39,7 @@ permissions:
 
 jobs:
   setup:
+    permissions: {}
     name: Setup
     runs-on: ubuntu-22.04
     steps:

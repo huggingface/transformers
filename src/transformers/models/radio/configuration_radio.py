@@ -40,6 +40,14 @@ class RadioConfig(PreTrainedConfig):
         Number of learned class (summary) tokens prepended to the patch sequence.
     num_registers (`int`, *optional*, defaults to 7):
         Number of learned register tokens prepended to the patch sequence.
+    patch_dim (`int`, *optional*):
+        Flattened size of one image patch. Derived from `num_channels` and `patch_size`.
+    video_patch_dim (`int`, *optional*):
+        Flattened size of one temporally-packed video patch. Derived from `video_temporal_patch_size`
+        and `patch_dim`; `None` for image-only checkpoints.
+    video_temporal_patch_size (`int`, *optional*):
+        Number of temporally-stacked frames per patch. When set, the patch generator also builds a
+        `video_patch_projection` for temporally-packed video patches; `None` disables the video path.
     summary_idxs (`list[int]`, *optional*, defaults to `[0, 1]`):
         Indices of the class tokens to gather and flatten into the `summary` output embedding.
     norm_mean (`tuple[float, float, float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
@@ -71,6 +79,10 @@ class RadioConfig(PreTrainedConfig):
     max_img_size: int = 2048
     num_cls_tokens: int = 3
     num_registers: int = 7
+    video_temporal_patch_size: int | None = None
+    # derived in `__post_init__` from the patch geometry above
+    patch_dim: int | None = None
+    video_patch_dim: int | None = None
     summary_idxs: list[int] | None = None
     # input conditioner
     norm_mean: list[float] | tuple[float, float, float] = tuple(OPENAI_CLIP_MEAN)
@@ -78,11 +90,22 @@ class RadioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        self.patch_dim = self.num_channels * self.patch_size**2
+        if self.video_temporal_patch_size is not None:
+            self.video_patch_dim = self.video_temporal_patch_size * self.patch_dim
         if self.summary_idxs is None:
             self.summary_idxs = [0, 1]
         self.norm_mean = list(self.norm_mean)
         self.norm_std = list(self.norm_std)
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        # packed video is told apart from images by its channel count, so it needs at least 2 frames per patch
+        if self.video_temporal_patch_size is not None and self.video_temporal_patch_size < 2:
+            raise ValueError(
+                f"`video_temporal_patch_size` must be at least 2 or `None`, got {self.video_temporal_patch_size}."
+            )
 
     @property
     def num_summary_tokens(self) -> int:

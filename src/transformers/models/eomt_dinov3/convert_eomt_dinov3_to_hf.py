@@ -288,7 +288,7 @@ def convert_checkpoint(
 
     # load config.json
     filepath = hf_hub_download(backbone_repo_id, filename="config.json")
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         base_config = json.load(f)
 
     mapped_base = map_dinov3_state_to_eomt(base_state_dict)

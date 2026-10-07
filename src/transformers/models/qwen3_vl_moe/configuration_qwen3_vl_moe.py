@@ -65,10 +65,9 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -96,6 +95,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
     moe_intermediate_size: int = 1408
     num_experts_per_tok: int = 4
     num_experts: int = 60
+    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     mlp_only_layers: list[int] | None = None
     pad_token_id: int | None = None

@@ -604,7 +604,7 @@ for mode in modes:
         model_dir,
         dtype="auto",
         attn_implementation="eager",
-        distributed_config=DistributedConfig(tp_size=world, enable_expert_parallel=(mode == "ep")),
+        distributed_config=DistributedConfig(tp_size=world, ep_size=world if mode == "ep" else None),
     ).eval()
     experts = next(m for n, m in model.named_modules() if n.endswith("mlp.experts"))
     weight = getattr(experts, experts.gate_up_name)

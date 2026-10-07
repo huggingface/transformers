@@ -34,11 +34,11 @@ The script leverages the 🤗 [Trainer API](https://huggingface.co/docs/transfor
 
 ### Using datasets from Hub
 
-Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/beans) dataset, to classify the disease type of bean leaves.
+Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/AI-Lab-Makerere/beans) dataset, to classify the disease type of bean leaves.
 
 ```bash
 python run_image_classification.py \
-    --dataset_name beans \
+    --dataset_name AI-Lab-Makerere/beans \
     --output_dir ./beans_outputs/ \
     --remove_unused_columns False \
     --label_column_name labels \

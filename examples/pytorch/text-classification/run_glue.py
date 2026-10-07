@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 import datasets
 import evaluate
 import numpy as np
-from datasets import load_dataset
+from datasets import Value, load_dataset
 
 import transformers
 from transformers import (
@@ -336,6 +336,12 @@ def main():
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.
 
+    # With pandas>=3, text columns of CSV files are loaded as `large_string`, and `datasets.map` then casts the label
+    # ids computed below back to that type, so they end up as strings. Using `string` lets them be inferred as ints.
+    for split in raw_datasets:
+        if raw_datasets[split].features.get("label") == Value("large_string"):
+            raw_datasets[split] = raw_datasets[split].cast_column("label", Value("string"))
+
     # Labels
     if data_args.task_name is not None:
         is_regression = data_args.task_name == "stsb"
@@ -612,7 +618,7 @@ def main():
 
             output_predict_file = os.path.join(training_args.output_dir, f"predict_results_{task}.txt")
             if trainer.is_world_process_zero():
-                with open(output_predict_file, "w") as writer:
+                with open(output_predict_file, "w", encoding="utf-8") as writer:
                     logger.info(f"***** Predict results {task} *****")
                     writer.write("index\tprediction\n")
                     for index, item in enumerate(predictions):
@@ -633,6 +639,8 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+    trainer.end()
 
 
 def _mp_fn(index):

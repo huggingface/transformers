@@ -33,12 +33,16 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import packaging.version
 from packaging import version
 
 from . import logging
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -325,6 +329,16 @@ def is_rocm_platform() -> bool:
 
         return getattr(torch, "version").hip is not None
     return False
+
+
+def get_device_type(device: "torch.device | str | None" = None) -> str:
+    """Type of a device (the current accelerator by default, else cpu), with AMD GPUs reported as rocm."""
+    import torch
+
+    if device is None:
+        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+    device_type = torch.device(device).type if isinstance(device, str) else device.type
+    return "rocm" if device_type == "cuda" and is_rocm_platform() else device_type
 
 
 @lru_cache
@@ -745,7 +759,12 @@ def enable_tf32(enable: bool) -> None:
 @lru_cache
 @_make_compile_constant
 def is_torch_flex_attn_available() -> bool:
-    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
+    return (
+        is_torch_available()
+        and version.parse(get_torch_version()) >= version.parse("2.5.0")
+        # torch's flex_attention refuses TPU tensors; checks the host accelerator, not the model's device
+        and get_device_type() != "tpu"
+    )
 
 
 @lru_cache
@@ -1036,6 +1055,12 @@ def is_onnx_available() -> bool:
 @_make_compile_constant
 def is_onnxscript_available() -> bool:
     return _is_package_available("onnxscript")[0]
+
+
+@lru_cache
+@_make_compile_constant
+def is_openvino_available() -> bool:
+    return _is_package_available("openvino")[0]
 
 
 @lru_cache
@@ -2509,6 +2534,10 @@ class _LazyModule(ModuleType):
         return result
 
     def __getattr__(self, name: str) -> Any:
+        import_error_message = (
+            f"Could not import module '{name}'. Are this object's requirements defined correctly? "
+            "Set the logging verbosity to DEBUG for the original import error."
+        )
         if name in self._objects:
             return self._objects[name]
         if name in self._object_missing_backend:
@@ -2637,25 +2666,22 @@ class _LazyModule(ModuleType):
                                             setattr(self, lookup_name, value)
                                         setattr(self, name, value)
                                         break
-                            except Exception as e:
-                                logger.debug(f"Could not create tokenizer alias: {e}")
+                            except Exception as alias_error:
+                                logger.debug(f"Could not create tokenizer alias: {alias_error}")
 
                         if value is None:
-                            raise ModuleNotFoundError(
-                                f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                            ) from e
+                            logger.debug(f"Original import error for '{name}': {e}")
+                            raise ModuleNotFoundError(import_error_message) from e
                 else:
-                    raise ModuleNotFoundError(
-                        f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                    ) from e
+                    logger.debug(f"Original import error for '{name}': {e}")
+                    raise ModuleNotFoundError(import_error_message) from e
 
         elif name in self._modules:
             try:
                 value = self._get_module(name)
             except (ModuleNotFoundError, RuntimeError) as e:
-                raise ModuleNotFoundError(
-                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                ) from e
+                logger.debug(f"Original import error for '{name}': {e}")
+                raise ModuleNotFoundError(import_error_message) from e
         else:
             # V5: If a *TokenizerFast symbol is requested but not present in the import structure,
             # try to resolve to the corresponding non-Fast symbol's module if available.

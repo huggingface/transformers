@@ -232,7 +232,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_single-py
         """
         results_path = self.fixtures_path / "expected_results_single.json"
-        with open(results_path, "r") as f:
+        with open(results_path, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         exp_code = torch.tensor(raw_data["audio_codes"])
         exp_recon = torch.tensor(raw_data["recon_wav"])
@@ -274,7 +274,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         NOTE (ebezzam): PyPI model does not support batch inference but we compare against its per-sample results
         """
         results_path = self.fixtures_path / "expected_results_batch.json"
-        with open(results_path, "r") as f:
+        with open(results_path, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         num_samples = len(raw_data["audio_codes"])
         exp_codes = [torch.tensor(c) for c in raw_data["audio_codes"]]

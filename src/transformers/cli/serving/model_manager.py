@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 # ggml's flash attention, the default on MPS where `kernels` can fetch it.
-GGML_ATTN = "transformers-community/ggml-attn"
+GGML_ATTN = "ggml-org/ggml-attn"
 
 
 class TimedModel:
@@ -342,7 +342,7 @@ class ModelManager:
                     progress_callback({"status": "ready", "model": key, "cached": True})
         return model, processor
 
-    async def load_model_streaming(self, model_id_and_revision: str):
+    async def load_model_streaming(self, model_id_and_revision: str, gguf_file: str | None = None):
         """Load a model and stream progress as SSE events.
 
         Handles three cases:
@@ -352,11 +352,12 @@ class ModelManager:
 
         Args:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
+            gguf_file (`str`, *optional*): GGUF file to load from the repository.
 
         Yields:
             `str`: SSE ``data: ...`` lines with progress updates.
         """
-        mid = model_id_and_revision
+        mid = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         # Case 1: already cached
@@ -402,9 +403,10 @@ class ModelManager:
                 try:
                     await asyncio.to_thread(
                         self.load_model_and_processor,
-                        mid,
+                        model_id_and_revision,
                         progress_callback=enqueue,
                         tqdm_class=tqdm_class,
+                        gguf_file=gguf_file,
                     )
                 finally:
                     logging.set_tqdm_hook(previous_hook)
@@ -492,6 +494,20 @@ class ModelManager:
                 continue
 
             for ref, revision_info in repo.refs.items():
+                author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
+
+                # One quantization per file, each a separate model, so list files rather than the repo.
+                gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
+                for gguf_file in gguf_files:
+                    generative_models.append(
+                        {
+                            "owned_by": author,
+                            "id": f"{repo.repo_id}:{gguf_file}",
+                            "object": "model",
+                            "created": repo.last_modified,
+                        }
+                    )
+
                 config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
                 if not config_path:
                     continue
@@ -506,7 +522,6 @@ class ModelManager:
                 multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
 
                 if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
-                    author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
                     repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
                     generative_models.append(
                         {

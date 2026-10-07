@@ -555,6 +555,8 @@ def main():
     else:
         trainer.create_model_card(**kwargs)
 
+    trainer.end()
+
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)

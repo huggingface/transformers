@@ -115,7 +115,7 @@ class TestGetAutoDocstringNames(unittest.TestCase):
         self.cache = {}
 
     def _write_temp(self, source):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w", suffix=".py", delete=False) as f:
             f.write(source)
         self.addCleanup(os.unlink, f.name)
         return f.name

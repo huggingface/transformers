@@ -740,6 +740,15 @@ class RotaryEmbeddingConfigMixin:
     default_rope_type = "default"  # override only for axial models
     ignore_keys_at_rope_validation = set()
 
+    def nested_rope_parameter_keys(self, rope_parameters: dict) -> list[str]:
+        """
+        Return the keys `rope_parameters` is nested under, or an empty list if it is a flat dict. Only the layer
+        types the config declares count, so a config that declares none is never treated as nested.
+        """
+        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+        labels = getattr(self, "_rope_type_labels", None) or getattr(self, "layer_types", None) or ()
+        return [key for key in rope_parameters if key in labels]
+
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
@@ -751,11 +760,19 @@ class RotaryEmbeddingConfigMixin:
         # 3. Values in the config's attributes (i.e. it's in MyConfig.__init__'s args)
         # 4. Default values (i.e. not present at all but other RoPE parameters are present)
         rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
-        self.rope_parameters.setdefault("rope_theta", rope_theta)
-
         partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+
+        # When `rope_parameters` is nested, the defaults belong in each nested dict rather than next to them
+        nested_keys = self.nested_rope_parameter_keys(self.rope_parameters)
+        nested_parameters = [self.rope_parameters[key] for key in nested_keys] or [self.rope_parameters]
+        for rope_parameters in nested_parameters:
+            if rope_parameters is None:
+                continue
+            rope_parameters.setdefault("rope_theta", rope_theta)
+            if partial_rotary_factor is not None:
+                rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+
         if partial_rotary_factor is not None:
-            self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
             self.ignore_keys_at_rope_validation = set(self.ignore_keys_at_rope_validation or []) | {
                 "partial_rotary_factor"
             }
@@ -773,16 +790,15 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = getattr(self, "rope_parameters", None) or {}
 
-        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
-        layer_types = getattr(self, "_rope_type_labels", getattr(self, "layer_types", None))
+        nested_keys = self.nested_rope_parameter_keys(rope_parameters)
 
         # Case 0: no RoPE params defined
         if not (rope_parameters or rope_theta):
             # partial_rotary_factor without rope_theta is invalid, so we don't check for it here
             logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
             return
-        # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        elif layer_types is None or rope_parameters == {} or set(rope_parameters.keys()).isdisjoint(layer_types):
+        # Case 1: RoPE params are not nested by layer type -> one global dict
+        elif not nested_keys:
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
@@ -805,7 +821,7 @@ class RotaryEmbeddingConfigMixin:
 
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
-            for layer_type in set(layer_types):
+            for layer_type in nested_keys:
                 # skip if saved with `None` value
                 if rope_parameters[layer_type] is None:
                     continue
@@ -836,14 +852,16 @@ class RotaryEmbeddingConfigMixin:
         if not rope_parameters_dict:
             return
 
-        if getattr(self, "layer_types", None) is not None and not set(rope_parameters_dict.keys()).isdisjoint(
-            self.layer_types
-        ):
-            pass
+        nested_keys = self.nested_rope_parameter_keys(rope_parameters_dict)
+        if nested_keys:
+            rope_parameters_dict = {key: rope_parameters_dict[key] for key in nested_keys}
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
-        for rope_parameters in rope_parameters_dict.values():
+        # Heterogeneous configs can't read `head_dim` globally, so the even-dim check is skipped for them
+        head_dim = None if self.is_heterogeneous else getattr(self, "head_dim", None)
+
+        for layer_type, rope_parameters in rope_parameters_dict.items():
             # skip when set to `None`, possibly a NoPE layer
             if rope_parameters is None:
                 continue
@@ -856,6 +874,20 @@ class RotaryEmbeddingConfigMixin:
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
+                )
+
+            # An odd partial rotary dim is rounded up and still fits in the head, but a fully-rotated odd head doesn't
+            # Synthetic test fixtures and Hub test checkpoints (e.g. tiny-llama) use head_dim <= 4 and are allowed
+            partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
+            if (
+                head_dim is not None
+                and head_dim > 4
+                and head_dim % 2
+                and int(head_dim * partial_rotary_factor) == head_dim
+            ):
+                raise ValueError(
+                    f"RoPE requires an even rotary dimension, but got `head_dim`={head_dim} with "
+                    f"`partial_rotary_factor`={partial_rotary_factor} for `{layer_type}`."
                 )
 
     def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
