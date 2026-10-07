@@ -597,6 +597,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return self.ops.astype((positions >= bounds[:, :1]) & (positions < bounds[:, 1:]), "int32")
 
     def _get_mask_from_lengths(self, lengths, padded_length, *, like=None):
+        """int32 `(len(lengths), padded_length)` with ones on `[0, length)` of each entry."""
         positions = self.ops.arange(padded_length, like=like)[None, :]
         lengths = self.ops.asarray(np.asarray(lengths, dtype=np.int64), like=like)
         return self.ops.astype(positions < lengths[:, None], "int32")
@@ -956,6 +957,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return self.ops.mean(x, 0)
 
     def _squeeze_axis0(self, x):
+        # The caller guards `shape[0] == 1`.
         return x[0]
 
     def _pad_axis(self, x, left, right, axis, value=0.0):
@@ -975,7 +977,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _lengths_from_ranges(self, ranges):
         """Host-side integer array of `end - start` per `(start, end)` range."""
-        return np.asarray([end - start for start, end in ranges])
+        return np.asarray([end - start for start, end in ranges], dtype=np.int64)
 
     def _log(self, x):
         return self.ops.log(x)
