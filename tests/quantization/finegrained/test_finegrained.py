@@ -356,6 +356,27 @@ class FineGrainedPlanTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             tp_plan({r"layers\.1\.mlp\.experts": Mxfp8Config(), ".*": per_tensor})
 
+    def test_parallel_plans_replicate_the_per_tensor_scales(self):
+        """A per-tensor scale is 0-dim, with no axis to split: the quantizer names each one a plan would shard with
+        its module `replicate`, which the parameter's own entry makes take precedence. A scale grid follows its
+        module's style."""
+        from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES
+        from transformers.integrations.finegrained import FineGrainedLinear
+        from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
+
+        model = nn.Module()
+        model.q_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
+        model.o_proj = FineGrainedLinear(64, 64, quantization_config=NVFP4Config())
+        model._tp_plan, model._ep_plan = {"q_proj": "colwise"}, {}
+        BlockScaledQuantizer._replicate_per_tensor_scales(model)
+        self.assertEqual(
+            model._tp_plan,
+            {"q_proj": "colwise", "q_proj.weight_global_scale": "replicate", "q_proj.activation_scale": "replicate"},
+        )
+        scale = model.q_proj.weight_global_scale
+        ALL_PARALLEL_STYLES["replicate"].shard_param(model.q_proj, "weight_global_scale", mesh=None)
+        self.assertIs(model.q_proj.weight_global_scale, scale)
+
 
 @require_torch
 class FineGrainedPlanConversionTest(unittest.TestCase):

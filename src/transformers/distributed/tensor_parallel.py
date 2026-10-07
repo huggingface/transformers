@@ -203,13 +203,7 @@ class ColwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        # a 0-dim scale is one value for the whole tensor: no axis to split, every rank keeps it
-        if meta.ndim == 0:
-            placement = Replicate()
-        elif isinstance(module, torch.nn.Embedding):
-            placement = Shard(1)
-        else:
-            placement = Shard(meta.ndim - 2)
+        placement = Shard(1) if isinstance(module, torch.nn.Embedding) else Shard(meta.ndim - 2)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -280,10 +274,7 @@ class RowwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        # a 0-dim scale is one value for the whole tensor: no axis to split, every rank keeps it
-        if meta.ndim == 0:
-            placement = Replicate()
-        elif isinstance(module, torch.nn.Embedding):
+        if isinstance(module, torch.nn.Embedding):
             placement = Shard(0)
         else:
             # bias is replicated (added after the row-reduce); weight shards on input dim (-1)
@@ -352,6 +343,11 @@ class RowwiseParallel(TensorParallelLayer):
                 output = output.to_local()
 
         return output
+
+
+class ReplicateParallel(TensorParallelLayer):
+    """A parameter every rank holds whole, such as a per-tensor quantization scale: named in a plan, it takes
+    precedence over the style its module's entry would give it."""
 
 
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
@@ -489,10 +485,7 @@ class PackedColwiseParallel(TensorParallelLayer):
             return
         shard_dim = self._packed_output_shard_dim(meta.ndim)
         # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
-        # a 0-dim scale is one value for the whole tensor: no axis to split, every rank keeps it
-        if meta.ndim == 0:
-            placement = Replicate()
-        elif meta.ndim == 1:
+        if meta.ndim == 1:
             placement = Shard(shard_dim)
         else:
             placement = _StridedShard(dim=shard_dim, split_factor=self.split_factor)
@@ -533,7 +526,7 @@ class PackedRowwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        placement = Replicate() if meta.ndim <= 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
+        placement = Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -959,6 +952,7 @@ class ParallelInterface(GeneralInterface):
             "moe_tp_experts": MoeExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityParallel(),
+            "replicate": ReplicateParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),

@@ -300,11 +300,28 @@ class BlockScaledQuantizer(HfQuantizer):
         if not any(name.endswith("activation_scale") for name, _ in model.named_parameters()):
             ignored.add(r"input(_global)?_scale$")
         model._keys_to_ignore_on_load_unexpected = ignored
+        self._replicate_per_tensor_scales(model)
         if not replaced and not self.quantization_config.dequantize:
             logger.warning(
                 "You are loading a fine-grained quantized model but no linear or experts modules were "
                 "found to convert. Please double check your model architecture."
             )
+
+    @staticmethod
+    def _replicate_per_tensor_scales(model: "PreTrainedModel"):
+        """A per-tensor scale is 0-dim, with no axis to split: each one a parallel plan would shard along with its
+        module is named `replicate`, which takes precedence over the module's entry."""
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+
+        for plan in (model._tp_plan, model._ep_plan):
+            if plan:
+                plan.update(
+                    {
+                        replace_layer_number_by_wildcard(name): "replicate"
+                        for name, param in model.named_parameters()
+                        if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
+                    }
+                )
 
     def replace_modules(self, model, plan=None, modules_to_not_convert=None) -> bool:
         """Swap the modules `plan` (this quantizer's own by default) covers for their quantized classes."""
