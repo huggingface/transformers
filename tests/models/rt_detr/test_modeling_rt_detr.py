@@ -49,7 +49,7 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrForObjectDetection, RTDetrModel
-    from transformers.loss.loss_rt_detr import RTDetrHungarianMatcher, RTDetrLoss
+    from transformers.models.rt_detr.modeling_rt_detr import RTDetrForObjectDetectionCriterion
 
 if is_vision_available():
     from PIL import Image
@@ -595,7 +595,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
 
         # The main loss terms must equal the loss computed on the normal queries alone
-        criterion = RTDetrLoss(config).to(torch_device)
+        criterion = RTDetrForObjectDetectionCriterion(config).loss_module.to(torch_device)
         reference = criterion(
             {
                 "logits": outputs.logits[:, num_denoising_queries:],
