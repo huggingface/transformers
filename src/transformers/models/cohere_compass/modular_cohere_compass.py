@@ -319,7 +319,7 @@ class CohereCompassDecoderLayer(Cohere2DecoderLayer):
 
 @auto_docstring
 class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
-    input_modalities = ("image", "text")
+    input_modalities = ("image", "video", "text")
     _no_split_modules = [
         "CohereCompassDecoderLayer",
         "CohereCompassVisionBlock",

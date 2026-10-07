@@ -154,6 +154,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("efficientloftr", "EfficientLoFTRModel"),
         ("efficientnet", "EfficientNetModel"),
         ("electra", "ElectraModel"),
+        ("embedding_gemma2", "EmbeddingGemma2Model"),
+        ("embedding_gemma2_text", "EmbeddingGemma2TextModel"),
         ("emu3", "Emu3Model"),
         ("encodec", "EncodecModel"),
         ("ernie", "ErnieModel"),
