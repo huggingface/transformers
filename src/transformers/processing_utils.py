@@ -2177,14 +2177,14 @@ class ProcessorMixin(PushToHubMixin):
                     videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                    if not load_audio_from_video:
-                        for fname in audio_fnames:
-                            batch_audios.append(
-                                load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend)
-                            )
-                    else:
+                    # FIXME: should follow order inside conversation!
+                    for fname in audio_fnames:
+                        batch_audios.append(load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend))
+
+                    if load_audio_from_video:
                         for fname in video_fnames:
                             # This updates the template in-place and adds audio entry to ensure `audio` token is added by jinja
+                            # Deprecated since we dont want to dummy-append at the end, let users choose where to put audio!
                             if {"type": "audio"} not in message["content"]:
                                 message["content"].append({"type": "audio"})
                                 logger.warning(

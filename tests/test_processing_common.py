@@ -1500,7 +1500,7 @@ class ProcessorTesterMixin:
         video_file_path = url_to_local_path(
             "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
         )
-        messages = [
+        Video_audio_message = [
             {
                 "role": "user",
                 "content": [
@@ -1521,11 +1521,8 @@ class ProcessorTesterMixin:
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
         out_dict = processor.apply_chat_template(
-            messages,
+            Video_audio_message,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
@@ -1539,6 +1536,37 @@ class ProcessorTesterMixin:
         self.assertEqual(out_dict["input_ids"].shape[0], 1)  # batch-size=1
         self.assertEqual(out_dict["attention_mask"].shape[0], 1)  # batch-size=1
         self.assertEqual(out_dict[self.audio_input_name].shape[0], 1)  # 1 audio from video
+        # TODO: check video shape somehow though it's hardly predictable with packing
+
+        audio_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
+        )
+        audio_message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "path": audio_file_path},
+                    {"type": "text", "text": "What do you hear in this track?"},
+                ],
+            },
+        ]
+        out_dict = processor.apply_chat_template(
+            [Video_audio_message, audio_message],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            load_audio_backend="torchcodec",
+            load_audio_from_video=True,
+        )
+        self.assertTrue(self.audio_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
+
+        self.assertEqual(out_dict["input_ids"].shape[0], 2)
+        self.assertEqual(out_dict["attention_mask"].shape[0], 2)
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 2)  # 2 audios
+        # TODO: check video shape somehow though it's hardly predictable with packing
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""
