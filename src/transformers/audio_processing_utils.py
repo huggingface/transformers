@@ -17,6 +17,7 @@ import warnings
 from dataclasses import fields
 from typing import TYPE_CHECKING, Any, Unpack
 
+import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .audio_processing_base import AudioProcessingMixin, BatchFeature
@@ -31,7 +32,6 @@ from .utils import PaddingStrategy, TensorType, logging
 
 
 if TYPE_CHECKING:
-    import numpy as np
     import torch
 
 
@@ -84,6 +84,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
         # Validate the *resolved* attribute set, not just what the caller passed: a bad value reaching us
         # from a class default or a hub config should fail here, not crash somewhere inside `_preprocess`.
         validate_typed_dict(self.valid_kwargs, {key: getattr(self, key) for key in self._valid_kwargs_names})
+        # Imported here: `audio_processing_backends` imports this module.
+        from .audio_processing_backends import get_audio_backend
+
+        self.ops = get_audio_backend(self.backend)()
         if (
             self.spectrogram_config is not None
             and self.spectrogram_config.mel_scale_config is not None
@@ -254,8 +258,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return make_list_of_audio(audio), sampling_rate if sampling_rate is not None else self.sampling_rate
 
     def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
-        """Resample one mono waveform to ``target_sampling_rate``. Implemented per backend."""
-        raise NotImplementedError
+        """Resample one mono waveform to ``target_sampling_rate``."""
+        return self.ops.resample(audio, orig_sampling_rate, target_sampling_rate)
 
     def _preprocess(
         self,
@@ -587,13 +591,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
         )
 
     def _get_mask(self, ranges, padded_length, *, like=None):
-        mask = self._zeros_int32((len(ranges), padded_length), like=like)
-        for i, (start, end) in enumerate(ranges):
-            mask[i, start:end] = 1
-        return mask
+        """int32 `(len(ranges), padded_length)` with ones on `[start, end)` of each range."""
+        positions = self.ops.arange(padded_length, like=like)[None, :]
+        bounds = self.ops.asarray(np.asarray(ranges, dtype=np.int64).reshape(-1, 2), like=like)
+        return self.ops.astype((positions >= bounds[:, :1]) & (positions < bounds[:, 1:]), "int32")
 
     def _get_mask_from_lengths(self, lengths, padded_length, *, like=None):
-        return self._get_mask([(0, int(length)) for length in lengths], padded_length, like=like)
+        positions = self.ops.arange(padded_length, like=like)[None, :]
+        lengths = self.ops.asarray(np.asarray(lengths, dtype=np.int64), like=like)
+        return self.ops.astype(positions < lengths[:, None], "int32")
 
     # ── Spectrogram core ─────────────────────────────────────────────────
 
@@ -929,63 +935,64 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return result
 
     # ── Backend array-API primitives ─────────────────────────────────────
+    # Thin names the model files still call; step 3 replaces the call sites with `self.ops.*`.
 
     def _astype(self, x, dtype_name):
-        raise NotImplementedError
+        return self.ops.astype(x, dtype_name)
 
     def _amax_over_features(self, x):
         raise NotImplementedError
 
     def _zeros_int32(self, shape, *, like=None):
-        raise NotImplementedError
+        return self.ops.zeros(shape, dtype="int32", like=like)
 
     def _as_backend_array(self, x, *, like=None):
-        raise NotImplementedError
+        return self.ops.asarray(x, like=like)
 
     def _arange(self, stop, *, like=None):
-        raise NotImplementedError
+        return self.ops.arange(stop, like=like)
 
     def _mean_axis0(self, x):
-        raise NotImplementedError
+        return self.ops.mean(x, 0)
 
     def _squeeze_axis0(self, x):
-        raise NotImplementedError
+        return x[0]
 
     def _pad_axis(self, x, left, right, axis, value=0.0):
-        raise NotImplementedError
+        return self.ops.pad(x, left, right, axis=axis, value=value)
 
     def _stack(self, seq):
-        raise NotImplementedError
+        return self.ops.stack(seq)
 
     def _insert_channel_dim(self, batch):
-        raise NotImplementedError
+        return batch[:, None]
 
     def _mean_last(self, x):
-        raise NotImplementedError
+        return self.ops.mean(x, -1, keepdims=True)
 
     def _concat_last(self, parts):
-        raise NotImplementedError
+        return self.ops.concat(parts, -1)
 
     def _lengths_from_ranges(self, ranges):
         """Host-side integer array of `end - start` per `(start, end)` range."""
-        raise NotImplementedError
+        return np.asarray([end - start for start, end in ranges])
 
     def _log(self, x):
-        raise NotImplementedError
+        return self.ops.log(x)
 
     def _log10(self, x):
-        raise NotImplementedError
+        return self.ops.log10(x)
 
     def _sqrt(self, x):
-        raise NotImplementedError
+        return self.ops.sqrt(x)
 
     def _maximum(self, x, y):
         """Element-wise maximum of two arrays."""
-        raise NotImplementedError
+        return self.ops.maximum(x, y)
 
     def _clamp_min(self, x, min_value):
         """Element-wise `max(x, min_value)` for a scalar or 0-d array `min_value`."""
-        raise NotImplementedError
+        return self.ops.clamp_min(x, min_value)
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         """Build the mel filter bank described by ``spectrogram_config.mel_scale_config``.

@@ -47,69 +47,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     # ── Backend array-API primitives ─────────────────────────────────────
 
-    def _astype(self, x, dtype_name):
-        return x.astype(np.dtype(dtype_name))
-
     def _amax_over_features(self, x):
         if x.ndim > 2:
             return x.max(axis=tuple(range(1, x.ndim)), keepdims=True)
         return x.max()
-
-    def _zeros_int32(self, shape, *, like=None):
-        return np.zeros(shape, dtype=np.int32)
-
-    def _as_backend_array(self, x, *, like=None):
-        return x if isinstance(x, np.ndarray) else np.asarray(x)
-
-    def _arange(self, stop, *, like=None):
-        return np.arange(stop)
-
-    def _mean_axis0(self, x):
-        return x.mean(axis=0)
-
-    def _squeeze_axis0(self, x):
-        return np.squeeze(x, axis=0)
-
-    def _lengths_from_ranges(self, ranges):
-        return np.asarray([end - start for start, end in ranges])
-
-    def _log(self, x):
-        return np.log(x)
-
-    def _log10(self, x):
-        return np.log10(x)
-
-    def _sqrt(self, x):
-        return np.sqrt(x)
-
-    def _maximum(self, x, y):
-        return np.maximum(x, y)
-
-    def _clamp_min(self, x, min_value):
-        return np.maximum(x, min_value)
-
-    def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
-        requires_backends(self._resample, ["soxr"])
-        import soxr
-
-        return soxr.resample(audio, orig_sampling_rate, target_sampling_rate, quality="HQ")
-
-    def _pad_axis(self, x, left, right, axis, value=0.0):
-        pad_width = [(0, 0)] * x.ndim
-        pad_width[axis] = (left, right)
-        return np.pad(x, pad_width, mode="constant", constant_values=value)
-
-    def _stack(self, seq):
-        return np.stack(seq)
-
-    def _insert_channel_dim(self, batch):
-        return batch[:, np.newaxis, :]
-
-    def _mean_last(self, x):
-        return x.mean(axis=-1, keepdims=True)
-
-    def _concat_last(self, parts):
-        return np.concatenate(parts, axis=-1)
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
@@ -383,9 +324,6 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     # ── Backend array-API primitives ─────────────────────────────────────
 
-    def _astype(self, x, dtype_name):
-        return x.to(getattr(torch, dtype_name))
-
     _transfer_chunk_bytes = 8 * 2**20
 
     @staticmethod
@@ -463,88 +401,6 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _amax_over_features(self, x):
         return x.amax(dim=(-2, -1), keepdim=True)
-
-    def _zeros_int32(self, shape, *, like=None):
-        device = like.device if isinstance(like, torch.Tensor) else None
-        return torch.zeros(shape, dtype=torch.int32, device=device)
-
-    def _get_mask(self, ranges, padded_length, *, like=None):
-        if not isinstance(like, torch.Tensor):
-            return super()._get_mask(ranges, padded_length, like=like)
-        range_tensor = self._host_to_device(ranges, like.device, dtype=torch.int64)
-        positions = torch.arange(padded_length, device=like.device)
-        return ((positions >= range_tensor[:, :1]) & (positions < range_tensor[:, 1:])).to(torch.int32)
-
-    def _get_mask_from_lengths(self, lengths, padded_length, *, like=None):
-        if not isinstance(like, torch.Tensor):
-            return super()._get_mask_from_lengths(lengths, padded_length, like=like)
-        lengths = self._host_to_device(lengths, like.device, dtype=torch.int64)
-        positions = torch.arange(padded_length, device=like.device)
-        return (positions < lengths[:, None]).to(torch.int32)
-
-    def _as_backend_array(self, x, *, like=None):
-        if isinstance(x, np.ndarray):
-            result = torch.from_numpy(x)
-        elif isinstance(x, torch.Tensor):
-            result = x
-        else:
-            # Sequences (e.g. `list[list[float]]`) are a documented input type; convert through numpy
-            # so the torch backend accepts everything the numpy one does.
-            result = torch.from_numpy(np.asarray(x))
-        return self._host_to_device(result, like.device) if isinstance(like, torch.Tensor) else result
-
-    def _arange(self, stop, *, like=None):
-        device = like.device if isinstance(like, torch.Tensor) else None
-        return torch.arange(stop, device=device)
-
-    def _mean_axis0(self, x):
-        return x.mean(dim=0)
-
-    def _squeeze_axis0(self, x):
-        return x.squeeze(0)
-
-    def _lengths_from_ranges(self, ranges):
-        # Host-side, like the numpy backend: lengths feed Python-side frame arithmetic and are copied to the
-        # device only where a mask needs them (`_get_mask_from_lengths`).
-        return np.asarray([end - start for start, end in ranges])
-
-    def _log(self, x):
-        return torch.log(x)
-
-    def _log10(self, x):
-        return torch.log10(x)
-
-    def _sqrt(self, x):
-        return torch.sqrt(x)
-
-    def _maximum(self, x, y):
-        return torch.maximum(x, y)
-
-    def _clamp_min(self, x, min_value):
-        return x.clamp(min=min_value)
-
-    def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
-        requires_backends(self._resample, ["torchaudio"])
-        import torchaudio
-
-        return torchaudio.functional.resample(audio, orig_freq=orig_sampling_rate, new_freq=target_sampling_rate)
-
-    def _pad_axis(self, x, left, right, axis, value=0.0):
-        axis = axis % x.ndim
-        pad = [0, 0] * (x.ndim - 1 - axis) + [left, right]
-        return torch.nn.functional.pad(x, pad, "constant", value)
-
-    def _stack(self, seq):
-        return torch.stack(seq)
-
-    def _insert_channel_dim(self, batch):
-        return batch.unsqueeze(1)
-
-    def _mean_last(self, x):
-        return x.mean(dim=-1, keepdim=True)
-
-    def _concat_last(self, parts):
-        return torch.cat(parts, dim=-1)
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
