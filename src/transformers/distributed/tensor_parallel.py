@@ -38,7 +38,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed._functional_collectives import all_to_all_single
+    from torch.distributed._functional_collectives import all_to_all_single, wait_tensor
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -804,7 +804,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         recv_counts = torch.empty_like(send_counts)
         torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
         send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
-        recv_tokens = all_to_all_single(send_tokens, recv_sizes, send_sizes, ep_group)
+        # the experts get the received rows, not the all-to-all's pending result: its pointer is null until a torch op
+        # waits on it, which a kernel launched straight from Python (Triton, a raw pointer) never does
+        recv_tokens = wait_tensor(all_to_all_single(send_tokens, recv_sizes, send_sizes, ep_group))
         recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
         recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
         return recv_tokens, recv_expert_ids, order, send_sizes, recv_sizes
