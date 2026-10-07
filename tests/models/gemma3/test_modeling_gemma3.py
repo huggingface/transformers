@@ -65,7 +65,6 @@ if is_torch_available():
     )
     from transformers.cache_utils import StaticCache
     from transformers.models.gemma3.modeling_gemma3 import create_masks_for_vision_model
-    from transformers.pytorch_utils import is_torch_greater_or_equal
 
 
 class Gemma3TextModelTester(CausalLMModelTester):
@@ -836,9 +835,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_export_text_only(self):
-        if not is_torch_greater_or_equal("2.6.0"):
-            self.skipTest(reason="This test requires torch >= 2.6 to run.")
-
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         model_id = "google/gemma-3-1b-it"
