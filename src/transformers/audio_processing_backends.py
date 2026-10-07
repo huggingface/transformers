@@ -905,7 +905,8 @@ class AudioOps:
       on either side: ``+ - * /`` (no ``/`` on int arrays), and unary ``-``;
     - comparisons ``< <= > >= == !=`` giving bool arrays, and ``~ & |`` on bool arrays;
     - indexing with ints, slices with a positive step, `None` and `...` (views or copies; never
-      rely on aliasing — torch rejects negative steps, so reversal is not part of the protocol);
+      rely on aliasing — torch rejects negative steps, so reversal is not part of the protocol;
+      indexing away every axis may yield a scalar on numpy: keep one axis or use `keepdims=True`);
     - the attributes ``.shape`` and ``.ndim``.
     Nothing else: no item assignment (build with `masked_fill`, `concat`, `arange`), no `.dtype`
     (use `dtype_name`), no method-style reductions (use the ops).
@@ -1019,7 +1020,8 @@ class AudioOps:
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
 
     def matmul(self, a, b):
-        """Batched matrix product with numpy broadcasting over leading axes."""
+        """Batched matrix product with numpy broadcasting over leading axes. Two 1-d operands may
+        give a numpy scalar rather than an array; the base only uses 2-d (or higher) operands."""
         raise NotImplementedError
 
     # ── signal ─────────────────────────────────────────────────────────────────────────────────
@@ -1130,8 +1132,8 @@ _NUMPY_PAD_MODES = {"constant": "constant", "reflect": "reflect", "replicate": "
 
 
 def _check_axis(axis):
-    """Shared by the three reductions of every in-library backend: `axis=()` reduces nothing in numpy
-    and torch, which is never what a caller means."""
+    """Shared by the three reductions of every backend: `axis=()` reduces nothing in numpy but
+    everything in torch; neither is what a caller means, so every backend rejects it."""
     if axis == ():
         raise ValueError("axis=() is not allowed; pass an int, a tuple of ints or None.")
 
@@ -1189,9 +1191,11 @@ class NumpyOps(AudioOps):
 
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
     #
-    # Every result goes through `np.asarray`: a ufunc on a 0-d array returns a numpy *scalar*, and
-    # numpy 1.26 promotes a scalar against a Python float (float32 * 2.0 → float64) where an
-    # ndarray keeps its dtype. The protocol promises arrays.
+    # Every result goes through `np.asarray`: a ufunc on 0-d input returns a numpy *scalar*
+    # (`np.float32`), without the `.shape` / `.ndim` semantics the protocol promises; the wrap
+    # guarantees an ndarray. It does not fix promotion: on numpy 1.x a 0-d array still promotes
+    # against a Python float (float32 * 2.0 → float64), which is why the base keeps a reduced axis
+    # (`keepdims=True`) wherever a reduction feeds arithmetic.
 
     def log(self, x):
         return np.asarray(np.log(x))
