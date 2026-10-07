@@ -14,9 +14,9 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import json
 from collections.abc import Callable
+from copy import deepcopy
 from inspect import isfunction, ismethod
 from typing import Any
 
