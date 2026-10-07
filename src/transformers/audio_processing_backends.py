@@ -896,10 +896,13 @@ class AudioOps:
     - Binary ops (`maximum`, `matmul`, arithmetic) require operands of the *same* dtype; the base
       casts with `astype(x, dtype_name(y))` first. `masked_fill`'s mask broadcasts *to* `x`, never
       beyond it. `randn`'s `shape` is a tuple.
+    - `log`, `log10`, `sqrt`, `pow`, `clamp_min` and `mean` take float input; `clamp_min`'s `value`
+      may also be a 0-d array.
 
     Array protocol — what the base may do with a backend array besides calling ops:
-    - arithmetic between two arrays of the same dtype or between an array and a Python scalar on
-      either side: ``+ - * /``, and unary ``-``;
+    - arithmetic between two arrays of the same dtype, or between an array and a Python scalar
+      *of the array's kind* (an int for int arrays, a float for float arrays, either for complex)
+      on either side: ``+ - * /`` (no ``/`` on int arrays), and unary ``-``;
     - comparisons ``< <= > >= == !=`` giving bool arrays, and ``~ & |`` on bool arrays;
     - indexing with ints, slices with a positive step, `None` and `...` (views or copies; never
       rely on aliasing — torch rejects negative steps, so reversal is not part of the protocol);
@@ -1126,6 +1129,13 @@ def register_audio_op(backend: str, name: str):
 _NUMPY_PAD_MODES = {"constant": "constant", "reflect": "reflect", "replicate": "edge"}
 
 
+def _check_axis(axis):
+    """Shared by the three reductions of every in-library backend: `axis=()` reduces nothing in numpy
+    and torch, which is never what a caller means."""
+    if axis == ():
+        raise ValueError("axis=() is not allowed; pass an int, a tuple of ints or None.")
+
+
 class NumpyOps(AudioOps):
     """The reference backend: every op, in numpy. No devices; `like` only matters for dtype."""
 
@@ -1178,43 +1188,50 @@ class NumpyOps(AudioOps):
         return np.swapaxes(x, axis1, axis2)
 
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
+    #
+    # Every result goes through `np.asarray`: a ufunc on a 0-d array returns a numpy *scalar*, and
+    # numpy 1.26 promotes a scalar against a Python float (float32 * 2.0 → float64) where an
+    # ndarray keeps its dtype. The protocol promises arrays.
 
     def log(self, x):
-        return np.log(x)
+        return np.asarray(np.log(x))
 
     def log10(self, x):
-        return np.log10(x)
+        return np.asarray(np.log10(x))
 
     def sqrt(self, x):
-        return np.sqrt(x)
+        return np.asarray(np.sqrt(x))
 
     def abs(self, x):
-        return np.abs(x)
+        return np.asarray(np.abs(x))
 
     def real(self, x):
-        return np.real(x)
+        return np.asarray(np.real(x))
 
     def imag(self, x):
-        return np.imag(x)
+        return np.asarray(np.imag(x))
 
     def maximum(self, x, y):
-        return np.maximum(x, y)
+        return np.asarray(np.maximum(x, y))
 
     def clamp_min(self, x, value):
-        return np.maximum(x, np.asarray(value, dtype=x.dtype))
+        return np.asarray(np.maximum(x, np.asarray(value, dtype=x.dtype)))
 
     def pow(self, x, exponent):
-        return np.power(x, exponent)
+        return np.asarray(np.power(x, exponent))
 
     # ── reductions ─────────────────────────────────────────────────────────────────────────────
 
     def sum(self, x, axis, *, keepdims=False):
+        _check_axis(axis)
         return np.asarray(np.sum(x, axis=axis, keepdims=keepdims))
 
     def mean(self, x, axis, *, keepdims=False):
+        _check_axis(axis)
         return np.asarray(np.mean(x, axis=axis, keepdims=keepdims))
 
     def amax(self, x, axis, *, keepdims=False):
+        _check_axis(axis)
         return np.asarray(np.amax(x, axis=axis, keepdims=keepdims))
 
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
@@ -1430,12 +1447,15 @@ if is_torch_available():
             return tuple(range(x.ndim)) if axis is None else axis
 
         def sum(self, x, axis, *, keepdims=False):
-            return torch.sum(x, dim=self._dims(x, axis), keepdim=keepdims)
+            _check_axis(axis)
+            return torch.sum(x, dim=self._dims(x, axis), keepdim=keepdims)  # bool sums to int64, as numpy
 
         def mean(self, x, axis, *, keepdims=False):
+            _check_axis(axis)
             return torch.mean(x, dim=self._dims(x, axis), keepdim=keepdims)
 
         def amax(self, x, axis, *, keepdims=False):
+            _check_axis(axis)
             return torch.amax(x, dim=self._dims(x, axis), keepdim=keepdims)
 
         # ── linear algebra ─────────────────────────────────────────────────────────────────────
