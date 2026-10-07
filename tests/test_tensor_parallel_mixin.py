@@ -599,9 +599,7 @@ class TensorParallelTesterMixin(ABC):
             plans = {kind: plan for kind, plan in plans.items() if plan}
             self.assertTrue(plans, f"{model_class.__name__} is an MoE model without a TP or an EP plan")
             for kind, plan in plans.items():
-                unsharded = sorted(
-                    n for n in expert_weights if _get_parameter_plan(n, plan, is_weight=True) is None
-                )
+                unsharded = sorted(n for n in expert_weights if _get_parameter_plan(n, plan, is_weight=True) is None)
                 self.assertFalse(
                     unsharded, f"{model_class.__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
                 )
