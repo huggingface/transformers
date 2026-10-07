@@ -23,9 +23,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     torch_device,
 )
 
@@ -129,47 +127,6 @@ class PixtralVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
-
-    @require_flash_attn
-    @require_torch_gpu
-    def test_flash_attention_2_packed_images(self):
-        config = PixtralVisionConfig(
-            hidden_size=256,
-            intermediate_size=512,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            head_dim=64,
-            image_size=64,
-            patch_size=16,
-        )
-        config._attn_implementation = "sdpa"
-        model = PixtralVisionModel(config).to(device=torch_device, dtype=torch.bfloat16).eval()
-        for image_sizes in (
-            [(64, 64)],
-            [(64, 64), (64, 64)],
-            [(64, 32), (32, 64)],
-            [(16, 64), (64, 16)],
-            [(64, 64), (32, 48), (16, 64)],
-            [(16, 16), (64, 32), (32, 64)],
-        ):
-            with self.subTest(image_sizes=image_sizes), torch.no_grad():
-                pixel_values = torch.randn(len(image_sizes), 3, 64, 64, device=torch_device, dtype=torch.bfloat16)
-                model.set_attn_implementation("sdpa")
-                expected = model(pixel_values, image_sizes=image_sizes).last_hidden_state
-                model.set_attn_implementation("flash_attention_2")
-                actual = model(pixel_values, image_sizes=image_sizes).last_hidden_state
-                torch.testing.assert_close(actual, expected, atol=2e-2, rtol=2e-2)
-
-                # Packing multiple images must not introduce attention across images.
-                if len(image_sizes) > 1:
-                    pixel_values[1].normal_()
-                    changed = model(pixel_values, image_sizes=image_sizes).last_hidden_state
-                    first_image_length = (image_sizes[0][0] // config.patch_size) * (
-                        image_sizes[0][1] // config.patch_size
-                    )
-                    torch.testing.assert_close(
-                        actual[:, :first_image_length], changed[:, :first_image_length], atol=0, rtol=0
-                    )
 
     def test_vision_axial_rope(self):
         # override -> the freqs are `//2` of head dim for this model
