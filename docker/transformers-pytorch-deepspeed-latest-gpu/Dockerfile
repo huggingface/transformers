@@ -22,10 +22,18 @@ ARG PYTORCH='2.13.0'
 ARG CUDA='cu126'
 
 RUN apt update
-# On top of what the general test image installs: `libaio-dev` for DeepSpeed's async I/O, and
-# `python-is-python3` because DeepSpeed's `zero_to_fp32.py` is executed directly and its shebang is
-# `#!/usr/bin/env python`, which Ubuntu does not provide (the previous `nvcr.io` base image did).
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs libaio-dev python-is-python3
+# On top of what the general test image installs: `libaio-dev` for DeepSpeed's async I/O.
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng ffmpeg git-lfs libaio-dev curl
+
+# Python comes from uv, at the version in the repo's `.python-version` (passed as the `PYTHON_VERSION` build arg by the
+# build workflow), instead of Ubuntu 22.04's 3.10.
+# The venv also provides `python`: DeepSpeed's `zero_to_fp32.py` is executed directly, with `#!/usr/bin/env python`.
+ARG PYTHON_VERSION
+ENV VIRTUAL_ENV="/opt/venv" UV_PYTHON_INSTALL_DIR="/opt/uv/python"
+ENV PATH="$VIRTUAL_ENV/bin:/root/.local/bin:$PATH"
+COPY --from=gpu-common install-python.sh /opt/ci/
+RUN sh /opt/ci/install-python.sh "$PYTHON_VERSION"
+
 RUN git lfs install
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
@@ -61,11 +69,10 @@ RUN python3 -m pip uninstall -y deepspeed
 # TODO: Find out why test fail.
 RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --no-build-isolation --config-settings="--build-option=build_ext" --config-settings="--build-option=-j8" --no-cache -v --disable-pip-version-check 2>&1
 
-# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
-RUN python3 -m pip uninstall -y kernels
+COPY --from=gpu-common finish-transformers-install.sh /opt/ci/
+RUN sh /opt/ci/finish-transformers-install.sh
 
-# When installing in editable mode, `transformers` is not recognized as a package.
-# this line must be added in order for python to be aware of transformers.
-RUN cd transformers && python3 setup.py develop
+COPY --from=gpu-common check-torch.sh /opt/ci/
+RUN sh /opt/ci/check-torch.sh "$PYTORCH"
 
 RUN python3 -c "from deepspeed.launcher.runner import main"
