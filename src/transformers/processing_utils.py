@@ -60,6 +60,8 @@ from .utils import (
     direct_transformers_import,
     hf_api,
     is_torch_available,
+    is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     list_repo_templates,
     logging,
     resolve_revision,
@@ -78,6 +80,9 @@ from .utils.type_validators import (
 )
 from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
 
+
+if is_torchcodec_available():
+    import torchcodec
 
 if is_torch_available():
     import torch
@@ -736,8 +741,7 @@ class ProcessorMixin(PushToHubMixin):
             text = list(text).copy()
 
         if audio is not None and self._audio_processor is not None:
-            sampling_rate = kwargs.get("sampling_rate", self._audio_processor.sampling_rate)
-            audio = self._audio_processor.fetch_audio(audio, sampling_rate=sampling_rate)
+            audio = self._audio_processor.fetch_audio(audio, sampling_rate=self._audio_processor.sampling_rate)
             audio = make_list_of_audio(audio)
 
         if images is not None and hasattr(self, "image_processor"):
@@ -2389,6 +2393,461 @@ class ProcessorMixin(PushToHubMixin):
                         f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
                         "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
                     )
+
+
+class OmniModalProcessorMixin(ProcessorMixin):
+    """
+    This is a mixin used to provide additional functionality for omni-modal processor classes,
+    including an API to load video and the corresponding audio track of it. New fn shared by omni
+    model should be added here rather than in `ProcessorMixin` to keep simple processors apart from
+    more involved models.
+    Omni modal models are recommended to use this mixin from now on to get more functionality supported
+    for cross-modal interactions.
+    """
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
+        audio_from_video_indices: list[int] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        images, text, videos, audio = self.prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
+        )
+        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+
+        merged_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
+
+        # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
+        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video")
+        if load_audio_from_video:
+            audio, video_to_audio_indices = self._resolve_audio_from_video(
+                videos,
+                audio=audio,
+                audio_from_video_indices=audio_from_video_indices,
+            )
+
+        processed_images = processed_videos = processed_audio = {}
+        images_replacements = videos_replacements = audio_replacements = []
+        if images is not None and hasattr(self, "image_processor"):
+            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+        if audio is not None and self._audio_processor is not None:
+            processed_audio, audio_replacements = self._process_audio(audio, **merged_kwargs["audio_kwargs"])
+            if load_audio_from_video:
+                audio_replacements = [
+                    sample for idx, sample in enumerate(audio_replacements) if idx not in video_to_audio_indices
+                ]
+        if videos is not None and hasattr(self, "video_processor"):
+            if load_audio_from_video:
+                additional_kwargs = {
+                    "audio": audio,
+                    "processed_audio": processed_audio,
+                    "audio_kwargs": merged_kwargs["audio_kwargs"],
+                    "video_to_audio_indices": video_to_audio_indices,
+                }
+                processed_videos, videos_replacements = self._process_videos(
+                    videos, **merged_kwargs["videos_kwargs"], **additional_kwargs
+                )
+            else:
+                processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
+
+        text_inputs = {}
+        return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        if getattr(self, "tokenizer", None) is not None and text is not None:
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
+                "return_text_replacement_offsets", False
+            )
+
+            text, text_replacement_offsets = self.get_text_with_replacements(
+                text,
+                images_replacements,
+                videos_replacements,
+                audio_replacements,
+            )
+            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
+
+            if return_text_replacement_offsets:
+                text_inputs["text_replacement_offsets"] = text_replacement_offsets
+
+            if return_mm_token_type_ids:
+                text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
+        data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
+        data = {k: v for k, v in data.items() if k not in self.unused_input_names}
+
+        if not kwargs.get("return_metadata"):
+            data.pop("video_metadata", None)
+
+        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def _resolve_audio_from_video(
+        self,
+        videos: list,
+        audio: list | None = None,
+        audio_from_video_indices: list[int | None] | None = None,
+        **kwargs,
+    ) -> tuple[list, list[int | None]]:
+        """
+        Resolve audio inputs and their relationship to input videos
+        when `load_audio_from_video=True` and model requires native interleaving.
+
+        `audio_from_video_indices` describes the source of each audio slot:
+            - `None` -> standalone audio associated with no video track
+            - `i`    -> audio extracted from videos[i]
+
+        Returns:
+            `audio (list[str | np.ndarray | torch.Tensor])`:
+                Resolved audio inputs, with audio-from-video appended where needed.
+                The order of audio will be aligned correctly with the input text, as
+                long as users pass valid `audio_from_video_indices` in ambiguous situations
+            `video_to_audio_indices (dict[int, int])`:
+                video_to_audio_indices[i] gives the audio index associated with
+                videos[i], or None if the video has no associated audio.
+        """
+        audio = list(audio or [])
+        videos = make_batched_videos(videos)
+
+        if audio_from_video_indices is None:
+            if audio:
+                raise ValueError(
+                    "Mixing `audio` with `load_audio_from_video=True` requires `audio_from_video_indices`."
+                )
+            audio_from_video_indices = list(range(len(videos)))  # videos only: one audio per video
+
+        if audio_from_video_indices.count(None) != len(audio):
+            raise ValueError(
+                f"`audio_from_video_indices` has {audio_from_video_indices.count(None)} standalone slots but {len(audio)} audio inputs."
+            )
+
+        if not is_torchcodec_greater_or_equal("0.17"):
+            raise ValueError("Loading audio track from video file requires torchcodec>=0.17 installed!")
+
+        standalone_audio = iter(audio)
+        audio_resolved = []
+        video_to_audio = [None] * len(videos)  # reverse mapping, `None` means no audio
+
+        for video_idx in audio_from_video_indices:
+            if video_idx is None:
+                audio_resolved.append(next(standalone_audio))
+                continue
+
+            # Only `torchcodec` can decode audio track from all types of video file formats
+            # Don't raise a load-error if video is silent and instead skip it
+            cont_metadata = torchcodec.decoders.get_container_metadata(videos[video_idx])
+            if not any(stream.media_type == "audio" for stream in cont_metadata.streams):
+                continue
+
+            loaded_audio = load_audio(
+                videos[video_idx],
+                backend="torchcodec",
+                sampling_rate=self._audio_processor.sampling_rate,
+            )
+            video_to_audio[video_idx] = len(audio_resolved)
+            audio_resolved.append(loaded_audio)
+
+        return audio_resolved, video_to_audio
+
+    # Opt-in method, only models that support interleaving video-audio can override it
+    def replace_video_with_audio_token(
+        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs
+    ) -> str:
+        raise NotImplementedError()
+
+    def apply_chat_template(
+        self,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool | str = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: bool = False,
+        return_tensors: str | TensorType | None = None,
+        return_dict: bool = False,
+        load_audio_from_video: bool = False,
+        processor_kwargs: dict | None = None,
+        **kwargs,
+    ) -> str:
+        """
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
+
+        The input is expected to be in the following format, where each message content is a list consisting of text and
+        optionally image or video inputs. One can also provide an image, video, URL or local path which will be used to form
+        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Please describe this image in detail."},
+                ],
+            },
+        ]
+
+        Args:
+            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
+        """
+        processor_kwargs = processor_kwargs or {}
+
+        if chat_template is None:
+            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
+                chat_template = self.chat_template["default"]
+            elif isinstance(self.chat_template, dict):
+                raise ValueError(
+                    'The processor has multiple chat templates but none of them are named "default". You need to specify'
+                    " which one to use by passing the `chat_template` argument. Available templates are: "
+                    f"{', '.join(self.chat_template.keys())}"
+                )
+            elif self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                raise ValueError(
+                    "Cannot use apply_chat_template because this processor does not have a chat template."
+                )
+        else:
+            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
+                # It's the name of a template, not a full template string
+                chat_template = self.chat_template[chat_template]
+            else:
+                # It's a template string, render it directly
+                pass
+
+        # Users might still be passing processing kwargs in `**kwargs` so we need to filter
+        # out additional kwargs that the template expects via Jinja2 template introspection
+        template_kwargs = _get_template_variables(chat_template)
+        processor_kwargs_from_kwargs = {k: v for k, v in kwargs.items() if k not in template_kwargs}
+        if processor_kwargs_from_kwargs:
+            logger.warning(
+                "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
+            )
+            processor_kwargs = processor_kwargs_from_kwargs
+
+        # Loading audio+video is supported natively by interleaving video/audio per timestamps
+        processor_kwargs["load_audio_from_video"] = load_audio_from_video
+
+        # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
+        is_tokenizers_fast = False
+        if hasattr(self, "tokenizer"):
+            if hasattr(self.tokenizer, "backend"):
+                is_tokenizers_fast = self.tokenizer.backend == "tokenizers"
+            else:
+                # Fallback to class name check
+                is_tokenizers_fast = self.tokenizer.__class__.__name__.endswith("Fast")
+
+        if continue_final_message:
+            if add_generation_prompt:
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if return_assistant_tokens_mask:
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if return_assistant_tokens_mask:
+            if not is_tokenizers_fast:
+                raise ValueError(
+                    "`return_assistant_tokens_mask` is not possible with slow tokenizers. Make sure you have `tokenizers` installed. "
+                    "If the error persists, open an issue to support a Fast tokenizer for your model."
+                )
+            else:
+                processor_kwargs["return_offsets_mapping"] = (
+                    True  # force offset mapping so we can infer token boundaries
+                )
+
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
+        audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
+        sampling_rate = processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
+        if sampling_rate is None:
+            if hasattr(self._audio_processor, "sampling_rate"):
+                sampling_rate = self._audio_processor.sampling_rate
+            else:
+                sampling_rate = 16_000
+
+        load_audio_backend = processor_kwargs.get(
+            "load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")
+        )
+        if load_audio_backend is None:
+            default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
+            load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
+
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        ):
+            is_batched = True
+            conversations = conversation
+        else:
+            is_batched = False
+            conversations = [conversation]
+
+        # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
+        # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
+        # HuggingFace format: {"type": "image", "url": "..."}
+        for conversation_idx, conversation in enumerate(conversations):
+            for message in conversation:
+                if not isinstance(message.get("content"), list):
+                    continue
+                new_content = []
+                for content in message["content"]:
+                    if isinstance(content, dict) and content.get("type") == "image_url" and "image_url" in content:
+                        image_url_info = content["image_url"]
+                        url = image_url_info.get("url", "") if isinstance(image_url_info, dict) else image_url_info
+                        new_content.append({"type": "image", "url": url})
+                    else:
+                        new_content.append(content)
+                message["content"] = new_content
+
+        if tokenize:
+            batch_images, batch_videos = [], []
+            batch_audios, batch_audio_from_video_indices = [], []
+            video_idx = 0
+            for conversation in conversations:
+                images, videos = [], []
+                for message in conversation:
+                    content = message.get("content") or []
+                    if isinstance(content, str):
+                        continue
+
+                    image_fnames = [
+                        content_block[key]
+                        for content_block in content
+                        for key in ["image", "url", "path", "base64"]
+                        if key in content_block and content_block["type"] == "image"
+                    ]
+                    images.extend(image_fnames)
+
+                    # Keep track of audio inputs and whether they comes from video or not
+                    for content_block in content:
+                        if content_block["type"] == "video":
+                            video = next(
+                                v for k in ("video", "url", "path") if (v := content_block.get(k)) is not None
+                            )
+                            videos.append(video)
+
+                            if load_audio_from_video:
+                                batch_audio_from_video_indices.append(video_idx)
+
+                            video_idx += 1
+                        elif content_block["type"] == "audio":
+                            audio = next(
+                                v for k in ("audio", "url", "path") if (v := content_block.get(k)) is not None
+                            )
+                            batch_audios.append(
+                                load_audio(audio, sampling_rate=sampling_rate, backend=load_audio_backend)
+                            )
+                            batch_audio_from_video_indices.append(None)
+
+                # Currently all processors can accept nested list of batches, but not flat list of visuals
+                # So we'll make a batched list of images and let the processor handle it
+                batch_images.append(images)
+                batch_videos.append(videos)
+
+        # `kwargs` overwrite special tokens if both are present
+        template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
+        prompt, generation_indices = render_jinja_template(
+            conversations=conversations,
+            tools=tools,
+            documents=documents,
+            chat_template=chat_template,
+            return_assistant_tokens_mask=return_assistant_tokens_mask,
+            continue_final_message=continue_final_message,
+            add_generation_prompt=add_generation_prompt,
+            **template_kwargs,
+        )
+
+        if not is_batched:
+            prompt = prompt[0]
+
+        if tokenize:
+            # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
+            # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
+            # and pass it to the processor. Users thus never worried about special tokens relying on processor handling
+            # everything internally. The below line is to keep BC for that and be able to work with model that have
+            # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood command line
+            # without actionable solution for users
+            single_prompt = prompt[0] if is_batched else prompt
+            if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
+                processor_kwargs["add_special_tokens"] = False
+
+            # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
+            # sampling should not done for BC.
+            if "do_sample_frames" not in processor_kwargs and (
+                processor_kwargs.get("fps") is not None or processor_kwargs.get("num_frames") is not None
+            ):
+                processor_kwargs["do_sample_frames"] = True
+
+            # Set only is user passes a non-None value. Otherwise wa want to use each processor's own defaults
+            if return_tensors:
+                processor_kwargs["return_tensors"] = return_tensors
+
+            # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
+            # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
+            if batch_audios:
+                if "sampling_rate" in audio_kwargs_from_user:
+                    processor_kwargs["audio_kwargs"] = {**audio_kwargs_from_user, "sampling_rate": sampling_rate}
+                else:
+                    processor_kwargs["sampling_rate"] = sampling_rate
+
+            images_exist = any((im is not None) for im_list in batch_images for im in im_list)
+            videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
+
+            out = self(
+                text=prompt,
+                images=batch_images if images_exist else None,
+                videos=batch_videos if videos_exist else None,
+                audio=batch_audios or None,
+                audio_from_video_indices=batch_audio_from_video_indices,
+                **processor_kwargs,
+            )
+
+            if return_dict:
+                if return_assistant_tokens_mask:
+                    assistant_masks = []
+                    offset_mapping = out.pop("offset_mapping")
+                    input_ids = out["input_ids"]
+                    for i in range(len(input_ids)):
+                        current_mask = [0] * len(input_ids[i])
+                        offsets = offset_mapping[i]
+                        offset_starts = [start for start, end in offsets]
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
+                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
+
+                            if not (
+                                start_pos >= 0
+                                and start_pos < len(offsets)
+                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
+                            ):
+                                # start_token is out of bounds maybe due to truncation.
+                                continue
+                            # Ensure end_pos is also within bounds
+                            if end_pos > len(input_ids[i]):
+                                end_pos = len(input_ids[i])
+                            for token_id in range(start_pos, end_pos or len(input_ids[i])):
+                                current_mask[token_id] = 1
+                        assistant_masks.append(current_mask)
+                    out["assistant_masks"] = assistant_masks
+                    out.convert_to_tensors(tensor_type=return_tensors)
+                return out
+            else:
+                return out["input_ids"]
+        return prompt
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)

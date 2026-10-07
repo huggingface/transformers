@@ -25,14 +25,13 @@ from ...video_utils import VideoInput
 
 
 if is_vision_available():
-    from .image_processing_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
+    from .image_processing_gemma4 import get_aspect_ratio_preserving_size
 
 
 logger = logging.get_logger(__name__)
 
 
 class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma4ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
