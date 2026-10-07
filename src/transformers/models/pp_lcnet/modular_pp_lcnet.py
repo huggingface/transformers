@@ -31,7 +31,6 @@ from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
@@ -42,6 +41,7 @@ from ...utils.generic import TensorType, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
+from ..pp_ocrv5_mobile_det.modeling_pp_ocrv5_mobile_det import PPOCRV5MobileDetPreTrainedModel
 from ..resnet.modeling_resnet import ResNetConvLayer
 
 
@@ -357,7 +357,7 @@ class PPLCNetBlock(nn.Module):
 
 
 @auto_docstring
-class PPLCNetPreTrainedModel(PreTrainedModel):
+class PPLCNetPreTrainedModel(PPOCRV5MobileDetPreTrainedModel):
     """
     An abstract base class for PP-LCNet models that inherits from Hugging Face PreTrainedModel.
     Provides common functionality for weight initialization and loading.
@@ -365,9 +365,6 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
 
     config: PPLCNetConfig
     base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _can_compile_fullgraph = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["PPLCNetDepthwiseSeparableConvLayer"]
     _can_record_outputs = {
