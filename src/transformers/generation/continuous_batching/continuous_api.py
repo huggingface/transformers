@@ -85,9 +85,7 @@ class ProtoPretrainedModel(nn.Module):
         pass
 
     @abstractmethod
-    def _get_logits_processor(
-        self, generation_config: GenerationConfig, input_ids_seq_length: int | None = None
-    ) -> LogitsProcessorList:
+    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
         pass
 
 
@@ -724,10 +722,14 @@ class ContinuousBatchingManager:
             self.distributed_helper.maybe_warn_nccl_graph_mixing()
 
         # Turn the classic logits processors into a CB-friendly version
+        # Processor construction needs tensor-valued special tokens; keep them off the caller's config.
+        processor_config = deepcopy(generation_config)
+        generation_model = cast("GenerativePreTrainedModel", self.model)
+        generation_model._prepare_special_tokens(processor_config, device=self.model.device)
         self.logit_processor = ContinuousBatchingLogitsProcessorList(
-            # Request lengths are not known yet. Construct processors with a placeholder so unsupported
-            # prompt-length-dependent processors can reach the filtering step.
-            logits_processor=self.model._get_logits_processor(generation_config, input_ids_seq_length=0),
+            # Request lengths are unknown here. A construction-only length lets
+            # MinNewTokensLengthLogitsProcessor reach the unsupported-processor filter.
+            logits_processor=generation_model._get_logits_processor(processor_config, input_ids_seq_length=0),
             per_request_processors=continuous_batching_config.per_request_processors,
             drop_unsupported_processors=continuous_batching_config.drop_unsupported_processors,
         )
@@ -1294,8 +1296,6 @@ class ContinuousMixin:
         gen_config = generation_config if generation_config is not None else self.generation_config
         if gen_config is None:
             raise ValueError("A GenerationConfig must be provided or set in the model.")
-        gen_config = deepcopy(gen_config)
-        cast("GenerativePreTrainedModel", self)._prepare_special_tokens(gen_config, device=self.device)
         # Warn about EOS
         if gen_config.eos_token_id is None:
             logger.warning("`eos_token_id` not set in GenerationConfig. Setting to -1 (disabled).")

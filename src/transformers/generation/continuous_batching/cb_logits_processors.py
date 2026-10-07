@@ -74,7 +74,6 @@ class ContinuousBatchingLogitsProcessorList:
         Some base processors have a per-request version adapted for CB and will be converted to their per-request
         version when this class is instantiated. This is the default behavior unless the flag `per_request_processors`
         is set to False.
-        Minimum-length processing always uses a CB adapter to track each request's length.
     """
 
     def __init__(
@@ -86,7 +85,8 @@ class ContinuousBatchingLogitsProcessorList:
         self.logits_processor = logits_processor
         self.tensors_required = 0  # number of tensors required to store CB logits processors arguments
         # If needed, convert compatible logits processors to their per-request versions
-        self._convert_to_per_request_processors(per_request_processors)
+        if per_request_processors:
+            self._convert_to_per_request_processors()
         # Validate and optionally filter processors based on their CB support
         self._validate_processors(drop_unsupported_processors)
         self._retrieve_processors_kwargs()
@@ -103,15 +103,9 @@ class ContinuousBatchingLogitsProcessorList:
         self.ignored_keys = set()
         self.do_processing = False
 
-    def _convert_to_per_request_processors(self, per_request_processors: bool) -> None:
+    def _convert_to_per_request_processors(self) -> None:
         """Replaces the compatible logits processors with their per-request versions."""
         for i, processor in enumerate(self.logits_processor):
-            if isinstance(processor, MinLengthLogitsProcessor):
-                self.logits_processor[i] = ContinuousBatchingMinLengthLogitsProcessor(processor)
-                self.tensors_required += 1
-                continue
-            if not per_request_processors:
-                continue
             for regular_cls, cb_cls in CLASSIC_TO_CB_PROCESSORS_MAP.items():
                 if isinstance(processor, regular_cls):
                     self.logits_processor[i] = cb_cls(processor)
@@ -227,24 +221,31 @@ class ContinuousBatchingMinLengthLogitsProcessor(ContinuousBatchingLogitsProcess
 
     def __init__(self, processor: MinLengthLogitsProcessor) -> None:
         self.min_length = processor.min_length
-        self.eos_token_id = processor.eos_token_id
+        self.eos_token_ids = processor.eos_token_id.reshape(-1).tolist()
 
     def fill_defaults(self, int32_tensor: torch.Tensor) -> None:
         int32_tensor.zero_()
 
     def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
-        # position_offset includes this batch's input, even before async outputs reach the host.
-        return torch.tensor(
-            [request.state.position_offset < self.min_length for request in requests_with_new_token],
-            dtype=torch.int32,
+        # Input preparation has already counted this batch's tokens in position_offset.
+        # Unlike generated_tokens, this count is up to date during asynchronous batching.
+        bias = torch.tensor(
+            [
+                -float("inf") if request.state.position_offset < self.min_length else 0.0
+                for request in requests_with_new_token
+            ],
+            dtype=torch.float32,
             device="cpu",
         )
+        return bias.view(dtype=torch.int32)
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
-        vocab = torch.arange(scores.size(-1), device=scores.device)
-        eos_mask = torch.isin(vocab, self.eos_token_id.to(scores.device))
-        suppress_eos = tensor_arg[: scores.size(0)].bool().unsqueeze(-1)
-        return scores.masked_fill(suppress_eos & eos_mask, -float("inf"))
+        bias = tensor_arg[: scores.size(0)].view(dtype=torch.float32)
+        scores_processed = scores.clone()
+        for eos_token_id in self.eos_token_ids:
+            if 0 <= eos_token_id < scores.size(-1):
+                scores_processed[:, eos_token_id] = torch.where(bias == 0, scores[:, eos_token_id], bias)
+        return scores_processed
 
 
 class ContinuousBatchingTemperatureLogitsWarper(ContinuousBatchingLogitsProcessor):
@@ -355,6 +356,7 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
 # TODO: add non-per-request CB variants so the memory-efficient warpers work when `per_request_processors=False`.
 # TODO: fuse temperature + top-k + top-p into a single pass to reuse the softmax/sort and cut activation peak.
 CLASSIC_TO_CB_PROCESSORS_MAP = {
+    MinLengthLogitsProcessor: ContinuousBatchingMinLengthLogitsProcessor,
     TemperatureLogitsWarper: ContinuousBatchingTemperatureLogitsWarper,
     TopKLogitsWarper: ContinuousBatchingTopKLogitsWarper,
     TopPLogitsWarper: ContinuousBatchingTopPLogitsWarper,

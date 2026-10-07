@@ -295,109 +295,13 @@ def _make_allocator(
     )
 
 
-class ContinuousBatchingMinLengthTest(unittest.TestCase):
-    @parameterized.expand([(None,), (0,), ([0, 9],)])
-    def test_generation_config_preparation(self, eos_token_id):
-        config = AutoConfig.for_model(
-            "qwen2",
-            vocab_size=32,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-        )
-        model = AutoModelForCausalLM.from_config(config, attn_implementation="eager")
-        gen_config = GenerationConfig(
-            min_length=8, min_new_tokens=2, max_new_tokens=10, eos_token_id=eos_token_id, pad_token_id=31
-        )
-        original_config = gen_config.to_dict()
-        manager = model.init_continuous_batching(
-            generation_config=gen_config,
-            continuous_batching_config=ContinuousBatchingConfig(
-                use_cuda_graph=False,
-                use_async_batching=False,
-                default_compile_level=0,
-                auto_switch_to_flash=False,
-                num_blocks=16,
-                max_batch_tokens=8,
-                max_requests_per_batch=4,
-            ),
-        )
-        try:
-            self.assertEqual(gen_config.to_dict(), original_config)
-            self.assertIsNot(manager.generation_config, gen_config)
-            processor_names = [p.__class__.__name__ for p in manager.logit_processor.logits_processor]
-            # min_new_tokens is still unsupported and must reach the filter without failing during construction.
-            expected = [] if eos_token_id is None else ["ContinuousBatchingMinLengthLogitsProcessor"]
-            self.assertEqual(processor_names, expected)
-        finally:
-            manager.destroy()
-
-    @parameterized.expand(
-        [(False, False, 0), (True, False, 0), (False, True, 0), (True, True, 0), (False, False, 1), (True, True, 1)]
-    )
-    def test_min_length_generation(self, use_cuda_graph, use_async_batching, compile_level):
-        use_accelerator = use_cuda_graph or use_async_batching or compile_level > 0
-        if use_accelerator and not torch.cuda.is_available():
-            self.skipTest("CUDA is required for graph, async and compile coverage")
-        device = "cuda" if use_accelerator else "cpu"
-        config = AutoConfig.for_model(
-            "qwen2",
-            vocab_size=32,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            max_position_embeddings=64,
-            pad_token_id=31,
-            eos_token_id=0,
-        )
-        model = AutoModelForCausalLM.from_config(config, attn_implementation="eager").to(device).eval()
-        # All logits tie: greedy decoding prefers EOS unless the minimum length masks it.
-        with torch.no_grad():
-            model.lm_head.weight.zero_()
-        prompts = [[2, 3, 4], [2, 3, 4, 5, 6], [2] * 9]
-        gen_config = GenerationConfig(
-            min_length=8, max_new_tokens=10, do_sample=False, pad_token_id=31, eos_token_id=0
-        )
-        expected = [
-            model.generate(torch.tensor([prompt], device=device), generation_config=gen_config)[
-                0, len(prompt) :
-            ].tolist()
-            for prompt in prompts
-        ]
-        model.set_attn_implementation("paged|eager")
-        outputs = model.generate_batch(
-            inputs=prompts,
-            generation_config=gen_config,
-            continuous_batching_config=ContinuousBatchingConfig(
-                use_cuda_graph=use_cuda_graph,
-                use_async_batching=use_async_batching,
-                default_compile_level=compile_level,
-                auto_switch_to_flash=False,
-                page_size=4,
-                num_blocks=64,
-                max_batch_tokens=8,
-                max_requests_per_batch=4,
-                q_padding_interval_size=4,
-                kv_padding_interval_size=16,
-            ),
-            progress_bar=False,
-        )
-        actual = [outputs[f"req_{i}"].generated_tokens for i in range(len(prompts))]
-        self.assertEqual(expected, [[1] * 5 + [0], [1] * 3 + [0], [0]])
-        self.assertEqual(actual, expected)
-
-
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
-    @parameterized.expand([(False,), (True,)])
-    def test_min_length_processor_matches_individual_requests(self, per_request_processors):
+    @parameterized.expand([(0, 0), (4, 0), (4, torch.tensor(0)), (4, [0, 9]), (4, [-1, 0, 9, 10])])
+    def test_min_length_processor_matches_individual_requests(self, min_length, eos_token_id):
         processors = ContinuousBatchingLogitsProcessorList(
-            LogitsProcessorList([MinLengthLogitsProcessor(4, [0, 9]), TemperatureLogitsWarper(2.0)]),
-            per_request_processors=per_request_processors,
+            LogitsProcessorList([MinLengthLogitsProcessor(min_length, eos_token_id), TemperatureLogitsWarper(2.0)]),
+            per_request_processors=True,
         )
         requests = []
         for i, (length, has_new_token) in enumerate([(3, True), (2, False), (4, True), (5, True)]):
@@ -409,11 +313,17 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         processors.fill_defaults(args)
         processors.prepare_tensor_args(requests, args)
         scores = torch.arange(40, dtype=torch.float32).view(4, 10)
+        scores[0, 0] = float("inf")
         original_scores = scores.clone()
         actual = processors(torch.ones(4, dtype=torch.long), scores, args)
-        reference = LogitsProcessorList([MinLengthLogitsProcessor(4, [0, 9]), TemperatureLogitsWarper(2.0)])
+        reference = LogitsProcessorList(
+            [MinLengthLogitsProcessor(min_length, eos_token_id), TemperatureLogitsWarper(2.0)]
+        )
         expected = torch.cat(
-            [reference(torch.ones((1, length), dtype=torch.long), row[None]) for length, row in zip([3, 4, 5], scores)]
+            [
+                reference(torch.ones((1, length), dtype=torch.long), row[None])
+                for length, row in zip([3, 4, 5], original_scores)
+            ]
         )
         torch.testing.assert_close(actual[:3], expected)
         torch.testing.assert_close(actual[3], scores[3] / 2)  # padded row uses processor defaults
@@ -2337,6 +2247,39 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
             text_fast = tokenizer.decode(out_fast.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_varlen, text_fast, f"Mismatch:\nvarlen: {text_varlen}\nfast: {text_fast}")
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    @slow
+    def test_min_length_generation_parity(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
+        tokenizer, model = get_tokenizer_and_model("Qwen/Qwen2.5-0.5B-Instruct", "eager", torch_device, torch.float32)
+        generation_config = GenerationConfig(
+            min_length=100,
+            max_new_tokens=120,
+            do_sample=False,
+            eos_token_id=model.generation_config.eos_token_id,
+            pad_token_id=model.generation_config.pad_token_id,
+        )
+        # Generate each reference separately: left padding would count toward min_length.
+        expected = [
+            regular_generate(model, tokenizer, [message], generation_config=generation_config)[0][0]
+            for message in _DEFAULT_USER_MESSAGES
+        ]
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        outputs = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=ContinuousBatchingConfig(
+                per_request_processors=True,
+                use_cuda_graph=use_cuda_graph,
+                use_async_batching=use_async_batching,
+                default_compile_level=0,
+                auto_switch_to_flash=False,
+            ),
+        )
+        for i, prompt in enumerate(input_ids):
+            actual = outputs[f"req_{i}"].generated_tokens
+            self.assertEqual(actual, expected[i])
+            self.assertGreaterEqual(len(prompt) + len(actual), generation_config.min_length)
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
