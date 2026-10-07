@@ -201,10 +201,43 @@ def _qwen35moe(config) -> list[WeightTransform]:
     return _qwen35(config) + routed + [fuse_gate_up, restore_gate]
 
 
+def _lfm2(config) -> list[WeightTransform]:
+    """LFM2: short-convolution blocks, with full attention on some layers.
+
+    llama.cpp only renames, apart from the convolution kernel, which it squeezes to 2D (`Unsqueeze`).
+    The norms carry no offset, so every quantized weight stays packed.
+    """
+    renamings = [
+        WeightRenaming(r"^token_embd\.", "model.embed_tokens."),
+        WeightRenaming(r"^token_embd_norm\.", "model.embedding_norm."),
+        WeightRenaming(r"^output\.", "lm_head."),
+        WeightRenaming(r"^blk\.", "model.layers."),
+        WeightRenaming(r"\.attn_norm\.", ".operator_norm."),
+        WeightRenaming(r"\.attn_q\.", ".self_attn.q_proj."),
+        WeightRenaming(r"\.attn_k\.", ".self_attn.k_proj."),
+        WeightRenaming(r"\.attn_v\.", ".self_attn.v_proj."),
+        WeightRenaming(r"\.attn_output\.", ".self_attn.out_proj."),
+        WeightRenaming(r"\.attn_q_norm\.", ".self_attn.q_layernorm."),
+        WeightRenaming(r"\.attn_k_norm\.", ".self_attn.k_layernorm."),
+        WeightRenaming(r"\.ffn_gate\.", ".feed_forward.w1."),
+        WeightRenaming(r"\.ffn_up\.", ".feed_forward.w3."),
+        WeightRenaming(r"\.ffn_down\.", ".feed_forward.w2."),
+        WeightRenaming(r"\.shortconv\.in_proj\.", ".conv.in_proj."),
+        WeightRenaming(r"\.shortconv\.out_proj\.", ".conv.out_proj."),
+    ]
+    conv_kernel = WeightConverter(
+        source_patterns=r"\.shortconv\.conv\.weight",
+        target_patterns=".conv.conv.weight",
+        operations=[Unsqueeze(1)],
+    )
+    return renamings + [conv_kernel]
+
+
 # gguf `general.architecture` -> builder taking the model config
 GGUF_ARCHS = {
     "qwen35": _qwen35,
     "qwen35moe": _qwen35moe,
+    "lfm2": _lfm2,
 }
 
 
