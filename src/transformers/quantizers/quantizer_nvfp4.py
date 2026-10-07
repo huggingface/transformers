@@ -11,122 +11,147 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
+"""NVFP4: E2M1 weights two per byte with an E4M3 scale per 16 and an fp32 global, in the layouts NVIDIA modelopt
+exports (per expert per projection, or stacked per layer); quantizes a full-precision checkpoint on the fly too."""
 
-import warnings
 from typing import TYPE_CHECKING
 
-from ..utils import is_kernels_available, is_torch_available
-from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
-from .base import HfQuantizer
+from .block_scaled_utils import BlockScaledQuantizer
 from .quantizers_utils import get_module_from_name
 
 
-warnings.warn(
-    "`transformers.quantizers.quantizer_nvfp4` is frozen and receives no new recipes. `FineGrainedConfig` supersedes it "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only); this module will be removed in a future "
-    "release.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-
-
-if is_torch_available():
-    import torch
-
 if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import NVFP4Config
 
 
-def _as_cuda_device(device) -> torch.device | None:
-    if isinstance(device, int):
-        return torch.device("cuda", device)
-    try:
-        device = torch.device(device)
-    except (TypeError, RuntimeError):
-        return None
-    return device if device.type == "cuda" else None
+class NVFP4HfQuantizer(BlockScaledQuantizer):
+    """NVFP4, in both key layouts modelopt ships: per expert per projection, or stacked per layer."""
 
+    quantization_config: "NVFP4Config"
+    # modelopt calibrates an FP8 KV cache beside the weights; the cache here stays in the model dtype
+    unexpected_keys = (r"\.(k_proj\.k|v_proj\.v)_scale$",)
 
-class NVFP4HfQuantizer(HfQuantizer):
-    """Quantize eligible linear weights to NVFP4 while loading a full-precision checkpoint."""
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        from ..integrations.finegrained import register_shared_gate_up_input_globals
 
-    requires_calibration = False
-    quantization_config: NVFP4Config
+        register_shared_gate_up_input_globals(model)
+        return super()._process_model_after_weight_loading(model, **kwargs)
 
-    def validate_environment(self, device_map, **kwargs):
-        if self.pre_quantized:
-            raise ValueError("Loading pre-quantized NVFP4 checkpoints is not supported yet.")
-        if not is_kernels_available():
-            raise ImportError(
-                "NVFP4 quantization requires the `kernels` package. "
-                f"Install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-                f"for example with `pip install kernels=={KERNELS_MIN_VERSION}`."
-            )
-        if not torch.cuda.is_available():
-            raise RuntimeError("NVFP4 quantization requires a CUDA GPU.")
+    def format_conversions(self, dequantize):
+        # weight-only keeps activations bf16, so there is no activation global for `input_scale` to land on; nor
+        # does a dequantized model, which leaves those keys to the unexpected-key filter
+        calibrated = not dequantize and self.quantization_config.activation_format != "bf16"
+        conversions = self._nvfp4_renames(calibrated)
+        if calibrated:
+            # the down projection's is read with its globals
+            conversions += self._activation_scale_conversions(projections=("gate_up_proj",), ops=self._reciprocal_ops)
+        if self.holds_experts and not dequantize:
+            conversions += self._nvfp4_per_expert_conversions(calibrated) + self._nvfp4_fused_conversions(calibrated)
+        return conversions
 
-        if device_map is None:
-            raise ValueError("NVFP4 quantization requires a CUDA `device_map`.")
-        devices = set(device_map.values()) if isinstance(device_map, dict) else {device_map}
-        cuda_devices = {_as_cuda_device(device) for device in devices}
-        if None in cuda_devices:
-            raise ValueError("NVFP4 quantization does not support CPU or disk offload.")
-        if len(cuda_devices) != 1:
-            raise ValueError(
-                "NVFP4 quantization currently supports one CUDA device. Tensor parallelism and multi-device "
-                "`device_map` configurations are not supported yet."
-            )
-        self.quantization_device = cuda_devices.pop()
+    def get_param_ops(self, model, param_name):
+        """The packed weights first take the int8 view the modules hold: the loader keeps a pre-quantized
+        non-float tensor in the checkpoint's dtype, modelopt's uint8, and the reverse saves it back as that."""
+        from ..integrations.finegrained import FineGrainedLinear
+        from ..integrations.finegrained.conversions import FineGrainedViewPackedInt8
 
-        major, minor = torch.cuda.get_device_capability(self.quantization_device)
-        if major < 10:
-            raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
+        ops = super().get_param_ops(model, param_name)
+        module, name = get_module_from_name(model, param_name)
+        if name in ("weight", "gate_up_proj", "up_proj", "down_proj"):
+            ops = [FineGrainedViewPackedInt8(self), *ops]
+        # an experts module's globals are inverted in their converters, before the per-expert reductions
+        elif isinstance(module, FineGrainedLinear) and name in ("weight_global_scale", "activation_scale"):
+            ops = [*self._reciprocal_ops, *ops]
+        return ops
 
-    def update_tp_plan(self, config):
-        distributed_config = getattr(config, "distributed_config", None)
-        tp_size = getattr(distributed_config, "tp_size", None)
-        if tp_size is not None and tp_size > 1:
-            raise ValueError(
-                "NVFP4 quantization does not support tensor parallelism yet because its scale metadata does not have "
-                "a sharding plan."
-            )
-        return config
+    @property
+    def _reciprocal_ops(self) -> list:
+        """compressed-tensors ships the globals as their reciprocal; modelopt as the multiplier the kernels take."""
+        from ..integrations.finegrained.conversions import FineGrainedReciprocal
 
-    def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
-        from ..integrations.nvfp4 import NVFP4Linear
-
-        module, tensor_name = get_module_from_name(model, param_name)
-        return isinstance(module, NVFP4Linear) and tensor_name == "weight"
-
-    def param_element_size(self, model: PreTrainedModel, param_name: str, param: torch.Tensor) -> float:
-        if self.param_needs_quantization(model, param_name):
-            # NVFP4 packs two 4-bit weights per byte; this estimate excludes the smaller scale metadata.
-            return 0.5
-        return super().param_element_size(model, param_name, param)
-
-    def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import replace_with_nvfp4_linear
-
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+        return (
+            [FineGrainedReciprocal(self)] if self.quantization_config.checkpoint_format == "compressed-tensors" else []
         )
-        replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
 
-    def get_quantize_ops(self):
-        from ..integrations.nvfp4 import NVFP4Quantize
+    def _nvfp4_renames(self, calibrated: bool):
+        """modelopt's scales onto the slots every module holds them in, experts included: renamed before converter
+        collection, a block scale then rides its weight's converter as `weight_scale_inv` (the merge that stacks
+        the experts' weights stacks their grids too), and the globals reach the converters below by slot name."""
+        from ..core_model_loading import WeightRenaming
 
-        return NVFP4Quantize(self.quantization_device)
+        renames = [
+            WeightRenaming(source_patterns=r"^(.+)\.weight_scale$", target_patterns=r"\1.weight_scale_inv"),
+            WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2$", target_patterns=r"\1.weight_global_scale"),
+        ]
+        if self.quantization_config.checkpoint_format == "compressed-tensors":
+            # its packed values ship as `weight_packed` and its activation global as `input_global_scale`; its weight
+            # global already carries the slot's name
+            renames.append(WeightRenaming(source_patterns=r"^(.+)\.weight_packed$", target_patterns=r"\1.weight"))
+            if calibrated:
+                renames.append(
+                    WeightRenaming(
+                        source_patterns=r"^(.+)\.input_global_scale$", target_patterns=r"\1.activation_scale"
+                    )
+                )
+        return renames
 
-    @property
-    def is_serializable(self) -> bool:
-        return False
+    def _nvfp4_per_expert_conversions(self, calibrated: bool):
+        """One key per expert per projection, as GLM-5.2-NVFP4 ships them.
 
-    @property
-    def is_trainable(self) -> bool:
-        return False
+        `MergeModulelist` stamps each source with its expert index, which is what lets expert
+        parallelism keep only this rank's experts (`tensor_idx` in `core_model_loading`); without
+        it every rank collects all E values and the forward asserts on the per-expert count.
+        """
+        from ..core_model_loading import MergeModulelist, WeightConverter
+        from ..integrations.finegrained.conversions import FineGrainedWeightGlobals
 
-    @property
-    def is_compileable(self) -> bool:
-        return True
+        converters = [
+            # every second-level global of a layer in ONE converter: folding the gate|up stack's
+            # two halves into one moves the up half's onto the down projection, so they decide
+            # together (`FineGrainedWeightGlobals`)
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight_global_scale",
+                    "mlp.experts.*.up_proj.weight_global_scale",
+                    "mlp.experts.*.down_proj.weight_global_scale",
+                    *(["mlp.experts.*.down_proj.activation_scale"] if calibrated else []),
+                ],
+                target_patterns=[
+                    "mlp.experts.gate_up_proj_weight_global_scale",
+                    "mlp.experts.down_proj_weight_global_scale",
+                    *(["mlp.experts.down_proj_activation_scale"] if calibrated else []),
+                ],
+                operations=[MergeModulelist(dim=0), *self._reciprocal_ops, FineGrainedWeightGlobals(self)],
+            ),
+        ]
+        return converters
+
+    def _nvfp4_fused_conversions(self, calibrated: bool):
+        """Already stacked per layer, as the vLLM fused layout ships them — so no `MergeModulelist`:
+        the scales only take their slot's name, and the module's ops give every tensor its layout."""
+        from ..core_model_loading import WeightConverter, WeightRenaming
+        from ..integrations.finegrained.conversions import FineGrainedWeightGlobals
+
+        converters = [
+            WeightRenaming(
+                source_patterns=rf"experts\.{proj}_weight_scale$", target_patterns=f"experts.{proj}_scale_inv"
+            )
+            for proj in ("gate_up_proj", "down_proj")
+        ]
+        converters.append(
+            # the same one-converter rule as the per-expert layout, over the fused keys
+            WeightConverter(
+                source_patterns=[
+                    r"experts\.gate_up_proj_weight_scale_2$",
+                    r"experts\.down_proj_weight_scale_2$",
+                    *([r"experts\.down_proj_input_scale$"] if calibrated else []),
+                ],
+                target_patterns=[
+                    "experts.gate_up_proj_weight_global_scale",
+                    "experts.down_proj_weight_global_scale",
+                    *(["experts.down_proj_activation_scale"] if calibrated else []),
+                ],
+                operations=[*self._reciprocal_ops, FineGrainedWeightGlobals(self)],
+            )
+        )
+        return converters

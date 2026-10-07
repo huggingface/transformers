@@ -54,8 +54,6 @@ _import_structure = {
         "FineGrainedEmbedding",
         "FineGrainedExperts",
         "FineGrainedLinear",
-        "replace_with_finegrained_embedding",
-        "replace_with_finegrained_layer",
     ],
     "finegrained_fp8": ["FP8Embedding", "FP8Linear", "replace_with_fp8_embedding", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
@@ -221,8 +219,6 @@ if TYPE_CHECKING:
         FineGrainedEmbedding,
         FineGrainedExperts,
         FineGrainedLinear,
-        replace_with_finegrained_embedding,
-        replace_with_finegrained_layer,
     )
     from .finegrained_fp8 import FP8Embedding, FP8Linear, replace_with_fp8_embedding, replace_with_fp8_linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module

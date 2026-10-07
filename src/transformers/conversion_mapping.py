@@ -503,6 +503,8 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "deepseek_v4": [
+            # the per-block weight scales ship as `.scale`; first, while `hc_*_scale` keys still carry no dot
+            WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv"),
             # checkpoint-form renames the general `.attn.` one below would otherwise take first
             WeightRenaming(source_patterns=r"\.attn\.wq_b\.", target_patterns=r".attn.q_b_proj."),
             # General mid-key renames acting on several keys

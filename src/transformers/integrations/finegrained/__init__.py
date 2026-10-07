@@ -15,8 +15,9 @@
 `conversions` the loader ops that fill them. `conversions` is imported by path, so that reading
 a checkpoint's layout never drags the kernels in."""
 
-from .core import (
+from .layers import (
     ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
+    SUPPORTED_FUSED_NORMS,
     FineGrainedEmbedding,
     FineGrainedExperts,
     FineGrainedGroupedLinear,
@@ -26,13 +27,12 @@ from .core import (
     finegrained_linear,
     load_finegrained_kernel,
     register_shared_gate_up_input_globals,
-    replace_with_finegrained_embedding,
-    replace_with_finegrained_layer,
 )
 
 
 __all__ = [
     "ALL_FINEGRAINED_EXPERTS_FUNCTIONS",
+    "SUPPORTED_FUSED_NORMS",
     "FineGrainedEmbedding",
     "FineGrainedExperts",
     "FineGrainedGroupedLinear",
@@ -42,6 +42,4 @@ __all__ = [
     "register_shared_gate_up_input_globals",
     "finegrained_linear",
     "load_finegrained_kernel",
-    "replace_with_finegrained_embedding",
-    "replace_with_finegrained_layer",
 ]

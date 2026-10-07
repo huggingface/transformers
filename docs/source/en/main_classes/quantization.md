@@ -98,20 +98,28 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] SpQRConfig
 
-## FineGrainedConfig
+## BlockScaledConfig
 
-> [!WARNING]
-> `FineGrainedConfig` supersedes `FineGrainedFP8Config`, `Mxfp4Config` and `NVFP4Config`, which are
-> frozen and will be removed in a future release. The `fp8`, `mxfp8`, `mxfp4` and `nvfp4`
-> `quant_method` keys already route here, so existing checkpoints need no change.
+[[autodoc]] BlockScaledConfig
+
+## BlockFp8Config
+
+[[autodoc]] BlockFp8Config
+
+## Mxfp8Config
+
+[[autodoc]] Mxfp8Config
+
+## FineGrainedConfig
 
 [[autodoc]] FineGrainedConfig
 
-## FineGrainedGroup
-
-[[autodoc]] FineGrainedGroup
-
 ## FineGrainedFP8Config
+
+> [!WARNING]
+> `FineGrainedFP8Config` is frozen and will be removed in a future release. A config passed to `from_pretrained`
+> loads as the config it spells: [`Mxfp8Config`] for a `[1, 32]` block, [`BlockFp8Config`] otherwise, and a
+> [`FineGrainedConfig`] of block-FP8 over MXFP4 experts for a model that declares `expert_dtype="fp4"` (DeepSeek-V4).
 
 [[autodoc]] FineGrainedFP8Config
 

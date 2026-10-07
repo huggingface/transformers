@@ -81,16 +81,12 @@ class HfQuantizer(ABC):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
-        quantization_param_suffixes (`tuple[str, ...]`):
-            Suffixes of the parameters quantization adds to a weight (`weight` -> `weight_scale_inv`).
-            A save runs each through its weight's reversed conversion, so it lands in the weight's layout.
         dtype_plan (`dict`):
             Entries added to the model's dtype plan: a parameter pattern and the dtype it loads in, `None`
             keeping the checkpoint's (e.g. quantization scales, which a checkpoint may ship in any float dtype).
     """
 
     requires_calibration = False
-    quantization_param_suffixes: tuple[str, ...] = ()
     dtype_plan: dict = {}
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -300,6 +296,11 @@ class HfQuantizer(ABC):
         )
 
     def get_weight_conversions(self):
+        return []
+
+    def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
+        """The ops a tensor loading into `param_name` runs after its converter's own, for the layout the module
+        holding it keeps; reversed, the same ops write it back on save. Default: none."""
         return []
 
     def update_weight_conversions(self, weight_conversions):

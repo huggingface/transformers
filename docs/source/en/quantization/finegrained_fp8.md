@@ -17,11 +17,9 @@ rendered properly in your Markdown viewer.
 # Fine-grained FP8
 
 > [!WARNING]
-> `FineGrainedFP8Config` is frozen and receives no new recipes. [`FineGrainedConfig`] supersedes it, serving
-> block-FP8, MXFP8, MXFP4 and NVFP4 through one config for dense linears, embeddings and MoE
-> experts alike. Existing checkpoints keep loading — the `fp8`, `mxfp8`, `mxfp4` and `nvfp4`
-> `quant_method` keys now route to the fine-grained integration — so this page is here for
-> reference while the frozen classes remain. They will be removed in a future release.
+> `FineGrainedFP8Config` is frozen and will be removed in a future release; use [`BlockFp8Config`] or
+> [`Mxfp8Config`]. A `FineGrainedFP8Config` passed to `from_pretrained` loads as the config it spells (MXFP8 for a
+> `[1, 32]` block, block-FP8 otherwise, with DeepSeek-V4's MXFP4 experts), and existing checkpoints load unchanged.
 
 Fine-grained FP8 quantization quantizes the weights and activations to fp8.
 

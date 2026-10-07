@@ -11,12 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The MXFP8 arm of the fine-grained quantizer."""
+"""MXFP8: `float8_e4m3fn` weights with a UE8M0 scale per 32. It ships the plain `weight` / `weight_scale_inv`
+pair, so it needs nothing beyond what every fine-grained format runs."""
 
-from .base import FineGrainedHfQuantizer
+from typing import TYPE_CHECKING
+
+from .block_scaled_utils import BlockScaledQuantizer
 
 
-class FineGrainedMxfp8HfQuantizer(FineGrainedHfQuantizer):
-    """MXFP8 ships the plain `weight` / `weight_scale_inv` pair, so it needs none of the key
-    surgery the other producers do and adds nothing to the base. It is named all the same, so
-    `AUTO_QUANTIZER_MAPPING` reads one class per key."""
+if TYPE_CHECKING:
+    from ..utils.quantization_config import Mxfp8Config
+
+
+class Mxfp8HfQuantizer(BlockScaledQuantizer):
+    """MXFP8 weights, W8A8, W8A4 or weight-only."""
+
+    quantization_config: "Mxfp8Config"

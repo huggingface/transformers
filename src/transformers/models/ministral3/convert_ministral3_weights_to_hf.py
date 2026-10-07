@@ -29,9 +29,8 @@ from transformers import (
     PixtralProcessor,
     PixtralVisionConfig,
 )
-from transformers.integrations.finegrained import replace_with_finegrained_layer
 from transformers.integrations.mistral import convert_tekken_tokenizer
-from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
 
 
 # fmt: off
@@ -256,9 +255,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
 
         # swap nn.Linear for the quantized module before loading
         if hasattr(model.config, "quantization_config"):
-            model = replace_with_finegrained_layer(
-                model, model.config.quantization_config.modules_to_not_convert, model.config.quantization_config
-            )
+            qconfig = model.config.quantization_config
+            quantizer = AutoHfQuantizer.from_config(qconfig, pre_quantized=True)
+            quantizer.replace_modules(model, modules_to_not_convert=qconfig.modules_to_not_convert)
 
     model.load_state_dict(full_state_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)

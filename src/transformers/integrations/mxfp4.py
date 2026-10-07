@@ -28,9 +28,8 @@ from ..quantizers.quantizers_utils import get_module_from_name, on_device, shoul
 
 
 warnings.warn(
-    "`transformers.integrations.mxfp4` is frozen and receives no new recipes. `FineGrainedConfig` supersedes it "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only); this module will be removed in a future "
-    "release.",
+    "`transformers.integrations.mxfp4` is frozen and will be removed in a future release; "
+    "`Mxfp4Config` now loads through `transformers.integrations.finegrained`.",
     DeprecationWarning,
     stacklevel=2,
 )
