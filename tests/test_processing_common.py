@@ -1500,6 +1500,8 @@ class ProcessorTesterMixin:
         video_file_path = url_to_local_path(
             "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
         )
+        video_expected_shape = processor.video_processor(videos=video_file_path)[self.videos_input_name].shape
+
         Video_audio_message = [
             {
                 "role": "user",
@@ -1536,7 +1538,7 @@ class ProcessorTesterMixin:
         self.assertEqual(out_dict["input_ids"].shape[0], 1)  # batch-size=1
         self.assertEqual(out_dict["attention_mask"].shape[0], 1)  # batch-size=1
         self.assertEqual(out_dict[self.audio_input_name].shape[0], 1)  # 1 audio from video
-        # TODO: check video shape somehow though it's hardly predictable with packing
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
 
         audio_file_path = url_to_local_path(
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
@@ -1566,7 +1568,7 @@ class ProcessorTesterMixin:
         self.assertEqual(out_dict["input_ids"].shape[0], 2)
         self.assertEqual(out_dict["attention_mask"].shape[0], 2)
         self.assertEqual(out_dict[self.audio_input_name].shape[0], 2)  # 2 audios
-        # TODO: check video shape somehow though it's hardly predictable with packing
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""

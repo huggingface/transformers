@@ -2193,7 +2193,7 @@ class ProcessorMixin(PushToHubMixin):
                                 message["content"].append({"type": "audio"})
                                 logger.warning(
                                     "When setting `load_audio_from_video=True` you must add an empty `audio` entry in the conversation. "
-                                    "From v5.25 the entry will NOT be added automatically during when calling `processor.apply_chat_template()`"
+                                    "From v5.25 the entry will NOT be added automatically when calling `processor.apply_chat_template()`"
                                 )
                             batch_audios.append(
                                 load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend)
