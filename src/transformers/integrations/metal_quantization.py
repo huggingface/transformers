@@ -118,8 +118,9 @@ class MetalLinear(nn.Linear):
 
         kernel = _get_metal_kernel()
 
+        flat = input.reshape(-1, self.in_features)
         output = kernel.affine_qmm_t(
-            input.reshape(-1, input.shape[-1]),
+            flat,
             self.weight,
             self.scales.to(input.dtype),
             self.qbiases.to(input.dtype),
