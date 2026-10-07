@@ -25,7 +25,7 @@ import numpy as np
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import OmniModalProcessorMixin, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
@@ -116,7 +116,7 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
 
 
 @auto_docstring
-class Qwen3OmniMoeProcessor(ProcessorMixin):
+class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
     valid_processor_kwargs = Qwen3OmniMoeProcessorKwargs
 
     def __init__(

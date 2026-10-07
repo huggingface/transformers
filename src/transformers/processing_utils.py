@@ -2268,12 +2268,11 @@ class ProcessorMixin(PushToHubMixin):
             prompt = prompt[0]
 
         if tokenize:
-            # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
-            # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
-            # and pass it to the processor. Users thus never worried about special tokens relying on processor handling
-            # everything internally. The below is to keep BC for that and be able to work with model that have
-            # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood
-            # command line without actionable solution for users
+            # Tokenizer's `apply_chat_template` never adds special tokens. Processor's `apply_chat_template`
+            # originally had no tokenize option, so users formatted the prompt themselves and passed it to the
+            # processor, relying on it to handle everything internally (never worrying about special tokens).
+            # This keeps BC for that flow and supports templates containing special tokens (consistent with
+            # tokenizers). No warning is raised: it would flood the command line with nothing actionable for users.
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 processor_kwargs["add_special_tokens"] = False
@@ -2444,6 +2443,12 @@ class OmniModalProcessorMixin(ProcessorMixin):
         audio_from_video_indices: list[int] | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
+        """
+        audio_from_video_indices (`list[int]`, *optional*):
+            A list that describes the source of each audio slot where
+                - `None` -> standalone audio associated with no video track
+                - `i`    -> audio extracted from videos[i]
+        """
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
