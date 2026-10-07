@@ -487,7 +487,7 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # TODO: switch to `google/embeddinggemma-2` at release
-        cls.checkpoint_name = "gg-hf-em/embeddinggemma-2"
+        cls.checkpoint_name = "google/embeddinggemma-2"
         cls.bucket = "hf-internal-testing/embeddinggemma2-integration-test"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 

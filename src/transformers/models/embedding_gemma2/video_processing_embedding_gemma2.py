@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 
 import numpy as np
@@ -69,6 +68,8 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
         The strategy used to cut the total number of sampled frames down to fit into the budget.
         Can be set only to "uniform" or "truncate". Applied after FPS-based sampling, and on its
         own when FPS-based sampling is off or not applicable.
+    load_audio_from_video (`bool`, *optional*):
+        Whether to load the audio track of an input video or not.
     """
 
     patch_size: int
@@ -78,6 +79,7 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
     add_timestamps: bool
     max_frames: int | None
     overflow_strategy: str | None
+    load_audio_from_video: bool
 
 
 _SUPPORTED_SOFT_TOKENS = (70, 140, 280, 560, 1120)

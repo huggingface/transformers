@@ -17,12 +17,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 
 import numpy as np
 
 from ...audio_utils import AudioInput, is_valid_audio
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, OmniModalProcessorMixin, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
@@ -33,18 +34,13 @@ from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 
 
 if is_vision_available():
-    from ..gemma4.image_processing_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
+    from ..gemma4.image_processing_gemma4 import get_aspect_ratio_preserving_size  # noqa: F401  # trf-ignore: TRF039
 
 
 class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma4ImageProcessorKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-        },
+        "text_kwargs": {"padding": True},
+        "images_kwargs": {"do_convert_rgb": True},
         "audio_kwargs": {},
         "videos_kwargs": {"return_metadata": True},
     }
@@ -52,7 +48,7 @@ class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 @requires(backends=("vision",))
-class EmbeddingGemma2Processor(ProcessorMixin):
+class EmbeddingGemma2Processor(OmniModalProcessorMixin):
     valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
 
     def __init__(
@@ -120,7 +116,7 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         **kwargs,
     ):
         # When `text` is None, record per-sample counts for `audio` and `videos` before
-        # `ProcessorMixin.prepare_inputs_layout` runs `make_list_of_audio` and `make_batched_videos`,
+        # `OmniModalProcessorMixin.prepare_inputs_layout` runs `make_list_of_audio` and `make_batched_videos`,
         # which flatten 2D nested per-sample lists into a 1D list of total items and discard sample
         # boundaries. `images` does not need this because `make_nested_list_of_images` preserves the
         # outer per-sample list structure.
@@ -181,7 +177,7 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[EmbeddingGemma2ProcessorKwargs],
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
@@ -241,7 +237,14 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         num_soft_tokens = image_inputs["num_soft_tokens_per_image"][image_idx]
         return f"{self.boi_token}{self.image_token * num_soft_tokens}{self.eoi_token}"
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
+    def replace_video_token(
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        processed_audio: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs,
+    ) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
         add_timestamps = kwargs.get("add_timestamps", self.video_processor.add_timestamps)
 
@@ -253,7 +256,6 @@ class EmbeddingGemma2Processor(ProcessorMixin):
             return "".join([frame_str] * num_frames)
 
         metadata = video_inputs["video_metadata"][video_idx]
-
         if metadata.fps is None:
             raise ValueError(
                 "Asked to build a prompt with frame timestamps, but no `fps` was provided in video metadata. "
@@ -261,24 +263,22 @@ class EmbeddingGemma2Processor(ProcessorMixin):
                 "object with a valid `fps`, or set `add_timestamps=False`."
             )
 
-        # mm:ss format for timestamps
+        # When loading audio from video and if current video has an associated audio, i.e. no silent
+        if kwargs.get("load_audio_from_video") and video_to_audio_indices[video_idx] is not None:
+            return self.replace_video_with_audio_token(
+                video_inputs, video_idx, processed_audio, video_to_audio_indices, **kwargs
+            )
+
+        # General timestamp format is `mm:ss` per each video frame/tokens
         timestamp_str = [f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps]
         return " ".join(
             [f"{t} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}" for t in timestamp_str]
         )
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
-        # TODO: Add tests for audio-only processor inputs.
         mask = audio_inputs["input_features_mask"][audio_idx]
-
-        # Simulate two stride-2 conv blocks on the mask
-        t = len(mask)
-        for _ in range(2):
-            t_out = (t + 2 - 3) // 2 + 1
-            mask = mask[::2][:t_out]
-            t = len(mask)
-
-        return f"{self.boa_token}{self.audio_token * int(mask.sum())}{self.eoa_token}"
+        num_audio_tokens_total = self.compute_sscp(mask)
+        return f"{self.boa_token}{self.audio_token * num_audio_tokens_total}{self.eoa_token}"
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
         """
@@ -387,24 +387,121 @@ class EmbeddingGemma2Processor(ProcessorMixin):
             return 0
 
         # Step 2: SSCP subsampling. Two stride-2 Conv2d layers (kernel=3, pad=1)
-        # from EmbeddingGemma2AudioSubSampleConvProjection(Layer) in modeling_embedding_gemma2.py.
-        # These are architectural constants, not exposed via EmbeddingGemma2AudioConfig
-        # (note: config.conv_kernel_size=5 is the *conformer* depthwise conv, NOT
-        # this one). The layer count tracks len(subsampling_conv_channels)==2.
-        # Keep in sync if the audio encoder's subsampling stack changes.
-        sscp_num_layers = 2
-        sscp_kernel, sscp_stride, sscp_padding = 3, 2, 1
-        t = num_mel_frames
-        for _ in range(sscp_num_layers):
-            # Conv1d/2d output-length along the time axis (dilation=1).
-            t = (t + 2 * sscp_padding - sscp_kernel) // sscp_stride + 1
+        num_audio_tokens = self.compute_sscp(num_mel_frames)
 
         # Cap at the configured maximum
-        return min(t, self.audio_seq_length)
+        return min(num_audio_tokens, self.audio_seq_length)
 
     @property
     def unused_input_names(self) -> list[str]:
         return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
+
+    def replace_video_with_audio_token(
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        processed_audio: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs,
+    ) -> str:
+        # When `load_audio_from_video` -> format is `mm:ss, audio_tokens, vision_tokens, mm:ss, audio_tokens, vision_tokens, [...]`
+        metadata = video_inputs["video_metadata"][video_idx]
+        num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
+
+        timestamp_str = [f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps]
+        max_duration = metadata.duration
+        per_frame_diff_in_seconds = [
+            math.ceil(metadata.timestamps[i] - metadata.timestamps[i - 1]) for i in range(1, len(metadata.timestamps))
+        ]
+        num_audio_tokens_per_sec = self.audio_frame_boundary(seconds=1)
+
+        mapped_audio_idx = video_to_audio_indices[video_idx]
+        audio_mask = processed_audio["input_features_mask"][mapped_audio_idx]
+        num_audio_tokens_total = self.compute_sscp(audio_mask)
+
+        # FIXME @raushan where do we need BOA/EOA/BOI/EOI - just formatting so straightforward
+        segments = []
+        processed_audio_tokens = 0
+        for i, audio_t in enumerate(metadata.timestamps):
+            # vision frame block, labeled with its own timestamp
+            segments.append(f"{timestamp_str[i]} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}")
+
+            # how many 1s audio chunks follow this frame before the next one
+            if i < len(metadata.timestamps) - 1:
+                n_seconds = per_frame_diff_in_seconds[i]
+            else:
+                n_seconds = math.ceil(max_duration - sum(per_frame_diff_in_seconds))
+
+            for sec in range(n_seconds):
+                sec += int(audio_t)
+                audio_ts = f"{sec // 60:02d}:{sec % 60:02d}"
+
+                # Clamp audio num total token to account to accumulated error from rounding/truncation
+                if (processed_audio_tokens + num_audio_tokens_per_sec) > num_audio_tokens_total:
+                    num_audio_tokens_per_sec = num_audio_tokens_total - processed_audio_tokens
+                segments.append(f"{audio_ts} {self.audio_token * num_audio_tokens_per_sec}")
+                processed_audio_tokens += num_audio_tokens_per_sec
+        return " ".join(segments)
+
+    def _process_videos(
+        self,
+        videos: VideoInput,
+        audio: AudioInput | None = None,
+        processed_audio: dict | None = None,
+        audio_kwargs: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs,
+    ):
+        # pop so it is not passed down to video processor
+        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
+        processed_videos = self.video_processor(videos, **kwargs)
+
+        video_replacements = []
+        videos = make_batched_videos(videos)
+        for idx in range(len(videos)):
+            replacement_text = self.replace_video_token(
+                processed_videos,
+                video_idx=idx,
+                processed_audio=processed_audio,
+                load_audio_from_video=load_audio_from_video,
+                video_to_audio_indices=video_to_audio_indices,
+                **kwargs,
+            )
+            video_replacements.append(replacement_text)
+        return processed_videos, video_replacements
+
+    def audio_frame_boundary(self, seconds: float) -> int:
+        """Number of `audio_tokens` whose analysis window falls within [0, seconds)."""
+        # early exit if audio truncated and current video frame has no corresponding track
+        if seconds == 0:
+            return 0
+
+        input_raw_length = round(seconds * self.feature_extractor.sampling_rate)
+        boundary = (
+            input_raw_length - self.feature_extractor.frame_length // 2 - 1
+        ) // self.feature_extractor.hop_length + 1
+        mels_per_chunk = max(boundary, 0)
+        return self.compute_sscp(mels_per_chunk)
+
+    @staticmethod
+    def compute_sscp(mask_or_len: int | np.ndarray):
+        """
+        SSCP subsampling. Two stride-2 Conv2d layers (kernel=3, pad=1)
+        values same as in EmbeddingGemma2AudioSubSampleConvProjection(Layer)
+        """
+        sscp_num_layers = 2
+        sscp_kernel, sscp_stride, sscp_padding = 3, 2, 1
+        if isinstance(mask_or_len, (int, np.integer)):
+            for _ in range(sscp_num_layers):
+                # Conv1d/2d output-length along the time axis (dilation=1).
+                mask_or_len = (mask_or_len + 2 * sscp_padding - sscp_kernel) // sscp_stride + 1
+            return mask_or_len
+
+        for _ in range(2):
+            mask_or_len = mask_or_len[::sscp_stride][
+                : (len(mask_or_len) + 2 * sscp_padding - sscp_kernel) // sscp_stride + 1
+            ]
+        return int(mask_or_len.sum())
 
 
 __all__ = ["EmbeddingGemma2Processor"]

@@ -24,42 +24,11 @@ from transformers.video_utils import VideoMetadata
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
-SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
-# TODO: remove `_CHAT_TEMPLATE` and set `model_id` once the checkpoint is available on the Hub.
-_CHAT_TEMPLATE = (
-    "{%- for msg in messages if msg.get('role') == 'system' -%}"
-    "{%- if msg.get('content') is string -%}"
-    "{{ msg['content'] }}"
-    "{%- else -%}"
-    "{%- for item in msg['content'] if item.get('type') == 'text' -%}"
-    "{{ item['text'] }}"
-    "{%- endfor -%}"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- for msg in messages if msg.get('role') != 'system' -%}"
-    "{%- if msg.get('content') is string -%}"
-    "{{ msg['content'] }}"
-    "{%- else -%}"
-    "{%- set existing_text = msg['content'] | selectattr('type', 'equalto', 'text') | map(attribute='text') | join -%}"
-    "{%- set has_manual_placeholders = ('<|image|>' in existing_text) or ('<|video|>' in existing_text) or ('<|audio|>' in existing_text) -%}"
-    "{%- for item in msg['content'] -%}"
-    "{%- if item.get('type') == 'text' -%}"
-    "{{ item['text'] }}"
-    "{%- elif not has_manual_placeholders and item.get('type') == 'image' -%}"
-    "<|image|>"
-    "{%- elif not has_manual_placeholders and item.get('type') == 'video' -%}"
-    "<|video|>"
-    "{%- elif not has_manual_placeholders and item.get('type') == 'audio' -%}"
-    "<|audio|>"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-)
 
 
 @require_vision
 class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    model_id = "google/embeddinggemma-2"
     processor_class = EmbeddingGemma2Processor
     videos_unstructured_max_length = 570
     videos_text_kwargs_max_length = 570
@@ -83,11 +52,6 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return video_processor_class(**video_processor_kwargs)
 
     @classmethod
-    def _setup_feature_extractor(cls):
-        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
-        return feature_extractor_class()
-
-    @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         image_processor_kwargs = {
@@ -98,30 +62,12 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return image_processor_class(**image_processor_kwargs)
 
     @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        extra_special_tokens = {
-            "image_token": "<|image|>",
-            "video_token": "<|video|>",
-            "boi_token": "<start_of_image>",
-            "eoi_token": "<end_of_image>",
-            "audio_token": "<|audio|>",
-            "boa_token": "<start_of_audio>",
-            "eoa_token": "<end_of_audio>",
-        }
-        tokenizer = tokenizer_class.from_pretrained(
-            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
-        )
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        return tokenizer
-
-    @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @staticmethod
     def prepare_processor_dict():
-        return {"image_seq_length": 3, "chat_template": _CHAT_TEMPLATE}
+        return {"image_seq_length": 3}
 
     # Override as EmbeddingGemma 2 needs images to be an explicitly nested batch
     def prepare_images_inputs(self, batch_size: int | None = None):
@@ -514,7 +460,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.audio_input_name in out_dict)
         self.assertTrue(self.videos_input_name in out_dict)
 
-        self.assertEqual(out_dict["input_ids"].shape[-1], 232)
+        self.assertEqual(out_dict["input_ids"].shape[-1], 229)
         self.assertListEqual(list(out_dict[self.audio_input_name].shape[:2]), [2, 290])
         self.assertListEqual(list(out_dict[self.videos_input_name].shape[:2]), [4, 630])
 
@@ -537,7 +483,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             load_audio_backend="torchcodec",
         )
 
-        self.assertEqual(out_dict["input_ids"].shape[-1], 232)
+        self.assertEqual(out_dict["input_ids"].shape[-1], 229)
         self.assertListEqual(list(out_dict[self.audio_input_name].shape[:2]), [1, 99])
         self.assertListEqual(list(out_dict[self.videos_input_name].shape[:2]), [3, 630])
 

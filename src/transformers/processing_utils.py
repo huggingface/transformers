@@ -2640,7 +2640,11 @@ class OmniModalProcessorMixin(ProcessorMixin):
             # So we'll make a batched list of images and let the processor handle it
             batch_images.append(images)
             batch_videos.append(videos)
-        return batch_images, batch_videos, batch_audios, {"audio_from_video_indices": batch_audio_from_video_indices}
+        additional_inputs = {
+            "audio_from_video_indices": batch_audio_from_video_indices,
+            "load_audio_from_video": load_audio_from_video,
+        }
+        return batch_images, batch_videos, batch_audios, additional_inputs
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
