@@ -22,6 +22,7 @@ from ...utils import _LazyModule
 _import_structure = {
     "tokenizer": [
         "MistralConverter",
+        "convert_tekken_image_processor",
         "convert_tekken_tokenizer",
         "resolve_mistral_format",
     ],
@@ -30,6 +31,7 @@ _import_structure = {
 if TYPE_CHECKING:
     from .tokenizer import (
         MistralConverter,
+        convert_tekken_image_processor,
         convert_tekken_tokenizer,
         resolve_mistral_format,
     )
