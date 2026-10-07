@@ -72,7 +72,7 @@ class DeformableDetrConfig(PreTrainedConfig):
     sub_configs_defaults = {
         "backbone_config": SubConfigSpec(
             config_class=AutoConfig,
-            model_type="resnet50",
+            model_type="resnet",
             init_kwargs={"out_features": ["stage4"]},
         ),
     }
