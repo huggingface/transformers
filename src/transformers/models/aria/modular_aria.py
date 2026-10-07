@@ -43,14 +43,14 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
 )
@@ -60,6 +60,7 @@ from ..llava.modeling_llava import (
     LlavaModel,
     LlavaModelOutputWithPast,
 )
+from ..olmoe.modeling_olmoe import OlmoeModel
 
 
 logger = logging.get_logger(__name__)
@@ -734,6 +735,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
+        "router_logits": OutputRecorder(AriaTextTopKRouter, index=2),
     }
 
     @torch.no_grad()
@@ -763,7 +765,7 @@ class AriaTextModel(LlamaModel):
     pass
 
 
-class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
+class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
@@ -775,17 +777,13 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(self, **super_kwargs)
-
 
 class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class AriaModelOutputWithPast(LlavaModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class AriaModel(LlavaModel):
@@ -887,6 +885,7 @@ class AriaModel(LlavaModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1024,6 +1023,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

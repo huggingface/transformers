@@ -66,12 +66,12 @@ On a single V100 GPU (16GB), this script should run in ~14 minutes and yield acc
 
 ## Multi-GPU
 
-The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/anton-l/common_language).
+The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/regisss/common_language).
 
 ```bash
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
-    --dataset_name speechbrain/common_language \
+    --dataset_name regisss/common_language \
     --audio_column_name audio \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \
@@ -135,7 +135,7 @@ The following table shows a couple of demonstration fine-tuning runs.
 It has been verified that the script works for the following datasets:
 
 - [SUPERB Keyword Spotting](https://huggingface.co/datasets/s3prl/superb#ks)
-- [Common Language](https://huggingface.co/datasets/speechbrain/common_language)
+- [Common Language](https://huggingface.co/datasets/regisss/common_language)
 
 | Dataset | Pretrained Model | # transformer layers | Accuracy on eval | GPU setup | Training time | Fine-tuned Model & Logs |
 |---------|------------------|----------------------|------------------|-----------|---------------|--------------------------|

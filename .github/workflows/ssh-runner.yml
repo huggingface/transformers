@@ -13,10 +13,6 @@ on:
         description: 'Number of GPUs to use (`single` or `multi`; not needed for cpu runner)'
         required: false
         default: 'none'
-      cache_type:
-        description: 'Cache backend for a10 runners: `bucket` (default) or `efs`'
-        required: false
-        default: 'bucket'
 
 env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
@@ -44,7 +40,6 @@ jobs:
         env:
           NUM_GPUS: ${{ github.event.inputs.num_gpus }}
           RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
-          CACHE_TYPE: ${{ github.event.inputs.cache_type }}
         run: |
           if [[ "$RUNNER_TYPE" == "a10" ]]; then
             if [[ "$NUM_GPUS" != "single" && "$NUM_GPUS" != "multi" ]]; then
@@ -52,11 +47,7 @@ jobs:
               NUM_GPUS="single"
             fi
             if [[ "$NUM_GPUS" == "single" ]]; then
-              if [[ "$CACHE_TYPE" == "efs" ]]; then
-                echo "RUNNER=aws-g5-4xlarge-cache-ssh-efs" >> $GITHUB_ENV
-              else
-                echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
-              fi
+              echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
             else
               echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
             fi
