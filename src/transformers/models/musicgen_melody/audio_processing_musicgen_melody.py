@@ -51,7 +51,6 @@ class MusicgenMelodyAudioProcessorMixin:
         "chroma_filters",
         "power_spectrogram_config",
         "_chroma_key",
-        "_cached_stft_window",
         "ops",
     }
     # The legacy FE mapped its chroma count to `num_chroma`.

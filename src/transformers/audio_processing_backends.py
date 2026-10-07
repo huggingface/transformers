@@ -785,14 +785,17 @@ class AudioOps:
     # ── signal ─────────────────────────────────────────────────────────────────────────────────
 
     def window(self, name, length, *, periodic, dtype=None, like=None, **params):
-        """Analysis window of `length` samples on `like`'s device. `name` is one of ``"hann"``,
-        ``"hamming"``, ``"boxcar"``, ``"povey"`` (Hann to the 0.85) or ``"blackman"`` (with
-        `params["blackman_coeff"]`); `periodic` builds `length + 1` points and drops the last.
-        `dtype` is a dtype name the window is evaluated in. `dtype=None` is the one place a backend
-        default differs: it means the backend's native precision for a window built for `like` --
-        `like`'s dtype on torch (what `torch.hann_window(..., dtype=audio.dtype)` did), float64 on
-        numpy (what the numpy leaves did). Each backend builds its own way, so float32 windows
-        differ by ulps between backends; float64 ones agree to ~1e-16."""
+        """Analysis window of `length` samples. `name` is one of ``"hann"``, ``"hamming"``,
+        ``"boxcar"``, ``"povey"`` (Hann to the 0.85) or ``"blackman"``; `periodic` builds
+        `length + 1` points and drops the last. `params` carries `blackman_coeff`, required for
+        ``"blackman"``; other keys are ignored. `dtype` is the dtype name the window is *returned*
+        in (only torch also evaluates in it). `dtype=None` is the one place a backend default
+        differs: it means the backend's native precision for a window built for `like` -- `like`'s
+        dtype on torch (what `torch.hann_window(..., dtype=audio.dtype)` did), float64 on numpy
+        (what the numpy leaves did). `like` is a device hint, as for `zeros`: torch builds the
+        window on `like`'s device (a change from the old CPU-then-`.to()` leaf, bit-identical on
+        CPU); numpy and MLX ignore it. Each backend builds its own way, so float32 windows differ
+        by ulps between backends; float64 ones agree to ~1e-16."""
         raise NotImplementedError
 
     def frame(self, x, frame_length, hop):

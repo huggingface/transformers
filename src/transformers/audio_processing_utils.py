@@ -98,7 +98,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
             and not hasattr(self, "mel_filters")
         ):
             self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
-        self._cached_stft_window = None
 
     @property
     def model_input_names(self) -> list[str]:
@@ -640,7 +639,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             dither=dither,
             audio_ranges=audio_ranges,
         )
-        window, frame_length = self._get_or_create_stft_window(audio, spectrogram_config=spectrogram_config)
+        window, frame_length = self._stft_window(audio, spectrogram_config=spectrogram_config)
 
         if frames_on_win_length:
             frames = self._frame_waveform(
@@ -718,13 +717,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         with their extractors, ignore `periodic` and `window_dtype`, and keep their float32 on
         every backend. Everything else is `self.ops.window`, built on the audio's device.
         """
-        if {k: v for k, v in (stft_cfg.wkwargs or {}).items() if k != "requires_grad" or v}:
-            # `requires_grad=False` is the no-op both old leaves accepted (hub configs carry it);
-            # anything that would change the window is a portable field instead.
-            raise ValueError(
-                "wkwargs is not supported: use `periodic`, `window_dtype` and `blackman_coeff`; "
-                "a window never needs gradients in preprocessing."
-            )
         n = stft_cfg.win_length
         if stft_cfg.window_fn == "hann_window_f32":
             # a float32 arange under numpy scalar promotion evaluates the whole cosine in float32
@@ -735,9 +727,21 @@ class BaseAudioProcessor(AudioProcessingMixin):
             return np.hanning(n + 1)[:-1].astype(np.float32)
         return None
 
+    @staticmethod
+    def _check_wkwargs(stft_cfg):
+        """`wkwargs` is kept for backwards compatibility; only `requires_grad=False` (a no-op) is
+        accepted. Anything that would change the window has a portable field instead."""
+        unsupported = [k for k, v in (stft_cfg.wkwargs or {}).items() if not (k == "requires_grad" and v is False)]
+        if unsupported:
+            raise ValueError(
+                f"Unsupported wkwargs {sorted(unsupported)}: use `periodic`, `window_dtype` and "
+                "`blackman_coeff`; a window never needs gradients in preprocessing."
+            )
+
     def _device_window(self, audio, stft_cfg):
         """The `win_length` window on `audio`'s device: a host recipe moved over, or the backend's
         own build in `window_dtype` (else the backend's default for `audio`, see `AudioOps.window`)."""
+        self._check_wkwargs(stft_cfg)
         host = self._host_window(stft_cfg)
         if host is not None:
             return self.ops.asarray(host, like=audio)
@@ -753,27 +757,21 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _prepare_window_and_framing(self, window, stft_cfg, frames_on_win_length: bool):
         """Centre the window in an `n_fft` frame unless the framing is on `win_length`."""
-        if stft_cfg.win_length < stft_cfg.n_fft and not frames_on_win_length:
+        if frames_on_win_length:
+            return window, stft_cfg.win_length
+        if stft_cfg.win_length < stft_cfg.n_fft:
             left = (stft_cfg.n_fft - stft_cfg.win_length) // 2
             right = stft_cfg.n_fft - stft_cfg.win_length - left
             return self.ops.pad(window, left, right), stft_cfg.n_fft
-        return window, stft_cfg.win_length if frames_on_win_length else stft_cfg.n_fft
+        return window, stft_cfg.n_fft
 
-    def _get_or_create_stft_window(self, audio, *, spectrogram_config):
-        """The window on `audio`'s device in its working dtype, and the frame length.
-
-        Built per call: a device window depends on the audio's device and dtype, and the op is
-        cheap. Only the host recipes are cached, for the processor's own configuration.
-        """
+    def _stft_window(self, audio, *, spectrogram_config):
+        """The window on `audio`'s device in its working dtype, and the frame length. Built per
+        call: a device window depends on the audio's device and dtype, and the op is cheap."""
         stft_cfg = spectrogram_config.stft_config
-        own = spectrogram_config is self.spectrogram_config
-        if own and self._cached_stft_window is not None:
-            window = self.ops.asarray(self._cached_stft_window, like=audio)
-        else:
-            window = self._device_window(audio, stft_cfg)
-            if own:
-                self._cached_stft_window = self._host_window(stft_cfg)
-        return self._prepare_window_and_framing(window, stft_cfg, self._frames_on_win_length(spectrogram_config))
+        return self._prepare_window_and_framing(
+            self._device_window(audio, stft_cfg), stft_cfg, self._frames_on_win_length(spectrogram_config)
+        )
 
     # ── Spectrogram hooks ────────────────────────────────────────────────
 
