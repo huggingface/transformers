@@ -77,7 +77,9 @@ class StftConfig(DataclassDict):
     win_length: int | None = None
     hop_length: int | None = None
     window_fn: str = "hann_window"
-    wkwargs: dict | None = None
+    wkwargs: dict | None = (
+        None  # unsupported; kept so hub configs that carry it still load; rejected unless it is only `requires_grad=False`
+    )
     power: float = 2.0
     pad: int = 0
     center: bool | str = True

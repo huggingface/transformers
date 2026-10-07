@@ -54,62 +54,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
-    def _create_stft_window(self, stft_cfg, audio):
-        win_length = stft_cfg.win_length
-        if stft_cfg.window_fn == "hann_window_f32":
-            # fixed USM float32 periodic Hann (bit-exact with the legacy Gemma3n extractor, which
-            # builds it inline from a float32 arange -- under numpy scalar promotion the whole
-            # cosine is then evaluated in single precision); ignores
-            # `periodic`/`window_dtype`/`wkwargs`
-            arange = np.arange(win_length, dtype=np.float32)
-            return (0.5 * (1 - np.cos(2 * np.pi * arange / win_length))).astype(np.float32)
-        if stft_cfg.window_fn == "hann_window_f64_as_f32":
-            # Periodic Hann evaluated in float64 and stored as float32 -- what the shared
-            # `window_function` util produces for a legacy extractor that does
-            # `window_function(n).astype(np.float32)` (Gemma4). Distinct from
-            # `hann_window_f32`, which evaluates the cosine itself in float32; the two differ
-            # by ~2.4e-07 and that is enough to break bit-exact parity.
-            return np.hanning(win_length + 1)[:-1].astype(np.float32)
-        wkwargs = dict(stft_cfg.wkwargs or {})
-        unsupported = set(wkwargs) - {"requires_grad"}
-        if unsupported:
-            raise ValueError(
-                f"Unsupported window kwargs for the NumPy backend: {sorted(unsupported)}. "
-                "Use the dedicated periodic and window_dtype fields for portable configuration."
-            )
-        if wkwargs.get("requires_grad"):
-            raise ValueError("requires_grad=True is only meaningful for the Torch backend.")
-
-        N = win_length + 1 if stft_cfg.periodic else win_length
-        fac = np.linspace(-np.pi, np.pi, N)
-        name = stft_cfg.window_fn
-        if name in ("hann", "hann_window"):
-            w = 0.5 + 0.5 * np.cos(fac)
-        elif name in ("hamming", "hamming_window"):
-            w = 0.54 + 0.46 * np.cos(fac)
-        elif name == "boxcar":
-            w = np.ones(N)
-        elif name == "povey":
-            w = (0.5 + 0.5 * np.cos(fac)) ** 0.85
-        elif name in ("blackman", "blackman_window"):
-            coeff = stft_cfg.blackman_coeff
-            indices = np.arange(N)
-            angle = 2 * np.pi / (N - 1)
-            w = coeff - 0.5 * np.cos(angle * indices) + (0.5 - coeff) * np.cos(2 * angle * indices)
-        else:
-            raise ValueError(f"Unknown window function '{name}'")
-        w = w[:win_length] if stft_cfg.periodic else w
-        # Honour `window_dtype` as the torch leaf does. Without this the cosine's float64 result
-        # was returned unconditionally, and `_frame_waveform`'s `result_type` promotion then
-        # carried the whole framing/preemphasis path into float64 while torch stayed in float32.
-        # Honour `window_dtype` as the torch leaf does. Left unread, the cosine's float64 result
-        # was returned unconditionally and `_frame_waveform`'s `result_type` promotion carried
-        # framing and preemphasis into float64 while torch stayed in float32 -- the same config
-        # computed at two different precisions. The *fallback* deliberately stays float64 rather
-        # than following the audio dtype as torch does: these numpy leaves are bit-exact against
-        # the numpy legacy extractors, and narrowing it moves qwen3_asr and voxtral_realtime.
-        return w.astype(np.dtype(stft_cfg.window_dtype), copy=False) if stft_cfg.window_dtype else w
-
     @staticmethod
     def _np_frame(x, frame_length, hop_length):
         """Create overlapping frames using stride tricks (replaces librosa.util.frame)."""
@@ -403,48 +347,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         return x.amax(dim=(-2, -1), keepdim=True)
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
-
-    def _create_stft_window(self, stft_cfg, audio):
-        win_length = stft_cfg.win_length
-        dtype = getattr(torch, stft_cfg.window_dtype) if stft_cfg.window_dtype else audio.dtype
-        raw_wkwargs = dict(stft_cfg.wkwargs or {})
-        unsupported = set(raw_wkwargs) - {"requires_grad"}
-        if unsupported:
-            raise ValueError(
-                f"Unsupported window kwargs: {sorted(unsupported)}. "
-                "Use the dedicated periodic and window_dtype fields for portable configuration."
-            )
-        wkwargs = {**raw_wkwargs, "dtype": dtype}
-        name = stft_cfg.window_fn
-        if name == "hann_window_f32":
-            # numpy build + convert, so both backends' windows are bit-identical;
-            # ignores `periodic`/`window_dtype`/`wkwargs`
-            arange = np.arange(win_length, dtype=np.float32)
-            window = torch.from_numpy((0.5 * (1 - np.cos(2 * np.pi * arange / win_length))).astype(np.float32))
-            return window.to(device=audio.device)
-        if name == "hann_window_f64_as_f32":
-            # See the numpy leaf: periodic Hann evaluated in float64, stored as float32, matching
-            # `window_function(n).astype(np.float32)`. Built through numpy so both backends'
-            # windows stay bit-identical.
-            window = torch.from_numpy(np.hanning(win_length + 1)[:-1].astype(np.float32))
-            return window.to(device=audio.device)
-        if name in ("hann", "hann_window"):
-            window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs)
-        elif name in ("hamming", "hamming_window"):
-            window = torch.hamming_window(win_length, periodic=stft_cfg.periodic, **wkwargs)
-        elif name == "boxcar":
-            window = torch.ones(win_length, dtype=dtype)
-        elif name == "povey":
-            window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs).pow(0.85)
-        elif name in ("blackman", "blackman_window"):
-            denominator = win_length if stft_cfg.periodic else win_length - 1
-            angle = 2 * math.pi / denominator
-            indices = torch.arange(win_length, **wkwargs)
-            coeff = stft_cfg.blackman_coeff
-            window = coeff - 0.5 * torch.cos(angle * indices) + (0.5 - coeff) * torch.cos(2 * angle * indices)
-        else:
-            raise ValueError(f"Unknown window function '{name}'")
-        return window.to(device=audio.device)
 
     def _frame_waveform(self, audio, window, frame_length, stft_cfg):
         if stft_cfg.center == "left":
@@ -882,6 +784,17 @@ class AudioOps:
 
     # ── signal ─────────────────────────────────────────────────────────────────────────────────
 
+    def window(self, name, length, *, periodic, dtype=None, like=None, **params):
+        """Analysis window of `length` samples on `like`'s device. `name` is one of ``"hann"``,
+        ``"hamming"``, ``"boxcar"``, ``"povey"`` (Hann to the 0.85) or ``"blackman"`` (with
+        `params["blackman_coeff"]`); `periodic` builds `length + 1` points and drops the last.
+        `dtype` is a dtype name the window is evaluated in. `dtype=None` is the one place a backend
+        default differs: it means the backend's native precision for a window built for `like` --
+        `like`'s dtype on torch (what `torch.hann_window(..., dtype=audio.dtype)` did), float64 on
+        numpy (what the numpy leaves did). Each backend builds its own way, so float32 windows
+        differ by ulps between backends; float64 ones agree to ~1e-16."""
+        raise NotImplementedError
+
     def frame(self, x, frame_length, hop):
         """Overlapping frames of the last axis: ``(..., n_frames, frame_length)`` with
         ``n_frames = 1 + (len - frame_length) // hop``. May return a view.
@@ -1100,6 +1013,27 @@ class NumpyOps(AudioOps):
         return np.matmul(a, b)
 
     # ── signal ─────────────────────────────────────────────────────────────────────────────────
+
+    def window(self, name, length, *, periodic, dtype=None, like=None, **params):
+        count = length + 1 if periodic else length
+        fac = np.linspace(-np.pi, np.pi, count)
+        if name == "hann":
+            window = 0.5 + 0.5 * np.cos(fac)
+        elif name == "hamming":
+            window = 0.54 + 0.46 * np.cos(fac)
+        elif name == "boxcar":
+            window = np.ones(count)
+        elif name == "povey":
+            window = (0.5 + 0.5 * np.cos(fac)) ** 0.85
+        elif name == "blackman":
+            coeff = params["blackman_coeff"]
+            indices = np.arange(count)
+            angle = 2 * np.pi / (count - 1)
+            window = coeff - 0.5 * np.cos(angle * indices) + (0.5 - coeff) * np.cos(2 * angle * indices)
+        else:
+            raise ValueError(f"Unknown window function {name!r}.")
+        window = window[:length] if periodic else window
+        return window.astype(np.dtype(dtype), copy=False) if dtype else window
 
     def frame(self, x, frame_length, hop):
         return np.lib.stride_tricks.sliding_window_view(x, frame_length, axis=-1)[..., ::hop, :]
@@ -1324,6 +1258,28 @@ if is_torch_available():
             return torch.matmul(a, b)
 
         # ── signal ─────────────────────────────────────────────────────────────────────────────
+
+        def window(self, name, length, *, periodic, dtype=None, like=None, **params):
+            device = self._device_of(like)
+            if dtype is not None:
+                torch_dtype = self._torch_dtype(dtype, device.type)
+            else:
+                torch_dtype = like.dtype if isinstance(like, torch.Tensor) else torch.float32
+            kwargs = {"dtype": torch_dtype, "device": device}
+            if name == "hann":
+                return torch.hann_window(length, periodic=periodic, **kwargs)
+            if name == "hamming":
+                return torch.hamming_window(length, periodic=periodic, **kwargs)
+            if name == "boxcar":
+                return torch.ones(length, **kwargs)
+            if name == "povey":
+                return torch.hann_window(length, periodic=periodic, **kwargs).pow(0.85)
+            if name == "blackman":
+                coeff = params["blackman_coeff"]
+                angle = 2 * math.pi / (length if periodic else length - 1)
+                indices = torch.arange(length, **kwargs)
+                return coeff - 0.5 * torch.cos(angle * indices) + (0.5 - coeff) * torch.cos(2 * angle * indices)
+            raise ValueError(f"Unknown window function {name!r}.")
 
         def frame(self, x, frame_length, hop):
             # A writable overlapping view; by contract callers never write into frames (numpy's view is read-only).
