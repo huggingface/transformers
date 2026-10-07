@@ -549,6 +549,7 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2TextConfig
+    base_model_prefix = "text_model"
     input_modalities = ("text",)
 
     def __init__(self, config: MetaClip2TextConfig):
@@ -1042,6 +1043,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2VisionConfig
+    base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 

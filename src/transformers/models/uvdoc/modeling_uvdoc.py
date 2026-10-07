@@ -249,7 +249,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
     """
 
     config: UVDocConfig
-    base_model_prefix = "uvdoc"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True

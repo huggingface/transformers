@@ -413,7 +413,7 @@ class CLIPSegDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class CLIPSegPreTrainedModel(PreTrainedModel):
     config: CLIPSegConfig
-    base_model_prefix = "clipseg"
+    base_model_prefix = "clip"
     input_modalities = ("image", "text")
     _no_split_modules = ["CLIPSegTextEmbeddings", "CLIPSegEncoderLayer", "CLIPSegVisionEmbeddings"]
 
