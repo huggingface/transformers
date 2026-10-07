@@ -62,7 +62,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_intel_xpu_ci_scheduled.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_intel_xpu_ci_scheduled.yaml@fix_xpu_workflow
     with:
       job: run_models_gpu
       slack_report_channel: "#intel-xpu-hf-ci"
