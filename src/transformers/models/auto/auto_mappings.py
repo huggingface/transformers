@@ -45,6 +45,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("axk1", "AXK1Config"),
         ("axk2", "AXK2Config"),
         ("aya_vision", "AyaVisionConfig"),
+        ("bailing_hybrid", "BailingHybridConfig"),
         ("bamba", "BambaConfig"),
         ("bark", "BarkConfig"),
         ("bart", "BartConfig"),
