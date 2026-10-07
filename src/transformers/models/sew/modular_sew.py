@@ -253,6 +253,9 @@ class SEWPreTrainedModel(PreTrainedModel):
                         init.kaiming_normal_(module.weight)
             else:
                 init.kaiming_normal_(module.weight)
+        elif isinstance(module, SEWModel):
+            if hasattr(module, "masked_spec_embed"):
+                init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
