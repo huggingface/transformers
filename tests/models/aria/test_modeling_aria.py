@@ -39,8 +39,11 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_coco_image, load_test_image
-from ...vlm_tester import VLMModelTest, VLMModelTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -51,35 +54,148 @@ if is_torch_available():
 IMAGE_OF_VIEW_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
 
 
-class AriaVisionText2TextModelTester(VLMModelTester):
-    base_model_class = AriaModel
-    config_class = AriaConfig
-    text_config_class = AriaTextConfig
-    vision_config_class = Idefics3VisionConfig
-    conditional_generation_class = AriaForConditionalGeneration
+class AriaVisionText2TextModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        num_channels=3,
+        image_size=16,
+        num_image_tokens=4,
+        ignore_index=-100,
+        image_token_index=9,
+        projector_hidden_act="gelu",
+        seq_length=7,
+        vision_feature_select_strategy="default",
+        vision_feature_layer=-1,
+        text_config=AriaTextConfig(
+            seq_length=7,
+            is_training=True,
+            use_input_mask=True,
+            use_token_type_ids=False,
+            use_labels=True,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            type_vocab_size=16,
+            type_sequence_label_size=2,
+            initializer_range=0.02,
+            num_labels=3,
+            num_choices=4,
+            pad_token_id=1,
+            hidden_size=32,
+            intermediate_size=16,
+            max_position_embeddings=60,
+            model_type="aria_moe_lm",
+            moe_intermediate_size=4,
+            moe_num_experts=3,
+            moe_topk=2,
+            num_attention_heads=2,
+            num_experts_per_tok=3,
+            num_hidden_layers=2,
+            num_key_value_heads=2,
+            rope_theta=5000000,
+            vocab_size=99,
+            eos_token_id=2,
+            head_dim=4,
+        ),
+        is_training=True,
+        vision_config=Idefics3VisionConfig(
+            image_size=16,
+            patch_size=8,
+            num_channels=3,
+            is_training=True,
+            hidden_size=32,
+            projection_dim=4,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=4,
+            dropout=0.1,
+            attention_dropout=0.1,
+            initializer_range=0.02,
+        ),
+    ):
+        self.parent = parent
+        self.ignore_index = ignore_index
+        self.image_token_index = image_token_index
+        self.projector_hidden_act = projector_hidden_act
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_layer = vision_feature_layer
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.pad_token_id = text_config.pad_token_id
+        self.eos_token_id = text_config.eos_token_id
+        self.num_hidden_layers = text_config.num_hidden_layers
+        self.vocab_size = text_config.vocab_size
+        self.hidden_size = text_config.hidden_size
+        self.num_attention_heads = text_config.num_attention_heads
+        self.is_training = is_training
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 9)
-        kwargs.setdefault("pad_token_id", 1)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("intermediate_size", 16)
-        kwargs.setdefault("head_dim", 4)
-        kwargs.setdefault("max_position_embeddings", 60)
-        kwargs.setdefault("moe_num_experts", 3)
-        kwargs.setdefault("moe_topk", 2)
-        super().__init__(parent, **kwargs)
-        self.projector_patch_to_query_dict = {(self.image_size // self.patch_size) ** 2: self.num_image_tokens}
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.num_image_tokens = num_image_tokens
+        self.seq_length = seq_length + self.num_image_tokens
+        self.projector_patch_to_query_dict = {
+            vision_config.image_size**2 // vision_config.patch_size**2: vision_config.projection_dim
+        }
+
+    def get_config(self):
+        return AriaConfig(
+            text_config=self.text_config.to_dict(),
+            vision_config=self.vision_config.to_dict(),
+            ignore_index=self.ignore_index,
+            image_token_index=self.image_token_index,
+            projector_hidden_act=self.projector_hidden_act,
+            vision_feature_select_strategy=self.vision_feature_select_strategy,
+            vision_feature_layer=self.vision_feature_layer,
+            eos_token_id=self.eos_token_id,
+            projector_patch_to_query_dict=self.projector_patch_to_query_dict,
+        )
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.vision_config.num_channels,
+                self.vision_config.image_size,
+                self.vision_config.image_size,
+            ]
+        )
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        attention_mask = input_ids.ne(1).to(torch_device)
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
 
 
 @require_torch
-class AriaForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase):
+class AriaForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     """
     Model tester for `AriaForConditionalGeneration`.
     """
 
-    model_tester_class = AriaVisionText2TextModelTester
+    all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
+
+    _is_composite = True
+
+    def setUp(self):
+        self.model_tester = AriaVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
 
     @pytest.mark.xfail(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
