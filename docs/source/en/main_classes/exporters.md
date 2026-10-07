@@ -67,6 +67,14 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.configs.OpenVINOConfig
 
+## OnnxRuntimeQuantizer
+
+[[autodoc]] exporters.exporter_onnx.OnnxRuntimeQuantizer
+
+## NNCFQuantizer
+
+[[autodoc]] exporters.exporter_openvino.NNCFQuantizer
+
 ## Utilities
 
 Lower-level functions that power `export_for_generation`, useful when you need to intervene

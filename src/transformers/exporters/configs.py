@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
 from os import PathLike
@@ -98,22 +98,19 @@ class DynamoConfig(ExportConfigMixin):
             fine-grained ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``,
             where ``torch.export`` infers shape relations instead of verifying them against the
             user-stated bounds.
-        quantizer (`Quantizer`, *optional*):
-            Post-training quantization recipe — a PT2E `Quantizer` (e.g. `XNNPACKQuantizer(...)`,
-            `X86InductorQuantizer(...)`, …). When set, the exported graph is
-            quantized (`prepare_pt2e` → calibrate → `convert_pt2e`) before it is returned/lowered.
-            The flow is the same for every backend, but each quantizer injects its own quantize/dequantize
-            ops, which a backend may or may not support: pass one whose ops your target handles
-            (`X86InductorQuantizer` for inductor or ONNX QDQ, `XNNPACKQuantizer` for ExecuTorch).
-            `None` (default) exports in full precision.
+        pt2e_quantizer (`Quantizer`, *optional*):
+            Post-training quantization with a PT2E `Quantizer` (e.g. `XNNPACKQuantizer(...)`,
+            `X86InductorQuantizer(...)`), run on the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) by
+            every backend. Each quantizer injects its own quantize/dequantize ops, which a backend may or may not
+            support: pass one whose ops your target handles (`X86InductorQuantizer` for inductor or ONNX QDQ,
+            `XNNPACKQuantizer` for ExecuTorch). ONNX and OpenVINO also take their own toolchain's quantizer
+            (`OnnxConfig.onnxruntime_quantizer`, `OpenVINOConfig.nncf_quantizer`).
         calibration_dataset (`Iterable[dict]`, *optional*):
-            Forward-kwarg dicts run through the prepared graph to gather observer statistics for static
-            quantization — any iterable of dicts works, including a `torch.utils.data.DataLoader` whose
-            batches collate to forward kwargs. Ignored when `quantizer` is `None`. When `None`,
-            calibration falls back to a
-            single pass on the export's own sample inputs (a warning is emitted — one sample can hurt
-            accuracy). For generative models, pass a generate-style dataset to `export_for_generation`'s
-            `calibration_dataset` instead — it fans out a per-component calibration set automatically.
+            Forward-kwarg dicts run through the model to gather calibration statistics — any iterable of dicts
+            works, including a `torch.utils.data.DataLoader` whose batches collate to forward kwargs. When `None`,
+            calibration falls back to a single pass on the export's own sample inputs (one sample can hurt
+            accuracy). `export_for_generation` reads it as **generate** kwarg dicts instead and fans it out into a
+            per-component calibration set.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
@@ -123,7 +120,7 @@ class DynamoConfig(ExportConfigMixin):
     dynamic_shapes: dict[str, Any] | None = None
     prefer_deferred_runtime_asserts_over_guards: bool = False
 
-    quantizer: Any = None
+    pt2e_quantizer: Any = None
     calibration_dataset: Iterable[Any] | None = None
 
 
@@ -157,6 +154,11 @@ class OnnxConfig(DynamoConfig):
         keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
             Expose weight initializers as explicit graph inputs. Required by
             some older ONNX runtimes (opset < 9).
+        onnxruntime_quantizer (`Callable`, *optional*):
+            Post-training quantization of the converted model with ONNX Runtime, before it's saved — an
+            [`~exporters.exporter_onnx.OnnxRuntimeQuantizer`], or any `quantizer(model_proto, feeds)` callable
+            returning the quantized `onnx.ModelProto`, where `feeds` are the model inputs built from
+            `calibration_dataset`. Mutually exclusive with `pt2e_quantizer`.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -167,6 +169,11 @@ class OnnxConfig(DynamoConfig):
     optimize: bool = True
     export_params: bool = True
     keep_initializers_as_inputs: bool = False
+    onnxruntime_quantizer: Callable[[Any, Any], Any] | None = None
+
+    def __post_init__(self):
+        if self.pt2e_quantizer is not None and self.onnxruntime_quantizer is not None:
+            raise ValueError("Set at most one of `pt2e_quantizer` and `onnxruntime_quantizer`.")
 
 
 @dataclass
@@ -228,6 +235,11 @@ class OpenVINOConfig(DynamoConfig):
             every step, and a fused ``beam_idx`` input reorders state in-graph for beam search.
             No-op for models without round-tripped state (encoders, prefill-only exports). Set it
             to `False` for targets that take no stateful model, such as the NPU plugin.
+        nncf_quantizer (`Callable`, *optional*):
+            Post-training quantization of the converted model with NNCF, OpenVINO's own optimizer — an
+            [`~exporters.exporter_openvino.NNCFQuantizer`], or any
+            `quantizer(ov_model, nncf_dataset)` callable returning the quantized ``openvino.Model``, where
+            `nncf_dataset` is built from `calibration_dataset`. Mutually exclusive with `pt2e_quantizer`.
     """
 
     export_format: ExportFormat = ExportFormat.OPENVINO
@@ -235,3 +247,8 @@ class OpenVINOConfig(DynamoConfig):
     output_path: str | PathLike | None = None
     compress_to_fp16: bool = True
     stateful: bool = True
+    nncf_quantizer: Callable[[Any, Any], Any] | None = None
+
+    def __post_init__(self):
+        if self.pt2e_quantizer is not None and self.nncf_quantizer is not None:
+            raise ValueError("Set at most one of `pt2e_quantizer` and `nncf_quantizer`.")

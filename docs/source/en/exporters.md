@@ -823,11 +823,10 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 ## Quantization
 
-Every export config accepts a `quantizer`. Set it to any PT2E
-[`Quantizer`](https://docs.pytorch.org/ao/main/pt2e_quantization/index.html) and the exporter runs post-training quantization on
-the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) before the program is returned or
-lowered. Quantization happens on the graph rather than the modeling code, so a `quantizer` works across
-every architecture without per-model handling.
+Every export config accepts a `pt2e_quantizer`. Set it to any PT2E
+[`Quantizer`](https://docs.pytorch.org/ao/main/pt2e_quantization/index.html) and the exporter runs post-training quantization on the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) before the program
+is returned or lowered. Quantization happens on the graph rather than the modeling code, so a `pt2e_quantizer` works
+across every architecture without per-model handling.
 
 Quantize through [`~HfExporter.export_for_generation`], which exports the decomposed generation components. Their attention mask is a precomputed graph input, which keeps PT2E away from the in-graph mask construction that trips its `make_fx` retrace on a full model forward.
 
@@ -843,7 +842,7 @@ model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B").eval()
 inputs = ...  # forward kwargs
 
 quantizer = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
-config = DynamoConfig(dynamic=True, quantizer=quantizer, calibration_dataset=[inputs])
+config = DynamoConfig(dynamic=True, pt2e_quantizer=quantizer, calibration_dataset=[inputs])
 exported = DynamoExporter().export(model, inputs, config)  # quantize/dequantize ops folded into the graph
 ```
 
@@ -853,8 +852,59 @@ Each quantizer injects its own quantize/dequantize ops, and a backend may or may
 
 | Where you'll run | Quantizer to pass | Import from |
 | --- | --- | --- |
-| PyTorch inductor, or ONNX Runtime (QDQ) | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
+| PyTorch inductor | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
+| ONNX Runtime | `OnnxRuntimeQuantizer` as `onnxruntime_quantizer` (below), or `X86InductorQuantizer` (QDQ) | `transformers.exporters`, `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
 | ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
+| OpenVINO | `NNCFQuantizer` as `nncf_quantizer` (below), or `X86InductorQuantizer` | `transformers.exporters`, `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
+
+### ONNX
+
+`OnnxConfig` also takes an `onnxruntime_quantizer`, which quantizes the converted ONNX model with ONNX Runtime's own
+tools (`onnxruntime.quantization`) before it's saved. [`OnnxRuntimeQuantizer`] runs `quantize_static` by default (int8
+QDQ activations and weights, calibrated on `calibration_dataset`); with `dynamic=True` it runs `quantize_dynamic` (int8
+`MatMul`/`Gemm` weights, activations quantized at runtime). Other keyword arguments go to that ONNX Runtime function.
+
+```python
+from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeQuantizer
+
+# int8 activations and weights, calibrated on `calibration_dataset`
+config = OnnxConfig(onnxruntime_quantizer=OnnxRuntimeQuantizer(per_channel=True), calibration_dataset=samples)
+# dynamic int8
+config = OnnxConfig(onnxruntime_quantizer=OnnxRuntimeQuantizer(dynamic=True))
+
+onnx_program = OnnxExporter().export(model, inputs, config)
+```
+
+Any callable `onnxruntime_quantizer(model_proto, feeds)` works the same way: it receives the converted `onnx.ModelProto`
+and a list of input feeds (built from `calibration_dataset`, else the sample inputs), and returns the quantized model.
+
+### OpenVINO
+
+`OpenVINOConfig` also takes an `nncf_quantizer`, such as [`NNCFQuantizer`]. It quantizes the converted model with
+[NNCF](https://github.com/openvinotoolkit/nncf), OpenVINO's own optimizer: it works on the OpenVINO IR rather than the
+PyTorch graph. By default it runs `nncf.quantize` (int8 activations and weights, calibrated on `calibration_dataset`, with
+`model_type=nncf.ModelType.TRANSFORMER` unless you pass another);
+with `weights_only=True` it runs `nncf.compress_weights`. Other keyword arguments go to that NNCF function.
+
+```python
+import nncf
+from transformers.exporters import NNCFQuantizer, OpenVINOConfig, OpenVINOExporter
+
+# int8 activations and weights, calibrated on `calibration_dataset`
+config = OpenVINOConfig(nncf_quantizer=NNCFQuantizer(), calibration_dataset=samples)
+# weight-only int4
+quantizer = NNCFQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT4_SYM, group_size=128)
+config = OpenVINOConfig(nncf_quantizer=quantizer)
+
+ov_model = OpenVINOExporter().export(model, inputs, config)
+```
+
+Any callable `nncf_quantizer(model, dataset)` works the same way: it receives the converted `openvino.Model` and an
+`nncf.Dataset` of its inputs (built from `calibration_dataset`, else the sample inputs).
+
+A `pt2e_quantizer` works on OpenVINO too: its weights stay in full precision behind quantize/dequantize pairs, which
+OpenVINO converts to `FakeQuantize` and compresses to int8 itself. Int8 matmuls saturate on CPUs without VNNI (AVX2-only
+Intel and AMD Zen 2 and older), so expect lower accuracy there.
 
 ### Calibration
 
@@ -876,15 +926,16 @@ def x86(dynamic):  # same quantizer family, static (per-channel) vs dynamic int8
     return X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config(is_dynamic=dynamic))
 
 config = {
-    "language_model": DynamoConfig(dynamic=True, quantizer=x86(dynamic=False)),  # static int8
-    "decode": DynamoConfig(dynamic=True, quantizer=x86(dynamic=True)),           # dynamic int8
-    "lm_head": DynamoConfig(dynamic=True),                                       # no quantizer → fp32
+    "language_model": DynamoConfig(dynamic=True, pt2e_quantizer=x86(dynamic=False)),  # static int8
+    "decode": DynamoConfig(dynamic=True, pt2e_quantizer=x86(dynamic=True)),           # dynamic int8
+    "lm_head": DynamoConfig(dynamic=True),                                            # no quantizer → fp32
 }
 components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 ```
 
 The dict must name every component [`~exporters.utils.decompose_for_generation`] produces; a component
-whose config sets no `quantizer` is left in full precision.
+whose config sets no quantizer is left in full precision, and each `calibration_dataset` in the dict holds that
+component's own forward kwargs.
 
 > [!NOTE]
 > Quantization always runs on these decomposed components, whose attention mask is a precomputed input.

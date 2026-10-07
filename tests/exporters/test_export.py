@@ -27,7 +27,7 @@ from transformers import GenerationConfig, set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
-from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter, _openvino_feed
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -690,29 +690,13 @@ def _run_openvino_model(ov_model, inputs) -> dict:
     to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
     through under their FX placeholder names.
     """
-    import numpy as np
     import openvino
 
     set_seed(1234)
     compiled = openvino.compile_model(ov_model, "AUTO")
     request = compiled.create_infer_request()
     leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(inputs).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
-
-    feed = {}
-    for port in compiled.inputs:
-        # Passthrough tensors carry both an input and an output name — check every alias.
-        for name in port.get_names():
-            path = re.sub(r"^input\.", "", name)
-            if path in leaves:
-                feed[name] = leaves[path]
-            elif name == "beam_idx":
-                feed[name] = np.arange(batch, dtype=np.int32)
-            elif name in inputs:
-                feed[name] = np.array(inputs[name])
-            else:
-                continue
-            break
+    feed = _openvino_feed(ov_model, inputs)
 
     # Folded state variables read zeros on the first infer — seed them from the sample leaves
     # (cast to the variable's dtype: the exporter may retype state, e.g. i64 lengths to i32).

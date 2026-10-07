@@ -84,6 +84,10 @@ class DynamoExporter(HfExporter):
     min_versions = {"torch": "2.11.0"}
     tested_versions = {"torch": "2.12.0"}
 
+    # Whether quantization folds each weight into an int8 constant behind a lone `dequantize`, or keeps it in
+    # full precision behind a quantize/dequantize pair for the backend to compress.
+    fold_quantized_weights = True
+
     def export(
         self,
         model: PreTrainedModel,
@@ -125,7 +129,7 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
-        if config.quantizer is not None:
+        if config.pt2e_quantizer is not None:
             exported_program = self._quantize(exported_program, config, sample_inputs, dynamic_shapes)
 
         return exported_program
@@ -141,21 +145,21 @@ class DynamoExporter(HfExporter):
 
         The standard PT2E flow, the same for every model: `prepare_pt2e` inserts observers,
         `config.calibration_dataset` (forward-kwarg dicts) drives their statistics, and `convert_pt2e` folds
-        them into `quantize`/`dequantize` ops. The only backend-specific input is `config.quantizer`: the ops it
+        them into `quantize`/`dequantize` ops. The only backend-specific input is `config.pt2e_quantizer`: the ops it
         injects are the target backend's to support or not — ExecuTorch has no kernels for the per-channel
         ones `X86InductorQuantizer` inserts, for instance. `convert_pt2e` returns a `GraphModule`, so the converted graph is
         re-exported, with the same inputs and dynamic-shape spec, back into an `ExportedProgram`.
         """
         from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
 
-        prepared = prepare_pt2e(exported_program.module(), config.quantizer)
+        prepared = prepare_pt2e(exported_program.module(), config.pt2e_quantizer)
 
         # default to a single calibration pass on the export's own sample inputs
         calibration_dataset = config.calibration_dataset
         if not calibration_dataset:
             logger.warning_once(
                 "Quantizing with no `calibration_dataset`; calibrating on the single sample input. Observer "
-                "statistics from one sample can hurt accuracy — set a representative `config.calibration_dataset` "
+                "statistics from one sample can hurt accuracy — set a representative `calibration_dataset` "
                 "(for generative models, `export_for_generation` fans a generate-level one out per component)."
             )
             calibration_dataset = [sample_inputs]
@@ -168,7 +172,7 @@ class DynamoExporter(HfExporter):
             inputs = {name: copy.deepcopy(value) for name, value in sample.items() if name in forward_keys}
             prepared(**inputs)
 
-        converted = convert_pt2e(prepared)
+        converted = convert_pt2e(prepared, fold_quantize=self.fold_quantized_weights)
         return torch.export.export(
             converted,
             args=(),

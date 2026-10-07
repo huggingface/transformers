@@ -102,6 +102,10 @@ class OpenVINOExporter(DynamoExporter):
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
 
+    # OV converts a weight's quantize/dequantize pair to a `FakeQuantize` and compresses it to int8 itself, but
+    # has no conversion for the lone `dequantize` of a folded int8 weight.
+    fold_quantized_weights = False
+
     def export(
         self,
         model: PreTrainedModel,
@@ -125,6 +129,10 @@ class OpenVINOExporter(DynamoExporter):
         inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
+
+        # Before the state folding, so calibration feeds each sample's cache as an input instead of empty state.
+        if config.nncf_quantizer is not None:
+            ov_model = _quantize_converted(ov_model, config, sample_inputs)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -596,6 +604,75 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
         if not changed:
             break
         ov_model.validate_nodes_and_infer_types()
+
+
+# ── Quantization ────────────────────────────────────────────────────────────
+
+
+class NNCFQuantizer:
+    """Quantize a converted OpenVINO model with [NNCF](https://github.com/openvinotoolkit/nncf), OpenVINO's own
+    optimizer, which works on the IR rather than the PyTorch graph. Pass it as
+    `OpenVINOConfig(nncf_quantizer=...)`.
+
+    By default it runs `nncf.quantize` (int8 activations and weights, calibrated on the config's
+    `calibration_dataset`, with `model_type=nncf.ModelType.TRANSFORMER` unless given); with `weights_only=True` it
+    runs `nncf.compress_weights` (weight-only int8 or int4). Other keyword arguments go to that NNCF function.
+
+    Example:
+
+    ```python
+    >>> import nncf
+    >>> from transformers.exporters import NNCFQuantizer, OpenVINOConfig
+
+    >>> OpenVINOConfig(nncf_quantizer=NNCFQuantizer(), calibration_dataset=samples)
+    >>> OpenVINOConfig(nncf_quantizer=NNCFQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT4_SYM))
+    ```
+    """
+
+    def __init__(self, weights_only: bool = False, **kwargs):
+        self.kwargs = kwargs
+        self.weights_only = weights_only
+
+    def __call__(self, model: openvino.Model, dataset) -> openvino.Model:
+        import nncf
+
+        if self.weights_only:
+            # The int8 modes are data-free and refuse a dataset; the others use it for their data-aware methods.
+            mode = self.kwargs.get("mode", nncf.CompressWeightsMode.INT8_ASYM)
+            data_free = mode in (nncf.CompressWeightsMode.INT8_SYM, nncf.CompressWeightsMode.INT8_ASYM)
+            return nncf.compress_weights(model, **({} if data_free else {"dataset": dataset}), **self.kwargs)
+
+        return nncf.quantize(model, dataset, **{"model_type": nncf.ModelType.TRANSFORMER, **self.kwargs})
+
+
+def _quantize_converted(ov_model: openvino.Model, config: OpenVINOConfig, sample_inputs) -> openvino.Model:
+    """Run the `nncf_quantizer` on the converted model, with an `nncf.Dataset` of its inputs."""
+    import nncf
+
+    samples = list(config.calibration_dataset or [sample_inputs])
+    dataset = nncf.Dataset(samples, lambda sample: _openvino_feed(ov_model, sample))
+    return config.nncf_quantizer(ov_model, dataset)
+
+
+def _openvino_feed(ov_model: openvino.Model, sample) -> dict[str, Any]:
+    """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
+    the identity `beam_idx`, and scalars as they are."""
+    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
+    batch = next(iter(leaves.values())).shape[0] if leaves else 1
+    feed = {}
+    for port in ov_model.inputs:
+        for name in port.get_names():
+            path = name.removeprefix("input.")
+            if path in leaves:
+                feed[name] = leaves[path]
+            elif name == "beam_idx":
+                feed[name] = np.arange(batch, dtype=np.int32)
+            elif name in sample:
+                feed[name] = np.array(sample[name])
+            else:
+                continue
+            break
+    return feed
 
 
 # ── Graph preparation ───────────────────────────────────────────────────────

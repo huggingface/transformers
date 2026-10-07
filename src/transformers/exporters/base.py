@@ -170,7 +170,7 @@ class HfExporter(ABC):
                 stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
         Quantization calibration: when a single `config` is passed (not a per-component dict) and it
-        carries a `quantizer`, its `calibration_dataset` is read as **generate** kwarg dicts (same level
+        carries a quantizer, its `calibration_dataset` is read as **generate** kwarg dicts (same level
         as `sample_inputs` here) and fanned out — each sample is run through the decomposition to produce
         a per-component calibration set that replaces each component's `config.calibration_dataset`
         (per-graph forward kwargs). Leave it `None` to fall back to a single pass on each component's own

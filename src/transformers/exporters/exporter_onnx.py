@@ -34,6 +34,8 @@ into an ONNX model via `torch.onnx.export`:
    lowering for specific aten ops where it's buggy or missing.
 5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
    fixes on the `ONNXProgram` IR for ORT compatibility.
+
+An `onnxruntime_quantizer` (e.g. [`OnnxRuntimeQuantizer`]) then runs on the fixed model, before it's saved.
 """
 
 from __future__ import annotations
@@ -41,6 +43,8 @@ from __future__ import annotations
 import copy
 import functools
 import operator
+import os
+import tempfile
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -94,6 +98,8 @@ if is_onnxscript_available():
     }
 
 if TYPE_CHECKING:
+    import onnx
+
     from ..modeling_utils import PreTrainedModel
 
     if is_onnxscript_available():
@@ -139,7 +145,6 @@ class OnnxExporter(DynamoExporter):
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
-                f=config.output_path,
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
@@ -152,6 +157,18 @@ class OnnxExporter(DynamoExporter):
             )
 
         apply_onnx_ir_fixes(onnx_program)
+
+        if config.onnxruntime_quantizer is not None:
+            _quantize_converted(onnx_program, config, sample_inputs)
+
+        if config.output_path is not None:
+            onnx_program.save(
+                config.output_path,
+                include_initializers=config.export_params,
+                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
+                external_data=config.external_data,
+            )
+
         return onnx_program
 
 
@@ -1208,3 +1225,75 @@ def apply_onnx_ir_fixes(onnx_program: ONNXProgram) -> None:
     for fix in _IR_FIXES:
         for graph in graphs:
             fix(graph)
+
+
+# ── Quantization ────────────────────────────────────────────────────────────
+
+
+class OnnxRuntimeQuantizer:
+    """Quantize a converted ONNX model with ONNX Runtime's own tools (`onnxruntime.quantization`), which work on the
+    ONNX graph rather than the PyTorch one. Pass it as `OnnxConfig(onnxruntime_quantizer=...)`.
+
+    By default it runs `quantize_static` (int8 QDQ activations and weights, calibrated on the config's
+    `calibration_dataset`); with `dynamic=True` it runs `quantize_dynamic` (int8 weights, activations quantized at
+    runtime, no calibration) on `MatMul`/`Gemm` unless `op_types_to_quantize` says otherwise. Other keyword arguments
+    go to that function.
+
+    Example:
+
+    ```python
+    >>> from transformers.exporters import OnnxConfig, OnnxRuntimeQuantizer
+
+    >>> OnnxConfig(onnxruntime_quantizer=OnnxRuntimeQuantizer(per_channel=True), calibration_dataset=samples)
+    >>> OnnxConfig(onnxruntime_quantizer=OnnxRuntimeQuantizer(dynamic=True))
+    ```
+    """
+
+    def __init__(self, dynamic: bool = False, **kwargs):
+        self.dynamic = dynamic
+        self.kwargs = kwargs
+
+    def __call__(self, model: onnx.ModelProto, dataset: list[dict[str, np.ndarray]]) -> onnx.ModelProto:
+        import onnx
+        from onnxruntime.quantization import CalibrationDataReader, quantize_dynamic, quantize_static
+
+        class _Reader(CalibrationDataReader):
+            def __init__(self):
+                self.samples = iter(dataset)
+
+            def get_next(self):
+                return next(self.samples, None)
+
+        # Dynamic mode transposes `Gemm` weights in place, which contradicts the exporter's `value_info` for them.
+        initializers = {initializer.name for initializer in model.graph.initializer}
+        model_copy = onnx.ModelProto()
+        model_copy.CopyFrom(model)
+        value_info = [info for info in model_copy.graph.value_info if info.name not in initializers]
+        del model_copy.graph.value_info[:]
+        model_copy.graph.value_info.extend(value_info)
+        model = model_copy
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "model.onnx")
+            if self.dynamic:
+                # ONNX Runtime lacks kernels for some of the integer ops it would put elsewhere (`ConvInteger`)
+                kwargs = {"op_types_to_quantize": ["MatMul", "Gemm"], **self.kwargs}
+                quantize_dynamic(model, path, **kwargs)
+            else:
+                quantize_static(model, path, _Reader(), **self.kwargs)
+            return onnx.load(path)
+
+
+def _quantize_converted(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs) -> None:
+    """Replace `onnx_program`'s model with the `onnxruntime_quantizer`'s, calibrated on the model's inputs."""
+    model = onnx_program.model_proto
+    names = [graph_input.name for graph_input in model.graph.input]
+    samples = config.calibration_dataset or [sample_inputs]
+    dataset = [_onnx_feed(names, sample) for sample in samples]
+    onnx_program.model = onnx_ir.from_proto(config.onnxruntime_quantizer(model, dataset))
+
+
+def _onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
+    """`sample`'s tensor leaves as the ONNX model's inputs, by input name (mutated inputs carry an `input.` prefix)."""
+    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
+    return {name: leaves[name.removeprefix("input.")] for name in input_names if name.removeprefix("input.") in leaves}
