@@ -14,10 +14,10 @@
 import codecs
 import unittest
 
-import httpx
 import numpy as np
 import pytest
 from huggingface_hub.file_download import hf_hub_download
+from huggingface_hub.utils import httpx
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available

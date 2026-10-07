@@ -144,7 +144,7 @@ tokenizer.batch_decode(generated_ids)[0]
 ```
 
 > [!TIP]
-> Skip ahead to the [Trainer](#trainer-api) section to learn how to fine-tune a model.
+> Skip ahead to the [Trainer](#trainer) section to learn how to fine-tune a model.
 
 ## Pipeline
 
@@ -242,7 +242,7 @@ from datasets import load_dataset
 
 model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
-dataset = load_dataset("rotten_tomatoes")
+dataset = load_dataset("cornell-movie-review-data/rotten_tomatoes")
 ```
 
 Create a function to tokenize the text and convert it into PyTorch tensors. Apply this function to the whole dataset with the [`~datasets.Dataset.map`] method.

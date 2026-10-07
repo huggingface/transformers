@@ -195,7 +195,9 @@ def main(hf_repo_id, output_dir, push_to_repo_id=None):
     extract_dir = os.path.dirname(filepath)
     extract_nemo_archive(filepath, extract_dir)
 
-    nemo_config = yaml.load(open(os.path.join(extract_dir, "model_config.yaml"), "r"), Loader=yaml.FullLoader)
+    nemo_config = yaml.load(
+        open(os.path.join(extract_dir, "model_config.yaml"), "r", encoding="utf-8"), Loader=yaml.FullLoader
+    )
     tokenizer_model_name = nemo_config["tokenizer"]["model_path"].split("nemo:")[-1]
     model_files = {
         "model_weights": os.path.join(extract_dir, "model_weights.ckpt"),

@@ -243,6 +243,16 @@ class EdgeTamModel(Sam2Model):
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
 
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | EdgeTamVisionEncoderOutput:
+        # original_sizes is returned by the processor for post-processing only and must not
+        # reach the timm backbone (FeatureListNet) which does not accept it.
+        kwargs.pop("original_sizes", None)
+        return super().get_image_features(pixel_values, **kwargs)
+
 
 __all__ = [
     "EdgeTamModel",

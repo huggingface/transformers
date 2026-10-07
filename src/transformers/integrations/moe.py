@@ -125,7 +125,9 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
+    sentinel_mask = None
     if self._is_expert_parallel:
+        sentinel_mask = expert_ids >= self.num_experts
         # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
         # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
         # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
@@ -163,6 +165,9 @@ def batched_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
+    if sentinel_mask is not None:
+        # Zero weights already drop these from the output; the mask keeps them out of the router gradient.
+        sample_weights = sample_weights.masked_fill(sentinel_mask, 0.0)
     weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -272,6 +277,11 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
+    # On TPU, `grouped_mm` is lowered natively in eager and under torch.compile for every dtype, so none
+    # of the inductor / CPU restrictions below apply.
+    if weight.device.type == "tpu":
+        return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
+
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
     if (
         (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)

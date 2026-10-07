@@ -911,7 +911,7 @@ class DFineMLPPredictionHead(nn.Module):
 @auto_docstring
 class DFinePreTrainedModel(PreTrainedModel):
     config: DFineConfig
-    base_model_prefix = "d_fine"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
@@ -1689,7 +1689,7 @@ class DFineModel(DFinePreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DFineModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

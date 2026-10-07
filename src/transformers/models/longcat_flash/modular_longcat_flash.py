@@ -24,12 +24,12 @@ from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3Model,
@@ -38,6 +38,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
+from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from .configuration_longcat_flash import LongcatFlashConfig
 
@@ -80,7 +81,7 @@ class LongcatFlashTopkRouter(MixtralTopKRouter):
         topk_indices = self.get_topk_indices(scores)
         topk_weights = scores.gather(1, topk_indices)
         topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_weights.to(router_logits.dtype), topk_indices
+        return router_logits, topk_weights.to(router_logits.dtype), topk_indices
 
 
 class LongcatFlashExperts(nn.Module):
@@ -148,17 +149,19 @@ class LongcatFlashMoE(nn.Module):
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
-        topk_weights, topk_indices = self.router(hidden_states)
+        _, topk_weights, topk_indices = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         return hidden_states
 
 
-class LongcatFlashMLA(DeepseekV3Attention):
+class LongcatFlashMLA(DeepseekV32Attention):
+    """MLA from Deepseek V3 with a Q-LoRA rank and LoRA scaling."""
+
     def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        del self.indexer
         self.qk_head_dim = config.qk_head_dim  # qk_head_dim is a settable attribute in LongcatFlashConfig
-
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
@@ -317,6 +320,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
+        "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
     }
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
     _keep_in_fp32_modules = [
@@ -341,10 +345,7 @@ class LongcatFlashModel(DeepseekV3Model):
         self.layers = nn.ModuleList(
             [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
         self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used)
-
-        self.config.num_hidden_layers = 2 * config.num_layers
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -398,7 +399,7 @@ class LongcatFlashModel(DeepseekV3Model):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=None,

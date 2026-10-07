@@ -710,6 +710,8 @@ def main():
 
         trainer.push_to_hub(**kwargs)
 
+    trainer.end()
+
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)

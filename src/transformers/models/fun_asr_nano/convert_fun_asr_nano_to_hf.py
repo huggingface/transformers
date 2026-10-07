@@ -222,7 +222,7 @@ def convert_state_dict(original_state_dict: dict[str, torch.Tensor]) -> tuple[di
 
 def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> FunAsrNanoConfig:
     """Build HF config from original config.yaml."""
-    with open(config_yaml_path, "r") as f:
+    with open(config_yaml_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
@@ -257,7 +257,7 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     )
 
     # Text (LLM) config
-    with open(os.path.join(qwen3_config_path, "config.json"), "r") as f:
+    with open(os.path.join(qwen3_config_path, "config.json"), "r", encoding="utf-8") as f:
         qwen3_cfg = json.load(f)
     text_config = Qwen3Config(**qwen3_cfg)
 

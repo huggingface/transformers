@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import (
     AutoProcessor,
     MiniCPMV4_6Config,
@@ -45,11 +43,11 @@ if is_torch_available():
 
 
 class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
-    base_model_class = MiniCPMV4_6Model if is_torch_available() else None
+    base_model_class = MiniCPMV4_6Model
     config_class = MiniCPMV4_6Config
-    text_config_class = Qwen3_5TextConfig if is_torch_available() else None
+    text_config_class = Qwen3_5TextConfig
     vision_config_class = MiniCPMV4_6VisionConfig
-    conditional_generation_class = MiniCPMV4_6ForConditionalGeneration if is_torch_available() else None
+    conditional_generation_class = MiniCPMV4_6ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
@@ -86,8 +84,9 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("insert_layer_id", 0)
         super().__init__(parent, **kwargs)
 
-    def _navit_pixel_values(self, batch_size):
-        """Build NaViT-packed pixel_values: (1, C, patch_size, total_L)."""
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         C = self.num_channels
         P = self.patch_size
         h_patches = self.image_size // self.patch_size
@@ -95,16 +94,12 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
         total_L = batch_size * h_patches * w_patches * P
         return floats_tensor([1, C, P, total_L])
 
-    def _target_sizes(self, batch_size):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         h_patches = self.image_size // self.patch_size
         w_patches = self.image_size // self.patch_size
-        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
-
-    def create_pixel_values(self):
-        return self._navit_pixel_values(self.batch_size)
-
-    def get_additional_inputs(self, config, input_ids, pixel_values):
-        return {"target_sizes": self._target_sizes(self.batch_size)}
+        target_sizes = torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
+        return {"target_sizes": target_sizes}
 
     def get_config(self):
         text_config = {
@@ -154,12 +149,6 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
 class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniCPMV4_6VisionText2TextModelTester
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        inputs_dict["pixel_values"] = self.model_tester._navit_pixel_values(batch_size)
-        inputs_dict["target_sizes"] = self.model_tester._target_sizes(batch_size)
-        return config, inputs_dict
-
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict = {
@@ -176,34 +165,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
             "target_sizes_videos": inputs_dict["target_sizes"],
         }
 
-    @unittest.skip(
-        "NaViT packing puts all images in a single tensor with dim-0 = 1; "
-        "the default test cannot correctly simulate image count mismatches"
-    )
-    def test_mismatching_num_image_tokens(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V uses custom pixel_values format (list-of-list), skipping common input tests")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V uses custom pixel_values format (list-of-list), skipping common input tests")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for MiniCPM-V models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip("FlashAttention only supports fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V 4.6 uses Qwen3.5 hybrid cache layers that are incompatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @unittest.skip(reason="Conversion only for CausalLM loading from saved ConditionalLM")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
@@ -215,67 +176,13 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip(
-        reason="NaViT packs all images into a single tensor (batch dim=1); "
-        "generic batch-splitting logic cannot separate individual samples"
-    )
-    def test_model_forward_default_config_values(self):
-        pass
-
-    @unittest.skip(
-        reason="get_image_features uses a custom pipeline (vision_tower -> vit_merger -> merger) "
-        "that does not accept output_attentions/output_hidden_states kwargs"
-    )
+    #
+    @unittest.skip(reason="Packed attention doesn't return attn weights yet")
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip(
-        reason="get_image_features uses a custom pipeline (vision_tower -> vit_merger -> merger) "
-        "that does not accept output_attentions/output_hidden_states kwargs"
-    )
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip(
-        reason="get_video_features uses a custom pipeline that does not accept "
-        "output_attentions/output_hidden_states kwargs"
-    )
+    @unittest.skip(reason="Packed attention doesn't return attn weights yet")
     def test_get_video_features_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="get_video_features uses a custom pipeline that does not accept "
-        "output_attentions/output_hidden_states kwargs"
-    )
-    def test_get_video_features_hidden_states(self):
-        pass
-
-    @unittest.skip(
-        "MiniCPM-V generate creates vision-aware embeddings via _build_vlm_inputs; "
-        "text-only get_input_embeddings bypass produces different outputs"
-    )
-    def test_generate_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Same as test_generate_from_inputs_embeds: vision-aware vs text-only embeddings mismatch")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "Manual left-padding in test does not adjust image_bound offsets, "
-        "causing vision features to be placed at wrong positions"
-    )
-    def test_left_padding_compatibility(self):
-        pass
-
-    @unittest.skip(reason="Batch splitting in compile test incompatible with list-of-list pixel_values")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip(reason="Batch splitting in compile test incompatible with list-of-list pixel_values")
-    @pytest.mark.torch_compile_test
-    def test_generate_compilation_all_outputs(self):
         pass
 
     @unittest.skip(reason="FA works on generate test, inference needs override to pass target sizes")
@@ -417,7 +324,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ("cuda", (10, 0)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
             }
         ).get_expectation()
@@ -499,7 +406,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ] * 2,
                 ("cuda", (10, 0)): [
                     "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
@@ -548,7 +455,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
                 ("cuda", (10, 0)): [

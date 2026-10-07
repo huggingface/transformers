@@ -155,9 +155,6 @@ class PI0ModelTester:
 @require_torch
 class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PI0ForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
     test_resize_embeddings = False
     test_all_params_have_gradient = False
     has_attentions = True
