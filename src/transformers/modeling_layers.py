@@ -112,7 +112,10 @@ class GradientCheckpointingLayer(nn.Module):
                 return self._gradient_checkpointing_func(checkpointed_forward, *args)
 
             # We still have gradients in the module so we need to let it be seen by autograd BUT not actually used by the layer
-            if (active_gradient := next((param for param in self.parameters() if param.requires_grad), None)) is not None:
+            if (
+                active_gradient := next((param for param in self.parameters() if param.requires_grad), None)
+            ) is not None:
+
                 def checkpointed_forward_with_gradient(*inputs):
                     return checkpointed_forward(*inputs[:-1])
 
