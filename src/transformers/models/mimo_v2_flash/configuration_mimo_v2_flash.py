@@ -92,6 +92,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 2048
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     n_routed_experts: int = 256
     routed_scaling_factor: float | None = 1.0
     n_group: int = 1

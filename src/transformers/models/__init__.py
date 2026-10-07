@@ -136,6 +136,7 @@ if TYPE_CHECKING:
     from .efficientloftr import *
     from .efficientnet import *
     from .electra import *
+    from .embedding_gemma2 import *
     from .emu3 import *
     from .encodec import *
     from .encoder_decoder import *
@@ -212,6 +213,7 @@ if TYPE_CHECKING:
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
+    from .gte import *
     from .helium import *
     from .herbert import *
     from .hgnet_v2 import *

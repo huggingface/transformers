@@ -25,7 +25,6 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -149,8 +148,7 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
 class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
     inv_freq: Tensor
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: EomtDinov3Config, device=None):
+    def __init__(self, config: EomtDinov3Config):
         nn.Module.__init__(self)
         self.config = config
 
@@ -158,14 +156,13 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: EomtDinov3Config, device=None, **kwargs) -> torch.Tensor:
+    def compute_default_rope_parameters(config: EomtDinov3Config, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -181,7 +178,7 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32)
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 class EomtDinov3Loss(EomtLoss):

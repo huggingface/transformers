@@ -44,7 +44,7 @@ The following example fine-tunes BERT on CoNLL-2003:
 ```bash
 python run_ner.py \
   --model_name_or_path google-bert/bert-base-uncased \
-  --dataset_name eriktks/conll2003 \
+  --dataset_name tomaarsen/conll2003 \
   --output_dir /tmp/test-ner \
   --do_train \
   --do_eval
@@ -99,7 +99,7 @@ export TASK_NAME=ner
 
 python run_ner_no_trainer.py \
   --model_name_or_path google-bert/bert-base-cased \
-  --dataset_name eriktks/conll2003 \
+  --dataset_name tomaarsen/conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \
   --per_device_train_batch_size 32 \
@@ -127,7 +127,7 @@ export TASK_NAME=ner
 
 accelerate launch run_ner_no_trainer.py \
   --model_name_or_path google-bert/bert-base-cased \
-  --dataset_name eriktks/conll2003 \
+  --dataset_name tomaarsen/conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \
   --per_device_train_batch_size 32 \

@@ -275,6 +275,15 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    image_like_kwargs = {
+        "description": """
+    Developer flag for additional image like inputs that will also be preprocessed. Only use this if
+    passing the inputs as kwarg doesn't work. For example, `preprocess(images, masks=masks)` is the
+    preferred option but results in argument priority issues for some models. In those cases
+    `preprocess(images, image_like_inputs={"masks": masks})` can be used instead.
+    """
+    }
+
     # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
     __kwargs__ = {
         "description": """
@@ -3092,8 +3101,9 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        if isinstance(value, dict) and placeholder == "image_processor_class":
+        if isinstance(value, dict) and placeholder in ["image_processor_class", "video_processor_class"]:
             value = value.get("torchvision", value.get("pil", None))
+            value = value or placeholder
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring

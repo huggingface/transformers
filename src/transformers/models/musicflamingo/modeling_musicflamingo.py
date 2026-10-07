@@ -35,7 +35,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_musicflamingo import MusicFlamingoConfig
 
@@ -53,8 +52,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
     timestamps in seconds.
     """
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MusicFlamingoConfig, device=None):
+    def __init__(self, config: MusicFlamingoConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -65,7 +63,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
@@ -73,7 +71,6 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         self.position_angles = nn.Buffer(position_angles, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: MusicFlamingoConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

@@ -1,8 +1,10 @@
 name: Self-hosted runner (AMD scheduled CI caller)
 
 on:
-  schedule:
-    - cron: "17 5 * * *"
+  # schedule:
+  #   - cron: "17 5 * * *"
+  # Temporarily disabled to observe a single end-to-end run without overlap.
+  workflow_dispatch:
 
 
 permissions: {}
