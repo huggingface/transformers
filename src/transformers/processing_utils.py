@@ -2103,18 +2103,15 @@ class ProcessorMixin(PushToHubMixin):
 
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
         audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
-        sampling_rate = kwargs.get(
-            "sampling_rate", processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
-        )
+        sampling_rate = processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
         if sampling_rate is None:
             if hasattr(self._audio_processor, "sampling_rate"):
                 sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
-        load_audio_backend = kwargs.get(
-            "load_audio_backend",
-            processor_kwargs.get("load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")),
+        load_audio_backend = processor_kwargs.get(
+            "load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")
         )
         if load_audio_backend is None:
             default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
@@ -2187,9 +2184,13 @@ class ProcessorMixin(PushToHubMixin):
                             )
                     else:
                         for fname in video_fnames:
-                            # This updates the template in-place and adds audio entry
-                            # to ensure `audio` token is added by jinja
-                            message["content"].append({"type": "audio"})
+                            # This updates the template in-place and adds audio entry to ensure `audio` token is added by jinja
+                            if {"type": "audio"} not in message["content"]:
+                                message["content"].append({"type": "audio"})
+                                logger.warning(
+                                    "When setting `load_audio_from_video=True` you must add an empty `audio` entry in the conversation. "
+                                    "From v5.25 the entry will NOT be added automatically during when calling `processor.apply_chat_template()`"
+                                )
                             batch_audios.append(
                                 load_audio(fname, sampling_rate=sampling_rate, backend=load_audio_backend)
                             )
