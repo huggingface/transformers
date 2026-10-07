@@ -113,7 +113,16 @@ class HeliumPreTrainedModel(LlamaPreTrainedModel):
 
 
 class HeliumModel(HeliumPreTrainedModel, LlamaModel):
-    pass
+    def __init__(self, config: HeliumConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [HeliumDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 class HeliumForCausalLM(GemmaForCausalLM):
