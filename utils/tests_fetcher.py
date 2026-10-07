@@ -55,12 +55,9 @@ import json
 import os
 import re
 from contextlib import contextmanager
-from functools import cache
 from pathlib import Path
 
 from git import Repo
-
-from transformers.models.auto.configuration_auto import CONFIG_MAPPING, model_type_to_module_name
 
 
 # List here the models not to be filtered by `filter_tests`.
@@ -563,46 +560,6 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-@cache
-def _get_backbone_map() -> dict[str, frozenset[str]]:
-    """
-    {composite_model_dir: {backbone_model_dir, ...}} built from `sub_configs_defaults[...].model_type`.
-    Cached: the config imports are the expensive part, so do them at most once per process.
-    """
-
-    mapping = {}
-    for model_type in CONFIG_MAPPING:
-        parent = model_type_to_module_name(model_type)
-        config_cls = CONFIG_MAPPING[model_type]  # imports only this config module
-        specs = getattr(config_cls, "sub_configs_defaults", None) or {}
-        children = {
-            model_type_to_module_name(spec.model_type) for spec in specs.values() if getattr(spec, "model_type", None)
-        }
-        children.discard(parent)
-        if children:
-            mapping[parent] = frozenset(children)
-    return mapping
-
-
-def create_backbone_edges() -> list[tuple[str, str]]:
-    models_dir = "src/transformers/models"
-    edges = []
-    for parent, children in _get_backbone_map().items():
-        targets = [
-            f"{models_dir}/{parent}/{kind}_{parent}.py"
-            for kind in ("configuration", "modeling")  # processor changes don't
-            if (PATH_TO_REPO / f"{models_dir}/{parent}/{kind}_{parent}.py").is_file()
-        ]
-        for child in children:
-            deps = [
-                f"{models_dir}/{child}/{kind}_{child}.py"
-                for kind in ("configuration", "modeling")  # processor changes don't
-                if (PATH_TO_REPO / f"{models_dir}/{child}/{kind}_{child}.py").is_file()
-            ]
-            edges.extend((dep, target) for dep in deps for target in targets)
-    return edges
-
-
 def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
     """
     Get the imports a given module makes.
@@ -778,7 +735,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
-    edges += create_backbone_edges()
+
     return list(set(edges))
 
 
@@ -927,22 +884,6 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
         deps = sum((reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")), direct_deps)
         reverse_map[m] = list(set(deps) - {m})
 
-    # Each key is a multimodal model name mapped to a set of its subconfigs (e.g. `llava: set(llama, clip)`)
-    # We have to reverse the mapping so that a modification on `clip` triggers a test of `llava`
-    for parent_model, children_models in _get_backbone_map().items():
-        for kind in ("configuration", "modeling"):
-            for child_model in children_models:
-                if (PATH_TO_REPO / f"src/transformers/models/{child_model}/{kind}_{child_model}.py").is_file():
-                    key = f"src/transformers/models/{child_model}/{kind}_{child_model}.py"
-                    reverse_map.setdefault(key, [])
-                    deps = [
-                        f"src/transformers/models/{parent_model}/{kind}_{parent_model}.py"
-                        for kind in ("configuration", "modeling")  # processor changes don't
-                        if (
-                            PATH_TO_REPO / f"src/transformers/models/{parent_model}/{kind}_{parent_model}.py"
-                        ).is_file()
-                    ]
-                    reverse_map[key].extend(deps)
     return reverse_map
 
 
