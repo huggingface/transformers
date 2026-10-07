@@ -649,7 +649,7 @@ def _quantize_converted(ov_model: openvino.Model, config: OpenVINOConfig, sample
     """Run the `nncf_quantizer` on the converted model, with an `nncf.Dataset` of its inputs."""
     import nncf
 
-    samples = list(config.calibration_dataset or [sample_inputs])
+    samples = config.calibration_dataset or [sample_inputs]
     dataset = nncf.Dataset(samples, lambda sample: _openvino_feed(ov_model, sample))
     return config.nncf_quantizer(ov_model, dataset)
 

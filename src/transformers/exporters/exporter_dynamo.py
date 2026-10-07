@@ -141,20 +141,12 @@ class DynamoExporter(HfExporter):
         sample_inputs: MutableMapping[str, Any],
         dynamic_shapes: Any,
     ) -> ExportedProgram:
-        """Post-training quantize the exported graph with PT2E, then re-export it.
-
-        The standard PT2E flow, the same for every model: `prepare_pt2e` inserts observers,
-        `config.calibration_dataset` (forward-kwarg dicts) drives their statistics, and `convert_pt2e` folds
-        them into `quantize`/`dequantize` ops. The only backend-specific input is `config.pt2e_quantizer`: the ops it
-        injects are the target backend's to support or not — ExecuTorch has no kernels for the per-channel
-        ones `X86InductorQuantizer` inserts, for instance. `convert_pt2e` returns a `GraphModule`, so the converted graph is
-        re-exported, with the same inputs and dynamic-shape spec, back into an `ExportedProgram`.
-        """
+        """Quantize the exported graph with PT2E (`prepare_pt2e` → calibrate → `convert_pt2e`) and re-export the
+        resulting `GraphModule` with the same inputs and dynamic shapes."""
         from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
 
         prepared = prepare_pt2e(exported_program.module(), config.pt2e_quantizer)
 
-        # default to a single calibration pass on the export's own sample inputs
         calibration_dataset = config.calibration_dataset
         if not calibration_dataset:
             logger.warning_once(
@@ -164,11 +156,9 @@ class DynamoExporter(HfExporter):
             )
             calibration_dataset = [sample_inputs]
 
-        forward_keys = set(sample_inputs)  # traced forward signature (output flags already stripped)
+        forward_keys = set(sample_inputs)
         for sample in calibration_dataset:
-            # keep only the traced forward kwargs (drop any captured generation flags), and deep-copy:
-            # a calibration forward writes the cache in place, so this stops it from mutating the
-            # caller's tensors — or `sample_inputs`, which the re-export below reuses
+            # Deep-copied: a calibration forward writes the cache in place, and the re-export reuses `sample_inputs`.
             inputs = {name: copy.deepcopy(value) for name, value in sample.items() if name in forward_keys}
             prepared(**inputs)
 

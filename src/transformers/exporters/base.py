@@ -169,13 +169,10 @@ class HfExporter(ABC):
                 classic single-token step (see [`~exporters.utils.decompose_for_generation`]). Only
                 stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
-        Quantization calibration: when a single `config` is passed (not a per-component dict) and it
-        carries a quantizer, its `calibration_dataset` is read as **generate** kwarg dicts (same level
-        as `sample_inputs` here) and fanned out — each sample is run through the decomposition to produce
-        a per-component calibration set that replaces each component's `config.calibration_dataset`
-        (per-graph forward kwargs). Leave it `None` to fall back to a single pass on each component's own
-        sample inputs (see [`DynamoConfig.calibration_dataset`]). A per-component `config` dict is left
-        untouched — set each component's `calibration_dataset` to its own forward kwargs directly.
+        Quantization calibration: a single `config`'s `calibration_dataset` holds **generate** kwarg dicts (like
+        `sample_inputs`), which are run through the decomposition to give each component its own calibration set.
+        A per-component `config` dict is used as is, each `calibration_dataset` holding that component's forward
+        kwargs.
 
         Returns:
             `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
@@ -190,6 +187,7 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
         )
 
+        calibration = {}
         if isinstance(config, dict):
             missing = set(components) - set(config)
             if missing:
@@ -198,12 +196,8 @@ class HfExporter(ABC):
                     f"Expected one entry per component: {sorted(components)}."
                 )
             configs = config
-            calibration = {}
         else:
             configs = dict.fromkeys(components, config)
-            # a single config's `calibration_dataset` is generate-level here: fan it out into a
-            # per-component (forward-level) calibration set via the decomposition capture
-            calibration = {}
             if config.calibration_dataset:
                 calibration = capture_calibration_inputs(
                     model,

@@ -45,7 +45,7 @@ import functools
 import operator
 import os
 import tempfile
-from collections.abc import MutableMapping, Sequence
+from collections.abc import Iterable, MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -1156,13 +1156,8 @@ def _quantized_decomposed_dequantize_per_channel(
     dtype: int,
     out_dtype: int = -1,
 ):
-    """ONNX translation for `quantized_decomposed.dequantize_per_channel`.
-
-    onnxscript's torchlib registers only the per-*tensor* `quantized_decomposed` ops, so a PT2E graph
-    with per-channel weights (e.g. `X86InductorQuantizer`) has no ONNX function for the per-channel
-    dequant and fails to translate. ONNX `DequantizeLinear` handles it natively via `axis` (1-D
-    scale/zero-point along the channel axis); the zero-point must share the input's integer dtype.
-    """
+    """`quantized_decomposed.dequantize_per_channel` as `DequantizeLinear` along `axis`; torchlib only translates the
+    per-tensor variants. The zero-point must share the input's integer dtype."""
     if zero_points is not None:
         zero_points = op.CastLike(zero_points, input)
         return op.DequantizeLinear(input, scales, zero_points, axis=axis)
@@ -1184,10 +1179,7 @@ if is_onnxscript_available():
         }
     )
 
-    # The `quantized_decomposed` ops (torch's built-in decomposed-quant lib, not `torchao`) are only
-    # registered once that lib is imported; import it so the per-channel dequant overload resolves as a
-    # table key (onnxscript covers only the per-tensor variants). The entry is inert unless a
-    # quantized graph actually contains the op, so it costs nothing when quantization is unused.
+    # Registers the `quantized_decomposed` ops, so the per-channel dequant resolves as a table key.
     import torch.ao.quantization.fx._decomposed  # noqa: F401
 
     _ONNX_TRANSLATION_TABLE[torch.ops.quantized_decomposed.dequantize_per_channel.default] = (
@@ -1253,7 +1245,7 @@ class OnnxRuntimeQuantizer:
         self.dynamic = dynamic
         self.kwargs = kwargs
 
-    def __call__(self, model: onnx.ModelProto, dataset: list[dict[str, np.ndarray]]) -> onnx.ModelProto:
+    def __call__(self, model: onnx.ModelProto, dataset: Iterable[dict[str, np.ndarray]]) -> onnx.ModelProto:
         import onnx
         from onnxruntime.quantization import CalibrationDataReader, quantize_dynamic, quantize_static
 
@@ -1266,12 +1258,9 @@ class OnnxRuntimeQuantizer:
 
         # Dynamic mode transposes `Gemm` weights in place, which contradicts the exporter's `value_info` for them.
         initializers = {initializer.name for initializer in model.graph.initializer}
-        model_copy = onnx.ModelProto()
-        model_copy.CopyFrom(model)
-        value_info = [info for info in model_copy.graph.value_info if info.name not in initializers]
-        del model_copy.graph.value_info[:]
-        model_copy.graph.value_info.extend(value_info)
-        model = model_copy
+        value_info = [info for info in model.graph.value_info if info.name not in initializers]
+        del model.graph.value_info[:]
+        model.graph.value_info.extend(value_info)
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "model.onnx")
@@ -1289,7 +1278,7 @@ def _quantize_converted(onnx_program: ONNXProgram, config: OnnxConfig, sample_in
     model = onnx_program.model_proto
     names = [graph_input.name for graph_input in model.graph.input]
     samples = config.calibration_dataset or [sample_inputs]
-    dataset = [_onnx_feed(names, sample) for sample in samples]
+    dataset = (_onnx_feed(names, sample) for sample in samples)
     onnx_program.model = onnx_ir.from_proto(config.onnxruntime_quantizer(model, dataset))
 
 

@@ -13,25 +13,11 @@
 # limitations under the License.
 """Post-training quantization export tests.
 
-PT2E quantization is a backend-agnostic recipe living in the shared Dynamo layer: pass a `pt2e_quantizer` (any
-PT2E `Quantizer` — `X86InductorQuantizer`, `XNNPACKQuantizer`, …) on the export config and the graph is quantized
-(`prepare_pt2e` → calibrate → `convert_pt2e`) before it's returned/lowered — no hardcoded schemes. The tests cover:
-
-- **`test_quantized_{dynamo,onnx,openvino,executorch}`** — one per exporter backend (so each carries the right CI
-  marker), each over the architecture families (dense / MoE / SSM) with the quantizer(s) natural to that
-  backend: dynamo/onnx use the torchao-native `x86` quantizer (graph-level QDQ, no executorch dep); the onnx and
-  openvino backends also take their toolchain's own quantizer run on the converted model (`onnxruntime_quantizer`,
-  `nncf_quantizer` — `nncf.quantize`, `nncf.compress_weights`); the executorch backend uses the per-tensor `xnnpack` quantizer it can
-  delegate (per-channel x86 has no delegated out variant). One structural check per cell — the artifact exports
-  and carries the quant ops (dynamo `quantize`/`dequantize`, ONNX QDQ that loads in ORT, int8 `.pte`) — driven
-  entirely by the config's quantizer, no per-case code.
-- **`test_vlm_per_component_quantization`** — a VLM quantized component-by-component, each with its OWN
-  recipe (`language_model` static int8, `decode` dynamic int8, `lm_head` fp32) via a per-component config dict.
-- **calibration** — the generate-level `calibration_dataset` captured into a separate set per component and
-  handed to each component's export, and the single-sample fallback (with a warning) when it's omitted.
-
-Quantization runs on the decomposed generation components (whose attention mask is a precomputed input),
-avoiding the in-graph mask construction that trips PT2E on a full-model forward.
+Each backend quantizes every architecture family (dense / MoE / SSM) with the quantizers it supports: a
+`pt2e_quantizer` on the traced graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch), and the converted
+model's own toolchain on ONNX (`onnxruntime_quantizer`) and OpenVINO (`nncf_quantizer`). Calibration and
+per-component recipes go through `export_for_generation`, whose components take the attention mask as an input
+(PT2E's retrace trips on in-graph mask construction).
 """
 
 import copy
@@ -191,15 +177,8 @@ class QuantizationExportTest(unittest.TestCase):
         )["decode"]
 
     def _quantizer(self, name, dynamic=False):
-        """Build the PT2E quantizer named `name`:
-
-        - `x86`: torchao-native (no ExecuTorch dependency), static per-channel int8 — or, with
-          `dynamic=True`, dynamic int8 (runtime-quantized activations + int8 weights), the lighter recipe
-          typical for decoders (a true weight-only PT2E quantizer isn't available in torchao/executorch).
-        - `xnnpack`: per-tensor quantizer for the XNNPACK ExecuTorch backend.
-
-        `dynamic` applies to `x86` only; `xnnpack` is static per-tensor.
-        """
+        """The PT2E quantizer named `name`: `x86` (torchao, static per-channel int8, or dynamic int8 with `dynamic`)
+        or `xnnpack` (static per-tensor, for ExecuTorch)."""
         if name == "x86":
             from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
                 X86InductorQuantizer,
@@ -270,10 +249,8 @@ class QuantizationExportTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @disable_hub_kernels
     def test_calibration_dataset_captured_per_component(self):
-        """One generate-level `calibration_dataset` becomes a separate calibration set for each generation
-        component: running it through `generate` captures every component's real inputs, so each calibrates
-        on its own activations. A multi-token decode graph serves the prefill step too, so its set also
-        carries each sample's prefill inputs — one graph, encodings covering both distributions."""
+        """A generate-level `calibration_dataset` becomes one calibration set per component; a multi-token decode
+        graph also serves prefill, so its set carries each sample's prefill inputs too."""
         model = self._tiny_model()
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
@@ -314,10 +291,7 @@ class QuantizationExportTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @disable_hub_kernels
     def test_quantized_dynamo(self, family):
-        """Every architecture family quantizes to a quantized FX graph on the Dynamo backend, via the
-        torchao-native x86 quantizer (the natural graph-level PT2E quantizer, no executorch dependency) —
-        the same `pt2e_quantizer` mechanism, no per-case code. The family unit is the module carrying
-        that family's distinct ops (dense/MoE `decode` component, SSM full forward). Static export."""
+        """Every family's graph gains PT2E quantize ops with the x86 quantizer."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         model, inputs = self._quantization_target(family)
@@ -357,8 +331,7 @@ class QuantizationExportTest(unittest.TestCase):
     @pytest.mark.onnx_export_test
     @disable_hub_kernels
     def test_quantized_onnx(self, family):
-        """The same x86-quantizer recipe, lowered to ONNX: every family produces a QDQ graph
-        (QuantizeLinear nodes) that runs in ONNX Runtime. Static export throughout."""
+        """The x86 quantizer lowered to ONNX: every family gets a QDQ graph that runs in ONNX Runtime."""
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         model, inputs = self._quantization_target(family)
@@ -368,8 +341,7 @@ class QuantizationExportTest(unittest.TestCase):
             OnnxConfig(dynamic=False, external_data=False, **self._quantization("x86", inputs)),
         )
         self.assertTrue(_has_onnx_quantize_ops(program))
-        # the QDQ graph must run in ONNX Runtime, not just parse — quantization error rules out an
-        # eager-parity check, so assert it executes to finite outputs
+        # quantization error rules out an eager-parity check, so check it runs to finite outputs
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
@@ -404,22 +376,23 @@ class QuantizationExportTest(unittest.TestCase):
 
     # ─────────────────────────────── OpenVINO ───────────────────────────────
 
-    def _assert_openvino_quantized_model_runs(self, ov_model, model, inputs, int8_matmuls=True):
+    def _assert_openvino_quantized_model_runs(self, ov_model, model, inputs):
         """The quantized OpenVINO model runs to finite logits, close to the fp32 model's.
 
-        With `int8_matmuls`, accuracy needs a CPU with VNNI: without it (AVX2-only Intel, AMD Zen 2 and older) OV's
-        int8 matmuls saturate their int16 accumulators, so the values depend on the machine and only finiteness is
-        checked.
+        With quantized activations (`FakeQuantize` nodes) the matmuls run in int8, whose accuracy needs a CPU with
+        VNNI: without it (AVX2-only Intel, AMD Zen 2 and older) their int16 accumulators saturate, so only finiteness
+        is checked.
         """
         outputs = _run_openvino_model(ov_model, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
-        if int8_matmuls and not torch.cpu._is_vnni_supported():
-            self.skipTest("int8 accuracy needs a CPU with VNNI; without it OV's int8 matmuls saturate")
+        int8_activations = _openvino_op_counts(ov_model)[0] > 0
+        if int8_activations and not torch.cpu._is_vnni_supported():
+            return
         with torch.no_grad():
             expected = model(**copy.deepcopy(inputs)).logits
-        # Quantization moves the logits, so the bar is relative to their scale rather than exact.
-        tolerance = 0.1 * expected.abs().max().item()
+        # Relative to the logits' scale: weight-only int8 stays within ~2% on these models, int8 activations ~10%.
+        tolerance = (0.1 if int8_activations else 0.05) * expected.abs().max().item()
         torch.testing.assert_close(outputs["logits"].to(expected.dtype), expected, atol=tolerance, rtol=0)
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
@@ -471,7 +444,7 @@ class QuantizationExportTest(unittest.TestCase):
         fake_quantize, low_precision = _openvino_op_counts(ov_model)
         self.assertEqual(fake_quantize, 0)
         self.assertGreater(low_precision, 0)
-        self._assert_openvino_quantized_model_runs(ov_model, model, inputs, int8_matmuls=False)
+        self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_openvino
@@ -521,8 +494,4 @@ class QuantizationExportTest(unittest.TestCase):
             )
         self.assertIsNotNone(program)
         self.assertTrue(_has_quantize_ops(quantized[0]))
-        # Export + lowering is the check here, not runtime execution. The quantized `.pte` runs fine
-        # standalone, but executing it in-process aborts (native SIGABRT) when the pytest-rerunfailures
-        # plugin's background socket-server thread is live — which it is in this suite's config — so
-        # running it here would take down the whole worker. `test_export` sidesteps this by never
-        # executing a quantized program.
+        # Not executed: running a quantized `.pte` in-process SIGABRTs under the pytest-rerunfailures plugin thread.

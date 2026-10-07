@@ -824,9 +824,10 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 ## Quantization
 
 Every export config accepts a `pt2e_quantizer`. Set it to any PT2E
-[`Quantizer`](https://docs.pytorch.org/ao/main/pt2e_quantization/index.html) and the exporter runs post-training quantization on the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) before the program
-is returned or lowered. Quantization happens on the graph rather than the modeling code, so a `pt2e_quantizer` works
-across every architecture without per-model handling.
+[`Quantizer`](https://docs.pytorch.org/ao/main/pt2e_quantization/index.html) and the exporter runs post-training
+quantization on the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) before the program is returned or
+lowered. Quantization happens on the graph rather than the modeling code, so a `pt2e_quantizer` works across every
+architecture without per-model handling.
 
 Quantize through [`~HfExporter.export_for_generation`], which exports the decomposed generation components. Their attention mask is a precomputed graph input, which keeps PT2E away from the in-graph mask construction that trips its `make_fx` retrace on a full model forward.
 
@@ -839,11 +840,12 @@ from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
 )
 
 model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B").eval()
-inputs = ...  # forward kwargs
+inputs = ...  # generate kwargs (`input_ids`, `attention_mask`)
 
 quantizer = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
 config = DynamoConfig(dynamic=True, pt2e_quantizer=quantizer, calibration_dataset=[inputs])
-exported = DynamoExporter().export(model, inputs, config)  # quantize/dequantize ops folded into the graph
+# quantize/dequantize ops folded into each component's graph
+components = DynamoExporter().export_for_generation(model, inputs, config)
 ```
 
 ### Choosing a quantizer
@@ -876,7 +878,8 @@ onnx_program = OnnxExporter().export(model, inputs, config)
 ```
 
 Any callable `onnxruntime_quantizer(model_proto, feeds)` works the same way: it receives the converted `onnx.ModelProto`
-and a list of input feeds (built from `calibration_dataset`, else the sample inputs), and returns the quantized model.
+and an iterable of input feeds, built one at a time from `calibration_dataset` (else the sample inputs), and returns
+the quantized model.
 
 ### OpenVINO
 
@@ -936,10 +939,6 @@ components = DynamoExporter().export_for_generation(model, inputs, config, multi
 The dict must name every component [`~exporters.utils.decompose_for_generation`] produces; a component
 whose config sets no quantizer is left in full precision, and each `calibration_dataset` in the dict holds that
 component's own forward kwargs.
-
-> [!NOTE]
-> Quantization always runs on these decomposed components, whose attention mask is a precomputed input.
-> That keeps PT2E away from in-graph mask construction, which otherwise trips its `make_fx` retrace.
 
 ## Limitations and workarounds
 

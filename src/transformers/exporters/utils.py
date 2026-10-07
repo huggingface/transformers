@@ -965,15 +965,8 @@ def capture_calibration_inputs(
     generation_config: Any = None,
     multi_token_decode: bool = False,
 ) -> dict[str, list[dict]]:
-    """Capture per-component forward inputs for post-training quantization calibration.
-
-    Reuses `decompose_for_generation`'s capture: each generate-style sample in `calibration_dataset` is
-    run through the decomposition, and every component's forward kwargs are collected. Returns
-    `{component_name: [forward_inputs, ...]}` — one list per component (same keys
-    `decompose_for_generation` produces), which the exporter feeds to that component's quantization
-    calibration. This is the input/output-capture "trick" applied to calibration: the user provides one
-    generate-level dataset, and each single-graph component gets its own inferred calibration set.
-    """
+    """Run each generate-style sample through `decompose_for_generation` and collect every component's forward
+    kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component."""
     calibration: dict[str, list[dict]] = {}
     for sample in calibration_dataset:
         components = decompose_for_generation(
@@ -981,10 +974,7 @@ def capture_calibration_inputs(
         )
         for name, (_submodel, forward_inputs) in components.items():
             calibration.setdefault(name, []).append(forward_inputs)
-        # A multi-token decode graph serves the prefill step too, so its quantization encodings must cover
-        # both distributions — calibrated on decode steps alone, the KV-cache values it writes at prefill
-        # would be quantized under encodings observed only on single-token steps. Feed it the prefill
-        # capture as one more calibration sample (the same forward, so the same kwarg schema).
+        # A multi-token decode graph also serves the prefill step, so it calibrates on the prefill inputs too.
         if multi_token_decode and "prefill" in components and "decode" in components:
             calibration["decode"].append(components["prefill"][1])
     return calibration
