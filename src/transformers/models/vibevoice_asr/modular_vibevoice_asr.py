@@ -455,19 +455,12 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         )
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
-        input_values = kwargs.pop("input_values", None)
-        padding_mask = kwargs.pop("padding_mask", None)
         acoustic_tokenizer_chunk_size = kwargs.pop("acoustic_tokenizer_chunk_size", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, is_first_iteration=is_first_iteration, **kwargs)
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            if input_values is not None:
-                model_inputs["input_values"] = input_values
-            if padding_mask is not None:
-                model_inputs["padding_mask"] = padding_mask
-            if acoustic_tokenizer_chunk_size is not None:
-                model_inputs["acoustic_tokenizer_chunk_size"] = acoustic_tokenizer_chunk_size
+        if (is_first_iteration or not kwargs.get("use_cache", True)) and acoustic_tokenizer_chunk_size is not None:
+            model_inputs["acoustic_tokenizer_chunk_size"] = acoustic_tokenizer_chunk_size
 
         return model_inputs
 

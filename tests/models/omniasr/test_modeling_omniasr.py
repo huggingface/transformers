@@ -62,7 +62,7 @@ class OmniASRModelTester(ALMModelTester):
 
     def create_audio_features(self):
         # OmniASR is fed the raw waveform, not mel features.
-        return floats_tensor([self.batch_size, self.feat_seq_length])
+        return floats_tensor([self.batch_size, 1, self.feat_seq_length])
 
     def get_audio_feature_key(self):
         return "input_values"

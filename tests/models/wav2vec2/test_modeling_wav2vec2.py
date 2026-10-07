@@ -738,6 +738,20 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_xvector_training(*config_and_inputs)
 
+    def test_gradient_checkpointing_use_reentrant_true_feature_encoder_grads(self):
+        # The common gradient checkpointing tests are skipped (`is_training=False`), so check here that the
+        # checkpointed conv layers, which directly consume the raw audio, receive gradients with `use_reentrant=True`
+        config, input_values, _ = self.model_tester.prepare_config_and_inputs()
+        model = Wav2Vec2ForSequenceClassification(config).to(torch_device).train()
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
+
+        labels = torch.zeros(input_values.shape[0], dtype=torch.long, device=torch_device)
+        model(input_values, labels=labels).loss.backward()
+
+        conv_grad = model.wav2vec2.feature_extractor.conv_layers[0].conv.weight.grad
+        self.assertIsNotNone(conv_grad)
+        self.assertGreater(conv_grad.abs().sum().item(), 0)
+
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)

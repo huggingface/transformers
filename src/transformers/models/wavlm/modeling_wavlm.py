@@ -18,7 +18,7 @@ from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer, InputGradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -656,7 +656,7 @@ class WavLMNoLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class WavLMLayerNormConvLayer(GradientCheckpointingLayer):
+class WavLMLayerNormConvLayer(InputGradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -683,7 +683,7 @@ class WavLMLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class WavLMGroupNormConvLayer(GradientCheckpointingLayer):
+class WavLMGroupNormConvLayer(InputGradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -725,20 +725,13 @@ class WavLMFeatureEncoder(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
-        self._requires_grad = True
 
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
-        self._requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
-
-        # make sure hidden_states require grad for gradient_checkpointing
-        if self._requires_grad and self.training:
-            hidden_states.requires_grad = True
-
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
 

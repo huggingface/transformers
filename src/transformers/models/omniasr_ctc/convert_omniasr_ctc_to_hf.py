@@ -78,7 +78,7 @@ def convert_omniasr_ctc_checkpoint(model_card, repo_id=None, bfloat16=False):
     state_dict = original_model.state_dict()
     print("Number of keys in original model :", len(state_dict))
     print("Number of keys in HF model       : ", len(hf_model.state_dict()))
-    key_mapping = {**get_encoder_key_mapping("model."), **CTC_KEY_MAPPING}
+    key_mapping = {**get_encoder_key_mapping("encoder."), **CTC_KEY_MAPPING}
     hf_model = load_state_dict(hf_model, convert_state_dict(state_dict, key_mapping))
     remove_weight_norm(hf_model)
 

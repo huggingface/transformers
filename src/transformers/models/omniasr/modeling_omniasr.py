@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer, InputGradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -237,7 +237,7 @@ class OmniASREncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class OmniASRLayerNormConvLayer(GradientCheckpointingLayer):
+class OmniASRLayerNormConvLayer(InputGradientCheckpointingLayer):
     def __init__(self, config, layer_id):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -275,13 +275,7 @@ class OmniASREncoderSubsamplingConv1D(nn.Module):
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
 
-    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
-        hidden_states = input_values[:, None]
-
-        # make sure hidden_states require grad for gradient_checkpointing (like Wav2Vec2FeatureEncoder)
-        if self.training:
-            hidden_states.requires_grad = True
-
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
@@ -465,7 +459,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
+        input_values (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
             Float values of the raw audio waveform, as produced by [`OmniASRFeatureExtractor`].
         padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
             Mask to avoid running the speech encoder over padding samples of `input_values`. Values selected in
@@ -574,7 +568,7 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
+        input_values (`torch.Tensor` of shape `(batch_size, 1, num_samples)`, *optional*):
             Float values of the raw audio waveform, scattered over the audio placeholders of `input_ids`. See
             [`OmniASRModel.forward`].
         padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):

@@ -110,6 +110,26 @@ class GradientCheckpointingLayer(nn.Module):
         return super().__call__(*args, **kwargs)
 
 
+class InputGradientCheckpointingLayer(GradientCheckpointingLayer):
+    """Gradient checkpointing layer that can directly consume model inputs, e.g. the conv layers of Wav2Vec2 on raw audio.
+
+    Needed for when `use_reentrant=True`: raw audio has no embedding layer in front of it (as for text models), so `hidden_states` is made to
+    require grad here.
+    """
+
+    def __call__(self, hidden_states, *args, **kwargs):
+        if (
+            self.gradient_checkpointing
+            and self.training
+            and not hidden_states.requires_grad
+            # skip frozen layers, e.g. after `freeze_feature_encoder()`
+            and any(param.requires_grad for param in self.parameters())
+        ):
+            # `detach` to not modify the caller's tensor in-place
+            hidden_states = hidden_states.detach().requires_grad_()
+        return super().__call__(hidden_states, *args, **kwargs)
+
+
 @auto_docstring
 class GenericForSequenceClassification:
     base_model_prefix = "model"

@@ -107,7 +107,7 @@ class OmniASRFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         encoded_list = feat_extract(list(audio_inputs[0]), sampling_rate=sampling_rate)
         encoded_np = feat_extract(np_audio_inputs[0], sampling_rate=sampling_rate)
         encoded_pt = feat_extract(torch_audio_inputs[0], sampling_rate=sampling_rate)
-        self.assertEqual(encoded_pt.input_values.shape, (1, len(audio_inputs[0])))
+        self.assertEqual(encoded_pt.input_values.shape, (1, 1, len(audio_inputs[0])))
         self.assertEqual(encoded_pt.input_values.dtype, torch.float32)
         torch.testing.assert_close(encoded_list.input_values, encoded_np.input_values, atol=TOL, rtol=TOL)
         torch.testing.assert_close(encoded_pt.input_values, encoded_np.input_values, atol=TOL, rtol=TOL)
@@ -115,9 +115,9 @@ class OmniASRFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # Batched, padded to the longest input
         encoded_np = feat_extract(list(np_audio_inputs), sampling_rate=sampling_rate)
         encoded_pt = feat_extract(list(torch_audio_inputs), sampling_rate=sampling_rate)
-        self.assertEqual(encoded_pt.input_values.shape, (3, len(audio_inputs[-1])))
+        self.assertEqual(encoded_pt.input_values.shape, (3, 1, len(audio_inputs[-1])))
         torch.testing.assert_close(encoded_pt.input_values, encoded_np.input_values, atol=TOL, rtol=TOL)
 
         # The mask marks the padding, so the model knows which frames are real
         self.assertListEqual(encoded_pt.padding_mask.sum(-1).tolist(), [len(x) for x in audio_inputs])
-        self.assertTrue(torch.all(encoded_pt.input_values[0, len(audio_inputs[0]) :] == 0.0))
+        self.assertTrue(torch.all(encoded_pt.input_values[0, 0, len(audio_inputs[0]) :] == 0.0))

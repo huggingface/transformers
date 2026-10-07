@@ -43,9 +43,8 @@ class OmniASRCTCForCTC(ParakeetForCTC):
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.encoder = AutoModel.from_config(config.audio_config)
         self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
-        del self.encoder
 
     # same as ParakeetForCTC but with `input_values` instead of `input_features` as we use audio values directly
     def forward(
@@ -80,7 +79,7 @@ class OmniASRCTCForCTC(ParakeetForCTC):
 
         if labels is not None:
             kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.audio_tower(
+        encoder_outputs = self.encoder(
             input_values=input_values,
             padding_mask=padding_mask,
             **kwargs,
@@ -93,24 +92,15 @@ class OmniASRCTCForCTC(ParakeetForCTC):
         if labels is not None:
             encoder_lengths = encoder_outputs.attention_mask.sum(-1)
 
-            # assuming that padded tokens are filled with -100 when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    encoder_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                logit_lengths=encoder_lengths,
+                blank_token_id=self.config.pad_token_id,
+                reduction=self.config.ctc_loss_reduction,
+                zero_infinity=self.config.ctc_zero_infinity,
+                **kwargs,
+            )
 
         return CausalLMOutput(
             loss=loss,

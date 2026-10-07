@@ -75,7 +75,7 @@ class OmniASRCTCForCTCModelTester:
         )
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_samples])
+        input_values = floats_tensor([self.batch_size, 1, self.num_samples])
         padding_mask = random_attention_mask([self.batch_size, self.num_samples])
         return self.get_config(), input_values, padding_mask
 

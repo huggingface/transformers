@@ -105,8 +105,8 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
+        self.encoder = AutoModel.from_config(config.audio_config)
         self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
-        self.model = AutoModel.from_config(config.audio_config)
 
         self.post_init()
 
@@ -144,7 +144,7 @@ class OmniASRCTCForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
 
         if labels is not None:
             kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.model(
+        encoder_outputs = self.encoder(
             input_values=input_values,
             padding_mask=padding_mask,
             **kwargs,
