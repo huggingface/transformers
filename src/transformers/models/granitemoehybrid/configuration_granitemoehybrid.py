@@ -53,6 +53,11 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     model_type = "granitemoehybrid"
     attribute_map = {"layers_block_type": "layer_types"}
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
     base_model_ep_plan = {
         "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
         "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",

@@ -85,6 +85,11 @@ class ZayaConfig(PreTrainedConfig):
     # Zaya-specific attention
     head_dim: int = 128
     attention_bias: bool = False
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     lm_head_bias: bool = False
     router_hidden_size: int = 256

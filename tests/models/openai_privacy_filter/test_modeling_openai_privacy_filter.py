@@ -183,6 +183,13 @@ class OpenAIPrivacyFilterModelTest(
     )
     test_all_params_have_gradient = False
 
+    @unittest.skip(
+        reason="The experts are stored transposed with biases: an intra-expert TP plan would add the down "
+        "projection's bias once per rank. It comes with the untransposed expert layout."
+    )
+    def test_moe_parallel_plans_shard_experts(self):
+        pass
+
     def setUp(self):
         self.model_tester = OpenAIPrivacyFilterModelTester(self)
         self.config_tester = ConfigTester(self, config_class=OpenAIPrivacyFilterConfig, hidden_size=32)

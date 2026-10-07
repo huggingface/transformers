@@ -564,15 +564,6 @@ class TensorParallelTesterMixin(ABC):
 
         self._skip_if_tp_distributed_not_enabled()
 
-        # # Skip encoder-decoder models (TP not supported)
-        # if getattr(self, "is_encoder_decoder", False):
-        #     self.skipTest("TP tests not supported for encoder-decoder models")
-
-        # # Skip VLM models for now
-        # config = self.model_tester.get_config()
-        # if hasattr(config, "vision_config") and config.vision_config is not None:
-        #     self.skipTest("VLM models are not yet supported in TP tests")
-
     def test_moe_parallel_plans_shard_experts(self):
         """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
         A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
@@ -581,22 +572,18 @@ class TensorParallelTesterMixin(ABC):
         if not moe_classes:
             self.skipTest("Not an MoE model")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        # a class-level `_tp_plan` (e.g. `lm_head` alone) is not a plan for the experts: only a base-model one is
-        has_tp_plan = config.base_model_tp_plan is not None or any(
-            getattr(getattr(config, key), "base_model_tp_plan", None) is not None for key in config.sub_configs
-        )
         for model_class in moe_classes:
             model = model_class(copy.deepcopy(config))
-            experts = {name for name, module in model.named_modules() if hasattr(module, "_is_expert_parallel")}
+            params = dict(model.named_parameters())  # a tied tensor once, under its first name
+            # an experts module (`@use_experts_implementation`) declares its layout: gated experts hold `gate_up_proj`
             expert_weights = [
-                name
-                for name, param in model.named_parameters()
-                if param.ndim == 3 and name.rpartition(".")[0] in experts
+                f"{name}.{projection}"
+                for name, module in model.named_modules()
+                if hasattr(module, "has_gate")
+                for projection in ("gate_up_proj" if module.has_gate else "up_proj", "down_proj")
+                if f"{name}.{projection}" in params
             ]
-            # an MoE whose experts implementation is switchable must ship an EP plan, a TP one is optional
-            self.assertTrue(model._ep_plan, f"{model_class.__name__} is an MoE model without an EP plan")
-            plans = {"EP": model._ep_plan, **({"TP": model._tp_plan} if has_tp_plan else {})}
-            for kind, plan in plans.items():
+            for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
                 unsharded = sorted(n for n in expert_weights if _get_parameter_plan(n, plan, is_weight=True) is None)
                 self.assertFalse(
                     unsharded, f"{model_class.__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
