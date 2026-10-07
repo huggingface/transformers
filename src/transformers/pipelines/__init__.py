@@ -294,6 +294,40 @@ SUPPORTED_TASKS = {
 
 PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
+REMOVED_TASKS = {
+    "text2text-generation": "Use the `text-generation` pipeline with a chat model instead.",
+    "summarization": "Use the `text-generation` pipeline with a chat model instead.",
+    "translation": "Use the `text-generation` pipeline with a chat model instead.",
+    "question-answering": "Use the `text-generation` pipeline with a chat model instead.",
+    "visual-question-answering": "Use the `image-text-to-text` pipeline with a vision-language chat model instead.",
+    "vqa": "Use the `image-text-to-text` pipeline with a vision-language chat model instead.",
+    "image-to-image": "For image generation tasks, please use 🤗 Diffusers instead.",
+}
+
+
+def _resolve_deprecated_task(task: str) -> str:
+    """
+    Redirects tasks listed in `DEPRECATED_TASKS` to their replacement and raises an explicit error for tasks listed
+    in `REMOVED_TASKS`.
+    """
+    if task == "image-to-text":
+        logger.warning_once(
+            f"The task `{task}` has been removed and has been replaced by `image-text-to-text`. The pipeline"
+            f" will be instantiated with the new task name.",
+            UserWarning,
+        )
+        return "image-text-to-text"
+
+    # Parametrized translation tasks such as "translation_en_to_fr" were removed along with "translation"
+    removed_task = "translation" if task.startswith("translation_") else task
+    if removed_task in REMOVED_TASKS:
+        raise KeyError(
+            f"The task {task} has been removed from transformers. {REMOVED_TASKS[removed_task]} See the migration"
+            f" guide for more details: https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md#pipelines"
+        )
+
+    return task
+
 
 def get_supported_tasks() -> list[str]:
     """
@@ -315,8 +349,7 @@ def get_task(model: str, token: str | None = None, **deprecated_kwargs) -> str:
         )
     if getattr(info, "library_name", "transformers") not in {"transformers", "timm"}:
         raise RuntimeError(f"This model is meant to be used with {info.library_name} not with transformers")
-    task = info.pipeline_tag
-    return task
+    return _resolve_deprecated_task(info.pipeline_tag)
 
 
 def check_task(task: str) -> tuple[str, dict, Any]:
@@ -355,7 +388,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
 
 
     """
-    return PIPELINE_REGISTRY.check_task(task)
+    return PIPELINE_REGISTRY.check_task(_resolve_deprecated_task(task))
 
 
 def clean_custom_task(task_info):
@@ -972,6 +1005,8 @@ def pipeline(
                 **hub_kwargs,
             )
     else:
+        # Resolve removed tasks here so that the pipeline and its components are built with the replacement task name
+        task = _resolve_deprecated_task(task)
         normalized_task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
             pipeline_class = targeted_task["impl"]

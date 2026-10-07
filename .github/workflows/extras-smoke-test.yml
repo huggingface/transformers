@@ -155,7 +155,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          python-version: '3.11'
+          python-version-file: .python-version
 
       - name: Download all failure reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -182,24 +182,26 @@ jobs:
 
       - name: Send Slack notification
         if: env.SLACK_MESSAGE != ''
-        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
-          channel-id: ${{ env.SLACK_CHANNEL_ID }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           payload: |
             {
+              "channel": ${{ toJSON(env.SLACK_CHANNEL_ID) }},
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ env.SLACK_TITLE }}"
+                    "text": ${{ toJSON(env.SLACK_TITLE) }}
                   }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "${{ env.SLACK_MESSAGE }}"
+                    "text": ${{ toJSON(env.SLACK_MESSAGE) }}
                   }
                 },
                 {
@@ -214,5 +216,3 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

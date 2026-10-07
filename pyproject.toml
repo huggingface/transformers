@@ -52,6 +52,10 @@ ignore = [
 extend-safe-fixes = [
     "UP006",  # Checks for the use of generics that can be replaced with standard library variants based on PEP 585.
 ]
+# Codes owned by other checkers, so ruff keeps `# noqa: <code>` for them instead of warning it is invalid.
+external = [
+    "NC",  # utils/check_noisy_comments.py
+]
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]

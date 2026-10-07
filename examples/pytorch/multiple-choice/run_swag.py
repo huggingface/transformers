@@ -240,7 +240,7 @@ def main():
     else:
         # Downloading and loading the swag dataset from the hub.
         raw_datasets = load_dataset(
-            "swag",
+            "allenai/swag",
             "regular",
             cache_dir=model_args.cache_dir,
             token=model_args.token,
@@ -421,6 +421,8 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+    trainer.end()
 
 
 def _mp_fn(index):

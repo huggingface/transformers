@@ -364,7 +364,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt")
@@ -392,7 +391,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(
@@ -422,7 +420,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(
@@ -458,7 +455,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs_batched = self.processor(

@@ -858,7 +858,10 @@ class RotaryEmbeddingConfigMixin:
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
-        for rope_parameters in rope_parameters_dict.values():
+        # Heterogeneous configs can't read `head_dim` globally, so the even-dim check is skipped for them
+        head_dim = None if self.is_heterogeneous else getattr(self, "head_dim", None)
+
+        for layer_type, rope_parameters in rope_parameters_dict.items():
             # skip when set to `None`, possibly a NoPE layer
             if rope_parameters is None:
                 continue
@@ -871,6 +874,20 @@ class RotaryEmbeddingConfigMixin:
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
+                )
+
+            # An odd partial rotary dim is rounded up and still fits in the head, but a fully-rotated odd head doesn't
+            # Synthetic test fixtures and Hub test checkpoints (e.g. tiny-llama) use head_dim <= 4 and are allowed
+            partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
+            if (
+                head_dim is not None
+                and head_dim > 4
+                and head_dim % 2
+                and int(head_dim * partial_rotary_factor) == head_dim
+            ):
+                raise ValueError(
+                    f"RoPE requires an even rotary dimension, but got `head_dim`={head_dim} with "
+                    f"`partial_rotary_factor`={partial_rotary_factor} for `{layer_type}`."
                 )
 
     def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):

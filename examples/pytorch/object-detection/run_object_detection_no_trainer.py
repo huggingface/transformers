@@ -249,7 +249,7 @@ def parse_args():
         "--dataset_name",
         type=str,
         help="Name of the dataset on the hub.",
-        default="cppe-5",
+        default="rishitdagli/cppe-5",
     )
     parser.add_argument(
         "--train_val_split",

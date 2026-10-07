@@ -37,56 +37,16 @@ if is_torch_available():
 
 
 class Lfm2VlImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        min_resolution=256,
-        max_resolution=1024,
-        downsample_factor=2,
-        do_image_splitting=False,
-        min_tiles=2,
-        max_tiles=10,
-        use_thumbnail=True,
-        min_image_tokens=64,
-        max_image_tokens=256,
-        encoder_patch_size=16,
-        tile_size=512,
-        max_pixels_tolerance=2.0,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.num_images = num_images
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 1)
+        kwargs.setdefault("min_resolution", 256)
+        kwargs.setdefault("max_resolution", 1024)
 
-        self.downsample_factor = downsample_factor
-        self.do_image_splitting = do_image_splitting
-        self.min_tiles = min_tiles
-        self.max_tiles = max_tiles
-        self.use_thumbnail = use_thumbnail
-        self.min_image_tokens = min_image_tokens
-        self.max_image_tokens = max_image_tokens
-        self.encoder_patch_size = encoder_patch_size
-        self.tile_size = tile_size
-        self.max_pixels_tolerance = max_pixels_tolerance
+        # Image processor init kwargs
+        kwargs.setdefault("do_image_splitting", False)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "downsample_factor": self.downsample_factor,
-            "do_image_splitting": self.do_image_splitting,
-            "min_tiles": self.min_tiles,
-            "max_tiles": self.max_tiles,
-            "use_thumbnail": self.use_thumbnail,
-            "min_image_tokens": self.min_image_tokens,
-            "max_image_tokens": self.max_image_tokens,
-            "encoder_patch_size": self.encoder_patch_size,
-            "tile_size": self.tile_size,
-            "max_pixels_tolerance": self.max_pixels_tolerance,
-        }
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -104,26 +64,7 @@ class Lfm2VlImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Lfm2VlImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "downsample_factor"))
-            self.assertTrue(hasattr(image_processing, "min_tiles"))
-            self.assertTrue(hasattr(image_processing, "max_tiles"))
-            self.assertTrue(hasattr(image_processing, "use_thumbnail"))
-            self.assertTrue(hasattr(image_processing, "min_image_tokens"))
-            self.assertTrue(hasattr(image_processing, "max_image_tokens"))
-            self.assertTrue(hasattr(image_processing, "encoder_patch_size"))
-            self.assertTrue(hasattr(image_processing, "tile_size"))
-            self.assertTrue(hasattr(image_processing, "max_pixels_tolerance"))
+    image_processor_tester_class = Lfm2VlImageProcessingTester
 
     @require_vision
     def test_smart_resize(self):
