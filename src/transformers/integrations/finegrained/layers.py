@@ -13,13 +13,14 @@
 # limitations under the License.
 """Quantized modules and forwards for the block-scaled formats — block-FP8, MXFP8, MXFP4, NVFP4
 and weight-only — served by `kernels-community/finegrained-kernels`. The checkpoint's layout is
-moved onto these modules by `finegrained_conversions`.
+moved onto these modules by the ops in `conversions`.
 """
 
 from __future__ import annotations
 
 import functools
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -27,6 +28,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
+from ...quantizers.quantizers_utils import FUSED_STACKS, STACK_COMPANIONS
 from ...utils import logging
 from ...utils.import_utils import is_kernels_available
 from ...utils.quantization_config import BlockFp8Config, BlockScaledConfig
@@ -115,7 +117,7 @@ _FINEGRAINED: FineGrained | None = None
 @torch._dynamo.allow_in_graph
 def _load_finegrained_kernel() -> None:
     """
-    Load the finegrained-fp8 Triton kernel once into the `_FINEGRAINED` module global.
+    Load the finegrained-kernels Triton kernel once into the `_FINEGRAINED` module global.
 
     `@allow_in_graph` makes `torch.compile` treat the untraceable hub download + dynamic import as a
     single opaque node instead of tracing into it; it returns `None` (proxyable) and populates the
@@ -133,7 +135,7 @@ def _load_finegrained_kernel() -> None:
         return
 
     if not is_kernels_available():
-        raise ImportError(f"finegrained-fp8 kernel unavailable: {_MISSING_KERNELS_MESSAGE}")
+        raise ImportError(f"finegrained-kernels kernel unavailable: {_MISSING_KERNELS_MESSAGE}")
 
     kernel = lazy_load_kernel("finegrained-kernels")
     if kernel is None:
@@ -253,6 +255,10 @@ def _alloc_expert_proj(
     )
 
 
+# the experts backends that read gate|up stacked and block scales affine
+_DEEPGEMM_EXPERTS_IMPLEMENTATIONS = ("deepgemm", "deepgemm_megamoe")
+
+
 def _holds_swizzled_scales(config, format_spec: WeightFormat, activation_format: str | None) -> bool:
     """Whether an experts module holds its block scales in the ``SWIZZLE_32_4_4`` layout the
     Blackwell tcgen05 scaled-MMA reads directly (row-major forces a per-tile gather). Needs SM100,
@@ -260,7 +266,7 @@ def _holds_swizzled_scales(config, format_spec: WeightFormat, activation_format:
     that quantizes activations. Block-FP8 reaches the scaled-MMA under UE8M0 by broadcasting one
     128-block scalar in-register, so it has no per-group grid to lay out."""
     return (
-        getattr(config, "_experts_implementation", None) not in ("deepgemm", "deepgemm_megamoe")
+        getattr(config, "_experts_implementation", None) not in _DEEPGEMM_EXPERTS_IMPLEMENTATIONS
         and format_spec.scale_group is not None
         and activation_format != "bf16"
         and is_sm100()
@@ -496,7 +502,7 @@ class FineGrainedEmbedding(nn.Embedding):
         self.quantization_config = quantization_config or BlockFp8Config(weight_block_size=None)
         self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False)
         # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with
-        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
+        self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
 
     @classmethod
     def from_module(
@@ -551,7 +557,8 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         input_shape = x.shape[:-2]
         hidden_dim = x.shape[-1]
 
-        w = self.weight.view(self.n_groups, -1, hidden_dim)
+        # the stored K, which packed FP4 halves
+        w = self.weight.view(self.n_groups, -1, self.weight.shape[-1])
         scale_inv = self.weight_scale_inv
         x = x.movedim(-2, 0).reshape(-1, hidden_dim)
         scale_inv = scale_inv.view(self.n_groups, scale_inv.size(0) // self.n_groups, scale_inv.size(1))
@@ -560,14 +567,16 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         # (E+1,) row boundaries — the kernels' expert_start schedule
         expert_start = torch.arange(0, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
+        two_level = self.weight_global_scale is not None
         kernel = load_finegrained_kernel()
         y = kernel.matmul_grouped(
             x,
             w,
-            None,
+            None if two_level else self.activation_scale,
             scale_inv,
             expert_start=expert_start,
             activation_format=self.activation_format,
+            a_global_scale=self.activation_scale if two_level else None,
             b_global_scale=self.weight_global_scale,
         )
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
@@ -576,8 +585,20 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         return y
 
 
+def _assert_interleaved_gate_up(module: nn.Module) -> None:
+    """The kernels' fused chains read gate|up interleaved. A module loaded for a DeepGEMM backend holds it
+    stacked; switched to a triton backend after load, the GLU would pair the wrong rows."""
+    if module.has_gate and not module.holds_interleaved_gate_up:
+        raise NotImplementedError(
+            "The triton experts backends need gate|up interleaved, but this module was loaded stacked for a "
+            "DeepGEMM backend. Switching backends after load is not supported — pass `experts_implementation=...` "
+            "to `from_pretrained` so the model loads for it."
+        )
+
+
 def finegrained_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     """Batched (decode) experts forward: one program per routed row."""
+    _assert_interleaved_gate_up(self)
     kernel = load_finegrained_kernel()
     return kernel.moe_fused_batched(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
@@ -585,6 +606,7 @@ def finegrained_batched_mm_experts_forward(self, hidden_states, top_k_index, top
 def finegrained_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     """Grouped (prefill) experts forward: one on-device routing pass, then the chain over the
     expert-sorted schedule, scattering back to routed rows (EP-sentinel rows skipped)."""
+    _assert_interleaved_gate_up(self)
     kernel = load_finegrained_kernel()
     return kernel.moe_fused_grouped(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
@@ -593,11 +615,15 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
     # the plan kinds an `_experts_implementation` needs in place of the impl-agnostic default
     # (megamoe wants no gradient-sync hooks and an EP `process_group`); extend when adding an impl
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
-        "deepgemm_megamoe": {"moe_tp_experts": "megamoe_experts", "ep_router": "megamoe_router"},
+        "deepgemm_megamoe": {
+            "moe_tp_experts": "megamoe_experts",
+            "ep_dispatch_experts": "megamoe_experts",
+            "ep_router": "megamoe_router",
+        },
     }
     # a projection's tensors, by the suffix they carry on the module: the weight, its scale grid, the NVFP4
     # weight global, the calibrated activation scale, a bias
-    _projection_slots = ("", "_scale_inv", "_weight_global_scale", "_activation_scale", "_bias")
+    _projection_slots = ("", *STACK_COMPANIONS, "_bias")
 
     def __init__(
         self,
@@ -627,14 +653,16 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.global_scale_dtype = format_spec.global_scale_dtype
 
         # The layouts: what the CHECKPOINT ships (`is_concatenated`: stacked ``[gate; up]`` or, like
-        # GPT-OSS, already the kernels' interleaved ``[g0, u0, ...]``) against what the module now
+        # GPT-OSS, already the kernels' interleaved ``[g0, u0, ...]``) against what the module
         # HOLDS, which the loader's conversion ops interleave and swizzle into where the two
-        # disagree. Frozen at load rather than derived on read, since it describes the bytes.
+        # disagree. Frozen at load rather than derived on read, since it describes the bytes. The
+        # triton backends and the eager loop share the interleaved rows; the DeepGEMM ones read
+        # gate|up stacked (Mega MoE packs it itself, the grouped GEMM reads a block grid row-major).
         self.has_gate = has_gate
         self.has_bias = has_bias
         self.is_concatenated = is_concatenated
         impl = getattr(config, "_experts_implementation", None)
-        self.holds_interleaved_gate_up = self.has_gate and impl != "deepgemm_megamoe"
+        self.holds_interleaved_gate_up = self.has_gate and impl not in _DEEPGEMM_EXPERTS_IMPLEMENTATIONS
         swizzled = _holds_swizzled_scales(config, format_spec, activation_format)
         self.gate_up_name = "gate_up_proj" if self.has_gate else "up_proj"
         up_rows = (2 if self.has_gate else 1) * self.intermediate_dim
@@ -664,9 +692,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             "has_bias": getattr(module, "has_bias", False),
             "is_concatenated": getattr(module, "is_concatenated", True),
         }
-        experts_class = use_experts_implementation(
-            experts_class=cls, experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS, **flags
-        )
+        experts_class = _experts_class_with(cls, **flags)
         config = getattr(module, "config", model.config.get_text_config())
         experts = experts_class(config=config, quantization_config=quantization_config, **flags)
         experts.post_expert_norm, experts.has_post_expert_norm = module.post_expert_norm, module.has_post_expert_norm
@@ -701,17 +727,18 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         _set_optional_parameter(self, f"{proj}_activation_scale", activation)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # interleaved rows -> alternating output columns, the same split the fused epilogue does
-        gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
-        if self.swiglu_alpha is not None:
-            # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
+        # interleaved rows give alternating output columns, the split the fused epilogue does; stacked rows two halves
+        if self.holds_interleaved_gate_up:
+            gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
+        else:
+            gate, up = gate_up.chunk(2, dim=-1)
+        if self.swiglu_limit is not None:
             gate = gate.clamp(max=self.swiglu_limit)
             up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        if self.swiglu_alpha is not None:
+            # SwiGLU-OAI gate (same math as the model's non-quantized experts)
             glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
             return (up + 1.0) * glu
-        elif self.swiglu_limit is not None:
-            gate = gate.clamp(max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
     def forward(
@@ -772,18 +799,35 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         if input_global is not None and input_global.numel() > 1:
             input_global = input_global[expert_idx : expert_idx + 1]
 
-        return finegrained_linear(
-            input,
-            weight,
-            scale,
-            self.block_size,
-            bias=bias,
+        linear = functools.partial(
+            finegrained_linear,
+            block_size=self.block_size,
             activation_scale=activation_scale,
             allow_deepgemm=not self._deepgemm_disabled,
             weight_global_scale=weight_global,
             input_global_scale=input_global,
             activation_format=self.activation_format,
         )
+        # A scale spanning several interleaved rows belongs to one half (the loader interleaves the grid per
+        # block), so a row-major read would pair half the rows with the other half's scale: each half runs on its
+        # own rows and blocks, its output columns interleaved back.
+        if (
+            proj == self.gate_up_name
+            and self.holds_interleaved_gate_up
+            and scale.ndim == 2
+            and scale.shape[0] < weight.shape[0]
+        ):
+            halves = [
+                linear(
+                    input,
+                    weight[half::2].contiguous(),
+                    scale[half::2].contiguous(),
+                    bias=bias[half::2] if bias is not None else None,
+                )
+                for half in (0, 1)
+            ]
+            return torch.stack(halves, dim=-1).flatten(-2)
+        return linear(input, weight, scale, bias=bias)
 
     def _moe_operands(self, kernel) -> dict:
         """Everything the kernels' MoE forwards take from the module: the two projections with their
@@ -840,8 +884,25 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         }
 
 
+@functools.cache
+def _experts_class_with(cls, *, has_gate: bool, has_bias: bool, is_concatenated: bool) -> type:
+    """`cls` with the experts dispatch and these flags: `use_experts_implementation` wraps the class it is handed in
+    place, so each flag set wraps a subclass of its own, once, and `cls` itself stays as defined. The subclass is
+    registered on `cls`'s module under its own name, so a pickled model finds it."""
+    qualname = f"{cls.__qualname__}_gate{int(has_gate)}_bias{int(has_bias)}_concatenated{int(is_concatenated)}"
+    subclass = type(cls.__name__, (cls,), {"__module__": cls.__module__, "__qualname__": qualname})
+    setattr(sys.modules[cls.__module__], qualname, subclass)
+    return use_experts_implementation(
+        experts_class=subclass,
+        experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
+        has_gate=has_gate,
+        has_bias=has_bias,
+        is_concatenated=is_concatenated,
+    )
+
+
 class FineGrainedExpertsInterface(ExpertsInterface):
-    """Interface for registering custom FP8 experts forward functions."""
+    """Interface for registering custom finegrained experts forward functions."""
 
     _global_mapping = {
         "deepgemm": deepgemm_fp8_fp4_experts_forward,
@@ -866,7 +927,7 @@ def assert_modules_are_quantized(model: nn.Module) -> None:
     for name, module in model.named_modules():
         if not isinstance(module, _FineGrainedModule):
             continue
-        for attr in ("weight", "gate_up_proj", "up_proj", "down_proj"):
+        for attr in ("weight", *FUSED_STACKS):
             weight = getattr(module, attr, None)
             if weight is not None and weight.element_size() > 1:
                 raise ValueError(

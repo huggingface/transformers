@@ -16,6 +16,11 @@ from contextlib import contextmanager
 from typing import Any
 
 
+# an experts module's fused projection stacks, and what each holds beside it
+FUSED_STACKS = ("gate_up_proj", "up_proj", "down_proj")
+STACK_COMPANIONS = ("_scale_inv", "_weight_global_scale", "_activation_scale")
+
+
 def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
     if "." in tensor_name:
         module_name, tensor_name = tensor_name.rsplit(".", 1)

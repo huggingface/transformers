@@ -932,6 +932,36 @@ class WeightTransform:
             renamed_key = prefix_dot + renamed_key
         return renamed_key, source_pattern_that_matched
 
+    def quantize(
+        self,
+        collected_tensors: dict[str, Any],
+        full_layer_name: str,
+        model=None,
+        config=None,
+        hf_quantizer=None,
+        loading_info: LoadStateDictInfo | None = None,
+    ) -> dict[str, Any]:
+        """`quantization_operation` over the tensors under their full names, then the quantizer's ops for the
+        module they fill: those lay out what the quantization emits (a gate|up interleave would otherwise mix
+        the halves inside one quantization block), so a quantized target takes them here and not in its chain."""
+        kwargs = {
+            "source_patterns": self.source_patterns,
+            "full_layer_name": full_layer_name,
+            "model": model,
+            "config": config,
+            "missing_keys": loading_info.missing_keys if loading_info else None,
+        }
+        context = (len(collected_tensors), full_layer_name)
+        with log_conversion_errors(full_layer_name, loading_info, context, self.quantization_operation):
+            collected_tensors = self.quantization_operation.convert(
+                collected_tensors, target_patterns=self.target_patterns, **kwargs
+            )
+        for op in hf_quantizer.get_param_ops(model, full_layer_name):
+            with log_conversion_errors(full_layer_name, loading_info, context, op):
+                # every tensor is under its full name by now
+                collected_tensors = op.convert(collected_tensors, target_patterns=list(collected_tensors), **kwargs)
+        return collected_tensors
+
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
         # TODO: check this and relax when quantizer have `reverse_op`
@@ -1014,18 +1044,7 @@ class WeightRenaming(WeightTransform):
         collected_tensors = {target_key: collected_tensors[self.source_patterns[0]]}
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_conversion_errors(
-                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
-            ):
-                collected_tensors = self.quantization_operation.convert(
-                    collected_tensors,
-                    source_patterns=self.source_patterns,
-                    target_patterns=self.target_patterns,
-                    full_layer_name=target_key,
-                    model=model,
-                    config=config,
-                    missing_keys=loading_info.missing_keys if loading_info else None,
-                )
+            collected_tensors = self.quantize(collected_tensors, target_key, model, config, hf_quantizer, loading_info)
 
         return collected_tensors
 
@@ -1218,18 +1237,7 @@ class WeightConverter(WeightTransform):
             pass
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_conversion_errors(
-                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
-            ):
-                collected_tensors = self.quantization_operation.convert(
-                    collected_tensors,
-                    source_patterns=self.source_patterns,
-                    target_patterns=self.target_patterns,
-                    full_layer_name=layer_name,
-                    config=config,
-                    model=model,
-                    missing_keys=loading_info.missing_keys if loading_info else None,
-                )
+            collected_tensors = self.quantize(collected_tensors, layer_name, model, config, hf_quantizer, loading_info)
         return collected_tensors
 
 
@@ -1664,9 +1672,19 @@ def convert_and_load_state_dict_in_model(
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
-            # each target key gets its own transform, with the ops the quantizer gives the module it fills
+            needs_quantization = (
+                hf_quantizer
+                and not hf_quantizer.pre_quantized
+                and hf_quantizer.param_needs_quantization(model, renamed_key)
+            )
+            # each target key gets its own transform, with the ops the quantizer gives the module it fills; a
+            # target quantized on load runs them after its quantization instead (`WeightTransform.quantize`)
             if renamed_key not in param_name_to_load:
-                param_ops = hf_quantizer.get_param_ops(model, renamed_key) if hf_quantizer is not None else []
+                param_ops = (
+                    hf_quantizer.get_param_ops(model, renamed_key)
+                    if hf_quantizer is not None and not needs_quantization
+                    else []
+                )
                 if source_pattern is not None:
                     mapping = deepcopy(pattern_to_converter[source_pattern])
                     mapping.operations = [*mapping.operations, *param_ops]
@@ -1680,11 +1698,6 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = original_key
 
             # 3. Handle dtype casting
-            needs_quantization = (
-                hf_quantizer
-                and not hf_quantizer.pre_quantized
-                and hf_quantizer.param_needs_quantization(model, renamed_key)
-            )
             if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 

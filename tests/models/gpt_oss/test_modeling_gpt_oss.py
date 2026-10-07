@@ -28,7 +28,6 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    FineGrainedConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -45,6 +44,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.quantization_config import Mxfp4Config
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -547,7 +547,7 @@ if __name__ == "__main__":
             device_map="auto",
             attn_implementation=attn_impl,
             use_kernels=kernels,
-            quantization_config=FineGrainedConfig(quant_method="mxfp4", dequantize=True),
+            quantization_config=Mxfp4Config(dequantize=True),
         )
         model_obj.train()
 

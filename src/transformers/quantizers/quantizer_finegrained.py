@@ -41,12 +41,14 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
         # the embedding tables `modules_to_convert` names hold FP8 rows with one per-tensor scale
         self._embedding_config = BlockFp8Config(weight_block_size=None)
         configs = {id(config): config for config in self.plan().values()}.values()
-        self._members = [AUTO_QUANTIZER_MAPPING[config.method.value](config) for config in configs]
+        self._members = [AUTO_QUANTIZER_MAPPING[config.method.value](config, **kwargs) for config in configs]
+        # the plan's embedding tables are the host's to name
+        for member in self._members:
+            member.embeddings = self.embeddings
 
     def plan(self):
-        embeddings = self.quantization_config.modules_to_convert or []
         return {
-            **dict.fromkeys(map(embedding_pattern, embeddings), self._embedding_config),
+            **dict.fromkeys(map(embedding_pattern, self.embeddings), self._embedding_config),
             **self.quantization_config.dtype_plan,
         }
 
@@ -56,8 +58,3 @@ class FineGrainedHfQuantizer(BlockScaledQuantizer):
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         member = self.member_of(get_module_from_name(model, param_name)[0])
         return member.get_param_ops(model, param_name) if member is not None else []
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        for member in self.members():
-            member._process_model_after_weight_loading(model, **kwargs)
-        return model

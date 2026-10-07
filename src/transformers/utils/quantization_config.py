@@ -19,6 +19,7 @@ import importlib.metadata
 import json
 import os
 import re
+import warnings
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Union
@@ -1703,21 +1704,40 @@ def subtree_patterns(globs: list[str]) -> list[str]:
     return patterns
 
 
+# the block and scale MXFP8 and MXFP4 fix
+_MX_FORMAT_OPTIONS = {"weight_block_size": (1, 32), "scale_fmt": "ue8m0"}
+
+
+class _FormatDefault:
+    """The `activation_format` a format config takes when none is passed."""
+
+    def __repr__(self):
+        return "the format's default"
+
+
+_FORMAT_DEFAULT = _FormatDefault()
+
+
+def _loading_attributes(config, **attributes) -> dict[str, Any]:
+    """What a config passed to `from_pretrained` lends a pre-quantized checkpoint's own config: `dequantize`, the
+    skip-list when it sets one (left unset, the checkpoint's stays), and `attributes`."""
+    loading = {"dequantize": config.dequantize}
+    if config.modules_to_not_convert is not None:
+        loading["modules_to_not_convert"] = config.modules_to_not_convert
+    return {**loading, **attributes}
+
+
 class BlockScaledConfig(QuantizationConfigMixin):
     """What every block-scaled weight format's config holds: the options of the format itself, which the quantized
     modules read, and the loading options. One such config quantizes a whole model; a [`FineGrainedConfig`] maps
-    several onto parts of one.
+    several onto parts of one. It is built as one of its formats: [`BlockFp8Config`], [`Mxfp8Config`],
+    [`Mxfp4Config`] or [`NVFP4Config`].
 
     Args:
         activation_format (`str`, *optional*):
-            What activations are quantized to: `None` for the weights' own format, `"bf16"` for weight-only, or
-            another format the weights' kernels serve.
-        activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            `"dynamic"` (inline per-token/per-block) or `"static"` (a calibrated per-tensor scale from the checkpoint).
-        weight_block_size (`tuple[int, int]`, *optional*):
-            The block of the weight scale grid, for formats whose granularity is not fixed by the format.
-        scale_fmt (`str`, *optional*, defaults to `"float"`):
-            Storage dtype of block scales: `"float"` (fp32) or `"ue8m0"` (`torch.float8_e8m0fnu`).
+            What activations are quantized to: `None` for the weights' own format (which its name spells too),
+            `"bf16"` for weight-only, or another format the weights' kernels serve. On a pre-quantized checkpoint, a
+            passed config's activation format replaces the checkpoint's: it picks the kernels the same weights run on.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model to full precision while loading.
         modules_to_not_convert (`list`, *optional*):
@@ -1727,58 +1747,86 @@ class BlockScaledConfig(QuantizationConfigMixin):
             `"compressed-tensors"`.
     """
 
-    # what `quant_method` this config is, and the activation formats its weights' kernels serve
+    # what `quant_method` this config is, the activation formats its weights' kernels serve, and the one it takes
     method: QuantizationMethod
     activation_formats: tuple[str | None, ...] = (None,)
+    default_activation_format: str | None = None
+    # fixed by the MX and NVFP4 formats; block-FP8 sets them
+    weight_block_size: tuple[int, int] | None = None
+    scale_fmt: str = "float"
+    activation_scheme: str = "dynamic"
+    # the values those fields take in this format, which a checkpoint's `config.json` may spell out
+    format_options: dict[str, Any] = {}
 
     def __init__(
         self,
-        activation_format: str | None = None,
-        activation_scheme: str = "dynamic",
-        weight_block_size: tuple[int, int] | None = None,
-        scale_fmt: str = "float",
+        *,
+        activation_format: str | None = _FORMAT_DEFAULT,
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
         checkpoint_format: str | None = None,
         **kwargs,
     ):
+        if not hasattr(self, "method"):
+            raise TypeError(
+                f"{type(self).__name__} is what the block-scaled format configs share; build one of them: "
+                f"{', '.join(config.__name__ for config in BLOCK_SCALED_CONFIGS.values())}"
+            )
         self.quant_method = self.method
-        self.checkpoint_format = checkpoint_format
         kwargs.pop("quant_method", None)
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
-        self.activation_format = activation_format
-        self.activation_scheme = activation_scheme
-        self.weight_block_size = tuple(weight_block_size) if weight_block_size is not None else None
-        self.scale_fmt = scale_fmt
+        # a `config.json` written before the format fixed these carries their defaults
+        fixed = {
+            name: kwargs.pop(name)
+            for name in ("weight_block_size", "scale_fmt", "activation_scheme")
+            if name in kwargs
+        }
+        changed = {
+            name: value
+            for name, value in fixed.items()
+            # a block size read back from `config.json` is a list
+            if (tuple(value) if isinstance(value, list) else value)
+            not in (getattr(BlockScaledConfig, name), self.format_options.get(name))
+        }
+        if changed:
+            raise ValueError(
+                f"{self.method.value} weights fix {sorted(changed)} by their format; got {changed}. Only "
+                "`BlockFp8Config` sets them."
+            )
+        if kwargs:
+            logger.info(f"Unused kwargs: {list(kwargs)}. These kwargs are not used in {type(self).__name__}.")
+        self.checkpoint_format = checkpoint_format
+        # a passed config lends its activation format to a pre-quantized checkpoint only where it names one
+        self._names_activation_format = activation_format is not _FORMAT_DEFAULT
+        self.activation_format = (
+            self.default_activation_format if activation_format is _FORMAT_DEFAULT else activation_format
+        )
         self.dequantize = dequantize
         self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
     def post_init(self):
-        self.activation_scheme = self.activation_scheme.lower()
         if self.activation_format not in self.activation_formats:
             raise ValueError(
                 f"{self.method.value} weights take activation_format in {self.activation_formats}; "
                 f"got {self.activation_format!r}"
             )
-        if self.activation_scheme not in ("dynamic", "static"):
-            raise ValueError(f"activation_scheme must be 'dynamic' or 'static'; got {self.activation_scheme!r}")
-        if self.scale_fmt not in ("float", "ue8m0"):
-            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+        # one spelling for the weights' own activation format
+        if self.activation_format == self.method.value:
+            self.activation_format = None
         if self.checkpoint_format not in (None, "compressed-tensors"):
             raise ValueError(f"checkpoint_format must be None or 'compressed-tensors'; got {self.checkpoint_format!r}")
-        if self.weight_block_size is not None and (
-            len(self.weight_block_size) != 2 or min(self.weight_block_size) <= 0
-        ):
-            raise ValueError(f"weight_block_size must be two positive integers; got {self.weight_block_size}")
 
     def get_loading_attributes(self):
-        # a skip-list left unset keeps the checkpoint's
-        attributes = {"dequantize": self.dequantize}
-        if self.modules_to_not_convert is not None:
-            attributes["modules_to_not_convert"] = self.modules_to_not_convert
-        return attributes
+        named = {"activation_format": self.activation_format} if self._names_activation_format else {}
+        return _loading_attributes(self, **named)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {name: value for name, value in super().to_dict().items() if not name.startswith("_")}
+
+    def __iter__(self):
+        yield from self.to_dict().items()
 
 
 class BlockFp8Config(BlockScaledConfig):
@@ -1791,7 +1839,8 @@ class BlockFp8Config(BlockScaledConfig):
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the scales: `"float"` (fp32) or `"ue8m0"` (`torch.float8_e8m0fnu`, DeepSeek-V4).
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            `"dynamic"` or `"static"` (a calibrated per-tensor activation scale from the checkpoint).
+            `"dynamic"` (quantized inline, per 128-wide group) or `"static"` (a calibrated per-tensor activation
+            scale from the checkpoint).
         modules_to_convert (`list`, *optional*):
             Embedding tables to quantize, by name suffix: FP8 rows with one per-tensor scale.
         kwargs (`dict[str, Any]`, *optional*):
@@ -1803,16 +1852,30 @@ class BlockFp8Config(BlockScaledConfig):
 
     def __init__(
         self,
+        *,
         weight_block_size: tuple[int, int] | None = (128, 128),
         scale_fmt: str = "float",
         activation_scheme: str = "dynamic",
         modules_to_convert: list | None = None,
         **kwargs,
     ):
+        self.weight_block_size = tuple(weight_block_size) if weight_block_size is not None else None
+        self.scale_fmt = scale_fmt
+        self.activation_scheme = activation_scheme
         self.modules_to_convert = modules_to_convert
-        super().__init__(
-            weight_block_size=weight_block_size, scale_fmt=scale_fmt, activation_scheme=activation_scheme, **kwargs
-        )
+        super().__init__(**kwargs)
+
+    def post_init(self):
+        super().post_init()
+        self.activation_scheme = self.activation_scheme.lower()
+        if self.activation_scheme not in ("dynamic", "static"):
+            raise ValueError(f"activation_scheme must be 'dynamic' or 'static'; got {self.activation_scheme!r}")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+        if self.weight_block_size is not None and (
+            len(self.weight_block_size) != 2 or min(self.weight_block_size) <= 0
+        ):
+            raise ValueError(f"weight_block_size must be two positive integers; got {self.weight_block_size}")
 
 
 class Mxfp8Config(BlockScaledConfig):
@@ -1820,15 +1883,16 @@ class Mxfp8Config(BlockScaledConfig):
 
     Args:
         activation_format (`str`, *optional*):
-            `None` for MXFP8 activations, `"mxfp4"` for W8A4, or `"bf16"` for weight-only.
+            `None` (or `"mxfp8"`) for MXFP8 activations, `"mxfp4"` for W8A4, or `"bf16"` for weight-only.
         kwargs (`dict[str, Any]`, *optional*):
             The options every block-scaled format takes, see [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.MXFP8
     activation_formats = (None, "mxfp8", "mxfp4", "bf16")
+    format_options = _MX_FORMAT_OPTIONS
 
-    def __init__(self, activation_format: str | None = None, **kwargs):
+    def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
         super().__init__(activation_format=activation_format, **kwargs)
 
 
@@ -1838,31 +1902,18 @@ class Mxfp4Config(BlockScaledConfig):
 
     Args:
         activation_format (`str`, *optional*, defaults to `"bf16"`):
-            `"bf16"` for weight-only (W4A16, what GPT-OSS runs), `"mxfp8"` for W4A8, or `"mxfp4"` (or `None`) for W4A4.
-        modules_to_not_convert (`list`, *optional*):
-            Modules to keep in full precision.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize the model to full precision while loading.
+            `"bf16"` for weight-only (W4A16, what GPT-OSS runs), `"mxfp8"` for W4A8, or `None` (or `"mxfp4"`) for W4A4.
         kwargs (`dict[str, Any]`, *optional*):
             The options every block-scaled format takes, see [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.MXFP4
     activation_formats = (None, "mxfp8", "mxfp4", "bf16")
+    default_activation_format = "bf16"
+    format_options = _MX_FORMAT_OPTIONS
 
-    def __init__(
-        self,
-        modules_to_not_convert: list | None = None,
-        dequantize: bool = False,
-        activation_format: str | None = "bf16",
-        **kwargs,
-    ):
-        super().__init__(
-            activation_format=activation_format,
-            dequantize=dequantize,
-            modules_to_not_convert=modules_to_not_convert,
-            **kwargs,
-        )
+    def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
+        super().__init__(activation_format=activation_format, **kwargs)
 
 
 class NVFP4Config(BlockScaledConfig):
@@ -1870,22 +1921,19 @@ class NVFP4Config(BlockScaledConfig):
     exports them; quantizes a full-precision checkpoint on the fly as well.
 
     Args:
-        modules_to_not_convert (`list[str]`, *optional*):
-            Modules to keep in full precision.
         activation_format (`str`, *optional*):
-            `None` for NVFP4 activations (W4A4, with the checkpoint's calibrated activation global) or `"bf16"` for
-            weight-only.
+            `None` (or `"nvfp4"`) for NVFP4 activations (W4A4, with the checkpoint's calibrated activation global) or
+            `"bf16"` for weight-only.
         kwargs (`dict[str, Any]`, *optional*):
             The options every block-scaled format takes, see [`BlockScaledConfig`].
     """
 
     method = QuantizationMethod.NVFP4
     activation_formats = (None, "nvfp4", "bf16")
+    format_options = {"weight_block_size": (1, 16)}
 
-    def __init__(
-        self, modules_to_not_convert: list[str] | None = None, activation_format: str | None = None, **kwargs
-    ):
-        super().__init__(activation_format=activation_format, modules_to_not_convert=modules_to_not_convert, **kwargs)
+    def __init__(self, *, activation_format: str | None = _FORMAT_DEFAULT, **kwargs):
+        super().__init__(activation_format=activation_format, **kwargs)
 
 
 # the block-scaled formats by their `quant_method`, for a plan entry read back from `config.json`
@@ -1901,7 +1949,8 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     compressed-tensors describes a format by its parameters; we name it. `group_size` is what
     separates the two 4-bit formats: nvfp4's block scale is E4M3 over 16 values, mxfp4's is E8M0
     over 32. `targets` is theirs too: a bare entry is a CLASS name (GLM-5.2 ships `["Linear"]`,
-    i.e. every linear), and an `re:` prefix introduces a pattern.
+    i.e. every linear), and an `re:` prefix introduces a pattern. Activations are read the same way, and only where
+    the weights' kernels quantize to them.
     """
     formats = {
         (4, "float", 16): "nvfp4",
@@ -1914,6 +1963,11 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     # one FP8 scale per output channel has no block the kernels tile
     if quant_method is None or weights.get("strategy") == "channel":
         return None
+    # MX block scales are E8M0 (some producers store its exponent bytes as uint8): group-32 values over another
+    # scale dtype are not an MX format
+    scale_dtype = str(weights.get("scale_dtype") or "e8m0")
+    if quant_method in ("mxfp8", "mxfp4") and not any(name in scale_dtype for name in ("e8m0", "uint8")):
+        return None
     targets = []
     for target in spec.get("targets") or []:
         if target.startswith("re:"):
@@ -1924,17 +1978,21 @@ def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
             return None
     activations = spec.get("input_activations") or {}
     act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
-    # no activation quantization is weight-only, not the weights' native activation format
-    activation_format = formats.get(act_key) if activations else "bf16"
-    options = {"activation_format": None if activation_format == quant_method else activation_format}
+    # block-FP8's own activations are FP8 per token, or per 128-wide group as its kernels quantize them;
+    # no activation quantization is weight-only
+    activation_format = {**formats, (8, "float", 128): "fp8"}.get(act_key) if activations else "bf16"
+    config_class = BLOCK_SCALED_CONFIGS[quant_method]
+    if activation_format is None or activation_format not in config_class.activation_formats:
+        return None
+    options = {"activation_format": activation_format}
     if quant_method == "fp8":
-        # group-scaled activations quantize their blocks inline either way: `dynamic: false` there is
-        # NVFP4's calibrated second-level global (`input_scale`), which the loader carries on its own
-        static = not activations.get("dynamic", True) and activation_format == "fp8"
+        # only a per-tensor scale is calibrated: `dynamic: false` on group-scaled activations is NVFP4's
+        # second-level global (`input_scale`), which the loader carries on its own
+        static = not activations.get("dynamic", True) and act_key == (8, "float", None)
         options.update(
             activation_scheme="static" if static else "dynamic", weight_block_size=weights.get("block_structure")
         )
-    config = BLOCK_SCALED_CONFIGS[quant_method](**options)
+    config = config_class(**options)
     return dict.fromkeys(targets or [".*"], config)
 
 
@@ -1957,7 +2015,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
         )
     ignore = config_dict.pop("ignore", None) or config_dict.pop("exclude_modules", None)
     modules_to_not_convert = subtree_patterns(ignore) if ignore is not None else None
-    dtype_plan = {".*": NVFP4Config(activation_format="nvfp4")}
+    dtype_plan = {".*": NVFP4Config()}
     # the same thing described parametrically, taken only when every group maps, so a multi-group export is not
     # flattened to one format
     if groups := config_dict.pop("config_groups", None):
@@ -2023,7 +2081,10 @@ class FineGrainedConfig(QuantizationConfigMixin):
     Args:
         dtype_plan (`dict[str, BlockScaledConfig]`, *optional*):
             A module regex and the format config the modules it matches load in. A targeted entry wins over the
-            `".*"` catch-all; modules no entry covers stay in full precision.
+            `".*"` catch-all; modules no entry covers stay in full precision. An entry takes no loading options
+            (`dequantize`, `modules_to_not_convert`, `modules_to_convert`): those are this config's. On a
+            pre-quantized checkpoint, a passed plan's entries replace the activation formats of the checkpoint's
+            entries under the same pattern.
         modules_to_not_convert (`list`, *optional*):
             Modules to keep in full precision.
         modules_to_convert (`list`, *optional*):
@@ -2032,8 +2093,12 @@ class FineGrainedConfig(QuantizationConfigMixin):
             Whether to dequantize the model to full precision while loading.
     """
 
+    # what an entry of the plan does not hold: they are the whole model's
+    _entry_loading_options = ("dequantize", "modules_to_not_convert", "modules_to_convert")
+
     def __init__(
         self,
+        *,
         dtype_plan: dict[str, BlockScaledConfig] | None = None,
         modules_to_not_convert: list | None = None,
         modules_to_convert: list | None = None,
@@ -2041,43 +2106,66 @@ class FineGrainedConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FINEGRAINED
-        # from `config.json` an entry is a plain dict naming its format
-        self.dtype_plan = {
-            pattern: config
-            if isinstance(config, BlockScaledConfig)
-            else BLOCK_SCALED_CONFIGS[config["quant_method"]].from_dict(config)
-            for pattern, config in (dtype_plan or {}).items()
-        }
+        kwargs.pop("quant_method", None)
+        if kwargs:
+            logger.info(f"Unused kwargs: {list(kwargs)}. These kwargs are not used in {type(self).__name__}.")
+        self.dtype_plan = {pattern: self._plan_entry(pattern, entry) for pattern, entry in (dtype_plan or {}).items()}
         self.modules_to_not_convert = modules_to_not_convert
         self.modules_to_convert = modules_to_convert
         self.dequantize = dequantize
 
+    def _plan_entry(self, pattern: str, entry) -> BlockScaledConfig:
+        """`entry` as its format config: from `config.json`, a plain dict naming its format."""
+        if isinstance(entry, dict):
+            method = entry.get("quant_method")
+            if method not in BLOCK_SCALED_CONFIGS:
+                raise ValueError(
+                    f"dtype_plan entry {pattern!r} has quant_method {method!r}; an entry is one of "
+                    f"{sorted(BLOCK_SCALED_CONFIGS)}"
+                )
+            entry = BLOCK_SCALED_CONFIGS[method].from_dict(entry)
+        if not isinstance(entry, BlockScaledConfig):
+            raise TypeError(
+                f"dtype_plan entry {pattern!r} is a {type(entry).__name__}; an entry is one of "
+                f"{', '.join(config.__name__ for config in BLOCK_SCALED_CONFIGS.values())}"
+            )
+        loading = [name for name in self._entry_loading_options if getattr(entry, name, None)]
+        if loading:
+            raise ValueError(
+                f"dtype_plan entry {pattern!r} sets {loading}, which hold for the whole model: set them on the "
+                "FineGrainedConfig"
+            )
+        return entry
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "quant_method": self.quant_method,
-            "dtype_plan": {pattern: config.to_dict() for pattern, config in self.dtype_plan.items()},
+            "dtype_plan": {
+                pattern: {
+                    name: value for name, value in config.to_dict().items() if name not in self._entry_loading_options
+                }
+                for pattern, config in self.dtype_plan.items()
+            },
             "modules_to_not_convert": self.modules_to_not_convert,
             "modules_to_convert": self.modules_to_convert,
             "dequantize": self.dequantize,
         }
 
     def get_loading_attributes(self):
-        # a skip-list left unset keeps the checkpoint's
-        attributes = {"dequantize": self.dequantize}
-        if self.modules_to_not_convert is not None:
-            attributes["modules_to_not_convert"] = self.modules_to_not_convert
-        return attributes
+        return _loading_attributes(self, **({"dtype_plan": self.dtype_plan} if self.dtype_plan else {}))
 
 
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
-    FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
+    Deprecated: passed to `from_pretrained`, it loads through its own frozen integration. Use [`BlockFp8Config`], or
+    [`Mxfp8Config`] for a `[1, 32]` block with UE8M0 scales.
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            The scheme used for activation, the defaults and only support scheme for now is "dynamic".
+            `"dynamic"` (quantized inline) or `"static"` (a calibrated per-tensor activation scale from the
+            checkpoint).
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
-            The size of the weight blocks for quantization, default is (128, 128).
+            The block each weight scale covers; `None` for one scale per tensor.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
@@ -2099,12 +2187,16 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt: str = "float",
         **kwargs,
     ):
+        warnings.warn(
+            "`FineGrainedFP8Config` is deprecated and will be removed in a future release: use `BlockFp8Config`, or "
+            "`Mxfp8Config` for a `[1, 32]` block with UE8M0 scales.",
+            FutureWarning,
+        )
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
         # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
-        # TODO: check overlap with not to convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size

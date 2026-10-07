@@ -8,7 +8,7 @@ from .quantizers_utils import get_module_from_name
 
 warnings.warn(
     "`transformers.quantizers.quantizer_finegrained_fp8` is frozen and will be removed in a future release; "
-    "use `BlockFp8Config` or `Mxfp8Config`, which a passed `FineGrainedFP8Config` loads as.",
+    "a passed `FineGrainedFP8Config` still loads through it. Use `BlockFp8Config` or `Mxfp8Config`.",
     DeprecationWarning,
     stacklevel=2,
 )

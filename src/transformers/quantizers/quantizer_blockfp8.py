@@ -33,21 +33,11 @@ class BlockFp8HfQuantizer(BlockScaledQuantizer):
         embeddings = self.quantization_config.modules_to_convert or []
         return {**dict.fromkeys(map(embedding_pattern, embeddings), self.quantization_config), **super().plan()}
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        from ..integrations.finegrained import disable_deepgemm_on_multi_device
-
-        disable_deepgemm_on_multi_device(model)
-        return super()._process_model_after_weight_loading(model, **kwargs)
-
     def format_conversions(self, dequantize):
-        from ..core_model_loading import WeightRenaming
-
         conversions = []
         if self.quantization_config.checkpoint_format == "compressed-tensors":
             # its block scale ships as `weight_scale`, and rides its weight's converter once renamed
-            conversions.append(
-                WeightRenaming(source_patterns=r"^(.+)\.weight_scale$", target_patterns=r"\1.weight_scale_inv")
-            )
+            conversions.append(self._block_scale_rename())
         if not dequantize and self.quantization_config.activation_scheme == "static":
             conversions += self._activation_scale_conversions()
         return conversions

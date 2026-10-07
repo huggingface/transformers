@@ -28,6 +28,8 @@ from ..utils import (
 )
 from .base import HfQuantizer
 from .quantizers_utils import (
+    FUSED_STACKS,
+    STACK_COMPANIONS,
     embedding_pattern,
     get_module_from_name,
     plan_entry_for,
@@ -57,8 +59,15 @@ class BlockScaledQuantizer(HfQuantizer):
     dtype_plan = dict.fromkeys(("_scale_inv", "activation_scale", "_global_scale"))
     # checkpoint keys this format's producers ship beside the weights that no module holds
     unexpected_keys: tuple[str, ...] = ()
-    # narrowed once the modules are built
+    # narrowed once the modules are built: whether this format holds experts, and the up projection they stack
+    # (`gate_up_proj` gated, `up_proj` not)
     holds_experts = True
+    up_projections: tuple[str, ...] = ("gate_up_proj",)
+
+    def __init__(self, quantization_config, **kwargs):
+        super().__init__(quantization_config, **kwargs)
+        # the embedding tables the plan quantizes, by name suffix: each holds its own per-tensor `weight_scale`
+        self.embeddings = list(getattr(quantization_config, "modules_to_convert", None) or [])
 
     def plan(self) -> dict[str, "BlockScaledConfig"]:
         """`{module regex: format config}` for the modules this quantizer covers."""
@@ -94,7 +103,7 @@ class BlockScaledQuantizer(HfQuantizer):
 
         module, name = get_module_from_name(model, param_name)
         if isinstance(module, FineGrainedExperts) and re.fullmatch(
-            r"(gate_up_proj|down_proj)(_scale_inv|_bias)?", name
+            r"(gate_up_proj|up_proj|down_proj)(_scale_inv|_bias)?", name
         ):
             ops = [FineGrainedInterleaveGateUp(self)] if name.startswith("gate_up_proj") else []
             if not name.endswith("_bias"):
@@ -104,38 +113,54 @@ class BlockScaledQuantizer(HfQuantizer):
             return [FineGrainedScaleContainer(self, module=module)]
         return []
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        from ..integrations.finegrained import assert_modules_are_quantized
+    def finish_modules(self, model):
+        """What this format does to its loaded modules beyond what every format does."""
 
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        from ..integrations.finegrained import assert_modules_are_quantized, disable_deepgemm_on_multi_device
+
+        for member in self.members():
+            member.finish_modules(model)
+        disable_deepgemm_on_multi_device(model)
         assert_modules_are_quantized(model)
         return model
 
-    def _activation_scale_conversions(self, projections=("gate_up_proj", "up_proj", "down_proj"), ops=()) -> list:
+    @staticmethod
+    def _per_expert_sources(proj: str, slot: str) -> list[str]:
+        """The per-expert checkpoint keys of `slot` that stack into the experts' `proj`, under any parent
+        (`mlp.experts`, `mixer.experts`, `feed_forward.experts`): the gate|up stack reads both halves."""
+        halves = ("gate_proj", "up_proj") if proj == "gate_up_proj" else (proj,)
+        return [f"experts.*.{half}.{slot}" for half in halves]
+
+    def _block_scale_rename(self):
+        """A producer's `weight_scale` block scale onto the `weight_scale_inv` slot every module holds it in; the
+        embedding tables the plan quantizes hold their per-tensor scale under that name, and keep it."""
+        from ..core_model_loading import WeightRenaming
+
+        kept = "".join(rf"(?<!{re.escape(name)})" for name in self.embeddings)
+        return WeightRenaming(source_patterns=rf"^(.+){kept}\.weight_scale$", target_patterns=r"\1.weight_scale_inv")
+
+    def _activation_scale_conversions(self, projections=FUSED_STACKS, ops=()) -> list:
         """A calibrated checkpoint's `input_scale` onto the `activation_scale` its module holds: renamed for every
-        module first, then one value per expert of each of `projections`, the gate|up pair reduced to the one both
-        halves read (`up_proj` is an ungated stack's); `ops` run on each value before that reduction. Both expert layouts
-        are covered, a checkpoint matching one while the other never fires; neither when this format holds no
-        experts."""
+        module first, then one value per expert of each of `projections` the experts hold, the gate|up pair reduced
+        to the one both halves read; `ops` run on each value before that reduction. Both expert layouts are covered, a
+        checkpoint matching one while the other never fires; neither when this format holds no experts."""
         from ..core_model_loading import MergeModulelist, WeightConverter, WeightRenaming
         from ..integrations.finegrained.conversions import FineGrainedInputScales
 
         rename = WeightRenaming(source_patterns=r"^(.+)\.input_scale$", target_patterns=r"\1.activation_scale")
         if not self.holds_experts:
             return [rename]
-        per_expert = {
-            "gate_up_proj": ["mlp.experts.*.gate_proj.activation_scale", "mlp.experts.*.up_proj.activation_scale"],
-            "down_proj": ["mlp.experts.*.down_proj.activation_scale"],
-        }
+        held = [proj for proj in projections if proj in (*self.up_projections, "down_proj")]
         return [
             rename,
             *(
                 WeightConverter(
-                    source_patterns=per_expert[proj],
-                    target_patterns=f"mlp.experts.{proj}_activation_scale",
+                    source_patterns=self._per_expert_sources(proj, "activation_scale"),
+                    target_patterns=f"experts.{proj}_activation_scale",
                     operations=[MergeModulelist(dim=0), *ops, FineGrainedInputScales(self)],
                 )
-                for proj in projections
-                if proj in per_expert
+                for proj in held
             ),
             *(
                 WeightConverter(
@@ -143,7 +168,7 @@ class BlockScaledQuantizer(HfQuantizer):
                     target_patterns=f"experts.{proj}_activation_scale",
                     operations=[*ops, FineGrainedInputScales(self)],
                 )
-                for proj in projections
+                for proj in held
             ),
         ]
 
@@ -214,7 +239,7 @@ class BlockScaledQuantizer(HfQuantizer):
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
         "Return the element size (in bytes) for `param_name`."
         if self.param_needs_quantization(model, param_name):
-            # 8 bit, this is needed as when `pre_quantized`` is False, we don't set the dtype of the FineGrainedLinear in order to correctly load the weights
+            # one byte per held element: an FP8 value, or two FP4 values packed into a weight already half as wide
             return 1
         return super().param_element_size(model, param_name, param)
 
@@ -265,8 +290,10 @@ class BlockScaledQuantizer(HfQuantizer):
         experts = [module for module in model.modules() if isinstance(module, FineGrainedExperts)]
         ignored = set(model._keys_to_ignore_on_load_unexpected or [])
         for member in self.members():
-            # a format's expert converters exist only where its experts do
-            member.holds_experts = any(module.quantization_config is member.quantization_config for module in experts)
+            # a format's expert converters exist only where its experts do, for the stacks they hold
+            held = [module for module in experts if module.quantization_config is member.quantization_config]
+            member.holds_experts = bool(held)
+            member.up_projections = tuple(sorted({module.gate_up_name for module in held}))
             ignored.update(member.unexpected_keys)
         # with no module holding an activation scale (weight-only, dynamic activations), a calibrated
         # `input_scale` is one this run has no use for, not an unexpected key: a later run may read it
@@ -297,10 +324,22 @@ class BlockScaledQuantizer(HfQuantizer):
         plan = self.plan() if plan is None else plan
         return replace_with_quantized_modules(model, plan, modules_to_not_convert, module_classes)
 
+    def _experts_hold_scale_grid(self, glob: str, config) -> bool:
+        """Whether the experts a TP glob (`layers.*.mlp.experts`) names hold a scale grid, which splits with its
+        weight. The glob's one style serves every layer, so its layers must agree."""
+        layers = range(getattr(config, "num_hidden_layers", None) or 1) if "*" in glob else (0,)
+        entries = (plan_entry_for(self.plan(), glob.replace("*", str(layer))) for layer in layers)
+        grids = {_has_scale_grid(entry) for entry in entries if entry is not None}
+        if len(grids) > 1:
+            raise ValueError(
+                f"Tensor parallelism shards every `{glob}` alike, but this plan gives some of them a block-scale "
+                "grid and others a per-tensor scale. Give those experts one format."
+            )
+        return True in grids
+
     def update_tp_plan(self, config):
-        # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes on
-        # top of any plan written above (e.g. the Qwen3 dense plan). Models carry the experts
-        # mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite both.
+        # Per-impl rewrite of the experts parallel-layer kind, over the plan the model declares. Models carry the
+        # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite both.
         from ..integrations.finegrained import FineGrainedExperts
 
         impl = getattr(config, "_experts_implementation", None)
@@ -318,11 +357,10 @@ class BlockScaledQuantizer(HfQuantizer):
             for key, style in list(updated_plan.items()):
                 # only the experts' own projections: a dense `self_attn.q_proj` is `colwise` too
                 projection = key.rpartition(".")[2]
-                if projection not in ("gate_up_proj", "up_proj", "down_proj"):
+                if projection not in FUSED_STACKS:
                     continue
                 if style == "grouped_gemm":
-                    companions = ["_bias", "_scale_inv", "_weight_global_scale", "_activation_scale"]
-                    for suffix in companions:
+                    for suffix in ("_bias", *STACK_COMPANIONS):
                         updated_plan.setdefault(f"{key}{suffix}", style)
                     continue
 
@@ -336,8 +374,7 @@ class BlockScaledQuantizer(HfQuantizer):
                 # Intra-expert TP: the experts stay whole and the projection's own axis splits,
                 # so only the scale GRID follows its weight — the per-expert globals, activation
                 # scales and the down bias stay replicated, as does a per-tensor `(E, 1, 1)`.
-                entry = plan_entry_for(self.plan(), key.rpartition(".")[0])
-                blocked = entry is not None and _has_scale_grid(entry)
+                blocked = self._experts_hold_scale_grid(key.rpartition(".")[0], plan_owner)
                 if projection == "down_proj" and style in ("rowwise", "packed_rowwise"):
                     if blocked:
                         updated_plan.setdefault(f"{key}_scale_inv", "moe_experts_rowwise")
@@ -381,15 +418,25 @@ class BlockScaledQuantizer(HfQuantizer):
         conversions, claimed = [], {}
         if dequantize:
             # every quantized key folded back to a full-precision weight from the `weight` + `weight_scale_inv` pair,
-            # times NVFP4's `weight_global_scale` where there is one; anchored `weight$` so the scale keys land in the
-            # scale slots, and the activation scales collected only to be dropped
+            # times NVFP4's `weight_global_scale` where there is one, and the activation scales collected only to be
+            # dropped; the companions start a name (`(?<!\w)`), so a fused stack's `gate_up_proj_weight_global_scale`
+            # stays with its own converter below
             conversions.append(
                 WeightConverter(
-                    source_patterns=["weight$", "weight_scale_inv", "weight_global_scale", "activation_scale"],
+                    source_patterns=["weight$", *_DENSE_COMPANIONS],
                     target_patterns="weight",
                     operations=[FineGrainedDequantize(self)],
                 )
             )
+            # an experts module's fused stacks, as a checkpoint written in the model's own layout ships them
+            for proj in FUSED_STACKS:
+                conversions.append(
+                    WeightConverter(
+                        source_patterns=[rf"(?<!\w){proj}{suffix}$" for suffix in ("", *STACK_COMPANIONS)],
+                        target_patterns=proj,
+                        operations=[FineGrainedDequantize(self)],
+                    )
+                )
         # once each: formats reading the same producer keys emit the same converter; two that read a key
         # differently cannot both load it, so the plan is refused rather than one picked
         for member in self.members():
@@ -440,6 +487,8 @@ class BlockScaledQuantizer(HfQuantizer):
 
 # a parameter and its block-scale grid, and none of its other companions (`_weight_global_scale`, `_activation_scale`)
 _WITH_SCALE_GRID = r"(?=$|_scale_inv$)"
+# what a dense quantized weight carries beside it
+_DENSE_COMPANIONS = (r"(?<!\w)weight_scale_inv", r"(?<!\w)weight_global_scale", r"(?<!\w)activation_scale")
 
 
 def _with_scale_grid(pattern: str) -> str:
@@ -448,14 +497,15 @@ def _with_scale_grid(pattern: str) -> str:
 
 def _rebuilt(conv, source_patterns: list[str], operations: list | None = None):
     """`conv` over `source_patterns`, its targets taking only a parameter and its scale grid on save (a target is
-    a source pattern there, and a parameter's name prefixes all its companions'), and its scope kept."""
+    a source pattern there, and a parameter's name prefixes all its companions'), and its scope and placement kept."""
     from ..core_model_loading import WeightConverter
 
-    params = (".weight", "gate_up_proj", "up_proj", "down_proj")
+    params = (".weight", *FUSED_STACKS)
     rebuilt = WeightConverter(
         source_patterns=source_patterns,
         target_patterns=[_with_scale_grid(p) if p.endswith(params) else p for p in conv._original_target_patterns],
         operations=conv.operations if operations is None else operations,
+        force_cpu=conv.force_cpu,
     )
     rebuilt.scope_prefix, rebuilt.base_model_prefix = conv.scope_prefix, conv.base_model_prefix
     return rebuilt

@@ -36,6 +36,7 @@ from dataclasses import dataclass
 
 import torch
 
+from ..quantizers.quantizers_utils import FUSED_STACKS
 from ..utils.import_utils import (
     is_kernels_available,
     maybe_import_error,
@@ -155,7 +156,7 @@ def is_deepgemm_loadable(raise_error: bool = False) -> bool:
 
     `@assume_constant_result` makes dynamo evaluate this once at trace time and inline the bool (its probe
     is untraceable — an `lru_cache`'d import check + the `get_device_capability` pybind + nvcc lookup), so
-    the check can sit in a compiled dispatch gate (e.g. `fp8_linear`) without breaking the graph.
+    the check can sit in a compiled dispatch gate (e.g. `prefers_deepgemm_linear`) without breaking the graph.
 
     FP4 / Mega MoE additionally need Blackwell (SM100); the relevant forwards enforce that via
     `_assert_sm100_requirements` / `is_sm100()`, since this env check can't see which dtype path the
@@ -585,7 +586,7 @@ def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> Non
     ``torch.compile``: the valid case compiles away to nothing, while an unsupported combo fails loud
     rather than letting the hot path silently corrupt (unlike an ``is_compiling`` skip, which would miss a
     model compiled from cold with no eager warmup). Both raise ``NotImplementedError``, which
-    ``fp8_linear`` treats as "DeepGEMM declined" and falls back to Triton (SM90 consuming float32 SFs
+    ``finegrained_linear`` treats as "DeepGEMM declined" and falls back to Triton (SM90 consuming float32 SFs
     directly is fine, so those cases are no-ops).
     """
     if not is_sm100():
@@ -603,8 +604,8 @@ def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> Non
             "DeepGEMM has no float32 scale-factor path on Blackwell (SM100): these scales are plain float32 "
             "(quantization_config.scale_fmt='float'), and rounding them to UE8M0 would silently corrupt the "
             "output. Use a checkpoint quantized with scale_fmt='ue8m0', or a path that consumes float32 block "
-            "scales directly — the FP8 linear falls back to Triton automatically; for experts use "
-            "`model.set_experts_implementation('grouped_mm')`."
+            "scales directly — the finegrained linear falls back to Triton automatically; for experts load with "
+            "`experts_implementation='grouped_mm'`."
         )
 
 
@@ -660,14 +661,34 @@ def _assert_affine_scales(module: torch.nn.Module) -> None:
 
 
 def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
-    """Mega MoE's ``transform_weights_for_mega_moe`` does its own gate/up interleave, so it takes the
-    stacked ``[gate; up]`` rows. A module loaded for a triton backend holds them interleaved; switched
-    to this backend after load, silently re-permuting would be a wrong answer rather than a failure."""
+    """The quantized DeepGEMM arms take the stacked ``[gate; up]`` rows: Mega MoE's
+    ``transform_weights_for_mega_moe`` does its own gate/up interleave, and the grouped GEMM reads a
+    block-scale grid row-major, whose blocks an interleaved stack splits between the halves. A module
+    loaded for a triton backend holds them interleaved; switched to this backend after load, silently
+    re-permuting would be a wrong answer rather than a failure."""
     if getattr(module, "has_gate", True) and getattr(module, "holds_interleaved_gate_up", False):
         raise NotImplementedError(
-            "Mega MoE needs gate|up stacked, but this module was loaded interleaved for the triton "
-            "experts backend. Switching to 'deepgemm_megamoe' after load is not supported — pass "
+            "DeepGEMM experts need gate|up stacked, but this module was loaded interleaved for the triton "
+            "experts backends. Switching to a DeepGEMM backend after load is not supported — pass "
             "`experts_implementation=...` to `from_pretrained` so the model loads for it."
+        )
+
+
+def _assert_block_scales_only(module: torch.nn.Module) -> None:
+    """The quantized DeepGEMM arms read the weights and their UE8M0/float32 block scales, and quantize the
+    activations to FP8 themselves. An expert bias, NVFP4's second-level globals and E4M3 block scales, or
+    weight-only (bf16) activations have nowhere to go, so they are refused rather than dropped."""
+    scales = (getattr(module, f"{proj}_scale_inv", None) for proj in FUSED_STACKS)
+    if getattr(module, "has_bias", False):
+        raise NotImplementedError("DeepGEMM quantized experts do not apply expert biases; use 'grouped_mm'.")
+    if getattr(module, "global_scale_dtype", None) is not None or any(
+        scale is not None and scale.dtype == torch.float8_e4m3fn for scale in scales
+    ):
+        raise NotImplementedError("DeepGEMM serves no NVFP4 experts (E4M3 block scales, globals); use 'grouped_mm'.")
+    if getattr(module, "activation_format", None) == "bf16":
+        raise NotImplementedError(
+            "DeepGEMM quantizes the activations, so it cannot serve weight-only experts "
+            "(activation_format='bf16'); use 'grouped_mm'."
         )
 
 
@@ -707,6 +728,7 @@ def deepgemm_experts_guards(
     sm100: bool = False,
     supports_post_expert_norm: bool = True,
     stacked_gate_up: bool = False,
+    block_scales_only: bool = False,
 ):
     """State an experts forward's requirements on the module, checked before any kernel work; each
     assert documents its own condition, and each flag enables one (``supports_post_expert_norm=False``
@@ -725,6 +747,8 @@ def deepgemm_experts_guards(
                 _assert_affine_scales(self)
             if stacked_gate_up:
                 _assert_stacked_gate_up(self)
+            if block_scales_only:
+                _assert_block_scales_only(self)
             if sm100:
                 _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
             return forward(self, hidden_states, *args, **kwargs)
@@ -835,7 +859,7 @@ def deepgemm_bf16_experts_forward(
     )
 
 
-@deepgemm_experts_guards(affine_scales=True, sm100=True)
+@deepgemm_experts_guards(affine_scales=True, sm100=True, stacked_gate_up=True, block_scales_only=True)
 def deepgemm_fp8_fp4_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -930,7 +954,7 @@ def deepgemm_fp8_fp4_experts_forward(
 
 
 def setup_megamoe_weights(module: torch.nn.Module) -> None:
-    """One-shot pack + permute of an FP8Experts module's L1/L2 weights into the
+    """One-shot pack + permute of a `FineGrainedExperts` module's L1/L2 weights into the
     Mega MoE UTCCP layout. Called lazily on the first megamoe forward; idempotent
     via the caller's ``_megamoe_transformed`` flag.
 
@@ -986,7 +1010,9 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
-@deepgemm_experts_guards(affine_scales=True, sm100=True, supports_post_expert_norm=False, stacked_gate_up=True)
+@deepgemm_experts_guards(
+    affine_scales=True, sm100=True, supports_post_expert_norm=False, stacked_gate_up=True, block_scales_only=True
+)
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,

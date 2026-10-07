@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The fine-grained quantization integration: `core` holds the modules and their forwards,
+"""The fine-grained quantization integration: `layers` holds the modules and their forwards,
 `conversions` the loader ops that fill them. `conversions` is imported by path, so that reading
 a checkpoint's layout never drags the kernels in."""
 

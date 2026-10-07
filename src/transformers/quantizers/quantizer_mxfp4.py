@@ -32,12 +32,6 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
 
     quantization_config: "Mxfp4Config"
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        from ..integrations.finegrained import disable_deepgemm_on_multi_device
-
-        disable_deepgemm_on_multi_device(model)
-        return super()._process_model_after_weight_loading(model, **kwargs)
-
     def format_conversions(self, dequantize):
         return self._dequantize_conversions() if dequantize else self._mxfp4_conversions()
 

@@ -17,7 +17,7 @@ exports (per expert per projection, or stacked per layer); quantizes a full-prec
 from typing import TYPE_CHECKING
 
 from .block_scaled_utils import BlockScaledQuantizer
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import FUSED_STACKS, get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -31,11 +31,10 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
     # modelopt calibrates an FP8 KV cache beside the weights; the cache here stays in the model dtype
     unexpected_keys = (r"\.(k_proj\.k|v_proj\.v)_scale$",)
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
+    def finish_modules(self, model):
         from ..integrations.finegrained import register_shared_gate_up_input_globals
 
         register_shared_gate_up_input_globals(model)
-        return super()._process_model_after_weight_loading(model, **kwargs)
 
     def format_conversions(self, dequantize):
         # weight-only keeps activations bf16, so there is no activation global for `input_scale` to land on; nor
@@ -44,8 +43,16 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         conversions = self._nvfp4_renames(calibrated)
         if calibrated:
             # the down projection's is read with its globals
-            conversions += self._activation_scale_conversions(projections=("gate_up_proj",), ops=self._reciprocal_ops)
-        if self.holds_experts and not dequantize:
+            conversions += self._activation_scale_conversions(
+                projections=self.up_projections, ops=self._reciprocal_ops
+            )
+        if dequantize:
+            # a stacked layout's scales reach its stack's dequantize converter under the slot names it collects; the
+            # experts are left as they are, so every stack a model may hold is covered
+            conversions += self._nvfp4_fused_renames(
+                FUSED_STACKS, (("_weight_scale", "_scale_inv"), ("_weight_scale_2", "_weight_global_scale"))
+            )
+        elif self.holds_experts:
             conversions += self._nvfp4_per_expert_conversions(calibrated) + self._nvfp4_fused_conversions(calibrated)
         return conversions
 
@@ -57,7 +64,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
 
         ops = super().get_param_ops(model, param_name)
         module, name = get_module_from_name(model, param_name)
-        if name in ("weight", "gate_up_proj", "up_proj", "down_proj"):
+        if name in ("weight", *FUSED_STACKS):
             ops = [FineGrainedViewPackedInt8(self), *ops]
         # an experts module's globals are inverted in their converters, before the per-expert reductions
         elif isinstance(module, FineGrainedLinear) and name in ("weight_global_scale", "activation_scale"):
@@ -80,7 +87,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         from ..core_model_loading import WeightRenaming
 
         renames = [
-            WeightRenaming(source_patterns=r"^(.+)\.weight_scale$", target_patterns=r"\1.weight_scale_inv"),
+            self._block_scale_rename(),
             WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2$", target_patterns=r"\1.weight_global_scale"),
         ]
         if self.quantization_config.checkpoint_format == "compressed-tensors":
@@ -105,53 +112,59 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
         from ..core_model_loading import MergeModulelist, WeightConverter
         from ..integrations.finegrained.conversions import FineGrainedWeightGlobals
 
-        converters = [
+        return [
             # every second-level global of a layer in ONE converter: folding the gate|up stack's
             # two halves into one moves the up half's onto the down projection, so they decide
             # together (`FineGrainedWeightGlobals`)
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.gate_proj.weight_global_scale",
-                    "mlp.experts.*.up_proj.weight_global_scale",
-                    "mlp.experts.*.down_proj.weight_global_scale",
-                    *(["mlp.experts.*.down_proj.activation_scale"] if calibrated else []),
+                    *self._per_expert_sources(up, "weight_global_scale"),
+                    *self._per_expert_sources("down_proj", "weight_global_scale"),
+                    *(self._per_expert_sources("down_proj", "activation_scale") if calibrated else []),
                 ],
                 target_patterns=[
-                    "mlp.experts.gate_up_proj_weight_global_scale",
-                    "mlp.experts.down_proj_weight_global_scale",
-                    *(["mlp.experts.down_proj_activation_scale"] if calibrated else []),
+                    f"experts.{up}_weight_global_scale",
+                    "experts.down_proj_weight_global_scale",
+                    *(["experts.down_proj_activation_scale"] if calibrated else []),
                 ],
                 operations=[MergeModulelist(dim=0), *self._reciprocal_ops, FineGrainedWeightGlobals(self)],
-            ),
+            )
+            for up in self.up_projections
         ]
-        return converters
+
+    @staticmethod
+    def _nvfp4_fused_renames(projections, slots) -> list:
+        """The stacked layout's `{proj}{shipped}` scales onto the `{proj}{slot}` slots, for each `(shipped, slot)`."""
+        from ..core_model_loading import WeightRenaming
+
+        return [
+            WeightRenaming(source_patterns=rf"experts\.{proj}{shipped}$", target_patterns=f"experts.{proj}{slot}")
+            for proj in projections
+            for shipped, slot in slots
+        ]
 
     def _nvfp4_fused_conversions(self, calibrated: bool):
         """Already stacked per layer, as the vLLM fused layout ships them — so no `MergeModulelist`:
         the scales only take their slot's name, and the module's ops give every tensor its layout."""
-        from ..core_model_loading import WeightConverter, WeightRenaming
+        from ..core_model_loading import WeightConverter
         from ..integrations.finegrained.conversions import FineGrainedWeightGlobals
 
-        converters = [
-            WeightRenaming(
-                source_patterns=rf"experts\.{proj}_weight_scale$", target_patterns=f"experts.{proj}_scale_inv"
-            )
-            for proj in ("gate_up_proj", "down_proj")
-        ]
-        converters.append(
+        converters = self._nvfp4_fused_renames((*self.up_projections, "down_proj"), (("_weight_scale", "_scale_inv"),))
+        converters += [
             # the same one-converter rule as the per-expert layout, over the fused keys
             WeightConverter(
                 source_patterns=[
-                    r"experts\.gate_up_proj_weight_scale_2$",
+                    rf"experts\.{up}_weight_scale_2$",
                     r"experts\.down_proj_weight_scale_2$",
                     *([r"experts\.down_proj_input_scale$"] if calibrated else []),
                 ],
                 target_patterns=[
-                    "experts.gate_up_proj_weight_global_scale",
+                    f"experts.{up}_weight_global_scale",
                     "experts.down_proj_weight_global_scale",
                     *(["experts.down_proj_activation_scale"] if calibrated else []),
                 ],
                 operations=[*self._reciprocal_ops, FineGrainedWeightGlobals(self)],
             )
-        )
+            for up in self.up_projections
+        ]
         return converters

@@ -95,7 +95,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## DeepGEMM
 
-The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels distributed by [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). It works with unquantized `bfloat16` experts and with FP8/FP4-quantized experts loaded through [Fine-grained FP8](./quantization/finegrained_fp8).
+The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels distributed by [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm). It works with unquantized `bfloat16` experts, with [Block FP8](./quantization/blockfp8) experts (128x128 blocks), and with [MXFP4](./quantization/mxfp4) experts run with FP8 activations (DeepSeek-V4's W4A8, Blackwell only), including a [Fine-grained](./quantization/finegrained) plan of them. On quantized experts it quantizes activations to FP8 at run time whatever their `activation_format`, and adds no expert biases; use `grouped_mm` or `batched_mm` for MXFP8 or NVFP4 experts, biased experts, or another activation format.
 
 The `"deepgemm"` backend requires:
 

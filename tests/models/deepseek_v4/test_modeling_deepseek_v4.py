@@ -448,12 +448,12 @@ def main() -> int:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
 
-    # FP8 only: Triton multi-expert kernels generate wrong tokens after DeepGEMM has run on
+    # FP8 experts only: Triton multi-expert kernels generate wrong tokens after DeepGEMM has run on
     # the same module (root cause unknown — per-row kernel outputs measure bit-perfect, yet
     # end-to-end generation degrades; not reproducible with DeepGEMM disabled). Force the
-    # Triton fallback in `fp8_linear` for batched_mm / grouped_mm so attention/MLP linears
-    # stay Triton-only too. FP4 is unaffected and keeps DeepGEMM for performance.
-    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+    # Triton dense-linear dispatch for batched_mm / grouped_mm so attention/MLP linears
+    # stay Triton-only too. FP4 experts are unaffected and keep DeepGEMM for performance.
+    is_fp8 = next((m.weight_format for m in model.modules() if hasattr(m, "holds_interleaved_gate_up")), None) == "fp8"
 
     failed = []
     for dispatch in RUNTIME_DISPATCHES:
@@ -528,7 +528,7 @@ def main() -> int:
     inputs = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=ADD_SPECIAL_TOKENS).to(model.device)
     expected_logits_shape = inputs.input_ids.shape
 
-    is_fp8 = getattr(model.config, "expert_dtype", "fp8") != "fp4"
+    is_fp8 = next((m.weight_format for m in model.modules() if hasattr(m, "holds_interleaved_gate_up")), None) == "fp8"
 
     failed = []
     for dispatch in RUNTIME_DISPATCHES:

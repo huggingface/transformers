@@ -25,7 +25,7 @@ from collections import defaultdict
 import torch
 
 from ...core_model_loading import ConversionOps, Interleave
-from ...quantizers.quantizers_utils import get_module_from_name
+from ...quantizers.quantizers_utils import FUSED_STACKS, get_module_from_name
 from .layers import (
     _FP8_DTYPE,
     _FP8_MAX,
@@ -40,6 +40,16 @@ from .layers import (
 )
 
 
+def single_tensor(value):
+    """A converter's tensor, which the loader hands in a list: one source's is a one-element list. Several are
+    sources this op does not merge, so they are refused rather than cut down to the first."""
+    if not isinstance(value, list):
+        return value
+    if len(value) != 1:
+        raise ValueError(f"expected a single tensor, got a list of {len(value)}")
+    return value[0]
+
+
 def keyed_by_target(input_dict: dict, target_patterns) -> dict:
     """A converter's ops see their single tensor under the SOURCE pattern until an op re-keys it to the
     target (the core ops do; the loader then expands the target into the full name) — so a
@@ -47,7 +57,7 @@ def keyed_by_target(input_dict: dict, target_patterns) -> dict:
     deserializer's fully named outputs) pass through."""
     if target_patterns and len(input_dict) == 1:
         value = next(iter(input_dict.values()))
-        return {target_patterns[0]: value[0] if isinstance(value, list) else value}
+        return {target_patterns[0]: single_tensor(value)}
     return input_dict
 
 
@@ -110,22 +120,24 @@ class _FineGrainedOp(ConversionOps):
 
 
 class FineGrainedInterleaveGateUp(_FineGrainedOp):
-    """Stacked ``[gate; up]`` expert rows into the kernels' ``[g0, u0, g1, u1, ...]`` order — the
-    core ``Interleave`` along dim 1, over the weight, scale grid and bias alike. Runs on load and
-    save wherever the checkpoint's row order differs from the one the experts hold."""
+    """Expert gate|up rows between the checkpoint's order and the one the experts hold: stacked
+    ``[gate; up]`` or the kernels' ``[g0, u0, g1, u1, ...]`` — the core ``Interleave`` along dim 1,
+    over the weight, scale grid and bias alike. Runs on load and save wherever the two differ."""
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         input_dict = keyed_by_target(input_dict, target_patterns)
         experts = finegrained_experts(model, full_layer_name)
-        if experts is None or not (experts.is_concatenated and experts.holds_interleaved_gate_up):
+        # `is_concatenated` is the checkpoint's stacked order
+        if experts is None or not experts.has_gate or experts.is_concatenated != experts.holds_interleaved_gate_up:
             return input_dict
-        interleave = Interleave(dim=1, inverse=not self.inverse)  # inverse=True is stacked -> interleaved
+        # inverse=True is stacked -> interleaved
+        interleave = Interleave(dim=1, inverse=experts.holds_interleaved_gate_up != self.inverse)
         out = {}
         for key, value in input_dict.items():
-            probe = value[0] if isinstance(value, list) and len(value) == 1 else value
+            value = single_tensor(value)
             # a per-tensor scale is ONE value covering the whole gate|up stack — no row axis to
             # reorder, and reshaping its length-1 axis into pairs is what would fail
-            if getattr(probe, "ndim", 0) < 2 or probe.shape[1] < 2:
+            if getattr(value, "ndim", 0) < 2 or value.shape[1] < 2:
                 out[key] = value
             else:
                 out[key] = interleave.convert({key: value}, None, [key])[key]
@@ -141,7 +153,7 @@ class FineGrainedScaleContainer(_FineGrainedOp):
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         out = {}
         for key, value in keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
+            value = single_tensor(value)
             if self.inverse:
                 # the container its module recorded at load; e8m0 is only ever a scale, so the dtype
                 # alone picks the tensors to restore
@@ -167,7 +179,7 @@ class FineGrainedSwizzleScales(_FineGrainedOp):
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         out = {}
         for key, value in keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
+            value = single_tensor(value)
             out[key] = self._unswizzle(value) if self.inverse else self._swizzle(key, value, model, full_layer_name)
         return out
 
@@ -195,7 +207,7 @@ class FineGrainedPackedBlocks(_FineGrainedOp):
     def convert(self, input_dict, target_patterns=None, **kwargs):
         out = {}
         for key, value in keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
+            value = single_tensor(value)
             if "_scales" in key:  # a converter that carries the scale alongside (the dequant chain)
                 out[key] = value
             elif self.inverse:
@@ -214,7 +226,7 @@ class FineGrainedViewPackedInt8(_FineGrainedOp):
         held, want = (torch.int8, torch.uint8) if self.inverse else (torch.uint8, torch.int8)
         out = {}
         for key, value in keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
+            value = single_tensor(value)
             out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
         return out
 
@@ -279,9 +291,10 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
         # which the down's weight global takes on (scaling the expert output back up) and its
         # input global gives back (keeping the requantized intermediate on the calibrated range)
         if stack is not None and globals_[stack].shape[1] == 2:
-            self._assert_no_gate_up_bias(model)
             gate, up = globals_[stack].chunk(2, dim=1)
             gate, up = gate.squeeze(1), up.squeeze(1)
+            if not torch.equal(gate, up):
+                self._assert_halves_foldable(model)
             globals_[stack] = gate
             ratio = (up / gate)[:, None]
             for role, factor in ((("down", "weight"), ratio), (("down", "input"), 1 / ratio)):
@@ -290,16 +303,22 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
         return {target: value.reshape(-1).contiguous() for target, value in globals_.items()}
 
     @staticmethod
-    def _assert_no_gate_up_bias(model) -> None:
-        """A gate|up bias is added AFTER the global, so merging the halves would have to divide
-        its up rows by the same ratio — in the bias converter, which the layout ops own. No
-        checkpoint pairs the two, so refuse rather than carry a silent half-correction."""
-        if model is not None and any(
-            isinstance(module, FineGrainedExperts) and module.has_bias for module in model.modules()
-        ):
+    def _assert_halves_foldable(model) -> None:
+        """Merging the halves' globals moves the up half's past the GLU. A gate|up bias is added AFTER the global, so
+        its up rows would have to be divided by the same ratio, in the bias converter the layout ops own; no
+        checkpoint pairs the two. And the GLU must be linear in `up`: a clamped SwiGLU (`swiglu_limit`) clips the
+        rescaled values, and SwiGLU-OAI (`swiglu_alpha`) multiplies by `up + 1`."""
+        experts = [module for module in model.modules() if isinstance(module, FineGrainedExperts)] if model else []
+        if any(module.has_bias for module in experts):
             raise NotImplementedError(
                 "this checkpoint calibrates the gate|up halves separately AND carries an expert "
                 "bias; the up half's bias would have to be folded with the globals."
+            )
+        if any(module.swiglu_limit is not None or module.swiglu_alpha is not None for module in experts):
+            raise NotImplementedError(
+                "this checkpoint calibrates the gate|up halves separately, and this model's GLU "
+                "(`swiglu_limit` / `swiglu_alpha`) is not linear in the up half, so the halves' globals "
+                "cannot be merged into one per expert."
             )
 
 
@@ -311,7 +330,9 @@ class FineGrainedInputScales(_FineGrainedOp):
     def convert(self, input_dict, full_layer_name=None, **kwargs):
         values = []
         for value in input_dict.values():
-            value = torch.stack(value, dim=0) if isinstance(value, list) else value
+            # unwrapped, a fused `(E,)` scale in the loader's list reads as `(1, E)` and reduces across experts
+            if isinstance(value, list):
+                value = value[0] if len(value) == 1 else torch.stack(value, dim=0)
             values.append(value.float())
         stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
         # a scale is a magnitude, so the reduce is over absolute values
@@ -330,8 +351,7 @@ class FineGrainedInputScalesSplit(_FineGrainedOp):
     re-expands per expert, the shape the checkpoint holds."""
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
-        value = next(iter(input_dict.values()))
-        value = value[0] if isinstance(value, list) else value
+        value = single_tensor(next(iter(input_dict.values())))
         if value.numel() == 1:
             experts = finegrained_experts(model, full_layer_name)
             if experts is not None:
@@ -346,7 +366,9 @@ class FineGrainedInputScalesSplit(_FineGrainedOp):
 
 class FineGrainedQuantize(_FineGrainedOp):
     """Quantize a full-precision weight on load into the format its module holds, emitting the
-    scale (and the NVFP4 global) in that module's layout.
+    scale (and the NVFP4 global) in its held dtype. The weight is read as its full stack, so a block
+    covers rows of one projection; the loader then runs the module's layout ops (gate|up interleave,
+    scale swizzle) on what this emits.
 
     Block-FP8 is computed in torch; the group formats run the kernels' row-wise quantizers, NVFP4
     after normalizing by the canonical global ``amax / (6 * 448)``. A tensor that is not a
@@ -356,7 +378,7 @@ class FineGrainedQuantize(_FineGrainedOp):
     def convert(self, input_dict: dict[str, torch.Tensor], model=None, **kwargs) -> dict[str, torch.Tensor]:
         result: dict[str, torch.Tensor] = {}
         for key, value in input_dict.items():
-            tensor = value[0] if isinstance(value, list) else value
+            tensor = single_tensor(value)
             holder = self._weight_holder(model, key)
             if holder is None and model is not None:
                 # not a weight, whatever its rank: an expert bias is 2-D and would otherwise be
@@ -372,7 +394,7 @@ class FineGrainedQuantize(_FineGrainedOp):
         """An expert stack in the ``(E, rows, K)`` the module's slot and the kernels take. A model may store its
         experts transposed (GPT-OSS: ``(E, H, 2I)``), which the module it replaced declares: quantizing before the
         swap packs the wrong axis, and a square stack (GPT-OSS's down projection) cannot tell from its shape."""
-        if module is None or value.ndim != 3 or name not in ("gate_up_proj", "up_proj", "down_proj"):
+        if module is None or value.ndim != 3 or name not in FUSED_STACKS:
             return value
         return value.transpose(1, 2).contiguous() if getattr(module, "ships_transposed", False) else value
 
@@ -386,7 +408,7 @@ class FineGrainedQuantize(_FineGrainedOp):
             return None
         if name == "weight":
             return module, "weight_scale_inv"
-        if name in ("gate_up_proj", "up_proj", "down_proj"):
+        if name in FUSED_STACKS:
             return module, f"{name}_scale_inv"
         return None
 
@@ -431,8 +453,6 @@ class FineGrainedQuantize(_FineGrainedOp):
             )
         weight, scale, global_scale = self._quantize_group(value, format_spec)
         scale = as_container(scale, held.dtype)
-        if held.ndim == 5:
-            scale = load_finegrained_kernel().swizzle_mx_scales(scale)
         out = {key: weight, f"{prefix}_scale_inv": scale}
         if global_scale is not None:
             # the experts name their global `<proj>_weight_global_scale`, a dense linear just
@@ -547,12 +567,26 @@ class FineGrainedDequantize(_FineGrainedOp):
         plan = self.hf_quantizer.plan() if hasattr(self.hf_quantizer, "plan") else {}
         return any(config.checkpoint_format == "compressed-tensors" for config in plan.values())
 
+    # the weights a converter hands one at a time: a dense `weight`, or an experts module's fused stack
+    _SINGLE_WEIGHTS = ("weight", *FUSED_STACKS)
+
+    @staticmethod
+    def _name(pattern: str) -> str:
+        """The name a source pattern matches: `(?<!\\w)gate_up_proj$` -> `gate_up_proj`."""
+        return pattern.removeprefix(r"(?<!\w)").removesuffix("$")
+
+    def _companion(self, input_dict, pattern: str) -> str | None:
+        """The source pattern in `input_dict` matching the same name as `pattern`, if the converter collected one."""
+        return next((key for key in input_dict if self._name(key) == self._name(pattern)), None)
+
     @staticmethod
     def _global_pattern_for(weight_pattern: str) -> str:
-        """NVFP4's second-level global beside `weight_pattern`: `x.weight` -> `x.weight_global_scale`."""
+        """NVFP4's second-level global beside `weight_pattern`: `x.weight` -> `x.weight_global_scale`, and a fused
+        stack's `gate_up_proj` -> `gate_up_proj_weight_global_scale`."""
         anchored = weight_pattern.endswith("$")
         base = weight_pattern[:-1] if anchored else weight_pattern
-        return base + "_global_scale" + ("$" if anchored else "")
+        suffix = "_global_scale" if base.endswith("weight") else "_weight_global_scale"
+        return base + suffix + ("$" if anchored else "")
 
     # packed-FP4 experts arrive as int8 / float4_e2m1fn_x2, two e2m1 nibbles per byte
     _FP4_E2M1_LUT = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
@@ -583,11 +617,8 @@ class FineGrainedDequantize(_FineGrainedOp):
         rows, cols = quantized_fp32.shape[-2:]
         # the block comes from the scale grid, not the config: one checkpoint holds both a
         # ``[1, 32]`` MXFP4 expert block and a ``[128, 128]`` FP8 dense one
-        try:
-            scale_rows, scale_cols = scales.shape[-2:]
-        except Exception:
-            # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
-            scale_rows, scale_cols = 1, 1
+        # a per-tensor scale has no grid: one block over the whole matrix
+        scale_rows, scale_cols = scales.shape[-2:] if scales.ndim >= 2 else (1, 1)
         # the grid ROUNDS UP, so it does not invert to the block (DSv3's `(576, 7168)` ships a
         # `(5, 56)` grid against a 128x128 block); only guess when no block the plan names reproduces it
         plan = self.hf_quantizer.plan() if hasattr(self.hf_quantizer, "plan") else {}
@@ -628,6 +659,10 @@ class FineGrainedDequantize(_FineGrainedOp):
         out = (blocked * per_block).reshape(*original_shape[:-2], rows + pad_m, cols + pad_n)[..., :rows, :cols]
         if global_scale is not None:
             global_scale = global_scale.to(torch.float32)
+            if out.ndim > 2 and global_scale.ndim:
+                # a stack's globals, one per expert (E,) or one per stacked gate|up half (E, 2), over its rows
+                global_scale = global_scale.reshape(global_scale.shape[0], -1)
+                global_scale = global_scale.repeat_interleave(rows // global_scale.shape[1], dim=1)[..., None]
             out = out / global_scale if self._reciprocal_globals else out * global_scale
         return out.to(output_dtype)
 
@@ -646,22 +681,24 @@ class FineGrainedDequantize(_FineGrainedOp):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
-        # The dense converter (``["weight$", "weight_scale_inv", "weight_global_scale", ...] -> weight``)
-        # hands one weight, with or without a scale (RMSNorm weights match ``weight$`` too).
-        if "weight$" in input_dict:
+        # The dense converter (``["weight$", companions...] -> weight``) and a fused stack's (``["gate_up_proj$", its
+        # companions...] -> gate_up_proj``) each hand one weight, with or without a scale (RMSNorm weights match
+        # ``weight$`` too).
+        weight_pattern = next(
+            (p for p in input_dict if p.endswith("$") and self._name(p) in self._SINGLE_WEIGHTS), None
+        )
+        if weight_pattern is not None:
             # the loader derives prefix/suffix from the output KEY; without a `full_layer_name`
-            # (direct invocation) key it by the converter's target
-            target_key = full_layer_name if full_layer_name is not None else "weight"
-            quantized = input_dict["weight$"]
-            quantized = quantized[0] if isinstance(quantized, list) else quantized
-            if "weight_scale_inv" in input_dict:
-                scales = input_dict["weight_scale_inv"]
-                scales = scales[0] if isinstance(scales, list) else scales
-                global_scale = input_dict.get("weight_global_scale")
-                global_scale = global_scale[0] if isinstance(global_scale, list) else global_scale
-                dequantized = self._dequantize_one(quantized, scales, output_dtype, global_scale)
-                return {target_key: dequantized}
-            return {target_key: quantized}
+            # (direct invocation) key it by the weight's own name
+            target_key = full_layer_name if full_layer_name is not None else self._name(weight_pattern)
+            quantized = single_tensor(input_dict[weight_pattern])
+            scale, global_scale = (
+                single_tensor(input_dict.get(self._companion(input_dict, companion(weight_pattern))))
+                for companion in (self._scale_pattern_for, self._global_pattern_for)
+            )
+            if scale is None:
+                return {target_key: quantized}
+            return {target_key: self._dequantize_one(quantized, scale, output_dtype, global_scale)}
 
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
         consumed = {
@@ -692,6 +729,6 @@ class FineGrainedDequantize(_FineGrainedOp):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        # a save re-quantizes, so the checkpoint keeps its format whether the in-memory
-        # state stayed quantized or was dequantized for compute
+        # a dequantized model saves in full precision: none of its weights fills a finegrained module,
+        # so the quantize passes each through
         return FineGrainedQuantize(self.hf_quantizer)
