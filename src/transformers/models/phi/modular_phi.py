@@ -178,7 +178,10 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
 
 
 class PhiPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": PhiDecoderLayer,
+        "attentions": PhiAttention,
+    }
 
 
 class PhiModel(LlamaModel):

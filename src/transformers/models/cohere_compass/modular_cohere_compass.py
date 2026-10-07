@@ -65,7 +65,8 @@ from ..qwen3_vl.video_processing_qwen3_vl import Qwen3VLVideoProcessor
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")
 @strict
 class CohereCompassVisionConfig(Qwen3VLVisionConfig):
-    pass
+    model_type = "cohere_compass_vision"
+    base_config_key = "vision_config"
 
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")

@@ -41,7 +41,7 @@ from ..eomt.modeling_eomt import (
 @auto_docstring(checkpoint="tue-mps/videomt-dinov2-small-ytvis2019")
 @strict
 class VideomtConfig(EomtConfig):
-    pass
+    model_type = "videomt"
 
 
 class VideomtPatchEmbeddings(EomtPatchEmbeddings):
