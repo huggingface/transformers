@@ -696,19 +696,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return audio_el
 
     def _to_device(self, audio: list, device) -> list:
-        """Place the mono waveforms on `device`. Only the Torch backend has devices."""
-        return audio
+        """Place the mono waveforms on `device`, as one batch transfer where the backend can."""
+        return audio if device is None else self.ops.to_device_many(audio, device)
 
     def _pad_waveforms(
         self, audio: list, max_length: int, *, padding_side: str, padding_value: float, **kwargs
     ) -> list:
-        """Pad every waveform to `max_length`. Backends may assemble the batch in one allocation."""
-        return [
-            self._pad_waveform(
-                audio_el, max_length=max_length, padding_side=padding_side, padding_value=padding_value, **kwargs
-            )
-            for audio_el in audio
-        ]
+        """Pad every waveform to `max_length` on `padding_side`; one already that long passes unchanged."""
+        return self.ops.pad_many(audio, max_length, side=padding_side, value=padding_value)
 
     def _stack_waveforms(self, audio, *, padding=None):
         self._validate_stackable(audio, padding=padding, item_name="waveforms")

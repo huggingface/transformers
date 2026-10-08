@@ -54,8 +54,6 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     # ── Backend array-API primitives ─────────────────────────────────────
 
-    _transfer_chunk_bytes = 8 * 2**20
-
     @staticmethod
     def _host_to_device(values, device, dtype=None):
         """Copy host data (lengths, ranges, filter banks) to `device` without blocking the host.
@@ -72,62 +70,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         if device.type != "cuda" or tensor.device.type != "cpu":
             return tensor.to(device)
         return tensor.pin_memory().to(device, non_blocking=True)
-
-    def _to_device(self, audio, device):
-        if device is None:
-            return audio
-        device = torch.device(device)
-        if all(audio_el.device == device for audio_el in audio):
-            return audio
-        if (
-            device.type != "cuda"
-            or len(audio) == 1
-            or any(audio_el.device.type != "cpu" or audio_el.ndim != 1 for audio_el in audio)
-            or len({audio_el.dtype for audio_el in audio}) > 1
-        ):
-            return [audio_el.to(device) for audio_el in audio]
-        # Stage through pinned memory in ~8 MB chunks, so packing chunk k+1 on the host overlaps the DMA
-        # of chunk k and only the last chunk's copy is exposed. Per-waveform pageable copies each blocked
-        # the host, which made the transfer ~4x slower than the bytes it moves. The waveforms come back
-        # as views of one device buffer.
-        lengths = [audio_el.shape[-1] for audio_el in audio]
-        flat = torch.empty(sum(lengths), dtype=audio[0].dtype, device=device)
-        chunk_samples = self._transfer_chunk_bytes // flat.element_size()
-        offset = start = pending = 0
-        for end, length in enumerate(lengths, start=1):
-            pending += length
-            if pending < chunk_samples and end < len(audio):
-                continue
-            host = torch.cat(audio[start:end], out=torch.empty(pending, dtype=flat.dtype, pin_memory=True))
-            flat[offset : offset + pending].copy_(host, non_blocking=True)
-            offset, start, pending = offset + pending, end, 0
-        return list(flat.split(lengths))
-
-    def _pad_waveforms(self, audio, max_length, *, padding_side, padding_value, **kwargs):
-        # Batched assembly only pays off on an accelerator: on CPU the per-item pads are cheaper than a
-        # scatter, and a single waveform has nothing to amortize.
-        if (
-            len(audio) == 1
-            or audio[0].device.type == "cpu"
-            or padding_side not in ("left", "right")
-            or any(audio_el.ndim != 1 or audio_el.device != audio[0].device for audio_el in audio)
-            or len({audio_el.dtype for audio_el in audio}) > 1
-            or any(audio_el.shape[-1] > max_length for audio_el in audio)
-        ):
-            return super()._pad_waveforms(
-                audio, max_length, padding_side=padding_side, padding_value=padding_value, **kwargs
-            )
-        # One allocation and one scatter for the whole batch: per-waveform `pad` paid an allocation, a
-        # fill and a copy per item, and the Python loop over rows kept the host busy while the device idled.
-        # `masked_scatter_` fills the mask in row-major order, which is exactly the concatenation order
-        # for either padding side, so the result is a pure copy -- bit-identical to per-item padding.
-        width = max_length
-        device = audio[0].device
-        lengths = self._host_to_device([audio_el.shape[-1] for audio_el in audio], device)
-        positions = torch.arange(width, device=device)
-        mask = positions >= width - lengths[:, None] if padding_side == "left" else positions < lengths[:, None]
-        batch = torch.full((len(audio), width), padding_value, dtype=audio[0].dtype, device=device)
-        return list(batch.masked_scatter_(mask, torch.cat(audio)))
 
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -195,6 +137,11 @@ class AudioOps:
         """`x` on `device` (a backend-specific designator). Backends without devices return `x`."""
         raise NotImplementedError
 
+    def to_device_many(self, seq, device):
+        """``[to_device(x, device) for x in seq]`` as a list. A backend may batch the transfer (torch stages
+        CPU→CUDA copies through pinned chunks); the values are those of per-item `to_device`."""
+        raise NotImplementedError
+
     def astype(self, x, dtype):
         """`x` cast to `dtype` (see the class docstring for the widest-float rule)."""
         raise NotImplementedError
@@ -230,6 +177,23 @@ class AudioOps:
         """Pad `axis` by `left` / `right` samples. `mode`: ``"constant"`` (with `value`),
         ``"reflect"`` (mirror without repeating the edge), ``"replicate"`` (repeat the edge).
         `reflect` requires `left` and `right` each at most `len - 1`."""
+        raise NotImplementedError
+
+    def pad_many(self, seq, length, *, side="right", value=0.0):
+        """Each array of `seq` constant-padded on its last axis to `length` samples on `side` (``"left"`` or
+        ``"right"``) with `value`, as a list in input order; an array already `length` or longer is returned
+        unchanged. A backend may assemble the batch in one allocation (torch on CUDA); the values are those of
+        per-item `pad`."""
+        raise NotImplementedError
+
+    def reshape(self, x, shape):
+        """`x` with the tuple `shape` (at most one ``-1``), elements in row-major order. May copy."""
+        raise NotImplementedError
+
+    def take_along_axis(self, x, indices, axis):
+        """numpy's `take_along_axis`: ``out[..., i, ...] = x[..., indices[..., i, ...], ...]`` along the int
+        `axis`. `indices` is an int64 array with `x`'s ndim; its other axes broadcast against `x`'s. A copy of
+        the selected values, exact."""
         raise NotImplementedError
 
     def masked_fill(self, x, mask, value):
@@ -308,6 +272,18 @@ class AudioOps:
 
     def amax(self, x, axis, *, keepdims=False):
         """Maximum over `axis` (int, tuple of ints, or `None`; `axis=()` is not allowed)."""
+        raise NotImplementedError
+
+    def amin(self, x, axis, *, keepdims=False):
+        """Minimum over `axis` (int, tuple of ints, or `None`; `axis=()` is not allowed)."""
+        raise NotImplementedError
+
+    def argmax(self, x, axis):
+        """int64 index of the maximum along the int `axis`; the first occurrence on ties."""
+        raise NotImplementedError
+
+    def argmin(self, x, axis):
+        """int64 index of the minimum along the int `axis`; the first occurrence on ties."""
         raise NotImplementedError
 
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
@@ -445,6 +421,15 @@ def _check_axis(axis):
         raise ValueError("axis=() is not allowed; pass an int, a tuple of ints or None.")
 
 
+def _side_widths(side, missing):
+    """`(left, right)` pad widths that bring a waveform `missing` samples short to length on `side`."""
+    if side == "right":
+        return 0, missing
+    if side == "left":
+        return missing, 0
+    raise ValueError(f"Invalid padding side: {side!r}; expected 'left' or 'right'.")
+
+
 class NumpyOps(AudioOps):
     """The reference backend: every op, in numpy. No devices; `like` only matters for dtype."""
 
@@ -460,6 +445,9 @@ class NumpyOps(AudioOps):
 
     def to_device(self, x, device):
         return x
+
+    def to_device_many(self, seq, device):
+        return [self.to_device(x, device) for x in seq]
 
     def astype(self, x, dtype):
         return x.astype(np.dtype(dtype), copy=False)
@@ -492,6 +480,19 @@ class NumpyOps(AudioOps):
         if mode not in _NUMPY_PAD_MODES:
             raise ValueError(f"Unknown pad mode {mode!r}.")
         return np.pad(x, width, mode=_NUMPY_PAD_MODES[mode])
+
+    def pad_many(self, seq, length, *, side="right", value=0.0):
+        _side_widths(side, 0)  # an unknown side raises even when nothing needs padding
+        return [
+            x if x.shape[-1] >= length else self.pad(x, *_side_widths(side, length - x.shape[-1]), value=value)
+            for x in seq
+        ]
+
+    def reshape(self, x, shape):
+        return np.reshape(x, shape)
+
+    def take_along_axis(self, x, indices, axis):
+        return np.take_along_axis(x, indices, axis)
 
     def masked_fill(self, x, mask, value):
         return np.where(mask, np.asarray(value, dtype=x.dtype), x)
@@ -561,6 +562,16 @@ class NumpyOps(AudioOps):
     def amax(self, x, axis, *, keepdims=False):
         _check_axis(axis)
         return np.asarray(np.amax(x, axis=axis, keepdims=keepdims))
+
+    def amin(self, x, axis, *, keepdims=False):
+        _check_axis(axis)
+        return np.asarray(np.amin(x, axis=axis, keepdims=keepdims))
+
+    def argmax(self, x, axis):
+        return np.asarray(np.argmax(x, axis=axis)).astype(np.int64, copy=False)
+
+    def argmin(self, x, axis):
+        return np.asarray(np.argmin(x, axis=axis)).astype(np.int64, copy=False)
 
     # ── linear algebra ─────────────────────────────────────────────────────────────────────────
 
@@ -719,6 +730,36 @@ if is_torch_available():
                 return x.pin_memory().to(device, non_blocking=True)
             return x.to(device)
 
+        _TRANSFER_CHUNK_BYTES = 8 * 2**20
+
+        def to_device_many(self, seq, device):
+            seq, device = list(seq), torch.device(device)
+            if all(x.device == device for x in seq):
+                return seq
+            if (
+                device.type != "cuda"
+                or len(seq) == 1
+                or any(x.device.type != "cpu" or x.ndim != 1 for x in seq)
+                or len({x.dtype for x in seq}) > 1
+            ):
+                return [self.to_device(x, device) for x in seq]
+            # Stage through pinned memory in ~8 MB chunks, so packing chunk k+1 on the host overlaps the DMA
+            # of chunk k and only the last chunk's copy is exposed. Per-waveform pageable copies each blocked
+            # the host, which made the transfer ~4x slower than the bytes it moves. The waveforms come back
+            # as views of one device buffer.
+            lengths = [x.shape[-1] for x in seq]
+            flat = torch.empty(sum(lengths), dtype=seq[0].dtype, device=device)
+            chunk_samples = self._TRANSFER_CHUNK_BYTES // flat.element_size()
+            offset = start = pending = 0
+            for end, length in enumerate(lengths, start=1):
+                pending += length
+                if pending < chunk_samples and end < len(seq):
+                    continue
+                host = torch.cat(seq[start:end], out=torch.empty(pending, dtype=flat.dtype, pin_memory=True))
+                flat[offset : offset + pending].copy_(host, non_blocking=True)
+                offset, start, pending = offset + pending, end, 0
+            return list(flat.split(lengths))
+
         def astype(self, x, dtype):
             return x.to(self._torch_dtype(dtype, x.device.type))
 
@@ -757,6 +798,39 @@ if is_torch_available():
             flat = moved.reshape(1, -1, moved.shape[-1])
             padded = torch.nn.functional.pad(flat, (left, right), mode=mode)
             return padded.reshape(*moved.shape[:-1], padded.shape[-1]).movedim(-1, axis)
+
+        def pad_many(self, seq, length, *, side="right", value=0.0):
+            _side_widths(side, 0)  # an unknown side raises even when nothing needs padding
+            seq = list(seq)
+            # Batched assembly only pays off on an accelerator: on CPU the per-item pads are cheaper than a
+            # scatter, and a single waveform has nothing to amortize.
+            if (
+                len(seq) <= 1
+                or seq[0].device.type == "cpu"
+                or any(x.ndim != 1 or x.device != seq[0].device for x in seq)
+                or len({x.dtype for x in seq}) > 1
+                or any(x.shape[-1] > length for x in seq)
+            ):
+                return [
+                    x if x.shape[-1] >= length else self.pad(x, *_side_widths(side, length - x.shape[-1]), value=value)
+                    for x in seq
+                ]
+            # One allocation and one scatter for the whole batch: per-waveform `pad` paid an allocation, a fill
+            # and a copy per item, and the Python loop over rows kept the host busy while the device idled.
+            # `masked_scatter_` fills the mask in row-major order, which is exactly the concatenation order for
+            # either side, so the result is a pure copy -- bit-identical to per-item padding.
+            device = seq[0].device
+            lengths = self.asarray(np.asarray([x.shape[-1] for x in seq], dtype=np.int64), like=seq[0])
+            positions = torch.arange(length, device=device)
+            mask = positions >= length - lengths[:, None] if side == "left" else positions < lengths[:, None]
+            batch = torch.full((len(seq), length), value, dtype=seq[0].dtype, device=device)
+            return list(batch.masked_scatter_(mask, torch.cat(seq)))
+
+        def reshape(self, x, shape):
+            return x.reshape(shape)
+
+        def take_along_axis(self, x, indices, axis):
+            return torch.take_along_dim(x, indices, dim=axis)  # broadcasts like numpy
 
         def masked_fill(self, x, mask, value):
             # keep `x`'s axis order (dense strides), as `np.where` does when the mask broadcasts to `x`: out-of-place
@@ -825,6 +899,16 @@ if is_torch_available():
         def amax(self, x, axis, *, keepdims=False):
             _check_axis(axis)
             return torch.amax(x, dim=self._dims(x, axis), keepdim=keepdims)
+
+        def amin(self, x, axis, *, keepdims=False):
+            _check_axis(axis)
+            return torch.amin(x, dim=self._dims(x, axis), keepdim=keepdims)
+
+        def argmax(self, x, axis):
+            return torch.argmax(x, dim=axis)  # int64; the first occurrence on ties
+
+        def argmin(self, x, axis):
+            return torch.argmin(x, dim=axis)
 
         # ── linear algebra ─────────────────────────────────────────────────────────────────────
 
