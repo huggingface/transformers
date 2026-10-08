@@ -16,6 +16,13 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained FP8
 
+> [!WARNING]
+> `FineGrainedFP8Config` is frozen and receives no new recipes. [`FineGrainedConfig`] supersedes it, serving
+> block-FP8, MXFP8, MXFP4 and NVFP4 through one config for dense linears, embeddings and MoE
+> experts alike. Existing checkpoints keep loading — the `fp8`, `mxfp8`, `mxfp4` and `nvfp4`
+> `quant_method` keys now route to the fine-grained integration — so this page is here for
+> reference while the frozen classes remain. They will be removed in a future release.
+
 Fine-grained FP8 quantization quantizes the weights and activations to fp8.
 
 - The weights are quantized to 8-bits for each 2D block (`weight_block_size=(128, 128)`).

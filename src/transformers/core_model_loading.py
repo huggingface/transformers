@@ -287,8 +287,9 @@ class SplitModulelist(ConversionOps):
             sizes = tensor.size(self.dim)
             targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
-            # We squeeze each chunk here as well to make sure to give them their original shape
-            all_tensors.update({target: chunk.squeeze() for target, chunk in zip(targets, chunks)})
+            # We squeeze each chunk here as well to make sure to give them their original shape; only the split
+            # dim, so a tensor that holds a size-1 dim of its own (a single column of block scales) keeps it
+            all_tensors.update({target: chunk.squeeze(self.dim) for target, chunk in zip(targets, chunks)})
         return all_tensors
 
     def get_target_patterns(
@@ -1142,11 +1143,21 @@ class PrefixChange(WeightRenaming):
         return result
 
 
-# List of classes that are known to be able to use m:n
-_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
-    ErnieFuseAndSplitTextVisionExperts,
-    ErnieSplitAndDecoupleTextVisionExperts,
-)
+def _internal_many_to_many_conversions() -> tuple[type[ConversionOps], ...]:
+    """The classes known to be able to use m:n.
+
+    A function, not the module-level tuple it would rather be: `FineGrainedWeightGlobals` lives in
+    `integrations.finegrained`, which imports THIS module, so naming it at import time fails
+    whenever the integration is imported first (`cannot import name ... from partially initialized
+    module`). Called once per `WeightConverter`, at construction.
+    """
+    from .integrations.finegrained.conversions import FineGrainedWeightGlobals
+
+    return (
+        ErnieFuseAndSplitTextVisionExperts,
+        ErnieSplitAndDecoupleTextVisionExperts,
+        FineGrainedWeightGlobals,
+    )
 
 
 class WeightConverter(WeightTransform):
@@ -1165,7 +1176,7 @@ class WeightConverter(WeightTransform):
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+            if not any(isinstance(op, _internal_many_to_many_conversions()) for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
@@ -1699,8 +1710,10 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+                # usually correct when initializing; only exception can be quants (int8 storage
+                # would zero it, float8 would double-round it)
+                _dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`
@@ -1800,6 +1813,11 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
+def _is_catch_all(converter: WeightConverter, key: str) -> bool:
+    """Whether `converter` takes `key` by its parameter name alone, for any module that holds one."""
+    return converter.compiled_sources.search(f"probe.{key.rsplit('.', 1)[-1]}") is not None
+
+
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
@@ -1832,27 +1850,52 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
-    conversion_mapping: dict[str, WeightTransform] = {}
+    # parameters the quantizer created next to a weight (e.g. its scale when quantizing on the fly) have no
+    # checkpoint key, so no converter of their own: they take their weight's reversed layout ops, and stay quantized
+    hf_quantizer = getattr(model, "hf_quantizer", None)
+    quantization_param_suffixes = hf_quantizer.quantization_param_suffixes if hf_quantizer is not None else ()
+
+    # `(layer name, reversed transform, quantization-param suffix)` per realized group
+    conversion_mapping: dict[str, tuple[str, WeightTransform, str]] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
         renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
-        if source_pattern is not None:
-            new_converter = deepcopy(pattern_to_converter[source_pattern])
-            # each target key gets its own converter instance
-            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
-        else:
-            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-            source_pattern = original_key
 
-        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+        source_key, suffix = original_key, ""
+        param_suffix = next((s for s in quantization_param_suffixes if original_key.endswith(s)), None)
+        own = pattern_to_converter.get(source_pattern)
+        # a parameter follows its weight's converter unless it has one of its own; a catch-all, which
+        # takes the name whatever module holds it, does not count as one
+        if param_suffix is not None and (own is None or _is_catch_all(own, original_key)):
+            weight_key = original_key.removesuffix(param_suffix)
+            _, weight_pattern = rename_source_key(weight_key, [], converters, reverse=True)
+            if weight_pattern is not None and not _is_catch_all(pattern_to_converter[weight_pattern], weight_key):
+                source_key, source_pattern, suffix = weight_key, weight_pattern, param_suffix
+
+        if source_pattern is not None:
+            # converted on its own name: the renamings apply to what the converter writes, since one written
+            # on the tail the converter matches would otherwise leave it nothing to expand the prefix from
+            converted_key, _ = rename_source_key(source_key, [], converters, reverse=True)
+            # each target key gets its own converter instance
+            _, mapping, _ = conversion_mapping.setdefault(
+                converted_key + suffix, (converted_key, deepcopy(pattern_to_converter[source_pattern]), suffix)
+            )
+            mapping.add_tensor(converted_key, source_key, source_pattern, tensor)
+        else:
+            _, mapping, _ = conversion_mapping.setdefault(
+                renamed_key, (renamed_key, WeightRenaming(original_key, renamed_key), "")
+            )
+            mapping.add_tensor(renamed_key, original_key, original_key, tensor)
 
     new_state_dict = {}
-    for first_param_name, reversed_converter in conversion_mapping.items():
+    for layer_name, reversed_transform, suffix in conversion_mapping.values():
         # Apply the reverse converter
-        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        realized_value = reversed_transform.convert(layer_name, model=model, config=model.config)
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
+            if isinstance(reversed_transform, WeightConverter):
+                target_name, _ = rename_source_key(target_name + suffix, renamings, [], reverse=True)
             new_state_dict[target_name] = param
 
     return new_state_dict

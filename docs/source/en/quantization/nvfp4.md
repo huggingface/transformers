@@ -16,6 +16,13 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
+> [!WARNING]
+> `NVFP4Config` is frozen and receives no new recipes. [`FineGrainedConfig`] supersedes it, serving
+> block-FP8, MXFP8, MXFP4 and NVFP4 through one config for dense linears, embeddings and MoE
+> experts alike. Existing checkpoints keep loading — the `fp8`, `mxfp8`, `mxfp4` and `nvfp4`
+> `quant_method` keys now route to the fine-grained integration — so this page is here for
+> reference while the frozen classes remain. They will be removed in a future release.
+
 NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
 loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
 the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are

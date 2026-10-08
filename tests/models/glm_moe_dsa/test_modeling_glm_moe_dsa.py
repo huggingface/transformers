@@ -22,7 +22,7 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    FineGrainedFP8Config,
+    FineGrainedConfig,
     GlmMoeDsaConfig,
     is_torch_available,
     set_seed,
@@ -164,7 +164,7 @@ class GlmMoeDsaIntegrationTest(unittest.TestCase):
         set_seed(0)  # different ranks need the same seed
         model_id = "zai-org/GLM-5-FP8"
 
-        quantization_config = FineGrainedFP8Config(
+        quantization_config = FineGrainedConfig(
             modules_to_not_convert=[
                 "model.layers.*.mlp.gate$",
                 "model.layers.*.self_attn.indexer.weights_proj$",

@@ -90,6 +90,12 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -345,6 +351,8 @@ class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def __init__(self, config):
         super().__init__(config)
         self.num_experts = config.text_config.num_local_experts

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -26,6 +27,15 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
+
+
+warnings.warn(
+    "`transformers.integrations.nvfp4` is frozen and receives no new recipes. `FineGrainedConfig` supersedes it "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only); this module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 if is_torch_available():

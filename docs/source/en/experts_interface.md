@@ -117,7 +117,7 @@ The kernel is loaded lazily on the first forward.
 
 ### FP8 and FP4 quantized experts
 
-DeepSeek-style checkpoints are usually pre-quantized and carry their own quantization config, so you don't need to pass a [`FineGrainedFP8Config`]. The `"deepgemm"` backend automatically picks the FP8 (or FP4 on Blackwell) grouped-GEMM kernel. DeepGEMM requires dynamic per-row activation scales (`activation_scheme="dynamic"`) and rejects static (per-tensor) activation quantization.
+DeepSeek-style checkpoints are usually pre-quantized and carry their own quantization config, so you don't need to pass a [`FineGrainedConfig`]. The `"deepgemm"` backend automatically picks the FP8 (or FP4 on Blackwell) grouped-GEMM kernel. DeepGEMM requires dynamic per-row activation scales (`activation_scheme="dynamic"`) and rejects static (per-tensor) activation quantization.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -133,14 +133,14 @@ For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Black
 > [!NOTE]
 > On Blackwell (SM100+), the `"deepgemm"` and `"deepgemm_megamoe"` experts kernels require power-of-two UE8M0 expert scales. A checkpoint quantized with plain `float32` scales (`scale_fmt="float"`) raises a `ValueError` on the first forward instead of silently corrupting the output. Load a checkpoint quantized with `scale_fmt="ue8m0"`, or switch to `grouped_mm` or `batched_mm`, which consume `float32` block scales directly. Hopper (SM90+) consumes `float32` scales on the DeepGEMM path without conversion.
 
-The main reason to pass a [`FineGrainedFP8Config`] for a pre-quantized checkpoint is to dequantize it back to `bfloat16`, in which case the experts run in `bfloat16` rather than on the FP8/FP4 DeepGEMM path.
+The main reason to pass a [`FineGrainedConfig`] for a pre-quantized checkpoint is to dequantize it back to `bfloat16`, in which case the experts run in `bfloat16` rather than on the FP8/FP4 DeepGEMM path.
 
 ```py
-from transformers import AutoModelForCausalLM, FineGrainedFP8Config
+from transformers import AutoModelForCausalLM, FineGrainedConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V3",
-    quantization_config=FineGrainedFP8Config(dequantize=True),
+    quantization_config=FineGrainedConfig(dequantize=True),
     experts_implementation="deepgemm",
 )
 ```
