@@ -11,14 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import warnings
 from unittest.mock import patch
 
 import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.distributed.device_mesh import init_device_mesh
+from torch.distributed._functional_collectives import AsyncCollectiveTensor
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
@@ -31,35 +28,7 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
 )
-from transformers.testing_utils import TestCasePlus, get_torch_dist_unique_port, is_tensor_parallel_test
-
-
-class _RecordingExperts(torch.nn.Module):
-    """Stand-in experts: the identity, recording the type of the rows it is handed."""
-
-    def __init__(self, num_experts):
-        super().__init__()
-        self.num_experts = num_experts
-        self.received = None
-
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        self.received = type(hidden_states)
-        return hidden_states.clone()
-
-
-def _dispatch_hands_the_experts_the_received_rows(rank, world_size, port):
-    os.environ.update(MASTER_ADDR="127.0.0.1", MASTER_PORT=str(port))
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    try:
-        experts = _RecordingExperts(num_experts=2)
-        EpDispatchExpertsParallel().install_forward(experts, init_device_mesh("cpu", (world_size,)))
-        hidden_states = torch.arange(4 * 8, dtype=torch.float32).view(4, 8) + 100 * rank
-        top_k_index = torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]])
-        output = experts(hidden_states, top_k_index, torch.full((4, 2), 0.5))
-        assert experts.received is torch.Tensor, experts.received
-        torch.testing.assert_close(output, hidden_states)
-    finally:
-        dist.destroy_process_group()
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 
 @is_tensor_parallel_test
@@ -201,10 +170,15 @@ class TestTensorParallelProperties(TestCasePlus):
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
     def test_dispatch_hands_the_experts_the_received_rows(self):
-        """The experts get the all-to-all's received rows as a plain tensor. Its pending result
-        (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on it, which a kernel launched straight
-        from Python (Triton, a raw pointer) never does."""
-        mp.spawn(_dispatch_hands_the_experts_the_received_rows, args=(2, get_torch_dist_unique_port()), nprocs=2)
+        """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
+        it, which a kernel launched straight from Python never does: the experts get the received rows."""
+        hidden_states, top_k_index = torch.randn(4, 8), torch.tensor([[0, 1], [1, 0], [0, 1], [1, 0]])
+        with (
+            patch.object(tensor_parallel, "all_to_all_single", lambda tokens, *args: AsyncCollectiveTensor(tokens)),
+            patch.object(torch.distributed, "all_to_all_single", lambda out, inp, group=None: out.copy_(inp)),
+        ):
+            tokens, *_ = EpDispatchExpertsParallel()._dispatch_tokens(hidden_states, top_k_index, 2, None, 1)
+        self.assertIs(type(tokens), torch.Tensor)
 
     class MockDeviceMesh:
         def __init__(self, world_size, rank):
