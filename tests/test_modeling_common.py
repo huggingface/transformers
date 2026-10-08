@@ -1657,7 +1657,7 @@ class ModelTesterMixin(ExportTesterMixin):
             with torch.no_grad():
                 model(**batched_input)
 
-    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None, frozen_input=False):
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
@@ -1694,8 +1694,42 @@ class ModelTesterMixin(ExportTesterMixin):
                 set_seed(42)
                 model = model_class(config)
                 model.to(torch_device)
-                model.train()
+                model.eval()
 
+                # modify the input to not have a gradient in its direct input
+                frozen_grads = set()
+                if frozen_input:
+                    model_forward_args = inspect.signature(model.forward).parameters
+                    if "inputs_embeds" not in model_forward_args:
+                        self.skipTest(reason="This model doesn't use `inputs_embeds` we can use to freeze the input")
+
+                    if not self.is_encoder_decoder:
+                        input_ids = inputs["input_ids"]
+                        del inputs["input_ids"]
+                    else:
+                        encoder_input_ids = inputs["input_ids"]
+                        decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                        del inputs["input_ids"]
+                        inputs.pop("decoder_input_ids", None)
+
+                    with torch.no_grad():
+                        wte = model.get_input_embeddings()
+
+                        if not self.is_encoder_decoder:
+                            inputs["inputs_embeds"] = wte(input_ids)
+                        else:
+                            inputs["inputs_embeds"] = wte(encoder_input_ids)
+                            inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+                    # Extract the names of the weights associated to the embedding we circumvent
+                    embedding_param_ids = {id(p) for p in wte.parameters()}
+                    frozen_grads = {
+                        name
+                        for name, param in model.named_parameters()
+                        if id(param) in embedding_param_ids
+                    }
+
+                model.train()
                 # unfreeze additional layers
                 for p in model.parameters():
                     p.requires_grad_(True)
@@ -1769,6 +1803,8 @@ class ModelTesterMixin(ExportTesterMixin):
                                 print(
                                     f"None for {k}, Probaby running a MOE, make sure grad is not NONE on EVERY layer. At LEAST 1 of the expert layer should have grads!"
                                 )
+                            elif k in frozen_grads:
+                                continue
                             else:
                                 with self.subTest(f"{k}"):
                                     self.assertTrue(
@@ -2022,6 +2058,11 @@ class ModelTesterMixin(ExportTesterMixin):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         # Scenario - 3 with `use_reentrant=True` (old default behaviour, not recommended)
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
+
+    def test_training_gradient_checkpointing_use_reentrant_true_with_frozen_input(self):
+        # Scenario - 4 with `use_reentrant=True` (old default behaviour, not recommended) and frozen input
+        # NOTE: In special cases 3 == 4 based on the input not going through any embedding (e.g. audio models going through the raw audio values)
+        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True}, frozen_input=True)
 
     def _set_subconfig_attributes(self, config, attribute_name, value):
         """Helper function to recursively set a config attr to a given value"""
