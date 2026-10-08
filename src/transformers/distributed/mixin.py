@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from ..utils.loading_report import LoadStateDictInfo
-from .checkpoint import load_model_checkpoint_distributed, save_model_checkpoint_distributed
+from .checkpoint import _load_model_checkpoint_distributed, _save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
@@ -229,7 +229,7 @@ class DistributedMixin:
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
-        save_model_checkpoint_distributed(model_to_save, save_directory, consolidate=consolidate)
+        _save_model_checkpoint_distributed(model_to_save, save_directory, consolidate=consolidate)
 
         if push_to_hub and save_on_this_rank:
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
@@ -288,7 +288,7 @@ class DistributedMixin:
         self.tie_weights(recompute_mapping=False)
 
         # Load the distributed checkpoint into the model.
-        load_model_checkpoint_distributed(self, distributed_checkpoint_dir)
+        _load_model_checkpoint_distributed(self, distributed_checkpoint_dir)
 
         # Everything in the state dict was loaded: only initialize what DCP cannot provide (non-persistent buffers).
         for tensor in self.state_dict(keep_vars=True).values():

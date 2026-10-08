@@ -20,8 +20,8 @@ from ..utils import _LazyModule
 _import_structure = {
     "checkpoint": [
         "consolidate_distributed_checkpoint",
-        "load_model_checkpoint_distributed",
-        "save_model_checkpoint_distributed",
+        "_load_model_checkpoint_distributed",
+        "_save_model_checkpoint_distributed",
     ],
     "configuration_utils": ["DistributedConfig"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
@@ -38,9 +38,9 @@ _import_structure = {
 
 if TYPE_CHECKING:
     from .checkpoint import (
+        _load_model_checkpoint_distributed,
+        _save_model_checkpoint_distributed,
         consolidate_distributed_checkpoint,
-        load_model_checkpoint_distributed,
-        save_model_checkpoint_distributed,
     )
     from .configuration_utils import (
         DistributedConfig,

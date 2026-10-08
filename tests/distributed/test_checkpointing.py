@@ -32,8 +32,8 @@ if is_torch_available():
     from transformers import LlamaConfig, LlamaForCausalLM
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import (
+        _load_model_checkpoint_distributed,
         consolidate_distributed_checkpoint,
-        load_model_checkpoint_distributed,
     )
 
     if is_torch_distributed_available():
@@ -110,7 +110,7 @@ def _test_load_model_checkpoint_distributed(rank, directory):
             with torch.no_grad():
                 for parameter in model.parameters():
                     parameter.zero_()
-            load_model_checkpoint_distributed(model, f"{directory}/{checkpoint}")
+            _load_model_checkpoint_distributed(model, f"{directory}/{checkpoint}")
             full_state_dict = get_model_state_dict(model, options=StateDictOptions(full_state_dict=True))
             torch.testing.assert_close(full_state_dict, reference.state_dict(), msg=f"checkpoint={checkpoint}")
 

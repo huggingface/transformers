@@ -107,7 +107,7 @@ def _prepare_state_dict_for_dcp(state_dict):
     return tree_map(prepare, state_dict)
 
 
-def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate: bool = True) -> None:
+def _save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate: bool = True) -> None:
     """Save rank-local model shards as safetensors with DCP, optionally consolidating them.
 
     With `consolidate=True`, rank-local files are kept in `sharded/` and complete weights
@@ -233,7 +233,7 @@ def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | o
     set_model_state_dict(model, state)
 
 
-def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
+def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
     """
     Load local safetensors weights into an initialized model, preserving its current mesh and placements.
     """
