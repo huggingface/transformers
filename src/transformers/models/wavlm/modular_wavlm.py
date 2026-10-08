@@ -495,6 +495,8 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, WavLMModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for WavLM")

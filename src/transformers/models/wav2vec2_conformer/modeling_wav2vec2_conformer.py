@@ -905,6 +905,8 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, Wav2Vec2ConformerRelPositionalEmbedding):
             init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
+        elif isinstance(module, Wav2Vec2ConformerModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
         """
