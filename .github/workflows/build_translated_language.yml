@@ -1,0 +1,77 @@
+name: Translate and build one documentation language
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+    secrets:
+      HF_DOC_BUILD_PUSH:
+        required: true
+
+permissions:
+  contents: read
+
+# Hold this group through both jobs so the next translation cannot replace the
+# canonical files before this run has built them. The reusable build has its own lock.
+concurrency:
+  group: transformers-${{ inputs.language }}-translation-and-build
+  cancel-in-progress: false
+
+jobs:
+  translate:
+    if: github.repository == 'huggingface/transformers' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    outputs:
+      state_sha256: ${{ steps.translation.outputs.translation_state_sha256 }}
+      doc_builder_revision: ${{ steps.translation.outputs.doc_builder_revision }}
+    env:
+      HF_TOKEN: ${{ secrets.HF_DOC_BUILD_PUSH }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          # PR #813; use the upstream repository after the translation PR merges.
+          repository: stevhliu/doc-builder
+          ref: f2a1be5008bb3e67b331badd23b68afabc576a0f
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22.14.0'
+      - uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3
+      - name: Install translation runner
+        run: |
+          uv venv --python 3.12
+          uv pip install -e . 'huggingface_hub==1.27.0'
+          npm ci --prefix kit
+      - name: Translate on HF Jobs
+        id: translation
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+          LANGUAGE: ${{ inputs.language }}
+        run: |
+          .venv/bin/python -m doc_builder.translate.job --source-revision "$SOURCE_REVISION" \
+            --lang "$LANGUAGE" --bucket hf://buckets/hf-doc-build/doc-translate --namespace hf-doc-build \
+            --doc-builder-repository https://github.com/stevhliu/doc-builder.git
+      - name: Stop an unfinished Job
+        if: always()
+        run: |
+          if [[ -f translation-job.json ]]; then
+            .venv/bin/python -m doc_builder.translate.job --cancel-record translation-job.json
+          fi
+
+  build:
+    needs: translate
+    if: ${{ !cancelled() && needs.translate.outputs.state_sha256 != '' && needs.translate.outputs.doc_builder_revision != '' }}
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@f2a1be5008bb3e67b331badd23b68afabc576a0f  # PR #813
+    with:
+      commit_sha: ${{ github.sha }}
+      package: transformers
+      languages: ${{ inputs.language }}
+      additional_args: --version main
+      translation_bucket: hf://buckets/hf-doc-build/doc-translate
+      translation_state_sha256: ${{ needs.translate.outputs.state_sha256 }}
+      translation_language: ${{ inputs.language }}
+      doc_builder_revision: ${{ needs.translate.outputs.doc_builder_revision }}
+    secrets:
+      hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
