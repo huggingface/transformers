@@ -20,7 +20,8 @@ from ...processing_utils import AudioKwargs
 class VoxtralRealtimeAudioProcessorKwargs(AudioKwargs, total=False):
     r"""
     global_log_mel_max (`float`, *optional*, defaults to 1.5):
-        Fixed ceiling used to clamp the log-mel features, in place of a per-clip maximum.
+        Fixed peak for the log-mel floor: the features are floored at `global_log_mel_max - 8` and then rescaled
+        as `(x + 4) / 4`. `None` uses each spectrogram's own peak (its max over the last two axes).
     """
 
     global_log_mel_max: float
@@ -51,8 +52,9 @@ class VoxtralRealtimeAudioProcessorMixin:
     valid_kwargs = VoxtralRealtimeAudioProcessorKwargs
 
     def _shape_log_features(self, features, spectrogram_config, *, global_log_mel_max, **kwargs):
-        # Voxtral bounds from above with a *fixed* `global_log_mel_max` rather than the per-utterance
-        # peak the base `floor_below_peak` field uses, so the rescale is written out here.
+        # Floors at `peak - 8` with the fixed `global_log_mel_max` as the peak (the per-spectrogram peak when
+        # None), then rescales `(x + 4) / 4`. The base `floor_below_peak` only knows the per-spectrogram peak,
+        # so this is written out here.
         features = super()._shape_log_features(features, spectrogram_config)
         if global_log_mel_max is not None:
             features = self.ops.clamp_min(features, global_log_mel_max - 8.0)

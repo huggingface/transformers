@@ -160,6 +160,7 @@ class SpectrogramConfig(DataclassDict):
     drop_last_frame: bool = False
     count_frames_by_hop: bool = False
     transpose_features: bool = False
+    # floor log features at (peak - value), peak per spectrogram (max over the last two axes)
     floor_below_peak: float | None = None
     log_shift: float | None = None
     log_scale: float | None = None
@@ -1009,7 +1010,8 @@ def power_to_db(
             `log(0)`. The default of `1e-10` corresponds to a minimum of -100 dB. Must be greater than zero.
         db_range (`float`, *optional*):
             Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
-            peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
+            peak value and the smallest value will never be more than 80 dB. Must be greater than zero. The peak is
+            the maximum of the whole input array.
 
     Returns:
         The spectrogram in decibels, same array type as the input.
@@ -1060,7 +1062,8 @@ def amplitude_to_db(
             `log(0)`. The default of `1e-5` corresponds to a minimum of -100 dB. Must be greater than zero.
         db_range (`float`, *optional*):
             Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
-            peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
+            peak value and the smallest value will never be more than 80 dB. Must be greater than zero. The peak is
+            the maximum of the whole input array.
 
     Returns:
         The spectrogram in decibels, same array type as the input.

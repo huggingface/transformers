@@ -1114,7 +1114,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _to_db(self, spectrogram, multiplier, reference, min_value, db_range):
         """`multiplier * log10(spectrogram / reference)`: 10 for a power spectrogram, 20 for an amplitude one.
 
-        Same arithmetic as `audio_utils.power_to_db` / `audio_utils.amplitude_to_db`, through the backend primitives.
+        Same arithmetic as `audio_utils.power_to_db` / `audio_utils.amplitude_to_db`, through the backend primitives,
+        except that the `db_range` peak is taken per spectrogram (over the last two axes), not over the whole array.
         """
         if reference <= 0.0:
             raise ValueError("reference must be greater than zero")

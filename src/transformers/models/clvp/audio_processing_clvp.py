@@ -84,8 +84,10 @@ class ClvpAudioProcessorMixin:
         # as the legacy extractor did
         features = self.ops.log(self.ops.clamp_min(features, spectrogram_config.mel_floor))
         if mel_norms is not None:
+            # via float64 numpy: a raw list would be read as float32 on torch
             norms = self.ops.asarray(np.asarray(mel_norms, dtype=np.float64), like=features)
-            features = features / self.ops.astype(norms, self.ops.dtype_name(features))[:, None]
+            norms = self.ops.astype(norms, self.ops.dtype_name(features))
+            features = features / norms[:, None]
         return self.ops.astype(features, "float32")
 
 
