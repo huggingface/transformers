@@ -2025,9 +2025,11 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         scores_processed[:, self.no_timestamps_token_id] = -float("inf")
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
-        for k in range(input_ids.shape[0]):
-            sampled_tokens = input_ids[k, self.begin_index :]
-            seq = list(sampled_tokens.tolist())
+        # The checks run on one host copy of `input_ids`: per-row device ops would each sync, and backends that compile
+        # per shape (e.g. TPU) would recompile them every step, as `input_ids` grows.
+        timestamps_last = []
+        for k, seq in enumerate(input_ids.tolist()):
+            seq = seq[self.begin_index :]
 
             last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
             penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
@@ -2038,8 +2040,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 else:  # cannot be normal text tokens
                     scores_processed[k, : self.eos_token_id] = -float("inf")
 
-            timestamps = sampled_tokens[sampled_tokens.ge(self.timestamp_begin)]
-            if timestamps.numel() > 0:
+            timestamp_last = self.timestamp_begin  # no timestamp is forbidden until one is sampled
+            timestamps = [token for token in seq if token >= self.timestamp_begin]
+            if timestamps:
                 # `timestamps` shouldn't decrease; forbid timestamp tokens smaller than the last
                 # The following lines of code are copied from: https://github.com/openai/whisper/pull/914/files#r1137085090
                 if last_was_timestamp and not penultimate_was_timestamp:
@@ -2047,8 +2050,15 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 else:
                     # Avoid to emit <|0.00|> again
                     timestamp_last = timestamps[-1] + 1
+            timestamps_last.append(timestamp_last)
 
-                scores_processed[k, self.timestamp_begin : timestamp_last] = -float("inf")
+        # Forbid the timestamps below each row's `timestamp_last` in one fixed-shape op: a slice per row would change
+        # width as timestamps advance, and backends that compile per shape would recompile it.
+        vocab_ids = torch.arange(scores_processed.shape[-1], device=scores_processed.device)
+        timestamps_last = torch.tensor(timestamps_last, device=scores_processed.device).unsqueeze(-1)
+        scores_processed.masked_fill_(
+            (vocab_ids >= self.timestamp_begin) & (vocab_ids < timestamps_last), -float("inf")
+        )
 
         # apply the `max_initial_timestamp` option
         if input_ids.shape[1] == self.begin_index:
@@ -2059,12 +2069,13 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 scores_processed[:, last_allowed + 1 :] = -float("inf")
 
         # if sum of probability over timestamps is above any other token, sample timestamp
-        logprobs = torch.nn.functional.log_softmax(scores_processed.float(), dim=-1)
-        for k in range(input_ids.shape[0]):
-            timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
-            max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
-            if timestamp_logprob > max_text_token_logprob and self._detect_timestamp_from_logprob:
-                scores_processed[k, : self.timestamp_begin] = -float("inf")
+        # (checked for the whole batch at once: a check per row would sync with the device for every row)
+        if self._detect_timestamp_from_logprob:
+            logprobs = torch.nn.functional.log_softmax(scores_processed.float(), dim=-1)
+            timestamp_logprob = logprobs[:, self.timestamp_begin :].logsumexp(dim=-1)
+            max_text_token_logprob = logprobs[:, : self.timestamp_begin].max(dim=-1).values
+            sample_timestamp = (timestamp_logprob > max_text_token_logprob).unsqueeze(-1)
+            scores_processed[:, : self.timestamp_begin].masked_fill_(sample_timestamp, -float("inf"))
 
         return scores_processed
 
