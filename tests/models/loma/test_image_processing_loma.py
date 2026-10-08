@@ -17,7 +17,7 @@ from tests.models.superglue.test_image_processing_superglue import (
     SuperGlueImageProcessingTest,
     SuperGlueImageProcessingTester,
 )
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available
 
 
@@ -38,22 +38,6 @@ def random_tensor(size):
 
 class LoMaImageProcessingTester(SuperGlueImageProcessingTester):
     """Tester for LoMaImageProcessor"""
-
-    def __init__(
-        self,
-        parent,
-        batch_size=6,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_grayscale=True,
-    ):
-        super().__init__(
-            parent, batch_size, num_channels, image_size, min_resolution, max_resolution, do_resize, size, do_grayscale
-        )
 
     def prepare_keypoint_matching_output(self, pixel_values):
         """Prepare a fake output for the keypoint matching model with random matches between 50 keypoints per image."""
@@ -84,8 +68,7 @@ class LoMaImageProcessingTester(SuperGlueImageProcessingTester):
 
 
 @require_torch
+@require_torchvision
 @require_vision
 class LoMaImageProcessingTest(SuperGlueImageProcessingTest, unittest.TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.image_processor_tester = LoMaImageProcessingTester(self)
+    image_processor_tester_class = LoMaImageProcessingTester
