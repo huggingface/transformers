@@ -27,7 +27,6 @@ if is_torch_available():
     import torch.distributed as dist
     import torch.multiprocessing as mp
 
-    from transformers import LlamaConfig
     from transformers.distributed.utils import clip_grad_norm_
 
     if dist.is_available():
@@ -59,24 +58,27 @@ def _distributed_context(rank, directory):
 def _gradient_clipping_worker(rank, directory):
     with _distributed_context(rank, directory):
         mesh = init_device_mesh("cpu", (4,))
-        for distributed in ((False, False), (True, True), (False, True)):
-            for max_norm in (1.0, 10000.0):
-                parameters, reference = [], []
-                for i, is_distributed in enumerate(distributed):
-                    gradient = torch.arange(1, 65, dtype=torch.float32).reshape(8, 8) * (i + 1)
-                    expected = torch.nn.Parameter(torch.zeros_like(gradient))
-                    expected.grad = gradient.clone()
-                    reference.append(expected)
-                    if is_distributed:
-                        gradient = distribute_tensor(gradient, mesh, [Shard(0)])
-                    parameter = torch.nn.Parameter(torch.zeros_like(gradient))
-                    parameter.grad = gradient
-                    parameters.append(parameter)
-                expected_norm = torch.nn.utils.clip_grad_norm_(reference, max_norm, foreach=True)
-                actual_norm = clip_grad_norm_(parameters, max_norm, foreach=True)
-                torch.testing.assert_close(_full_tensor(actual_norm), expected_norm)
-                for parameter, expected in zip(parameters, reference):
-                    torch.testing.assert_close(_full_tensor(parameter.grad), expected.grad)
+        for norm_type in (0.0, 2.0, float("inf")):
+            for distributed in ((False, False), (True, True), (False, True)):
+                for max_norm in (1.0, 10000.0):
+                    parameters, reference = [], []
+                    for i, is_distributed in enumerate(distributed):
+                        gradient = torch.arange(1, 65, dtype=torch.float32).reshape(8, 8) * (i + 1)
+                        expected = torch.nn.Parameter(torch.zeros_like(gradient))
+                        expected.grad = gradient.clone()
+                        reference.append(expected)
+                        if is_distributed:
+                            gradient = distribute_tensor(gradient, mesh, [Shard(0)])
+                        parameter = torch.nn.Parameter(torch.zeros_like(gradient))
+                        parameter.grad = gradient
+                        parameters.append(parameter)
+                    expected_norm = torch.nn.utils.clip_grad_norm_(
+                        reference, max_norm, foreach=True, norm_type=norm_type
+                    )
+                    actual_norm = clip_grad_norm_(parameters, max_norm, foreach=True, norm_type=norm_type)
+                    torch.testing.assert_close(_full_tensor(actual_norm), expected_norm)
+                    for parameter, expected in zip(parameters, reference):
+                        torch.testing.assert_close(_full_tensor(parameter.grad), expected.grad)
 
 
 @require_torch
@@ -84,16 +86,6 @@ def _gradient_clipping_worker(rank, directory):
     is_torch_available() and dist.is_available() and dist.is_gloo_available(), "Requires distributed Gloo"
 )
 class DistributedUtilsTest(unittest.TestCase):
-    def setUp(self):
-        self.config = LlamaConfig(
-            vocab_size=16,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-        )
-
     def test_gradient_clipping(self):
         with tempfile.TemporaryDirectory() as directory:
             mp.spawn(_gradient_clipping_worker, args=(directory,), nprocs=4, join=True)
