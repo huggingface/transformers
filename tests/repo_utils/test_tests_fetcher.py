@@ -703,6 +703,48 @@ src/transformers/configuration_utils.py
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
 
+    def test_multimodal_in_create_reverse_dependency_map(self):
+        """
+        Tests that multimodal models' backbones can grab a parent MLLMs from
+        reverse mapping. For example: `modified_file=CLIP` has to grab `LLaVA`
+        as impacted file from reverse dependency
+        """
+        reverse_map = create_reverse_dependency_map()
+
+        # impact of CLIP modeling file to all models where it is a backbone
+        expected_clip_multimodals = {
+            "src/transformers/models/video_llava/configuration_video_llava.py",
+            "src/transformers/models/llava/modeling_llava.py",
+            "src/transformers/models/vipllava/configuration_vipllava.py",
+            "src/transformers/models/cosmos3_edge/modular_cosmos3_edge.py",
+            "src/transformers/models/granite4_vision/modeling_granite4_vision.py",
+            "src/transformers/models/llava/configuration_llava.py",
+            "src/transformers/models/cohere_asr/modular_cohere_asr.py",
+            "src/transformers/models/fun_asr_nano/modular_fun_asr_nano.py",
+            "src/transformers/models/sam3/configuration_sam3.py",
+            "src/transformers/models/vision_text_dual_encoder/modeling_vision_text_dual_encoder.py",
+            "src/transformers/models/minimax_m3_vl/modular_minimax_m3_vl.py",
+            "src/transformers/models/llava_next/configuration_llava_next.py",
+            "src/transformers/models/sam3/modeling_sam3.py",
+            "src/transformers/models/internvl/modular_internvl.py",
+            "src/transformers/models/llava_next/modeling_llava_next.py",
+            "src/transformers/models/llava_next_video/configuration_llava_next_video.py",
+            "src/transformers/models/llava_next_video/modeling_llava_next_video.py",
+            "src/transformers/models/vipllava/modeling_vipllava.py",
+            "src/transformers/models/video_llava/modeling_video_llava.py",
+            "src/transformers/models/granite4_vision/configuration_granite4_vision.py",
+            "src/transformers/models/vibevoice/modular_vibevoice.py",
+            "src/transformers/models/jina_embeddings_v3/modular_jina_embeddings_v3.py",
+        }
+        assert expected_clip_multimodals.issubset(set(reverse_map["src/transformers/models/clip/modeling_clip.py"]))
+        assert expected_clip_multimodals.issubset(set(reverse_map["src/transformers/models/clip/configuration_clip.py"]))
+
+        # reverse backbone mapping works only if modeling or configuration files are modified
+        # because multimodals re-use only config/model of its backbone
+        assert expected_clip_multimodals.isdisjoint(
+            set(reverse_map["src/transformers/models/clip/image_processing_clip.py"])
+        )
+
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
