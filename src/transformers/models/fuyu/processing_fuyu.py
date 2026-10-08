@@ -244,6 +244,10 @@ class FuyuProcessor(ProcessorMixin):
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "BatchFeature":
         r"""
+        return_legacy_image_output (`bool`, *optional*, defaults to `True`):
+            Whether to return image inputs in legacy format or not. Note that legacy format is
+            deprecated and will be removed in v5.23.
+
         Returns:
             [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
 
