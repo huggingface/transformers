@@ -485,8 +485,8 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.config_tester.run_common_tests()
 
     def test_oom_crash(self):
-        # Intentional OOM: allocate 160 GB to crash the job (for CI crash-surfacing test)
-        _ = bytearray(160 * 1024 * 1024 * 1024)
+        # Intentional OOM: allocate 400 GB to crash both single-GPU (64 GB) and multi-GPU (192 GB) runners
+        _ = bytearray(400 * 1024 * 1024 * 1024)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
