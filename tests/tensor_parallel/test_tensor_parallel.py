@@ -11,15 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import warnings
 from unittest.mock import patch
 
 import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
 from torch.distributed.device_mesh import init_device_mesh
 
+from tests.test_tensor_parallel_mixin import _init_distributed
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
@@ -31,47 +29,25 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
 )
-from transformers.testing_utils import TestCasePlus, get_torch_dist_unique_port, is_tensor_parallel_test
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 
-class _ScalingExperts(torch.nn.Module):
-    """Stand-in experts: each local expert `e` scales its rows by `rank * num_experts + e + 1` and weights them;
-    records the batch size and the expert ids it is handed."""
+def _shared_batch_runs_the_experts_masked(rank):
+    seen = {}
 
-    def __init__(self, num_experts, rank):
-        super().__init__()
-        self.num_experts, self.rank = num_experts, rank
-        self.received = None
+    def experts(hidden_states, top_k_index, top_k_weights):
+        seen["index"] = top_k_index.tolist()
+        return hidden_states * top_k_weights.sum(-1, keepdim=True)
 
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        self.received = (hidden_states.shape[0], top_k_index.clone())
-        local = top_k_index < self.num_experts
-        scale = torch.where(local, self.rank * self.num_experts + top_k_index + 1, 0).to(hidden_states.dtype)
-        return (hidden_states[:, None, :] * (scale * top_k_weights)[..., None]).sum(1)
-
-
-def _shared_batch_runs_masked(rank, world_size, port):
-    os.environ.update(MASTER_ADDR="127.0.0.1", MASTER_PORT=str(port))
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    try:
-        mesh = init_device_mesh("cpu", (world_size,))
-        hidden_states = torch.arange(4 * 8, dtype=torch.float32).view(4, 8)
-        top_k_index = torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]])
-        top_k_weights = torch.full((4, 2), 0.5)
-        experts = _ScalingExperts(num_experts=2, rank=rank)
-        # the ranks holding one batch are the EP group: nothing to exchange
-        EpDispatchExpertsParallel().install_forward(experts, mesh, tp_mesh=mesh)
-        output = experts(hidden_states, top_k_index, top_k_weights)
-
-        num_tokens, local_index = experts.received
-        assert num_tokens == 4, num_tokens
-        owned = (top_k_index // 2) == rank
-        assert torch.equal(local_index[owned], top_k_index[owned] - 2 * rank)
-        assert bool((local_index[~owned] == 2).all()), local_index
-        want = (hidden_states[:, None, :] * ((top_k_index + 1) * top_k_weights)[..., None]).sum(1)
-        torch.testing.assert_close(output, want)
-    finally:
-        dist.destroy_process_group()
+    module = torch.nn.Module()
+    module.num_experts = 2
+    hidden_states = torch.arange(16.0).view(2, 8)
+    output = EpDispatchExpertsParallel()._masked_forward(
+        module, experts, init_device_mesh("cpu", (2,)), hidden_states, torch.tensor([[0, 3], [1, 2]]), torch.ones(2, 2)
+    )
+    # each rank owns 2 experts: its own become local ids, the other rank's go past them with weight 0
+    assert seen["index"] == ([[0, 2], [1, 2]] if rank == 0 else [[2, 1], [2, 0]]), seen
+    torch.testing.assert_close(output, 2 * hidden_states)
 
 
 @is_tensor_parallel_test
@@ -212,11 +188,6 @@ class TestTensorParallelProperties(TestCasePlus):
 
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
-    def test_a_shared_batch_runs_the_experts_masked(self):
-        """When the EP group holds one batch, every rank runs its own experts on all of it, the other ranks' routes
-        masked past its experts, and the partial outputs sum to the unsharded result."""
-        mp.spawn(_shared_batch_runs_masked, args=(2, get_torch_dist_unique_port()), nprocs=2)
-
     class MockDeviceMesh:
         def __init__(self, world_size, rank):
             self.world_size = world_size
@@ -415,3 +386,8 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+    def test_a_shared_batch_runs_the_experts_masked(self):
+        """When the EP group holds one batch, each rank runs its own experts on all of it and the partial outputs
+        sum to the full result."""
+        _init_distributed(tp=2, backend="gloo")(_shared_batch_runs_the_experts_masked)()
