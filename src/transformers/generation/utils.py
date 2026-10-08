@@ -3948,22 +3948,19 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        # The cache must be dynamic for assisted generation, and the check must happen AFTER preparing cache
+        # The cache must be able to roll back the drafts we reject, and the check must happen AFTER preparing cache
         if not model_kwargs["use_cache"]:
             raise ValueError("assisted generate requires `use_cache=True`")
-        if (
-            generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]
-            or type(model_kwargs.get("past_key_values")) is StaticCache
-        ):
-            raise ValueError("assisted generate is not supported with Static cache classes`")
+        cache = model_kwargs.get("past_key_values")
+        if cache is None:
+            raise RuntimeError("assisted decoding requires a cache")
+        if not cache.is_croppable:
+            raise ValueError(f"assisted generate is not supported with a non-croppable cache, got {type(cache)}")
 
         # Same tensor the stopping criteria are built from
         eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
 
         # Make sure we can record past on the cache
-        cache = model_kwargs.get("past_key_values")
-        if cache is None:
-            raise RuntimeError("assisted decoding requires a cache")
         cache.activate_past_recording()
 
         # Get the candidate generator, given the parameterization
@@ -4009,6 +4006,15 @@ class GenerationMixin(ContinuousMixin):
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
         outputs = None
         n_matches = 0
+
+        # The target model verifies a fixed `num_assistant_tokens + 1` tokens per step, so its forward has a static
+        # shape and can be compiled, as long as the cache is static too. Prefill keeps running eagerly.
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
+
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
@@ -4059,7 +4065,7 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs |= candidate_generator.model_kwargs_overrides
 
             # 2.2. Run a forward pass on the candidate sequence
-            outputs = self(**model_inputs)
+            outputs = (self.__call__ if is_first_iteration else model_forward)(**model_inputs)
 
             # 2.3. Process the new logits
             # .float() is needed to retain precision for later logits manipulations

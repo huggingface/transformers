@@ -418,6 +418,7 @@ class StaticLayer(CacheLayerMixin):
     """
 
     is_compileable = True
+    is_croppable = True
     is_sliding = False
 
     def __init__(self, max_cache_len: int, **kwargs):
@@ -512,6 +513,19 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer. The backing tensors keep their shape and their
+        static dynamo address: only the write offset moves back. The slots beyond it still hold stale states, but they
+        are masked out by the causal mask and overwritten by the next `update`.
+        """
+        if tokens_to_remove > 0:
+            raise RuntimeError(
+                "Static layers can only be cropped by passing a negative int, to specify how many tokens to remove"
+            )
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_length.sub_(abs(tokens_to_remove))
+
 
 class StaticSlidingWindowLayer(StaticLayer):
     """
@@ -533,6 +547,9 @@ class StaticSlidingWindowLayer(StaticLayer):
         super().__init__(max_cache_len=effective_max_cache_len)
         # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
         self.cumulative_length_int = 0
+        # Once the window slides, the evicted states are gone for good, so `crop` can only restore this layer if the
+        # window is wide enough to hold everything we will ever generate
+        self.is_croppable = max_cache_len <= sliding_window
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -634,6 +651,14 @@ class StaticSlidingWindowLayer(StaticLayer):
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length_int
+
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer. This is only valid as long as the window never
+        slid, which `is_croppable` guarantees: the evicted states cannot be recovered otherwise.
+        """
+        super().crop(tokens_to_remove)
+        self.cumulative_length_int -= abs(tokens_to_remove)
 
     def reset(self):
         super().reset()
