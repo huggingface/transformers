@@ -272,14 +272,22 @@ class LoMaVgg19Block(nn.Module):
 class LoMaVgg19Stage(nn.Module):
     """A sequence of VGG convolution blocks followed by spatial downsampling."""
 
-    def __init__(self, in_channels: int, out_channels: int, num_blocks: int, kernel_size: int) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        num_blocks: int,
+        kernel_size: int,
+        pool_kernel_size: int = 2,
+        pool_stride: int = 2,
+    ) -> None:
         super().__init__()
         blocks = []
         for _ in range(num_blocks):
             blocks.append(LoMaVgg19Block(in_channels, out_channels, kernel_size))
             in_channels = out_channels
         self.blocks = nn.ModuleList(blocks)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         for block in self.blocks:
@@ -587,7 +595,7 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
             matching_scores=matching_scores,
             keypoints=keypoints,
             prune=prune,
-            mask=mask.to(torch.int),
+            mask=mask,
             hidden_states=hidden_states,
             attentions=None,
         )
