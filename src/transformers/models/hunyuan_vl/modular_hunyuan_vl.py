@@ -38,7 +38,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
@@ -290,7 +289,6 @@ class HunYuanVLConfig(Qwen2VLConfig):
     ```"""
 
     model_type = "hunyuan_vl"
-    sub_configs = {"vision_config": HunYuanVLVisionConfig, "text_config": HunYuanVLTextConfig}
 
     image_token_id: int = 120120
     im_start_id: int = 120118
@@ -307,30 +305,21 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_config_class = self.sub_configs["text_config"]
-        text_keys = (
-            set(text_config_class.__dataclass_fields__)
-            | set(text_config_class.attribute_map)
-            | {"rope_scaling", "rope_theta"}
-        )
-        text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = text_config_class(**{**self.text_config, **text_kwargs})
-        elif self.text_config is None:
-            self.text_config = text_config_class(**text_kwargs)
+        if self.text_config is None:
+            text_config_class = self.sub_configs_defaults["text_config"].config_class
+            text_keys = (
+                set(text_config_class.__dataclass_fields__)
+                | set(text_config_class.attribute_map)
+                | {"rope_scaling", "rope_theta"}
+            )
+            self.text_config = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
-
         # The attr is saved inside `text_config` on most VLMs, use it if available
-        kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
-        PreTrainedConfig.__post_init__(self, **kwargs)
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
 
 class HunYuanVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
@@ -572,16 +561,11 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(len(self.mrope_section), position_ids.shape[1], -1, 1)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        # One row of positions per M-RoPE axis: (num_axes, bs, positions)
+        position_ids = position_ids.expand(len(self.mrope_section), -1, -1)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)
@@ -1105,6 +1089,7 @@ class HunYuanVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor,
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
         """
         Build HunYuanVL multimodal RoPE position ids.
@@ -1279,19 +1264,24 @@ class HunYuanVLModel(Qwen2VLModel):
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_embeds = None
-        if pixel_values is not None and image_grid_thw is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
-            image_embeds = image_outputs.pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, dtype=inputs_embeds.dtype, non_blocking=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
@@ -1323,7 +1313,7 @@ class HunYuanVLModel(Qwen2VLModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -1369,6 +1359,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -1417,6 +1408,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

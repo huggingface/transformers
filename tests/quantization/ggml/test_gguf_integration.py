@@ -81,6 +81,7 @@ class GgufTokenizerTesterMixin:
         "\u0391\u0392\u0393 \u0411\u0413\u0414 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u05e2\u05d1\u05e8\u05d9\u05ea",
         "https://example.com/a_b?c=1&d=2#e",
         "<|im_start|>user\nhi<|im_end|>",
+        "<think>\nreasoning\n</think>\n\nanswer <tool_call>x</tool_call>",
     )
 
     chat = (
