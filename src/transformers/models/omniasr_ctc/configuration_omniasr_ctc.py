@@ -14,9 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
@@ -50,7 +50,9 @@ class OmniASRCTCConfig(PreTrainedConfig):
     """
 
     model_type = "omniasr_ctc"
-    sub_configs = {"audio_config": AutoConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="omniasr_audio"),
+    }
 
     vocab_size: int = 10288
     ctc_loss_reduction: str = "mean"
@@ -60,14 +62,6 @@ class OmniASRCTCConfig(PreTrainedConfig):
     bos_token_id: int | None = 0
     pad_token_id: int | None = 1
     eos_token_id: int | None = 2
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "omniasr_audio")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["omniasr_audio"]()
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

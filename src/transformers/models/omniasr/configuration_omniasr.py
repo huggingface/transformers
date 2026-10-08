@@ -14,9 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
@@ -111,7 +111,23 @@ class OmniASRConfig(PreTrainedConfig):
     """
 
     model_type = "omniasr"
-    sub_configs = {"audio_config": OmniASRAudioConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="omniasr_audio"),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="llama",
+            init_kwargs={
+                "vocab_size": 11984,
+                "hidden_size": 4096,
+                "intermediate_size": 2816,
+                "max_position_embeddings": 8192,
+                "num_hidden_layers": 12,
+                "num_attention_heads": 8,
+                "num_key_value_heads": 8,
+                "rms_norm_eps": 1e-05,
+            },
+        ),
+    }
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -120,29 +136,6 @@ class OmniASRConfig(PreTrainedConfig):
     bos_token_id: int | None = 0
     pad_token_id: int | None = 1
     eos_token_id: int | None = 2
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config = OmniASRAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = OmniASRAudioConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"](
-                vocab_size=11984,
-                hidden_size=4096,
-                intermediate_size=2816,
-                max_position_embeddings=8192,
-                num_hidden_layers=12,
-                num_attention_heads=8,
-                num_key_value_heads=8,
-                rms_norm_eps=1e-05,
-            )
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
