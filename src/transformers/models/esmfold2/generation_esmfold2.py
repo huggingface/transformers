@@ -124,7 +124,8 @@ class EsmFold2FoldingMixin:
         asym_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Asymmetric-unit (chain) ID for each token. Also forwarded to the trunk.
         mol_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
-            Molecule-type code for each token (``0`` = protein). Also forwarded to the trunk.
+            Molecule-type code for each token: ``0`` = protein, ``1`` = DNA, ``2`` = RNA,
+            ``3`` = non-polymer (ligand). Also forwarded to the trunk.
         distogram_atom_idx (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Index of the representative atom (Cβ, or Cα for glycine) of each token. Used by the
             confidence head; the trunk does not need it.

@@ -15,15 +15,18 @@
 
 import copy
 import inspect
+import os
+import tempfile
 import unittest
 
 import numpy as np
 import pytest
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoProcessor,
     AutoTokenizer,
     Gemma3nAudioConfig,
@@ -44,6 +47,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import WEIGHTS_NAME
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
@@ -415,11 +419,6 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -517,7 +516,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             seq_length = self.model_tester.seq_length
             max_new_tokens = 20
 
-            for dtype in (torch.float32, torch.bfloat16):
+            for dtype in (torch.float32, torch.float16):
                 model = model_class(copy.deepcopy(config)).to(torch_device).to(dtype).eval()
                 inputs_dict = {
                     k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
@@ -559,7 +558,11 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
+                # Use same tolerances as the parent class test_generate_with_static_cache
+                atol = rtol = 1e-5 if dtype == torch.float32 else 5e-5
+                assert_similar_generate_outputs(
+                    dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
+                )
 
 
 class Gemma3nVision2TextModelTester:
@@ -718,12 +721,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             text_config={"activation_sparsity_pattern": None},
         )
 
-    @unittest.skip(
-        reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
-    )
-    def test_flex_attention_with_grads(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -732,21 +729,31 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    def test_from_pretrained_fp16_initializes_gradient_clipping(self):
+        config = self.model_tester.get_config()
+        checkpoint_model = Gemma3nForConditionalGeneration(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            torch.save(checkpoint_model.state_dict(), os.path.join(tmp_dir, WEIGHTS_NAME))
+
+            model = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float16)
+
+        gradient_clipping = model.model.audio_tower.conformer[0].attention.gradient_clipping
+        self.assertEqual(gradient_clipping.dtype, torch.float16)
+        self.assertEqual(gradient_clipping.item(), torch.finfo(torch.float16).max)
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         return 2
@@ -762,11 +769,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip("Audio modality is not tested here")
     def test_get_audio_features_attentions(self, return_dict: bool | None):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(
@@ -877,10 +879,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        audio_ds = load_dataset(
-            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
+        self.audio_file_path = hf_hub_download(
+            repo_id="etechgrid/28.5k_wavfiles_dataset",
+            filename="wav_dataset/103-1240-0000.wav",
+            repo_type="dataset",
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):

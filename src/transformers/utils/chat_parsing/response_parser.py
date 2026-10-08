@@ -31,8 +31,9 @@ def _schema_types(schema: Any) -> tuple[str, ...]:
     types = [declared] if isinstance(declared, str) else []
     if isinstance(declared, list):
         types.extend(t for t in declared if isinstance(t, str))
-    for choice in schema.get("anyOf") or []:
-        types.extend(_schema_types(choice))
+    for union_name in ("anyOf", "oneOf"):
+        for choice in schema.get(union_name) or []:
+            types.extend(_schema_types(choice))
     if schema.get("nullable") and "null" not in types:  # `nullable` is how get_json_schema marks Optionals
         types.append("null")
     return tuple(types)
@@ -389,7 +390,8 @@ class ResponseParser:
                     continue
                 if isinstance(argument, str):
                     arguments[key] = _coerce(argument, types)
-                elif isinstance(argument, list):  # duplicate keys collected by `merge_duplicates`
+                elif isinstance(argument, list) and "array" not in types:
+                    # duplicate keys collected by `merge_duplicates`
                     arguments[key] = [_coerce(item, types) if isinstance(item, str) else item for item in argument]
         return value
 

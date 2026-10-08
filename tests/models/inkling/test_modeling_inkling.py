@@ -77,6 +77,17 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
     def test_training_overfit(self):
         pass
 
+    def test_dense_intermediate_size_keeps_expert_width(self):
+        # Official checkpoints: `intermediate_size` is the routed experts' width and
+        # `dense_intermediate_size` is the dense MLP's width.
+        config = InklingTextConfig.from_dict({"intermediate_size": 2048, "dense_intermediate_size": 16384})
+        self.assertEqual(config.intermediate_size, 16384)
+        self.assertEqual(config.moe_intermediate_size, 2048)
+
+        config = InklingTextConfig.from_dict({"intermediate_size": 3072, "dense_intermediate_size": 24576})
+        self.assertEqual(config.intermediate_size, 24576)
+        self.assertEqual(config.moe_intermediate_size, 3072)
+
 
 class InklingAudio2TextModelTester:
     def __init__(
@@ -227,10 +238,6 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Audio placeholder embeddings are replaced when audio inputs are provided")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("Accelerate does not create a device map when the entire tiny model fits on CPU")
     def test_cpu_offload(self):
         pass
@@ -255,10 +262,6 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Inkling uses a custom hybrid cache that is incompatible with quantized cache")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(
@@ -453,18 +456,10 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Image placeholder embeddings are replaced when pixel values are provided")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(
         reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Inkling uses a custom hybrid cache that is incompatible with quantized cache")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(

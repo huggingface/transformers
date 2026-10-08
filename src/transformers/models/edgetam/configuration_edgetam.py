@@ -19,9 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
@@ -48,8 +48,15 @@ class EdgeTamVisionConfig(PreTrainedConfig):
 
     base_config_key = "vision_config"
     model_type = "edgetam_vision_model"
-    sub_configs = {
-        "backbone_config": AutoConfig,
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="timm_wrapper",
+            init_kwargs={
+                "archirecture": "repvit_m1",
+                "model_args": {"in_chans": 3, "features_only": True, "out_indices": [0, 1, 2, 3]},
+            },
+        )
     }
 
     backbone_config: dict | PreTrainedConfig | None = None
@@ -73,15 +80,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
             [[256, 256], [128, 128], [64, 64]] if self.backbone_feature_sizes is None else self.backbone_feature_sizes
         )
         self.fpn_top_down_levels = [2, 3] if self.fpn_top_down_levels is None else self.fpn_top_down_levels
-
-        if isinstance(self.backbone_config, dict):
-            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "timm_wrapper")
-            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
-        elif self.backbone_config is None:
-            self.backbone_config = AutoConfig.from_pretrained(
-                "timm/repvit_m1.dist_in1k",
-                model_args={"in_chans": 3, "features_only": True, "out_indices": [0, 1, 2, 3]},
-            )
         super().__post_init__(**kwargs)
 
 
@@ -98,6 +96,7 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "prompt_encoder_config"
+    model_type = "edgetam_prompt_encoder"
 
     hidden_size: int = 256
     image_size: int | list[int] | tuple[int, int] = 1024
@@ -132,6 +131,7 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "mask_decoder_config"
+    model_type = "edgetam_mask_decoder"
 
     hidden_size: int = 256
     hidden_act: str = "gelu"
@@ -186,35 +186,19 @@ class EdgeTamConfig(PreTrainedConfig):
     """
 
     model_type = "edgetam"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "prompt_encoder_config": EdgeTamPromptEncoderConfig,
-        "mask_decoder_config": EdgeTamMaskDecoderConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="edgetam_vision_model",
+        ),
+        "prompt_encoder_config": SubConfigSpec(config_class=EdgeTamPromptEncoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=EdgeTamMaskDecoderConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
     prompt_encoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "edgetam_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["edgetam_vision_model"]()
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = EdgeTamPromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = EdgeTamPromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = EdgeTamMaskDecoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = EdgeTamMaskDecoderConfig()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["EdgeTamConfig", "EdgeTamVisionConfig", "EdgeTamPromptEncoderConfig", "EdgeTamMaskDecoderConfig"]

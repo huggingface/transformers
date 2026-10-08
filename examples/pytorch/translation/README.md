@@ -48,7 +48,7 @@ python run_translation.py \
     --do_eval \
     --source_lang en \
     --target_lang ro \
-    --dataset_name wmt16 \
+    --dataset_name wmt/wmt16 \
     --dataset_config_name ro-en \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
@@ -68,7 +68,7 @@ python run_translation.py \
     --source_lang en \
     --target_lang ro \
     --source_prefix "translate English to Romanian: " \
-    --dataset_name wmt16 \
+    --dataset_name wmt/wmt16 \
     --dataset_config_name ro-en \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
@@ -87,7 +87,7 @@ python run_translation.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
-    --dataset_name wmt16 \
+    --dataset_name wmt/wmt16 \
     --dataset_config_name ro-en \
     --source_lang en_XX \
     --target_lang ro_RO \
@@ -108,7 +108,7 @@ python run_translation.py \
     --source_lang en \
     --target_lang ro \
     --source_prefix "translate English to Romanian: " \
-    --dataset_name wmt16 \
+    --dataset_name wmt/wmt16 \
     --dataset_config_name ro-en \
     --train_file path_to_jsonlines_file \
     --validation_file path_to_jsonlines_file \
@@ -167,7 +167,7 @@ python run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \
     --target_lang ro \
-    --dataset_name wmt16 \
+    --dataset_name wmt/wmt16 \
     --dataset_config_name ro-en \
     --output_dir ~/tmp/tst-translation
 ```
@@ -191,7 +191,7 @@ accelerate launch run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \
     --target_lang ro \
-    --dataset_name wmt16 \
+    --dataset_name wmt/wmt16 \
     --dataset_config_name ro-en \
     --output_dir ~/tmp/tst-translation
 ```

@@ -87,11 +87,11 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder",
-    "huggingface-hub>=1.31.0,<2.0",
+    "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
-    "kernels>=0.16.0,<0.17",
+    "kernels>=0.17.0,<0.18",
     "librosa",
     "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
@@ -101,7 +101,6 @@ _deps = [
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
-    "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
     "peft>=0.20.0",
@@ -326,7 +325,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.18.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

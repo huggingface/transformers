@@ -28,13 +28,12 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
-    extract_commit_hash,
     is_g2p_en_available,
     is_sentencepiece_available,
     is_tokenizers_available,
     logging,
 )
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, resolve_revision
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -162,6 +161,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
         ("grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("gte", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -202,6 +202,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("mgp-str", "MgpstrTokenizer"),
         ("mimo_v2_flash", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("minicpmv4_7", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
             "MistralCommonBackend"
@@ -293,6 +294,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_moe_text", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_text", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_asr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -414,6 +416,10 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3_v",
     "phimoe",
     "qwen2",
+    "qwen3_5",
+    "qwen3_5_moe",
+    "qwen3_5_moe_text",
+    "qwen4_exp",
     "step3p5",
     "step3_vl",
     "vipllava",
@@ -617,7 +623,14 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    commit_hash = kwargs.get("_commit_hash")
+    kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+    revision = resolve_revision(
+        pretrained_model_name_or_path,
+        revision,
+        token=token,
+        local_files_only=local_files_only,
+        cache_dir=cache_dir,
+    )
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         TOKENIZER_CONFIG_FILE,
@@ -631,17 +644,13 @@ def get_tokenizer_config(
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
-        _commit_hash=commit_hash,
     )
     if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
-    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
 
     with open(resolved_config_file, encoding="utf-8") as reader:
-        result = json.load(reader)
-    result["_commit_hash"] = commit_hash
-    return result
+        return json.load(reader)
 
 
 class AutoTokenizer:
@@ -704,10 +713,6 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
-            backend (`str`, *optional*, defaults to `"tokenizers"`):
-                Backend to use for tokenization. Valid options are:
-                - `"tokenizers"`: Use the HuggingFace tokenizers library backend (default)
-                - `"sentencepiece"`: Use the SentencePiece backend
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
@@ -733,12 +738,6 @@ class AutoTokenizer:
 
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
-
-        >>> # Explicitly use the tokenizers backend
-        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="tokenizers")
-
-        >>> # Explicitly use the sentencepiece backend
-        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
@@ -754,6 +753,16 @@ class AutoTokenizer:
             _use_mistral_format(pretrained_model_name_or_path, mistral_format=True, **kwargs)
             tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Resolve the revision once, so the model config, the tokenizer config and every tokenizer file below come
+        # from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -871,9 +880,6 @@ class AutoTokenizer:
                 f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
                 f"The tokenizer may need to be converted or re-saved."
             )
-
-        if "_commit_hash" in tokenizer_config:
-            kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
         if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
             tokenizer_config_class = tokenizer_config_class[:-4]

@@ -33,14 +33,13 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
 
 
@@ -66,8 +65,7 @@ class GlmMoeDsaRMSNorm(nn.Module):
 
 
 class GlmMoeDsaRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: GlmMoeDsaConfig, device=None):
+    def __init__(self, config: GlmMoeDsaConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -78,14 +76,13 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: GlmMoeDsaConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: GlmMoeDsaConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -101,23 +98,15 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -308,12 +297,11 @@ def yarn_apply_mscale(rope_parameters, scaling):
 
 class GlmMoeDsaAttention(nn.Module):
     """
-    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
+    DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
 
-    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's top-k selection (`"shared"`).
-    `next_skip_topk` signals that the *next* layer will reuse this
-    layer's top-k, so it is propagated upward via `prev_topk_indices`.
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or reuses the previous
+    full layer's top-k selection (`"shared"`). `next_skip_topk` signals that the *next* layer will reuse this layer's
+    top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
@@ -333,23 +321,9 @@ class GlmMoeDsaAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-
-        self.q_proj = (
-            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
-        )
-        self.q_a_proj = (
-            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            if self.q_lora_rank is not None
-            else None
-        )
-        self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
-        self.q_b_proj = (
-            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is not None
-            else None
-        )
+        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = GlmMoeDsaRMSNorm(self.q_lora_rank)
+        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -419,13 +393,13 @@ class GlmMoeDsaAttention(nn.Module):
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
+        # Cache read / write is performed while latent KV is still compressed
+        if past_key_values is not None:
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
@@ -658,6 +632,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": GlmMoeDsaDecoderLayer,
         "attentions": GlmMoeDsaAttention,
+        "router_logits": OutputRecorder(GlmMoeDsaTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
@@ -680,7 +655,6 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [GlmMoeDsaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -704,7 +678,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -729,7 +703,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
                 "position_ids": position_ids,
                 "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
-            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -738,7 +712,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -748,7 +722,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -783,7 +757,7 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -801,7 +775,7 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -820,12 +794,13 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

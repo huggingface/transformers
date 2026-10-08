@@ -41,7 +41,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import can_return_tuple, maybe_autocast
+from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import positive_int
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
@@ -289,15 +289,12 @@ class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(2, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # (2, batch, 1, seq_len)
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            # (2, batch, seq_len, rotary_dim // 2)
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+        # One row of positions per M-RoPE axis: (num_axes, bs, positions)
+        position_ids = position_ids.expand(2, -1, -1)
+        # (2, batch, seq_len, rotary_dim // 2)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * attention_scaling
+        sin = freqs.sin() * attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)

@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
     bidirectional_mask_function,
@@ -51,7 +51,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.modeling_gemma4 import (
     Gemma4ClippableLinear,
@@ -145,9 +145,9 @@ class DiffusionGemmaConfig(Gemma4Config):
     ```"""
 
     model_type = "diffusion_gemma"
-    sub_configs = {
-        "text_config": DiffusionGemmaTextConfig,
-        "vision_config": AutoConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=DiffusionGemmaTextConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision"),
     }
 
     text_config: DiffusionGemmaTextConfig | dict[str, Any] | None = None
@@ -165,21 +165,6 @@ class DiffusionGemmaConfig(Gemma4Config):
     eoa_token_index = AttributeError()
     video_token_id = AttributeError()
     audio_token_id = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = DiffusionGemmaTextConfig()
-            logger.info("text_config is None. Using default DiffusionGemmaTextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = DiffusionGemmaTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. DiffusionGemmaEncoderModel.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "gemma4_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-
-        PreTrainedConfig.__post_init__(**kwargs)
 
 
 # Add support for `partial_rotary_factor` in full attention layers
@@ -877,31 +862,27 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
         return vision_outputs
 
     def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-    ) -> torch.BoolTensor:
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
         """
-        Obtains mask for multimodal placeholders (replaced by soft tokens) and hard text tokens.
-
-        Masks will be obtained from `input_ids` or `inputs_embeds` as available and in that
-        precedence order.
-
-        Args:
-            input_ids: A tensor containing the hard token IDs from the text tokenizer.
-            inputs_embeds: A tensor containing the embeddings for all hard text tokens.
-
-        Returns:
-            image_mask
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
-        if input_ids is not None:
-            special_image_mask = input_ids == self.config.image_token_id
-        else:
-            image_token_embeddings = self.get_input_embeddings()(
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = (inputs_embeds == image_token_embeddings).all(-1)
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
 
+        n_image_tokens = special_image_mask.sum()
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features:"
+            f" {image_features.shape[0]}",
+        )
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     def forward(
@@ -914,6 +895,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         image_position_ids: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -924,32 +906,27 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        image_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        # Replace image id with PAD if the image token if OOV, to avoid index-errors
-        llm_input_ids = None
         if inputs_embeds is None:
-            llm_input_ids = input_ids.clone()
-            llm_input_ids[image_mask] = self.config.text_config.pad_token_id
-            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values,
+                image_position_ids,
+                return_dict=True,
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
-            # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
-            n_image_tokens = image_mask.sum()
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            torch_compilable_check(
-                inputs_embeds[image_mask].numel() == image_features.numel(),
-                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features:"
-                f" {image_features.shape[0]}",
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-
-            inputs_embeds = inputs_embeds.masked_scatter(
-                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
@@ -1335,6 +1312,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
         self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DiffusionGemmaModelOutputWithPast:
         r"""
@@ -1365,6 +1343,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
                 position_ids=position_ids,
+                mm_encoder_outputs=mm_encoder_outputs,
                 **kwargs,
             )
             encoder_last_hidden_state = encoder_outputs.last_hidden_state
@@ -1439,6 +1418,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DiffusionGemmaBlockDiffusionOutputWithPast:
         r"""
@@ -1472,6 +1452,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
             self_conditioning_mask=self_conditioning_mask,
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

@@ -192,7 +192,7 @@ if __name__ == "__main__":
             continue
 
         # Read short summary
-        with open(summary_short_path, "r") as f:
+        with open(summary_short_path, "r", encoding="utf-8") as f:
             short_summary_lines = f.readlines()
 
         # Parse short summary
@@ -214,7 +214,7 @@ if __name__ == "__main__":
 
     filename = f"collated_reports_{machine_type}_{commit_hash}.json"
     # Write collated report
-    with open(filename, "w") as f:
+    with open(filename, "w", encoding="utf-8") as f:
         json.dump(
             {
                 "gpu_name": gpu_name,

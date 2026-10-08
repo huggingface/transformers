@@ -210,6 +210,7 @@ IGNORE_NON_TESTED = (
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
         "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
@@ -226,6 +227,7 @@ IGNORE_NON_TESTED = (
         "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "MiniCPMV4_7VisionModel",  # Building part of bigger (tested) model - FIXME: raushan; adding each VLM backbone here is annoying!
         "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
@@ -266,8 +268,6 @@ IGNORE_NON_TESTED = (
         "Glm5NextVisionModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
-        "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
-        "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "Step3p7Model",  # `base_model_class = Step3p7Model if is_torch_available() else None`; check_repo's regex can't parse the conditional. Tested implicitly through Step3p7ForConditionalGeneration.
         "Step3p7TextModel",  # Building part of bigger (tested) model
         "Step3p7VisionModel",  # Building part of bigger (tested) model
@@ -277,6 +277,7 @@ IGNORE_NON_TESTED = (
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
         "TimesFm2_5Model",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
@@ -315,6 +316,7 @@ IGNORE_NON_TESTED = (
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
     ]
 )
 

@@ -28,7 +28,7 @@ from torch.nn import Parameter
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import RopeParameters
@@ -363,10 +363,10 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         "video_token_id": "video_token_index",
         "audio_token_id": "audio_token_index",
     }
-    sub_configs = {
-        "audio_config": Qwen2_5OmniAudioEncoderConfig,
-        "vision_config": Qwen2_5OmniVisionEncoderConfig,
-        "text_config": Qwen2_5OmniTextConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Qwen2_5OmniTextConfig),
+        "vision_config": SubConfigSpec(config_class=Qwen2_5OmniVisionEncoderConfig),
+        "audio_config": SubConfigSpec(config_class=Qwen2_5OmniAudioEncoderConfig),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -382,24 +382,6 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     user_token_id: int = 872
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = Qwen2_5OmniTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = Qwen2_5OmniTextConfig()
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -648,26 +630,13 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni_token2wav"
-    sub_configs = {
-        "dit_config": Qwen2_5OmniDiTConfig,
-        "bigvgan_config": Qwen2_5OmniBigVGANConfig,
+    sub_configs_defaults = {
+        "dit_config": SubConfigSpec(config_class=Qwen2_5OmniDiTConfig),
+        "bigvgan_config": SubConfigSpec(config_class=Qwen2_5OmniBigVGANConfig),
     }
 
     dit_config: dict | PreTrainedConfig | None = None
     bigvgan_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.dit_config is None:
-            self.dit_config = Qwen2_5OmniDiTConfig()
-        elif isinstance(self.dit_config, dict):
-            self.dit_config = Qwen2_5OmniDiTConfig(**self.dit_config)
-
-        if self.bigvgan_config is None:
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig()
-        elif isinstance(self.bigvgan_config, dict):
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig(**self.bigvgan_config)
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -714,37 +683,16 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni"
-    sub_configs = {
-        "thinker_config": Qwen2_5OmniThinkerConfig,
-        "talker_config": Qwen2_5OmniTalkerConfig,
-        "token2wav_config": Qwen2_5OmniToken2WavConfig,
+    sub_configs_defaults = {
+        "thinker_config": SubConfigSpec(config_class=Qwen2_5OmniThinkerConfig),
+        "talker_config": SubConfigSpec(config_class=Qwen2_5OmniTalkerConfig),
+        "token2wav_config": SubConfigSpec(config_class=Qwen2_5OmniToken2WavConfig),
     }
 
     thinker_config: dict | PreTrainedConfig | None = None
     talker_config: dict | PreTrainedConfig | None = None
     token2wav_config: dict | PreTrainedConfig | None = None
     enable_audio_output: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.thinker_config is None:
-            self.thinker_config = Qwen2_5OmniThinkerConfig()
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-        elif isinstance(self.thinker_config, dict):
-            self.thinker_config = Qwen2_5OmniThinkerConfig(**self.thinker_config)
-
-        if self.talker_config is None:
-            self.talker_config = Qwen2_5OmniTalkerConfig()
-            logger.info("talker_config is None. Initializing talker model with default values")
-        elif isinstance(self.talker_config, dict):
-            self.talker_config = Qwen2_5OmniTalkerConfig(**self.talker_config)
-
-        if self.token2wav_config is None:
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig()
-            logger.info("token2wav_config is None. Initializing token2wav model with default values")
-        elif isinstance(self.token2wav_config, dict):
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig(**self.token2wav_config)
-
-        super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """
@@ -1707,8 +1655,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(video_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1723,10 +1670,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(image_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
@@ -1876,6 +1823,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         use_cache: bool | None = None,
         use_audio_in_video: bool | None = None,
         video_second_per_grid: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
         r"""
@@ -1923,6 +1871,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         ```"""
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             # 1. Extract the input embeddings
@@ -1937,21 +1889,28 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithPooling = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithPooling = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -2002,26 +1961,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- position ids are packed as `[4, batch_size, seq_len]`, so the batch dim is not `0`
-        position_ids = model_kwargs.pop("position_ids", None)
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-        if position_ids is not None:
-            batch_dim = 1 if position_ids.ndim == 3 else 0
-            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
-        return input_ids, model_kwargs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids

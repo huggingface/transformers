@@ -73,13 +73,24 @@ def get_job_links(workflow_run_id, token=None):
     return {}
 
 
-def get_artifacts_links(workflow_run_id, token=None):
-    """Get all artifact links from a workflow run"""
+def get_artifacts_links(workflow_run_id, token=None, artifact_names=None):
+    """Get artifact links from a workflow run.
 
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=50"
+    If ``artifact_names`` is specified, fetches only those artifacts (one request per name).
+    Otherwise fetches all artifacts via pagination.
+    """
+    base_url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts"
     try:
-        artifacts = _get_paginated_items(url, "artifacts", token=token)
-        return {artifact["name"]: artifact["archive_download_url"] for artifact in artifacts}
+        if artifact_names is not None:
+            links = {}
+            for name in artifact_names:
+                result = get_github_json(f"{base_url}?name={name}&per_page=1", token=token)
+                for artifact in result.get("artifacts", []):
+                    links[artifact["name"]] = artifact["archive_download_url"]
+            return links
+        else:
+            artifacts = _get_paginated_items(f"{base_url}?per_page=50", "artifacts", token=token)
+            return {artifact["name"]: artifact["archive_download_url"] for artifact in artifacts}
     except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 

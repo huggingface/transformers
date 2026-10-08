@@ -84,7 +84,7 @@ trainer = Trainer(
 
 ## Built-in callbacks
 
-Transformers includes several built-in callbacks that are active by default. Additional [integrated callbacks](./main_classes/callback#available-callbacks) log to platforms like [Trackio](https://huggingface.co/docs/trackio/en/index).
+Transformers includes several built-in callbacks that are active by default. Additional [integrated callbacks](./main_classes/callback) log to platforms like [Trackio](https://huggingface.co/docs/trackio/en/index).
 
 ### DefaultFlowCallback
 
@@ -129,5 +129,5 @@ trainer = Trainer(
 
 ## Next steps
 
-- See all available [integrated callbacks](./main_classes/callback#available-callbacks) for logging to experiment trackers.
+- See all available [integrated callbacks](./main_classes/callback) for logging to experiment trackers.
 - The [Subclassing Trainer methods](./trainer_customize) guide covers overriding [`Trainer`] methods when you need to change what the training loop computes.

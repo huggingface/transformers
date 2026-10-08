@@ -40,14 +40,17 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 # Helper methods for segment sum computation
@@ -284,7 +287,9 @@ def mamba2_chunk_scan(
     hidden_states = hidden_states * dt[..., None].float()
     A = A.to(hidden_states.dtype) * dt.float()
 
-    # Rearrange into blocks/chunks
+    # Rearrange into blocks/chunks. This fixes the layout the einsums below are written against:
+    # b = batch, c = chunk index, l and s = positions within a chunk, h = head, p = head_dim,
+    # n = ssm state. So hidden_states is (b, c, l, h, p) and B and C are (b, c, l, h, n).
     hidden_states, A, B, C = [reshape_into_chunks(tensor, pad_size, chunk_size) for tensor in (hidden_states, A, B, C)]
 
     A = A.permute(0, 3, 1, 2)
@@ -294,20 +299,23 @@ def mamba2_chunk_scan(
     # This is the analog of a causal mask
     L = torch.exp(segment_sum(A))
 
-    # Contraction of C and B to get G (attention-weights like)
-    G = (C[:, :, :, None, :, :] * B[:, :, None, :, :, :]).sum(dim=-1)
+    # Contraction of C and B to get G (attention-weights like): sum over the state n, leaving a
+    # position-by-position score per head. (b,c,l,h,n) x (b,c,s,h,n) -> (b,c,l,s,h).
+    G = torch.einsum("bclhn,bcshn->bclsh", C, B)
 
     # Compute M, equivalent to applying attention mask to weights
-    M = (G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]).sum(dim=-1)
+    M = G * L.permute(0, 2, 3, 4, 1)
 
-    # Compute Y_diag (apply to values)
-    Y_diag = (M[..., None] * hidden_states[:, :, None]).sum(dim=3)
+    # Compute Y_diag (apply to values): sum over the source position s. (b,c,l,s,h) x (b,c,s,h,p)
+    # -> (b,c,l,h,p).
+    Y_diag = torch.einsum("bclsh,bcshp->bclhp", M, hidden_states)
 
     # 2. Compute the state for each intra-chunk
     # (right term of low-rank factorization of off-diagonal blocks; B terms)
     decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
     B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
-    states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
+    # Sum over the positions l in the chunk: (b,c,l,h,n) x (b,c,l,h,p) -> (b,c,h,p,n).
+    states = torch.einsum("bclhn,bclhp->bchpn", B_decay, hidden_states)
 
     # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
     # (middle term of factorization of off-diag blocks; A terms)
@@ -318,17 +326,22 @@ def mamba2_chunk_scan(
     )
     states = torch.cat([previous_states, states], dim=1)
     decay_chunk = torch.exp(segment_sum(F.pad(A_cumsum[:, :, :, -1], (1, 0)))).transpose(1, 3)
-    new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
+    # Sum over the source chunk z to get each chunk's start state: (b,z,c,h) x (b,z,h,p,n) -> (b,c,h,p,n).
+    new_states = torch.einsum("bzch,bzhpn->bchpn", decay_chunk, states)
     states, final_state = new_states[:, :-1], new_states[:, -1]
 
     # 4. Compute state -> output conversion per chunk
     # (left term of low-rank factorization of off-diagonal blocks; C terms)
     state_decay_out = torch.exp(A_cumsum)
-    C_times_states = C[..., None, :] * states[:, :, None, ...]
-    Y_off = C_times_states.sum(-1) * state_decay_out.permute(0, 2, 3, 1)[..., None]
+    # Sum over the state n again, now against each chunk's start state: (b,c,l,h,n) x (b,c,h,p,n)
+    # -> (b,c,l,h,p).
+    C_times_states = torch.einsum("bclhn,bchpn->bclhp", C, states)
+    Y_off = C_times_states * state_decay_out.permute(0, 2, 3, 1)[..., None]
 
-    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
-    output = Y_diag + Y_off
+    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks).
+    # `contiguous` because einsum may return a permuted view, and callers such as FalconH1Mixer
+    # call `.view()` on this return value, which a permuted view refuses.
+    output = (Y_diag + Y_off).contiguous()
     output = output.reshape(batch_size, -1, num_heads, head_dim)
 
     if D_residual is not None:
@@ -414,6 +427,12 @@ class NemotronHMamba2Mixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
         self.layer_type = config.layer_types[layer_idx]
+        if not config.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
         self.use_mem_eff_path = True
 
     @torch.no_grad()
@@ -586,7 +605,9 @@ class NemotronHRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        # Unlike Llama, the weight multiply is kept in fp32 and only the result is cast back to the input
+        # dtype, matching the reference implementation.
+        return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -962,6 +983,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
+        "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -1058,7 +1080,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
         use_cache: bool | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1104,7 +1126,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
         hidden_states = self.norm_f(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
@@ -1136,13 +1158,8 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1178,12 +1195,13 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
