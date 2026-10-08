@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import re
 from collections.abc import Callable
 from itertools import chain
@@ -876,12 +877,54 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         )
         return output.full_tensor()
 
+    def _masked_forward(self, module, experts_forward, ep_mesh, hidden_states, top_k_index, top_k_weights, **kwargs):
+        """The EP group shares one batch: every rank runs its own experts on all of it, the other ranks' routes
+        masked, and the partial outputs are summed. No tokens move and no split size is read back, so it captures in
+        a CUDA graph."""
+        ep_group = ep_mesh.get_group()
+        if isinstance(hidden_states, DTensor):
+            hidden_states = hidden_states.to_local()
+        if isinstance(top_k_weights, DTensor):
+            top_k_weights = top_k_weights.to_local()
+        # each rank backpropagates through its own experts only: the replicated inputs' gradients are summed
+        hidden_states = _AllReduceBackward.apply(hidden_states, ep_group)
+        if not isinstance(top_k_index, torch.Tensor):
+            # experts that route themselves (MXFP4 GPT-OSS hands its own routing data) keep to this rank's experts
+            # already: they take the batch as it is
+            with self.context_around_forward(module, ep_mesh):
+                output = experts_forward(hidden_states, top_k_index, top_k_weights, **kwargs)
+            return _AllReduceForward.apply(output, ep_group)
+        top_k_weights = _AllReduceBackward.apply(top_k_weights, ep_group)
+        num_local_experts = module.num_experts
+        local_index = top_k_index - ep_mesh.get_local_rank() * num_local_experts
+        off_rank = (local_index < 0) | (local_index >= num_local_experts)
+        with self.context_around_forward(module, ep_mesh):
+            output = experts_forward(
+                hidden_states,
+                local_index.masked_fill(off_rank, num_local_experts),
+                top_k_weights.masked_fill(off_rank, 0),
+                **kwargs,
+            )
+        return _AllReduceForward.apply(output, ep_group)
+
     def install_forward(self, module, ep_mesh, *, tp_mesh=None):
-        """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
+        """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch.
+
+        When those ranks are the EP group itself, there is nothing to exchange: the experts run masked
+        (`_masked_forward`). Otherwise each rank's tokens are dispatched to their experts' owners."""
         experts_forward = module.forward
         ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
+        batch_ranks = sorted(tp_mesh.mesh.flatten().tolist()) if tp_mesh is not None else []
+        if batch_ranks == sorted(ep_mesh.mesh.flatten().tolist()):
+            module.forward = functools.partial(self._masked_forward, module, experts_forward, ep_mesh)
+            return module
 
-        def ep_forward(hidden_states, top_k_index, top_k_weights):
+        def ep_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
+            if kwargs or not isinstance(top_k_index, torch.Tensor):
+                raise NotImplementedError(
+                    f"{type(module).__name__} routes its tokens itself, which token dispatch cannot exchange: run it "
+                    "with `ep_size == tp_size`, where its experts run on the shared batch."
+                )
             # Read the full token count before the pre hook slices the inputs across the batch replicas.
             num_tokens = hidden_states.size(0)
             (hidden_states, top_k_index, top_k_weights), _ = self.transform_inputs_pre_forward(
