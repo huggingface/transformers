@@ -100,14 +100,6 @@ def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=Tru
     return None
 
 
-def _maybe_wait_tensor(module, tensor):
-    # A collective's pending result (`AsyncCollectiveTensor`) has a null pointer until a torch op waits on it. Torch
-    # experts wait at that op's entry; quantized experts read raw pointers, so they get the result waited.
-    if getattr(module, "_hf_quantized_needs_local_tp", False):
-        return wait_tensor(tensor)
-    return tensor
-
-
 @contextlib.contextmanager
 def _use_local_dtensor_params(module):
     # Kernels as DeepGEMM require local tensors rather than DTensors.
@@ -899,7 +891,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 tokens, expert_ids, order, send_sizes, recv_sizes = self._dispatch_tokens(
                     hidden_states, top_k_index, module.num_experts, ep_group, ep_size
                 )
-                tokens = _maybe_wait_tensor(module, tokens)
+                # the received rows' pointer is null until a torch op waits on them; quantized experts read raw pointers
+                if getattr(module, "_hf_quantized_needs_local_tp", False):
+                    tokens = wait_tensor(tokens)
                 expert_output = self._run_local_experts(experts_forward, tokens, expert_ids)
                 output = self._combine_tokens(
                     expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
