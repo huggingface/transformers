@@ -10,7 +10,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.from typing import List, Union
+# limitations under the License.
 
 import copy
 from typing import Any, TypedDict, overload
@@ -107,12 +107,18 @@ class TextToAudioPipeline(Pipeline):
     _default_generation_config = GenerationConfig(max_new_tokens=256)
 
     def __init__(self, *args, vocoder=None, sampling_rate=None, noise_scheduler=None, **kwargs):
-        # Some models (e.g., VibeVoice) require noise_scheduler during initialization because `_prepare_generation_config` is called in super().__init__
-        if noise_scheduler is not None:
-            kwargs["noise_scheduler"] = noise_scheduler
         self.noise_scheduler = noise_scheduler
 
         super().__init__(*args, **kwargs)
+        # These models pass generation parameters to each of their sub-models, which have their own generation configs:
+        # the pipeline doesn't add any
+        self._passes_generation_params_to_submodels = self.model.config.model_type in (
+            "bark",
+            "seamless_m4t",
+            "seamless_m4t_v2",
+        )
+        if self._passes_generation_params_to_submodels:
+            self._generation_defaults = {}
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
@@ -133,7 +139,7 @@ class TextToAudioPipeline(Pipeline):
         if self.sampling_rate is None:
             # get sampling_rate from config and generation config
 
-            config = self.model.config
+            config = copy.deepcopy(self.model.config)
             gen_config = self.model.__dict__.get("generation_config", None)
             if gen_config is not None:
                 config.update({k: v for k, v in gen_config.to_dict().items() if v is not None})
@@ -159,8 +165,8 @@ class TextToAudioPipeline(Pipeline):
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
             # Check if generation_config has semantic_config (BarkGenerationConfig) or use default
             max_length = 256
-            if hasattr(self.generation_config, "semantic_config"):
-                max_length = getattr(self.generation_config.semantic_config, "max_input_semantic_length", 256)
+            if hasattr(self.model.generation_config, "semantic_config"):
+                max_length = getattr(self.model.generation_config.semantic_config, "max_input_semantic_length", 256)
             new_kwargs = {
                 "max_length": max_length,
                 "add_special_tokens": False,
@@ -211,29 +217,9 @@ class TextToAudioPipeline(Pipeline):
             # we expect some kwargs to be additional tensors which need to be on the right device
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" in generate_kwargs:
-                generation_config = generate_kwargs.pop("generation_config")
-            else:
-                generation_config = copy.deepcopy(self.generation_config)
-
-            # ensure dict output to facilitate postprocessing
-            generation_config.return_dict_in_generate = True
-
-            # priotiize max_new_tokens to avoid max_length warning
-            if generation_config.max_new_tokens is not None:
-                generation_config.max_length = None
-
-            # Merge generate_kwargs into generation_config where possible to avoid the
-            # deprecation warning about passing generation_config alongside generation params
-            model_specific_kwargs = {}
-            for k, v in generate_kwargs.items():
-                if hasattr(generation_config, k):
-                    setattr(generation_config, k, v)
-                else:
-                    model_specific_kwargs[k] = v
-            forward_params["generation_config"] = generation_config
-            forward_params.update(model_specific_kwargs)
+            # `generate_kwargs` take precedence over `forward_params`. Dict output facilitates postprocessing.
+            overrides = {} if self._passes_generation_params_to_submodels else {"return_dict_in_generate": True}
+            forward_params = self._prepare_generate_kwargs({**forward_params, **generate_kwargs}, **overrides)
 
             if self.model.config.model_type in ["csm"]:
                 # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
@@ -289,7 +275,8 @@ class TextToAudioPipeline(Pipeline):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
                 guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation). `generate_kwargs` are
-                only passed to the underlying model if the latter is a generative model.
+                only passed to the underlying model if the latter is a generative model, and take precedence over
+                `forward_params`.
 
         Return:
             `AudioOutput` or a list of `AudioOutput`, which is a `TypedDict` with two keys:
@@ -330,6 +317,8 @@ class TextToAudioPipeline(Pipeline):
         if isinstance(audio, dict):
             if "audio" in audio:
                 audio = audio["audio"]
+            elif "waveform" in audio:  # e.g. SeamlessM4T with `return_intermediate_token_ids=True`
+                audio = audio["waveform"]
             else:
                 needs_decoding = True
                 audio = audio["sequences"]

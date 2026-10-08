@@ -97,7 +97,6 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: PILImageResampling | InterpolationMode | int | None,

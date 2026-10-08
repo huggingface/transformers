@@ -46,7 +46,6 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config
@@ -75,8 +74,7 @@ class PPDocLayoutV2GlobalPointer(nn.Module):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: PPDocLayoutV2Config, device=None):
+    def __init__(self, config: PPDocLayoutV2Config):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim
@@ -84,14 +82,11 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config)
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: PPDocLayoutV2Config, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: PPDocLayoutV2Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -108,7 +103,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / half_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5

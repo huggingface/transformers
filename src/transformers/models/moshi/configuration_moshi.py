@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
@@ -128,7 +128,10 @@ class MoshiConfig(PreTrainedConfig):
 
     model_type = "moshi"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"audio_encoder_config": AutoConfig, "depth_decoder_config": MoshiDepthConfig}
+    sub_configs_defaults = {
+        "audio_encoder_config": SubConfigSpec(config_class=AutoConfig, model_type="mimi"),
+        "depth_decoder_config": SubConfigSpec(config_class=MoshiDepthConfig),
+    }
 
     vocab_size: int = 32000
     hidden_size: int = 4096
@@ -160,15 +163,13 @@ class MoshiConfig(PreTrainedConfig):
         )
         self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
 
-        if isinstance(self.audio_encoder_config, dict):
-            audio_encoder_model_type = self.audio_encoder_config.pop("model_type", "mimi")
-            self.audio_encoder_config = AutoConfig.for_model(audio_encoder_model_type, **self.audio_encoder_config)
-        elif self.audio_encoder_config is None:
-            self.audio_encoder_config = AutoConfig.for_model("mimi")
-
-        self.audio_vocab_size = (
-            self.audio_encoder_config.codebook_size if self.audio_vocab_size is None else self.audio_vocab_size
-        )
+        if self.audio_encoder_config is not None:
+            encoder_codebook_size = (
+                self.audio_encoder_config.get("codebook_size", 2048)
+                if isinstance(self.audio_encoder_config, dict)
+                else self.audio_encoder_config.codebook_size
+            )
+            self.audio_vocab_size = encoder_codebook_size if self.audio_vocab_size is None else self.audio_vocab_size
 
         if isinstance(self.depth_decoder_config, dict):
             self.depth_decoder_config.update(
@@ -179,9 +180,6 @@ class MoshiConfig(PreTrainedConfig):
                     "num_codebooks": self.num_codebooks,
                 }
             )
-            self.depth_decoder_config = MoshiDepthConfig(**self.depth_decoder_config)
-        elif self.depth_decoder_config is None:
-            self.depth_decoder_config = MoshiDepthConfig()
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

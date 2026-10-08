@@ -55,7 +55,6 @@ from ...utils import (
     is_torchdynamo_exporting,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -80,8 +79,7 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen3_5VisionConfig, device=None):
+    def __init__(self, config: Qwen3_5VisionConfig):
         super().__init__()
         self.config = config
 
@@ -89,13 +87,12 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_axial_rope_parameters
         if self.rope_type != "axial":
             raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_axial_rope_parameters(
         config: Qwen3_5VisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -140,8 +137,7 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
 
 
 class Qwen3_5TextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen3_5TextConfig, device=None):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -152,14 +148,13 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen3_5TextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -186,15 +181,11 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
     @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, Qwen3_5Text has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        # So position_ids is broadcast to (3, bs, positions) and freqs has shape (3, bs, positions, dim // 2)
+        position_ids = position_ids.expand(3, -1, -1)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)

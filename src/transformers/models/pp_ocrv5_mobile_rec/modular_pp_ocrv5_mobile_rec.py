@@ -15,11 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...configuration_utils import SubConfigSpec
+from ...utils import auto_docstring, logging
+from ..auto import AutoConfig
 from ..pp_lcnet_v3.modeling_pp_lcnet_v3 import make_divisible
 from ..pp_ocrv5_server_rec.configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
 from ..pp_ocrv5_server_rec.modeling_pp_ocrv5_server_rec import (
@@ -35,21 +33,18 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_rec_safetensors")
 @strict
 class PPOCRV5MobileRecConfig(PPOCRV5ServerRecConfig):
-    def __post_init__(self, **kwargs):
-        if self.conv_kernel_size is None:
-            self.conv_kernel_size = [1, 3]
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="pp_lcnet_v3",
-            default_config_kwargs={
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pp_lcnet_v3",
+            init_kwargs={
                 "scale": 0.75,
                 "out_features": ["stage2", "stage3", "stage4", "stage5"],
                 "out_indices": [2, 3, 4, 5],
                 "divisor": 16,
             },
-            **kwargs,
-        )
-        super().__post_init__(**kwargs)
+        ),
+    }
 
 
 class PPOCRV5MobileRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
