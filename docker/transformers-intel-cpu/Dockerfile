@@ -1,4 +1,4 @@
-FROM intel/deep-learning-essentials:2025.1.3-0-devel-ubuntu24.04 AS base
+FROM intel/deep-learning-essentials:2026.0.0-devel-ubuntu24.04 AS base
 LABEL maintainer="Hugging Face"
 SHELL ["/bin/bash", "-c"]
 
@@ -32,7 +32,8 @@ RUN apt-get update && \
     wget \
     ncurses-term \
     google-perftools \
-    libjemalloc-dev \
+    libmimalloc-dev \
+    libmimalloc2.0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -45,19 +46,17 @@ RUN uv venv --python ${PYTHON_VERSION} --seed ${VIRTUAL_ENV}
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN pip install --upgrade pip wheel
-RUN pip install torch torchvision torchaudio torchcodec --index-url https://download.pytorch.org/whl/cpu --no-cache-dir
+RUN pip install torch torchvision torchaudio torchcodec torchao --index-url https://download.pytorch.org/whl/cpu --no-cache-dir
 RUN pip install av pyctcdecode pytesseract decord galore-torch fire scipy scikit-learn sentencepiece sentence_transformers sacremoses nltk rouge_score librosa soundfile mpi4py pytorch_msssim
 RUN pip install onnx optimum onnxruntime
-RUN pip install gptqmodel --no-build-isolation
 RUN pip install -U datasets timm transformers accelerate peft diffusers opencv-python kenlm evaluate
 RUN pip install -U intel-openmp
+RUN pip install kernels
+RUN pip install gptqmodel bitsandbytes
+RUN pip install git+https://github.com/facebookresearch/detectron2.git --no-build-isolation
 
-# install bitsandbytes
-RUN git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git && cd bitsandbytes/ && \
-    cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip install . && cd ../
-
-# CPU don't need triton
-RUN pip uninstall triton -y
+# MXFP4 requires triton >= 3.5.0
+RUN pip install "triton>=3.5.0"
 
 ENV LD_PRELOAD=${LD_PRELOAD}:/opt/venv/lib/libiomp5.so:/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4
 ENV KMP_AFFINITY=granularity=fine,compact,1,0
