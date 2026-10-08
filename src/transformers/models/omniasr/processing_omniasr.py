@@ -164,10 +164,12 @@ class OmniASRProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         language: str | list[str] | None = None,
+        transcription: str | list[str] | None = None,
         **kwargs: Unpack[OmniASRProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare inputs for speech recognition without manually writing the chat template.
+        Prepare inputs for speech recognition without manually writing the chat template, either for inference or,
+        when `transcription` is given, for training.
 
         Args:
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -178,13 +180,17 @@ class OmniASRProcessor(ProcessorMixin):
                 or one per audio. ISO 639-1 codes (e.g. `"en"`) are also accepted for the languages that have one.
                 `None` or `"auto"` selects the model's language-agnostic mode; naming the language explicitly gives
                 better transcription quality.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in [`~OmniASRProcessor.__call__`]).
             **kwargs:
                 Additional keyword arguments forwarded to [`~OmniASRProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
             [`BatchFeature`]: Processor outputs ready to be passed to
-            [`OmniASRForConditionalGeneration.generate`].
+            [`OmniASRForConditionalGeneration.generate`], or to [`OmniASRForConditionalGeneration.forward`] to compute
+            the loss when `transcription` is given.
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
         batch_size = len(audio_items)
@@ -196,17 +202,32 @@ class OmniASRProcessor(ProcessorMixin):
         if len(language) != batch_size:
             raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
 
+        is_training = transcription is not None
+        if is_training:
+            if isinstance(transcription, str):
+                transcription = [transcription]
+            if len(transcription) != batch_size:
+                raise ValueError(
+                    f"Got {len(transcription)} transcription(s) for {batch_size} sample(s); counts must match."
+                )
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+        else:
+            transcription = [None] * batch_size
+
         conversations = []
-        for audio_item, lang in zip(audio_items, language):
+        for audio_item, lang, transcript in zip(audio_items, language, transcription):
             content = [make_audio_chat_template_content(audio_item)]
             if lang is not None:
                 content.append({"type": "language", "language": lang})
-            conversations.append([{"role": "user", "content": content}])
+            conversation = [{"role": "user", "content": content}]
+            if transcript is not None:
+                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
+            conversations.append(conversation)
 
         return self.apply_chat_template(
             conversations,
             tokenize=True,
-            add_generation_prompt=True,
+            add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
         )

@@ -155,3 +155,36 @@ class OmniASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertListEqual(labels[idx][labels[idx] != -100].tolist(), target)
             self.assertListEqual(input_ids[idx, -len(target) :].tolist(), target)
             self.assertEqual(input_ids[idx, -len(target) - 1].item(), tokenizer.bos_token_id)
+
+    @require_librosa
+    def test_apply_transcription_request_with_transcription(self):
+        processor = self.get_processor()
+        text = ["hello world", "hi"]
+        language = ["eng_Latn", None]
+        audio = self.prepare_audio_inputs(batch_size=2)
+        audio[1] = audio[1][: len(audio[1]) // 2]
+
+        inputs = processor.apply_transcription_request(audio, language=language, transcription=text)
+
+        # Same as manually writing the transcripts as the assistant turn and asking for labels.
+        conversations = []
+        for audio_item, lang, transcript in zip(audio, language, text):
+            content = [{"type": "audio", "audio": audio_item}]
+            if lang is not None:
+                content.append({"type": "language", "language": lang})
+            conversations.append(
+                [
+                    {"role": "user", "content": content},
+                    {"role": "assistant", "content": [{"type": "text", "text": transcript}]},
+                ]
+            )
+        expected = processor.apply_chat_template(
+            conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
+        )
+
+        self.assertIn("labels", inputs)
+        for key in ("input_ids", "attention_mask", "labels", "input_values", "padding_mask"):
+            torch.testing.assert_close(inputs[key], expected[key])
+
+        with self.assertRaisesRegex(ValueError, "transcription"):
+            processor.apply_transcription_request(audio, transcription=text[:1])

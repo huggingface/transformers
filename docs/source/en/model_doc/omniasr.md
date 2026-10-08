@@ -170,9 +170,11 @@ for text in processor.decode(generated_ids, skip_special_tokens=True):
 
 ### Training
 
-The model can be trained with the loss it outputs. Put the target transcript in the assistant turn and pass
-`output_labels=True`. Everything but the transcript and its EOS (the audio placeholders, the language prompt and the
-padding) is masked automatically. Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech
+The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
+`transcription`, which writes them as the assistant turn and returns `labels`. Everything but the transcript and its EOS
+(the audio placeholders, the language prompt and the padding) is masked automatically. With
+[`apply_chat_template`](#chat-template), the same is done by putting the transcript in an assistant turn and passing
+`processor_kwargs={"output_labels": True}`. Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech
 transcripts are lowercased below.
 
 ```python
@@ -191,21 +193,8 @@ ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sam
 speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
 text_samples = [text.lower() for text in ds["text"][:NUM_SAMPLES]]
 
-conversations = [
-    [
-        {
-            "role": "user",
-            # Any supported language code, or drop the language item to train the language-agnostic mode
-            "content": [{"type": "audio", "audio": audio}, {"type": "language", "language": "en"}],
-        },
-        {"role": "assistant", "content": [{"type": "text", "text": text}]},
-    ]
-    for audio, text in zip(speech_samples, text_samples)
-]
-
-inputs = processor.apply_chat_template(
-    conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
-)
+# Any supported language code, or `language=None` to train the language-agnostic mode
+inputs = processor.apply_transcription_request(speech_samples, language="en", transcription=text_samples)
 inputs.to(model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
