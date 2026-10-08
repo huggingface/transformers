@@ -1048,7 +1048,16 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         deprecates passing one together with generation parameters.
         """
         # Pipeline defaults for these only apply when sampling, otherwise `generate()` warns about them
-        _SAMPLING_PARAMS = {"temperature", "top_k", "top_p", "min_p", "top_h", "typical_p", "epsilon_cutoff","eta_cutoff"}
+        _SAMPLING_PARAMS = {
+            "temperature",
+            "top_k",
+            "top_p",
+            "min_p",
+            "top_h",
+            "typical_p",
+            "epsilon_cutoff",
+            "eta_cutoff",
+        }
         if "generation_config" not in generate_kwargs:
             generate_kwargs = {**self._generate_kwargs, **generate_kwargs}
         set_params = self._get_set_generation_params(generate_kwargs)
