@@ -162,6 +162,7 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
+    is_torch_flex_attn_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -1148,6 +1149,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MPS is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "tpu" and not is_torch_tpu_available():
+            raise ValueError(
+                "TRANSFORMERS_TEST_DEVICE=tpu, but TPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -1166,6 +1171,8 @@ if is_torch_available():
         torch_device = "hpu"
     elif is_torch_xpu_available():
         torch_device = "xpu"
+    elif is_torch_tpu_available():
+        torch_device = "tpu"
     else:
         torch_device = "cpu"
 else:
@@ -1419,6 +1426,11 @@ def require_torch_fp16(test_case):
     return unittest.skipUnless(
         is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
     )(test_case)
+
+
+def require_flex_attention(test_case):
+    """Decorator marking a test that requires FlexAttention."""
+    return unittest.skipUnless(is_torch_flex_attn_available(), "test requires FlexAttention")(test_case)
 
 
 def require_fp8(test_case):
@@ -3420,6 +3432,17 @@ if is_torch_xpu_available():
     BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
     BACKEND_SYNCHRONIZE["xpu"] = torch.xpu.synchronize
     BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
+
+
+if is_torch_available() and is_torch_tpu_available():
+    # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
+    # falls back to the `default` entry of its table rather than being faked here.
+    BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
+    BACKEND_DEVICE_COUNT["tpu"] = torch.tpu.device_count
+    BACKEND_SYNCHRONIZE["tpu"] = torch.tpu.synchronize
+    BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
+    if hasattr(torch.tpu, "empty_cache"):
+        BACKEND_EMPTY_CACHE["tpu"] = torch.tpu.empty_cache
 
 
 if is_torch_xla_available():
