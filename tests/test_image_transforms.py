@@ -12,12 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import io
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils.import_utils import is_torch_available, is_vision_available
 
 
@@ -42,12 +47,62 @@ if is_vision_available():
         to_channel_dimension_format,
         to_pil_image,
     )
+    from transformers.image_utils import load_image, load_image_as_tensor
 
 
 def get_random_image(height, width, num_channels=3, channels_first=True):
     shape = (num_channels, height, width) if channels_first else (height, width, num_channels)
     random_array = np.random.randint(0, 256, shape, dtype=np.uint8)
     return random_array
+
+
+@require_vision
+class ImageLoaderTransparencyTester(unittest.TestCase):
+    def test_load_image_sources(self):
+        image = PIL.Image.new("RGBA", (2, 1), (255, 0, 0, 0))
+        image.putpixel((1, 0), (255, 0, 0, 128))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "transparent.png"
+            path.write_bytes(image_bytes)
+            with patch("transformers.image_utils.httpx.get") as get:
+                get.return_value.content = image_bytes
+                sources = (
+                    image,
+                    str(path),
+                    "data:image/png;base64," + base64.b64encode(image_bytes).decode(),
+                    "https://example.com/transparent.png",
+                )
+                for source in sources:
+                    with self.subTest(source=str(source)[:40]):
+                        loaded = load_image(source)
+                        self.assertEqual(loaded.mode, "RGB")
+                        self.assertEqual(loaded.getpixel((0, 0)), (255, 255, 255))
+                        self.assertEqual(loaded.getpixel((1, 0)), (255, 127, 127))
+
+    def test_load_palette_png_transparency(self):
+        image = PIL.Image.new("P", (2, 1))
+        image.putpalette([255, 0, 0, 0, 0, 255] + [0] * (256 * 3 - 6))
+        image.putdata([0, 1])
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "transparent.png"
+            image.save(path, transparency=0)
+            loaded = load_image(str(path))
+            self.assertEqual(loaded.getpixel((0, 0)), (255, 255, 255))
+            self.assertEqual(loaded.getpixel((1, 0)), (0, 0, 255))
+
+    @require_torchvision
+    def test_load_image_as_tensor(self):
+        image = PIL.Image.new("RGBA", (1, 1), (255, 0, 0, 0))
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "transparent.png"
+            image.save(path)
+            for source in (image, str(path)):
+                with self.subTest(source=str(source)[:40]):
+                    self.assertEqual(load_image_as_tensor(source)[:, 0, 0].tolist(), [255, 255, 255])
 
 
 @require_vision
@@ -565,7 +620,7 @@ class ImageTransformsTester(unittest.TestCase):
     @require_vision
     def test_convert_to_rgb(self):
         # Test that an RGBA image is converted to RGB
-        image = np.array([[[1, 2, 3, 4], [5, 6, 7, 8]]], dtype=np.uint8)
+        image = np.array([[[1, 2, 3, 0], [5, 6, 7, 255]]], dtype=np.uint8)
         pil_image = PIL.Image.fromarray(image)
         self.assertEqual(pil_image.mode, "RGBA")
         self.assertEqual(pil_image.size, (2, 1))
@@ -579,7 +634,10 @@ class ImageTransformsTester(unittest.TestCase):
         rgb_image = convert_to_rgb(pil_image)
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
-        self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[1, 2, 3], [5, 6, 7]]], dtype=np.uint8)))
+        self.assertTrue(np.array_equal(np.array(rgb_image), np.array([[[255, 255, 255], [5, 6, 7]]])))
+
+        semi_transparent = PIL.Image.new("RGBA", (1, 1), (255, 0, 0, 128))
+        self.assertEqual(convert_to_rgb(semi_transparent).getpixel((0, 0)), (255, 127, 127))
 
         # Test that a grayscale image is converted to RGB
         image = np.array([[0, 255]], dtype=np.uint8)
@@ -590,6 +648,32 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
         self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
+
+    @parameterized.expand(["RGB", "L", "P"])
+    def test_convert_to_rgb_png_transparency(self, mode):
+        image = PIL.Image.new(mode, (2, 1))
+        if mode == "RGB":
+            image.putdata([(255, 0, 0), (0, 0, 255)])
+            transparency = (255, 0, 0)
+        elif mode == "L":
+            image.putdata([0, 128])
+            transparency = 0
+        else:
+            image.putpalette([255, 0, 0, 0, 0, 255] + [0] * (256 * 3 - 6))
+            image.putdata([0, 1])
+            transparency = 0
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG", transparency=transparency)
+        buffer.seek(0)
+        image = PIL.Image.open(buffer)
+        self.assertEqual(image.mode, mode)
+        self.assertEqual(image.info["transparency"], transparency)
+
+        rgb_image = convert_to_rgb(image)
+        self.assertEqual(rgb_image.mode, "RGB")
+        self.assertEqual(rgb_image.getpixel((0, 0)), (255, 255, 255))
+        self.assertEqual(rgb_image.getpixel((1, 0)), (128, 128, 128) if mode == "L" else (0, 0, 255))
 
     def test_flip_channel_order(self):
         # fmt: off
