@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
@@ -106,7 +106,10 @@ class InternVLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "internvl"
-    sub_configs = {"text_config": AutoConfig, "vision_config": InternVLVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
+        "vision_config": SubConfigSpec(config_class=InternVLVisionConfig),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -117,20 +120,6 @@ class InternVLConfig(PreTrainedConfig):
     vision_feature_layer: int | list[int] = -1
     vision_feature_select_strategy: str = "default"
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = InternVLVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = InternVLVisionConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"]()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["InternVLVisionConfig", "InternVLConfig"]

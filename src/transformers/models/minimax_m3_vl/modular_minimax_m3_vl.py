@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
@@ -36,7 +36,6 @@ from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
-from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
@@ -200,7 +199,11 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MiniMaxM3VLTextConfig),
+        "vision_config": SubConfigSpec(config_class=MiniMaxM3VLVisionConfig),
+    }
+
     attribute_map = {
         "image_token_id": "image_token_index",
         "video_token_id": "video_token_index",
@@ -214,26 +217,13 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config.pop("model_type", None)
-            self.vision_config = MiniMaxM3VLVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MiniMaxM3VLVisionConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config.pop("model_type", None)
-            self.text_config = MiniMaxM3VLTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = MiniMaxM3VLTextConfig()
-
+        super().__post_init__(**kwargs)
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         # Channel dim after grouping `spatial_merge_size**2` projected patches, consumed by the
         # patch-merge MLP inside `MiniMaxM3VLMultiModalProjector`.
         self.merged_hidden_size = self.text_config.hidden_size * (self.vision_config.spatial_merge_size**2)
-
-        super().__post_init__(**kwargs)
 
 
 class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
