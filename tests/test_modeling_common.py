@@ -1724,9 +1724,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # Extract the names of the weights associated to the embedding we circumvent
                     embedding_param_ids = {id(p) for p in wte.parameters()}
                     frozen_grads = {
-                        name
-                        for name, param in model.named_parameters()
-                        if id(param) in embedding_param_ids
+                        name for name, param in model.named_parameters() if id(param) in embedding_param_ids
                     }
 
                 model.train()
@@ -2062,7 +2060,9 @@ class ModelTesterMixin(ExportTesterMixin):
     def test_training_gradient_checkpointing_use_reentrant_true_with_frozen_input(self):
         # Scenario - 4 with `use_reentrant=True` (old default behaviour, not recommended) and frozen input
         # NOTE: In special cases 3 == 4 based on the input not going through any embedding (e.g. audio models going through the raw audio values)
-        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True}, frozen_input=True)
+        self.check_training_gradient_checkpointing(
+            gradient_checkpointing_kwargs={"use_reentrant": True}, frozen_input=True
+        )
 
     def _set_subconfig_attributes(self, config, attribute_name, value):
         """Helper function to recursively set a config attr to a given value"""
