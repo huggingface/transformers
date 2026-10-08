@@ -129,7 +129,6 @@ class GptOssTopKRouter(nn.Module):
         return router_logits, router_scores, router_indices
 
 
-@use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class GptOssMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
