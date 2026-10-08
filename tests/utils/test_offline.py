@@ -38,9 +38,9 @@ from transformers import BertConfig, BertModel, BertTokenizer, pipeline
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
-BertModel.from_pretrained(mname, use_kernels=False)
+BertModel.from_pretrained(mname)
 BertTokenizer.from_pretrained(mname)
-pipe = pipeline(task="fill-mask", model=mname, model_kwargs={"use_kernels": False})
+pipe = pipeline(task="fill-mask", model=mname)
 print("success")
         """
 
@@ -53,7 +53,7 @@ socket.socket = offline_socket
         # Force fetching the files so that we can use the cache
         mname = "hf-internal-testing/tiny-random-bert"
         BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname, use_kernels=False)
+        BertModel.from_pretrained(mname)
         BertTokenizer.from_pretrained(mname)
         pipeline(task="fill-mask", model=mname)
 
@@ -73,9 +73,9 @@ from transformers import BertConfig, BertModel, BertTokenizer, pipeline
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
-BertModel.from_pretrained(mname, use_kernels=False)
+BertModel.from_pretrained(mname)
 BertTokenizer.from_pretrained(mname)
-pipe = pipeline(task="fill-mask", model=mname, model_kwargs={"use_kernels": False})
+pipe = pipeline(task="fill-mask", model=mname)
 print("success")
         """
 
@@ -88,7 +88,7 @@ socket.socket = offline_socket
         # Force fetching the files so that we can use the cache
         mname = "hf-internal-testing/tiny-random-bert"
         BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname, use_kernels=False)
+        BertModel.from_pretrained(mname)
         BertTokenizer.from_pretrained(mname)
         pipeline(task="fill-mask", model=mname)
 
@@ -113,7 +113,7 @@ from transformers import BertConfig, BertModel, BertTokenizer
         run = """
 mname = "hf-internal-testing/tiny-random-bert-sharded"
 BertConfig.from_pretrained(mname)
-BertModel.from_pretrained(mname, use_kernels=False)
+BertModel.from_pretrained(mname)
 print("success")
         """
 
@@ -143,7 +143,7 @@ from transformers import pipeline
         """
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
-pipe = pipeline(model=mname, model_kwargs={"use_kernels": False})
+pipe = pipeline(model=mname)
         """
 
         mock = """
@@ -165,7 +165,7 @@ from transformers import AutoModel
         """
         run = """
 mname = "hf-internal-testing/test_dynamic_model"
-AutoModel.from_pretrained(mname, trust_remote_code=True, use_kernels=False)
+AutoModel.from_pretrained(mname, trust_remote_code=True)
 print("success")
         """
 
@@ -206,8 +206,6 @@ print("success")
         # Configure env
         new_env = self.get_env()
         new_env.update(env)
-        # Kernels always requires special treatment so we ignore it in general for each test here
-        new_env["USE_HUB_KERNELS"] = "0"
 
         # Run command
         result = subprocess.run(cmd, env=new_env, check=False, capture_output=True)

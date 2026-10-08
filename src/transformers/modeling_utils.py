@@ -124,7 +124,7 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.generic import GeneralInterface, is_flash_attention_requested
+from .utils.generic import GeneralInterface, is_flash_attention_requested, suppress_kernels_logging
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
 from .utils.import_utils import (
     KERNELS_MAX_VERSION,
@@ -3838,6 +3838,7 @@ class PreTrainedModel(
             # Reset kernelization
             self.use_kernels = False
 
+    @suppress_kernels_logging
     def reset_kernels(self) -> bool:
         """
         Reset any kernelization applied on the model, i.e. use the torch implementation for any function or module
@@ -3852,18 +3853,10 @@ class PreTrainedModel(
         from kernels import Mode
 
         previous_use_kernels = self.use_kernels
-        with warnings.catch_warnings():
-            # Temporarily ignore user warnings as this is intentional from our side
-            warnings.filterwarnings(
-                "ignore",
-                message=r"\s*No kernel mapping found for layer .*",
-                category=UserWarning,
-                module=r"kernels\.layer\.layer",
-            )
 
-            # Force kernelization with an empty mapping to force the torch fallbacks in all cases
-            # NOTE: The mode is not relevant (either training or inference to force kernelization to happen)
-            kernelize(self, mode=Mode.INFERENCE, kernel_config=KernelConfig(kernel_mapping={}, inherit_mapping=False))
+        # Force kernelization with an empty mapping to force the torch fallbacks in all cases
+        # NOTE: The mode is not relevant (either training or inference to force kernelization to happen)
+        kernelize(self, mode=Mode.INFERENCE, kernel_config=KernelConfig(kernel_mapping={}, inherit_mapping=False))
 
         self._use_kernels = False
         self._kernels_mode = None

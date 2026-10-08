@@ -17,8 +17,6 @@ import random
 from inspect import signature
 from unittest.mock import patch
 
-from transformers.testing_utils import scoped_kernels_class
-
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
     floats_tensor,
@@ -157,7 +155,6 @@ class ALMModelTester(MultiModalModelTester):
         return self.audio_config_class(**kwargs)
 
 
-@scoped_kernels_class
 class ALMModelTest(MultiModalModelTest):
     """
     Base test class for Audio-Language Models.

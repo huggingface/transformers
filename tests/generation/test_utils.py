@@ -46,13 +46,13 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
+    require_kernels,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
-    scoped_kernels,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -339,7 +339,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
     @pytest.mark.generate
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_kernels_greedy_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()

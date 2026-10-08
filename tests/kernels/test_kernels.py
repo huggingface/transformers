@@ -44,7 +44,6 @@ from transformers.testing_utils import (
     require_kernels,
     require_rocm,
     require_torch_accelerator,
-    scoped_kernels,
     slow,
     torch_device,
 )
@@ -60,7 +59,7 @@ if is_kernels_available():
 
 @slow
 @require_torch_accelerator
-@scoped_kernels
+@require_kernels
 class TestHubKernels(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
@@ -475,7 +474,7 @@ class TestKernelUtilities(TestCasePlus):
             self.assertFalse(is_kernel(s))
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
 
@@ -518,7 +517,7 @@ class TestKernelUtilities(TestCasePlus):
         _KERNEL_MODULE_MAPPING.pop(name, None)
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_lazy_load_kernel_version(self):
         name = "causal-conv1d"
         version_spec = ">=0.0.4,<0.1.0"
@@ -803,7 +802,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
 
 
 @require_torch_accelerator
-@scoped_kernels
+@require_kernels
 class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):

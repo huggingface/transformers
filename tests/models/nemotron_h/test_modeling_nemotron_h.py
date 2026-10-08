@@ -23,10 +23,10 @@ from transformers import AutoTokenizer, NemotronHConfig, NemotronHForCausalLM, i
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     require_torch_greater_or_equal,
-    scoped_kernels,
     slow,
     torch_device,
 )
@@ -496,7 +496,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester.create_and_check_nemotron_h_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_nemotron_h_chunked_prefill(*config_and_inputs, device=torch_device)

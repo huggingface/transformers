@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch_accelerator,
-    scoped_kernels_class,
     slow,
 )
 
@@ -271,7 +270,6 @@ class CausalLMModelTester:
 
 
 @require_torch
-@scoped_kernels_class
 class CausalLMModelTest(
     ModelTesterMixin,
     GenerationTesterMixin,

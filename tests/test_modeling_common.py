@@ -109,7 +109,6 @@ from transformers.testing_utils import (
     rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
-    scoped_kernels,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -6022,7 +6021,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 )
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -6036,7 +6035,7 @@ class ModelTesterMixin(ExportTesterMixin):
             model.use_kernels = True
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_kernels_can_run_without_crashing(self):
         """
         Check whether activating kernels and then running through some input leads to an (value) error

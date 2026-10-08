@@ -21,9 +21,9 @@ import pytest
 from transformers import DynamicCache, FalconH1Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
-    scoped_kernels,
     slow,
     torch_device,
 )
@@ -363,7 +363,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)

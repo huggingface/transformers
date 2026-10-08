@@ -18,9 +18,9 @@ import unittest
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
-    scoped_kernels,
     slow,
     torch_device,
 )
@@ -330,13 +330,13 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_mamba2_slow_vs_fast_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
@@ -345,7 +345,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # creates a grouped SSD configuration in the mamba2 layers
     # See https://github.com/huggingface/transformers/pull/37533/
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_mamba2_slow_vs_fast_forward_grouped(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_and_inputs[0].n_groups //= 2

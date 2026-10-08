@@ -37,10 +37,10 @@ from transformers.testing_utils import (
     get_cpu_ram_total_gib,
     is_kernels_available,
     require_deterministic_for_xpu,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    scoped_kernels,
     slow,
     torch_device,
 )
@@ -93,7 +93,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     @pytest.mark.flash_attn_test
     @require_torch_accelerator
-    @scoped_kernels
+    @require_kernels
     def test_default_flash_implementation_auto_correction(self):
         """
         Tests that setting attn_implementation="flash_attention_2" during model initialization
@@ -430,7 +430,7 @@ if __name__ == "__main__":
     # ------------------------
     @parameterized.expand(PARAMETERS)
     @require_deterministic_for_xpu
-    @scoped_kernels
+    @require_kernels
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         if torch_device == "cpu":
             if attn_impl == "kernels-community/vllm-flash-attn3":

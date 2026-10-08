@@ -29,9 +29,9 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
-    scoped_kernels,
     slow,
     torch_device,
 )
@@ -324,7 +324,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["audio_input_ids"].shape[1])
 
     @pytest.mark.generate
-    @scoped_kernels
+    @require_kernels
     def test_kernels_greedy_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
