@@ -39,12 +39,14 @@ class GptOssConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    # MXFP4 experts route their tokens themselves, which only the router-masked plan leaves them to
     base_model_ep_plan = {
+        "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
-        "layers.*.mlp.experts": "ep_dispatch_experts",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     num_hidden_layers: int = 36
