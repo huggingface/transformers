@@ -95,10 +95,9 @@ class DeepseekV2Config(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_experts": "n_routed_experts",

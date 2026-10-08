@@ -137,7 +137,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+    from transformers.distributed.tensor_parallel import _get_parameter_plan
     from transformers.integrations.accelerate import compute_module_sizes
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
@@ -4871,10 +4871,9 @@ class ModelTesterMixin(ExportTesterMixin):
             for pattern in tp_plan:
                 # Check if this given pattern matches any param or module (the value attributed to the pattern does not matter)
                 pattern_usage[pattern] = any(
-                    _get_parameter_tp_plan(param, {pattern: ""}, is_weight=True) is not None for param in param_names
+                    _get_parameter_plan(param, {pattern: ""}, is_weight=True) is not None for param in param_names
                 ) or any(
-                    _get_parameter_tp_plan(module, {pattern: ""}, is_weight=False) is not None
-                    for module in module_names
+                    _get_parameter_plan(module, {pattern: ""}, is_weight=False) is not None for module in module_names
                 )
 
             unused_entries = {k for k, v in pattern_usage.items() if not v}
@@ -5376,18 +5375,23 @@ class ModelTesterMixin(ExportTesterMixin):
                     "hidden_dim",
                     "mm_embed_dim",  # gemma4-only
                 ]
-                hidden_size = None
-                for attr in attribute_candidates:
-                    if hasattr(vision_config, attr):
-                        hidden_size = getattr(vision_config, attr)
-                        break
-                    elif isinstance(vision_config, dict) and attr in vision_config:
-                        hidden_size = vision_config[attr]
-                        break
+                if "Fuyu" in model_class.__name__:
+                    # very old model without an encoder - simple MLP as vision backbone
+                    # add a knob here to not overwrite the whole test
+                    hidden_size = config.get_text_config().hidden_size
                 else:
-                    raise ValueError("Cannot find the hidden size attribute in vision_config")
-                if isinstance(hidden_size, (list, tuple)):
-                    hidden_size = hidden_size[-1]
+                    hidden_size = None
+                    for attr in attribute_candidates:
+                        if hasattr(vision_config, attr):
+                            hidden_size = getattr(vision_config, attr)
+                            break
+                        elif isinstance(vision_config, dict) and attr in vision_config:
+                            hidden_size = vision_config[attr]
+                            break
+                    else:
+                        raise ValueError("Cannot find the hidden size attribute in vision_config")
+                    if isinstance(hidden_size, (list, tuple)):
+                        hidden_size = hidden_size[-1]
                 self.assertEqual(
                     last_hidden_state_shape[-1],
                     hidden_size,
