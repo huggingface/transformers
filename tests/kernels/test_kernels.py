@@ -304,7 +304,7 @@ class TestHubKernels(MemoryCleanupTestCase):
                     ("MLP", "model.layers.*.mlp"),
                 ): (
                     "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
-                    {"revision": "d582b66bea8e567dd06e683eca611648cfe53a7b", "trust_remote_code": True},
+                    {"revision": "4a46a59cc7e02bf54a09f8c8a10e4ce209756029", "trust_remote_code": True},
                 ),
             }
         )
