@@ -16,7 +16,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 
@@ -63,32 +62,25 @@ class FuyuConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 25000.0
 
-    vocab_size: int = 262144
-    hidden_size: int = 4096
-    intermediate_size: int = 16384
-    num_hidden_layers: int = 36
-    num_attention_heads: int = 64
-    hidden_act: str = "relu2"
-    max_position_embeddings: int = 16384
     image_size: int | None = 300
     patch_size: int | None = 30
     num_channels: int | None = 3
     initializer_range: float = 0.02
-    layer_norm_eps: float | None = 1e-5
-    use_cache: bool = True
     tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    qk_layernorm: bool | None = True
-    hidden_dropout: float | int | None = 0.0
-    attention_dropout: float | int | None = 0.0
-    pad_token_id: int | None = None
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 2
     image_token_id: int | None = 71011
     text_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
+        # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
+        if self.text_config is None:
+            text_params = self.sub_configs_defaults["text_config"].init_kwargs.keys()
+            text_params = list(text_params) + ["rope_scaling", "rope_theta"]
+            text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+            if text_config:
+                text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+                text_config.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
+                self.text_config = text_config
+
         super().__post_init__(**kwargs)
 
 
