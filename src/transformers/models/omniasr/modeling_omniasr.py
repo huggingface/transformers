@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer, InputGradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -237,7 +237,7 @@ class OmniASREncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class OmniASRLayerNormConvLayer(InputGradientCheckpointingLayer):
+class OmniASRLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
