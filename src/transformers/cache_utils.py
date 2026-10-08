@@ -723,6 +723,14 @@ class StaticIndexedLayer(StaticLayer):
 
         return self.indexer_keys
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Roll the write offset of both the main and the indexer buffers back, see `StaticLayer.crop`.
+        """
+        super().crop(tokens_to_remove)
+        if self.is_indexer_initialized:
+            self.indexer_cumulative_length.sub_(abs(tokens_to_remove))
+
     def reset(self) -> None:
         super().reset()
         if self.is_indexer_initialized:

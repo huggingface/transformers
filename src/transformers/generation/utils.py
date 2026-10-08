@@ -20,7 +20,7 @@ import warnings
 from collections import deque
 from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import accumulate
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -4005,10 +4005,15 @@ class GenerationMixin(ContinuousMixin):
         outputs = None
         n_matches = 0
 
-        # The target model verifies a fixed `num_assistant_tokens + 1` tokens per step, so its forward has a static
-        # shape and can be compiled, as long as the cache is static too. Prefill keeps running eagerly.
+        # The number of tokens verified per step varies, as the assistant may stop early and the schedule adapts.
+        # The default `reduce-overhead` mode cannot be used here: it records a cudagraph, which needs a static shape
+        # and cannot contain the device-to-host syncs some layers do on a multi-token forward. `default` leaves
+        # dynamo's automatic dynamic shapes on, which settles on a handful of graphs. Prefill keeps running eagerly.
+        compile_config = generation_config.compile_config
+        if compile_config is None:
+            compile_config = replace(self._default_compile_config(), mode="default")
         model_forward = (
-            self.get_compiled_call(generation_config.compile_config)
+            self.get_compiled_call(compile_config)
             if self._valid_auto_compile_criteria(model_kwargs, generation_config)
             else self.__call__
         )
