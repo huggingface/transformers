@@ -5006,8 +5006,6 @@ def get_total_byte_count(
         else:
             dtype_size = param.element_size()
 
-        # Parallelism is applied before loading, so a sharded parameter is already a DTensor placeholder
-        # Therefore, we can use the local tensor size to determine the total byte count.
         numel = param._local_tensor.numel() if is_dtensor(param) else param.numel()
         total_byte_count[device] += numel * dtype_size
     return total_byte_count
