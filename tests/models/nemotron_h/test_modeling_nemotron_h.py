@@ -156,7 +156,6 @@ class NemotronHModelTester:
             max_position_embeddings=self.max_position_embeddings,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             ssm_state_size=self.ssm_state_size,
             mamba_num_heads=self.mamba_num_heads,
             mamba_n_groups=self.mamba_n_groups,
@@ -512,10 +511,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip(reason="NemotronH has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip("NemotronH hybrid cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
         pass
 
     def test_reverse_loading_mapping(self):

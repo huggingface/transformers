@@ -312,6 +312,15 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
+        "NemotronH_Omni_Reasoning_V3": [
+            WeightRenaming(r"^mlp1\.0\.", r"multi_modal_projector\.layer_norm\."),
+            WeightRenaming(r"^mlp1\.1\.", r"multi_modal_projector\.linear_1\."),
+            WeightRenaming(r"^mlp1\.3\.", r"multi_modal_projector\.linear_2\."),
+            WeightRenaming(r"^sound_encoder\.encoder\.", r"audio_tower\."),
+            WeightRenaming(r"^sound_projection\.norm\.", r"embed_audio\.layer_norm\."),
+            WeightRenaming(r"^sound_projection\.linear1\.", r"embed_audio\.linear_1\."),
+            WeightRenaming(r"^sound_projection\.linear2\.", r"embed_audio\.linear_2\."),
+        ],
         "hrm_text": [
             WeightConverter(
                 source_patterns="mlp.gate_up_proj.weight",
@@ -1238,6 +1247,13 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "pp_doclayout_v4": [
+            WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head.proj."),
+            WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_order_head.global_pointer."),
+            WeightRenaming("decoder_order_head.", "decoder.relative_order_head.proj."),
+            WeightRenaming("decoder_global_pointer.", "decoder.relative_order_head.global_pointer."),
+            WeightRenaming("s2r_fusion.a", "decoder.relative_order_head.s2r_fusion.closure_weight"),
+        ],
         "RfDetrModel": [
             # RfDetrConvEncoder — backbone checkpoint layout + projector stages
             WeightRenaming(r"backbone.0.encoder.encoder", r"backbone.backbone"),
@@ -1394,6 +1410,31 @@ def _build_checkpoint_conversion_mapping():
                     "self_attn.q_proj",
                     "self_attn.k_proj",
                     "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "gte": [
+            PrefixChange(prefix_to_remove="new"),
+            WeightRenaming(r"encoder.layer", r"layers"),
+            WeightRenaming(r"attention.o_proj", r"self_attn.o_proj"),
+            WeightRenaming(r"attn_ln", r"post_attention_layernorm"),
+            WeightRenaming(r"mlp_ln", r"post_mlp_layernorm"),
+            WeightRenaming(r"lm_head.norm", r"lm_head.layer_norm"),
+            WeightConverter(
+                source_patterns="attention.qkv_proj",
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.up_gate_proj",
+                target_patterns=[
+                    "mlp.up_proj",
+                    "mlp.gate_proj",
                 ],
                 operations=[Chunk(dim=0)],
             ),
@@ -1828,6 +1869,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
 
     mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
+
+    # The pp_doclayout_v4-specific reading order renames are defined in the mapping literal above; it also
+    # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
+    mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [

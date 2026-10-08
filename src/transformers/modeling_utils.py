@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
+from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
 from .distributed.utils import (
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
@@ -80,19 +80,17 @@ from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
-from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import _kernels_enabled, allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
-from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
+    FLASH_ATTN_KERNEL_DEVICES,
     FLASH_ATTN_KERNEL_FALLBACK,
     lazy_import_flash_attention,
-    lazy_import_paged_flash_attention,
 )
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
@@ -114,6 +112,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    get_device_type,
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
@@ -125,7 +124,7 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
+from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
 from .utils.import_utils import (
     KERNELS_MAX_VERSION,
@@ -1129,7 +1128,8 @@ class PreTrainedModel(
     _supports_sdpa: bool = False
     _supports_flash_attn: bool = False
     _supports_flex_attn: bool = False
-    # Model's compatible flash kernels (e.g., "kernels-community/flash-mla") defaulting to the first in the list
+    # Model's compatible flash kernels (e.g., "kernels-community/flash-mla") defaulting to the first one supported
+    # by the current hardware
     _compatible_flash_implementations: list[str] | None = None
 
     # Set to `False` by models that can never run under context parallelism, whatever their config
@@ -1705,7 +1705,8 @@ class PreTrainedModel(
             )
         if not is_torch_flex_attn_available():
             raise ImportError(
-                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0."
+                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0 and"
+                " run on a device other than TPU."
             )
 
         # If no error raise by this point, we can return `True`
@@ -1734,24 +1735,41 @@ class PreTrainedModel(
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        is_paged, base_implementation = split_attention_implementation(attn_implementation)
+        # Deprecation warning for paged| implementations
+        if (
+            attn_implementation is not None
+            and attn_implementation.startswith("paged|")
+            and attn_implementation != "paged|eager"
+        ):
+            warnings.warn(
+                "The `paged|` prefix is no longer needed, except for `paged|eager`. Support for paged|sdpa and "
+                "paged|*flash* implementations will be removed in v5.23. Please remove the `paged|` prefix.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            attn_implementation = attn_implementation.removeprefix("paged|")
 
         # A kernel the model explicitly lists in `_compatible_flash_implementations` is vouched for by
         # the model author, so authorize loading it even when it lives outside the `kernels-community` org.
-        if base_implementation in (getattr(self, "_compatible_flash_implementations", None) or []):
+        if attn_implementation in (getattr(self, "_compatible_flash_implementations", None) or []):
             allow_all_kernels = True
 
         # Auto-correct model's default flash implementation if specified
         if attn_implementation is not None:
             compatible_flash_implementations = getattr(self, "_compatible_flash_implementations", None)
             if (
-                is_flash_attention_requested(requested_attention_implementation=base_implementation)
+                is_flash_attention_requested(requested_attention_implementation=attn_implementation)
                 and compatible_flash_implementations is not None
-                and base_implementation not in compatible_flash_implementations
+                and attn_implementation not in compatible_flash_implementations
             ):
-                default_flash_implementation = (
-                    f"paged|{compatible_flash_implementations[0]}" if is_paged else compatible_flash_implementations[0]
-                )
+                # Prefer the first implementation shipping builds for the current device
+                device = get_device_type()
+                supported_flash_implementations = [
+                    impl
+                    for impl in compatible_flash_implementations
+                    if device in FLASH_ATTN_KERNEL_DEVICES.get(FLASH_ATTN_KERNEL_FALLBACK.get(impl, impl), (device,))
+                ]
+                default_flash_implementation = (supported_flash_implementations or compatible_flash_implementations)[0]
 
                 logger.warning_once(
                     f"This model is compatible with the following flash attention implementations: `{compatible_flash_implementations}`. "
@@ -1759,17 +1777,15 @@ class PreTrainedModel(
                 )
                 attn_implementation = default_flash_implementation
 
-        is_paged, base_implementation = split_attention_implementation(attn_implementation)
-
         applicable_attn_implementation = attn_implementation
 
         requested_original_flash_attn = False
-        if is_flash_attention_requested(requested_attention_implementation=base_implementation):
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
             # If FA not installed, do not fail but use kernels instead if possible
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
                 # Check whether we have an original FA requested but not available in the env
                 if (
-                    base_implementation == f"flash_attention_{fa_version}"
+                    attn_implementation == f"flash_attention_{fa_version}"
                     and not FLASH_ATTENTION_COMPATIBILITY_MATRIX[fa_version]["general_availability_check"]()
                 ):
                     requested_original_flash_attn = True
@@ -1781,25 +1797,17 @@ class PreTrainedModel(
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[base_implementation]
+            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[attn_implementation]
 
-            if is_torch_xpu_available() and base_implementation == "flash_attention_2":
+            if is_torch_xpu_available() and attn_implementation == "flash_attention_2":
                 # On XPU, kernels library is the native implementation
                 # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
                 requested_original_flash_attn = False
 
-            if is_paged:
-                applicable_attn_implementation = f"paged|{applicable_attn_implementation}"
-
         if is_kernel(applicable_attn_implementation):
             try:
                 # preload flash attention here to allow compile with fullgraph
-                if is_paged:
-                    lazy_import_paged_flash_attention(
-                        applicable_attn_implementation, allow_all_kernels=allow_all_kernels
-                    )
-                else:
-                    lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
+                lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -1810,7 +1818,7 @@ class PreTrainedModel(
             except Exception as e:
                 # raise the proper exception for requested flash attention
                 if requested_original_flash_attn:
-                    fa_version = int(base_implementation[-1])  # "flash_attention_(2|3|...)"
+                    fa_version = int(attn_implementation[-1])  # "flash_attention_(2|3|...)"
                     self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
 
                 # error properly out if a kernel was specifically requested
@@ -1850,10 +1858,10 @@ class PreTrainedModel(
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
                 message += ", "
                 for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
-                    message += f'`"attn_implementation=flash_attention_{fa_version}"`, `"attn_implementation=paged|flash_attention_{fa_version}"`, '
+                    message += f'`"attn_implementation=flash_attention_{fa_version}"`, '
                 message = message[:-2]  # remove trailing comma
             if self._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|sdpa"`'
+                message += ', `"attn_implementation=sdpa"`'
             if self._supports_flex_attn:
                 message += ', `"attn_implementation=flex_attention"`'
             raise ValueError(message + ".")
@@ -4204,9 +4212,10 @@ class PreTrainedModel(
             distributed_config = DistributedConfig(tp_plan=tp_plan, tp_size=tp_size)
 
         if distributed_config is not None:
-            distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
+            distributed_config, device_map, mesh_manager = cls.prepare_distribute_model(
                 distributed_config, device_map=device_map
             )
+            device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp")) if mesh_manager is not None else None
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4354,7 +4363,7 @@ class PreTrainedModel(
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
-            model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+            model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)
 
         # Prepare the full device map
         if device_map is not None:
@@ -5091,7 +5100,7 @@ def get_total_byte_count(
         param_byte_count = param.numel() * dtype_size
 
         if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
+            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
             param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
 
         total_byte_count[device] += param_byte_count
@@ -5198,10 +5207,6 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
-        "paged|flash_attention_4": paged_attention_forward,
-        "paged|flash_attention_3": paged_attention_forward,
-        "paged|flash_attention_2": paged_attention_forward,
-        "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,
     }
 
@@ -5213,6 +5218,12 @@ class AttentionInterface(GeneralInterface):
                 "is expected if you use an Attention Module as a standalone Module. If this is not the case, something went "
                 "wrong with the dispatch of `config._attn_implementation`"
             )
+        elif attn_implementation.startswith("paged|") and attn_implementation != "paged|eager":
+            logger.warning_once(
+                "Except for `paged|eager`, the `paged|` prefix is no longer needed. Support for paged|sdpa and "
+                "paged|*flash* implementations will be removed in v5.23."
+            )
+            attn_implementation = attn_implementation.removeprefix("paged|")
         elif attn_implementation != "eager" and attn_implementation not in self:
             raise KeyError(
                 f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"

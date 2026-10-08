@@ -105,20 +105,61 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Some tests require quanto
 RUN python3 -m pip install --no-cache-dir quanto
 
-# After using A10 as CI runner, let's run FA2 tests
-# Notes on the install command below (see https://github.com/huggingface/transformers/pull/47251):
-# - wheel is upgraded before flash-attn: torch 2.13.0 added an unconditional setuptools>=77.0.3
-#   requirement, which pip resolves to setuptools 83.0.0 (which removed pkg_resources). The Ubuntu
-#   22.04 system wheel still imports pkg_resources, so --no-build-isolation builds fail. wheel>=0.43
-#   (Feb 2024) uses importlib.metadata instead and is not affected.
-# - if/else instead of `... || echo`: the old pattern silently swallowed real install failures;
-#   now only FLASH_ATTN=false skips gracefully, and any actual install error will correctly
-#   fail the Docker build.
+# Install FA2:
+#
+# FA2 is built from source because Dao-AILab stopped publishing wheels for torch>=2.9.
+# Key changes vs the naive `pip install flash-attn --no-build-isolation`:
+#   1. ninja       – parallel compilation (without it the build falls back to sequential make)
+#   2. wheel       – force-reinstall the pip-managed wheel (>=0.43) instead of the Ubuntu 22.04
+#                    system wheel (0.37.1) that still imports pkg_resources, which was removed in
+#                    setuptools>=83 (pulled in by torch>=2.13). Correctness fix, not a speed opt.
+#   3. C++20       – torch>=2.14 requires C++20; FA2 v2.8.3.post1 still ships -std=c++17 in its
+#                    setup.py, so we patch it with sed before building.
+#   4. SKIP_CK_BUILD=True  – skip ROCm composable_kernel submodule; on NVIDIA it is useless
+#                    but setup.py unconditionally sets SKIP_CK_BUILD=False, causing ~1100
+#                    extra .cu files to be compiled.
+#   5. csrc/cutlass – init only the CUTLASS submodule (headers required by flash_attn kernels).
+#   6. FLASH_ATTN_CUDA_ARCHS='80' – compile only for Ampere (SM 8.0/8.6, covers A10G & A100);
+#                    skips Hopper (90), Blackwell (100/120) and cuts compile time ~4× (biggest
+#                    speedup along with ninja).
+#   7. Dynamic MAX_JOBS / NVCC_THREADS – derived from available RAM so the build never OOMs
+#                    on the CI runner (formula: floor(RAM_GB/2.8), capped at nproc, then
+#                    split as NVCC_THREADS=4 / MAX_JOBS=product÷4).
+#   8. --allow-unsupported-compiler – CUDA 13.0 dropped GCC 11 from its supported-compiler
+#                    matrix; Ubuntu 22.04 ships GCC 11 by default, so NVCC hard-errors without
+#                    this flag even though GCC 11 compiles FA2 fine in practice.
+#
+# FA3 and FA4 are skipped — FA3/FA4 require Hopper/Blackwell; our runners use Ampere (A10G).
 RUN if [ "$FLASH_ATTN" != "false" ]; then \
-        python3 -m pip uninstall -y ninja && \
-        python3 -m pip install --no-cache-dir ninja && \
-        python3 -m pip install --no-cache-dir -U wheel && \
-        python3 -m pip install flash-attn --no-cache-dir --no-build-isolation; \
+        set -e; \
+        \
+        python3 -m pip install --no-cache-dir ninja; \
+        python3 -m pip install --force-reinstall --no-cache-dir wheel; \
+        \
+        cd /tmp; \
+        git clone --depth=1 --branch v2.8.3.post1 \
+            https://github.com/Dao-AILab/flash-attention.git flash-attention; \
+        cd flash-attention; \
+        \
+        sed -i 's/-std=c++17/-std=c++20/g' setup.py; \
+        sed -i 's/SKIP_CK_BUILD = os.getenv.*if USE_TRITON_ROCM else False/SKIP_CK_BUILD = True/' setup.py; \
+        git submodule update --init --depth=1 csrc/cutlass; \
+        \
+        RAM_GB=$(free -g | awk '/^Mem:/{print $2}'); \
+        NCPU=$(nproc); \
+        MAX_PRODUCT=$(python3 -c "print(min(${NCPU}, int(${RAM_GB}/2.8)))"); \
+        NVCC_THREADS=4; \
+        MAX_JOBS=$(python3 -c "print(max(1, ${MAX_PRODUCT} // ${NVCC_THREADS}))"); \
+        echo "Building FA2: MAX_JOBS=${MAX_JOBS} NVCC_THREADS=${NVCC_THREADS} RAM=${RAM_GB}GB CPUs=${NCPU}"; \
+        \
+        FLASH_ATTN_CUDA_ARCHS='80' \
+        MAX_JOBS=${MAX_JOBS} \
+        NVCC_THREADS=${NVCC_THREADS} \
+        FLASH_ATTENTION_FORCE_BUILD=TRUE \
+        NVCC_APPEND_FLAGS='--allow-unsupported-compiler' \
+            python3 setup.py bdist_wheel --dist-dir=dist; \
+        python3 -m pip install --no-cache-dir dist/*.whl; \
+        cd /tmp && rm -rf flash-attention; \
     else \
         echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN})"; \
     fi

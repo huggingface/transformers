@@ -433,24 +433,8 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip("Cannot generate from inputs embeds")
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("QuantizedCache does not support sliding attention")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip("Sliding layers cap their cache at `sliding_window`, but the test expects `max_cache_len`")
@@ -678,8 +662,14 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 @require_torch
 class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     maxDiff = None
-    model = None
-    offload_dir = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Assigned here rather than in the class body: `MemoryCleanupMixin` snapshots the class body and
+        # protects it from teardown, so a checkpoint parked on a class-body `model` is never released.
+        cls.model = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):

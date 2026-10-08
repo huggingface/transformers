@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
-   move the model to the target device/dtype and build the partitioner list.
+1. **Backend preparation** (`_BACKEND_PREPARE`): move the model to the target device/dtype
+   and build the partitioner list.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -67,7 +67,7 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
-    from .. import masking_utils
+    from ..cache_utils import EncoderDecoderCache, StaticCache
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -146,7 +146,10 @@ class ExecutorchExporter(DynamoExporter):
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+                exported_program,
+                partitioner=partitioner,
+                compile_config=_get_edge_compile_config(config.backend),
+                transform_passes=_get_transform_passes(config.backend),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
@@ -155,7 +158,16 @@ class ExecutorchExporter(DynamoExporter):
         return executorch_programs_manager
 
 
-def _get_edge_compile_config() -> EdgeCompileConfig:
+def _get_transform_passes(backend: str):
+    """Return backend-specific graph transforms, or ``None`` for defaults."""
+    if backend == "mlx":
+        from executorch.backends.mlx.passes import get_default_passes
+
+        return get_default_passes()
+    return None
+
+
+def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -165,6 +177,8 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     but aren't in the core ATen opset. The CPU portable kernels handle them at
     runtime; XNNPACK leaves them in the non-delegated CPU portion of the graph.
     """
+    if backend == "mlx":
+        return EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True)
     return EdgeCompileConfig(
         _core_aten_ops_exception_list=[
             torch.ops.aten._fft_c2c.default,
@@ -259,9 +273,33 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+    """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
+    for value in sample_inputs.values():
+        caches = [value]
+        if isinstance(value, EncoderDecoderCache):
+            caches = [value.self_attention_cache, value.cross_attention_cache]
+        if any(isinstance(cache, StaticCache) for cache in caches):
+            raise ValueError(
+                "StaticCache is not supported by the ExecuTorch MLX backend. "
+                "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
+            )
+
+    from executorch.backends.mlx import MLXPartitioner
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    # MLX does not support grouped MoE kernels.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
+    partitioner = [MLXPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
+    "mlx": prepare_for_mlx,
 }
 
 
@@ -340,7 +378,8 @@ def _patch_topk(original):
     return patch
 
 
-@register_patch("executorch", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.xnnpack", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.cuda", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
     """No-op detach."""
 
@@ -377,42 +416,6 @@ def _patch_avg_pool2d(original):
         divisor = divisor_override if divisor_override is not None else actual_kh * actual_kw
         weight = input.new_ones(channels, 1, actual_kh, actual_kw) / divisor
         return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
-
-    return patch
-
-
-@register_patch("executorch", "torch.bucketize")
-def _patch_bucketize(original):
-    """Decompose bucketize into a broadcasted comparison + sum.
-
-    The portable runtime ships no `bucketize.Tensor_out` kernel (used by VLM vision position ids —
-    idefics2/3, smolvlm, phi4_multimodal). `boundaries` is 1-D and sorted, so the bucket index is
-    just the count of boundaries below each value — comparison and sum, both portable ops.
-    """
-
-    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
-        below = (boundaries <= input.unsqueeze(-1)) if right else (boundaries < input.unsqueeze(-1))
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose searchsorted into a broadcasted comparison + sum (no portable kernel; same idea as
-    bucketize). ``sorted_sequence`` is sorted, so the insertion index is the count of entries below.
-    """
-
-    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
-        below = (seq <= val) if right else (seq < val)
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
 
     return patch
 
@@ -508,23 +511,6 @@ def _patch_bernoulli(_original):
         probs = input if p is None else p
         result = (torch.rand_like(input) < probs).to(input.dtype)
         return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion. `aot_autograd` and
-    `gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering passes."""
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-
-        return _expanded
 
     return patch
 
@@ -631,30 +617,6 @@ def _patch_expand(original):
         if 0 in result.stride():
             return result.clone(memory_format=torch.contiguous_format)
         return result
-
-    return patch
-
-
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before ``reshape``.
-
-    ExecuTorch's edge-lowering reshape reference refuses a non-contiguous input (e.g. the
-    ``transpose(1, 2).reshape(...)`` in the packed vision-attention forward). A plain
-    ``.contiguous()`` gets folded away by functionalization, but a ``.clone()`` survives. Eager
-    ``reshape`` already copies a non-contiguous tensor, so this adds no extra work — it just moves
-    the copy where ExecuTorch's lowering needs it.
-
-    The clone must force ``contiguous_format``: a bare ``.clone()`` defaults to
-    ``preserve_format``, keeping a transposed dim-order (e.g. ``[0, 2, 1]``) that ExecuTorch's
-    clone lowering can't map to a ``torch.memory_format`` (``Failed to map a given dim_order`` —
-    hit by xcodec2's ISTFT head).
-    """
-
-    def patch(input, *shape, **kwargs):
-        if not input.is_contiguous():
-            input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
 
     return patch
 

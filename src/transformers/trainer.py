@@ -230,7 +230,7 @@ if is_accelerate_available():
         save_fsdp_model,
         save_fsdp_optimizer,
     )
-    from accelerate.utils.memory import clear_device_cache
+    from accelerate.utils.memory import clear_device_cache, should_reduce_batch_size
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -352,6 +352,11 @@ class Trainer:
           overridden by subclassing `TrainingArguments` and overriding the `place_model_on_device` property.
         - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
           in `train`)
+        - **loss_is_scaled_for_ga** -- Whether the loss returned by `compute_loss` is already scaled for gradient
+          accumulation. `True`: `training_step` uses it as is. `False`: `training_step` divides it by the number of
+          gradient accumulation steps. `None` (default): the loss counts as scaled when it was normalized by
+          `num_items_in_batch`, i.e. when the model accepts loss kwargs or a `compute_loss_func` is passed. Subclasses
+          that compute their own loss should set it.
 
     """
 
@@ -365,6 +370,10 @@ class Trainer:
         save_metrics,
         save_state,
     )
+
+    # Whether the loss returned by `compute_loss` is already scaled for gradient accumulation. `None` decides from
+    # `model_accepts_loss_kwargs` and `compute_loss_func`, see the class docstring.
+    loss_is_scaled_for_ga: bool | None = None
 
     # ---- Initialization & Validation ----
 
@@ -456,6 +465,10 @@ class Trainer:
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
 
+        # Sharded at load time by `from_pretrained(distributed_config=...)`, whatever the parallelism: the model owns
+        # its placement and gradient reduction, so Accelerate must not wrap or shard it again.
+        self.is_distributed_loading_by_transformers = getattr(model, "is_distributed_loading_by_transformers", False)
+
         self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
         if args.fsdp:
             if self.is_deepspeed_enabled:
@@ -477,7 +490,7 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             # Sharded at load time (`DistributedConfig`): the model manages its own placement, and
             # `.to()` on FSDP2-managed (possibly CPU-offloaded) parameters raises in `_apply`.
-            or getattr(model, "_device_mesh", None) is not None
+            or self.is_distributed_loading_by_transformers
         ):
             self.place_model_on_device = False
         else:
@@ -618,7 +631,7 @@ class Trainer:
         # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
         self._mixed_mesh_grads: bool | None = None
         if (
-            getattr(model, "_device_mesh", None) is not None
+            self.is_distributed_loading_by_transformers
             and args.save_strategy != SaveStrategy.NO
             and not args.save_only_model
         ):
@@ -1613,6 +1626,8 @@ class Trainer:
         start_time = time.time()
         # needed to calculate tokens/s
         self._initial_num_input_tokens_seen = self.state.num_input_tokens_seen
+        # needed to report loss and throughput for this `train()` call only when resuming from a checkpoint
+        self._initial_global_step = self.state.global_step
         # Logging state: _tr_loss accumulates on-device between logging steps (avoiding costly .item() syncs
         # on TPUs), then gets drained into _total_loss_scalar at each logging step.
         self._tr_loss = torch.tensor(0.0, device=args.device)
@@ -1712,7 +1727,13 @@ class Trainer:
         use_accelerator_prepare = model is self.model
 
         # prepare using `accelerator` prepare
-        if use_accelerator_prepare:
+        if self.is_distributed_loading_by_transformers:
+            # The model already owns placement and gradient reduction. Prepare autocast and compilation only,
+            # without asking Accelerate to wrap the DTensor parameters in DDP or to shard them again.
+            model = self.accelerator.prepare_model(model, device_placement=False, evaluation_mode=True)
+            self.optimizer = self.accelerator.prepare(self.optimizer)
+            self._sync_replicated_trainable_parameters(model)
+        elif use_accelerator_prepare:
             if delay_optimizer_creation:
                 # TODO: check if we can move this somewhere else
                 if self.is_fsdp_enabled and _is_peft_model(self.model):
@@ -1958,14 +1979,15 @@ class Trainer:
 
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
-        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
-        train_loss = self._total_loss_scalar / effective_global_step
+        num_steps_trained = self.state.global_step - self._initial_global_step
+        train_loss = self._total_loss_scalar / max(num_steps_trained, 0.001)  # Avoid ZeroDivisionError
 
         metrics = speed_metrics(
             "train",
             start_time,
-            num_samples=num_train_samples,
-            num_steps=self.state.max_steps,
+            # `num_train_samples` covers the whole schedule: only count the share of the steps run in this call
+            num_samples=num_train_samples * num_steps_trained / max(self.state.max_steps, 1),
+            num_steps=num_steps_trained,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
@@ -2061,8 +2083,14 @@ class Trainer:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+            if self.loss_is_scaled_for_ga is not None:
+                loss_is_scaled_for_ga = self.loss_is_scaled_for_ga
+            else:
+                # The loss is scaled when it was normalized by `num_items_in_batch`, by the model or by `compute_loss_func`
+                loss_is_scaled_for_ga = (
+                    self.model_accepts_loss_kwargs and num_items_in_batch is not None
+                ) or self.compute_loss_func is not None
+            if not loss_is_scaled_for_ga:
                 loss = loss / self.current_gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
@@ -2098,8 +2126,10 @@ class Trainer:
         Returns:
             The loss of the model along with its output if return_outputs was set to True
 
-        Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculation might be slightly inaccurate when performing gradient accumulation.
+        Subclass and override for custom behavior. If you compute your own loss, set `loss_is_scaled_for_ga` to say
+        whether it is already scaled for gradient accumulation: `False` if it is a per-batch mean (the Trainer then
+        divides it by the number of gradient accumulation steps), `True` if you already normalized it over the whole
+        accumulated batch.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
@@ -2154,11 +2184,9 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
-            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes
-            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
-                loss_scale //= pc.tp_size
+            # TP ranks (and the expert-parallel ranks sharing their batch) see replicated batches; `num_processes`
+            # over-counts them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes // self.get_tp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2307,8 +2335,9 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                if pc := getattr(self.accelerator, "parallelism_config", None):
-                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
+                num_items_in_batch = num_items_in_batch // (
+                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                )
 
         return num_items_in_batch
 
@@ -2553,8 +2582,42 @@ class Trainer:
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
             return deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
 
-        # 3. Default fallback
+        # 3. Fall back to accelerate, for tensor parallelism configured outside `DistributedConfig`
+        if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+            return pc.tp_size
+
+        # 4. Default fallback
         return 1
+
+    def _sync_replicated_trainable_parameters(self, model: nn.Module) -> None:
+        """
+        Keep the trainable parameters that FSDP2 does not manage identical across ranks.
+
+        A parameter added after `fully_shard` (a PEFT adapter attached to a model sharded at load time) stays a plain
+        replicated tensor next to the DTensor base weights. FSDP2 reduce-scatters only what it sharded and the DDP
+        wrap is skipped for such a model, so each rank would init its own copy and train it on its own batch.
+        Broadcast these parameters from rank 0, then average their gradient over all ranks at the end of each
+        accumulation window.
+        """
+        if not dist.is_available() or not dist.is_initialized() or dist.get_world_size() == 1:
+            return
+
+        from torch.distributed.tensor import DTensor
+
+        def average_gradient(param):
+            # Averaging the accumulated micro-batch gradients once gives the same result as after every backward.
+            if self.accelerator.sync_gradients:
+                dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
+
+        for param in model.parameters():
+            if not param.requires_grad or isinstance(param.data, DTensor):
+                continue
+            with torch.no_grad():
+                dist.broadcast(param.data, src=0)
+            # `train()` can run more than once on the same model: register the hook only once.
+            if not getattr(param, "_replicated_grad_hook_registered", False):
+                param.register_post_accumulate_grad_hook(average_gradient)
+                param._replicated_grad_hook_registered = True
 
     def _wrap_model(self, model: nn.Module, training: bool = True, dataloader: DataLoader | None = None) -> nn.Module:
         """Wrap `model` for distributed training if needed (DDP, FSDP, SageMaker, etc.)."""
@@ -3005,6 +3068,25 @@ class Trainer:
 
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
+    def end(self):
+        """
+        Finish the trackers and destroy the distributed process group.
+
+        Call this once, at the very end of a script, after everything that needs the other processes:
+        [`~Trainer.train`], [`~Trainer.evaluate`], [`~Trainer.predict`], [`~Trainer.save_model`] and
+        [`~Trainer.push_to_hub`] all communicate between processes and will fail once the group is gone.
+
+        Example:
+
+        ```python
+        trainer.train()
+        trainer.evaluate()
+        trainer.push_to_hub()
+        trainer.end()
+        ```
+        """
+        self.accelerator.end_training()
+
     def predict(
         self, test_dataset: Dataset, ignore_keys: list[str] | None = None, metric_key_prefix: str = "test"
     ) -> PredictionOutput:
@@ -3182,7 +3264,17 @@ class Trainer:
         skip_scheduler: bool = False,
     ) -> dict[str, float]:
         """Run evaluation, report to HP search, and step ReduceLROnPlateau/GreedyLR if needed."""
-        metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+        try:
+            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+        except RuntimeError as e:
+            # `auto_find_batch_size` only shrinks the train batch size, so letting an eval OOM reach the batch size
+            # finder would restart training with a smaller train batch size until it hits zero.
+            if self.args.auto_find_batch_size and should_reduce_batch_size(e):
+                raise RuntimeError(
+                    "Evaluation hit an out-of-memory error. `auto_find_batch_size` only adjusts the training batch size, "
+                    "reduce `per_device_eval_batch_size` instead."
+                ) from e
+            raise
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         # Run delayed LR scheduler now that metrics are populated
@@ -3833,7 +3925,10 @@ class Trainer:
                     # We use the CPU when training on one GPU to avoid OOM for GPU RAM when training big models.
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
-                    map_location = self.args.device if self.args.world_size > 1 else "cpu"
+                    # An indexed CPU device (e.g. "cpu:0") can't be restored by torch - use plain "cpu".
+                    map_location = (
+                        self.args.device if self.args.world_size > 1 and self.args.device.type != "cpu" else "cpu"
+                    )
                     if self.is_fsdp_enabled:
                         load_fsdp_optimizer(
                             self.accelerator.state.fsdp_plugin,
@@ -3992,7 +4087,7 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif getattr(self.model, "_device_mesh", None) is not None and not _is_peft_model(self.model):
+        elif self.is_distributed_loading_by_transformers and not _is_peft_model(self.model):
             # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
             # is collective, so every rank saves; only the main process writes, the others leave at the
             # closing barrier. (PEFT models fall through to the adapter-only save below.)

@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -162,15 +162,14 @@ class CohereCompassConfig(PreTrainedConfig):
     ```"""
 
     model_type = "cohere_compass"
-    sub_configs = {
-        "text_config": CohereCompassTextConfig,
-        "vision_config": CohereCompassVisionConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=CohereCompassVisionConfig),
+        "text_config": SubConfigSpec(config_class=CohereCompassTextConfig),
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-
     image_token_id: int = 255031
     video_token_id: int = 255032
     vision_start_token_id: int = 255028
@@ -178,19 +177,9 @@ class CohereCompassConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "cohere_compass":
             # old ckpt with incorrect model type -> override manually
-            if self.vision_config.get("model_type") == "cohere_compass":
-                self.vision_config["model_type"] = "cohere_compass_vision"
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+            self.vision_config["model_type"] = "cohere_compass_vision"
         super().__post_init__(**kwargs)
 
 

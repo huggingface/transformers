@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
+from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     backend_device_count,
     backend_empty_cache,
@@ -92,8 +93,7 @@ def _get_distributed_device_type():
 
 
 def _get_distributed_backend():
-    backend_map = {"cpu": "gloo", "cuda": "nccl", "xpu": "xccl", "hpu": "hccl"}
-    return backend_map.get(_get_distributed_device_type(), "gloo")
+    return get_distributed_backend(_get_distributed_device_type()) or "gloo"
 
 
 def _get_rank_device(rank):
@@ -167,8 +167,9 @@ def _fsdp_global_wrapper(
     os.environ["USE_HUB_KERNELS"] = use_hub_kernels
 
     _set_determinism(SEED)
-    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank)
+    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
 
     if rank == 0:
         start_time = time.perf_counter()
@@ -541,10 +542,10 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
         model = AutoModelForCausalLM.from_pretrained(
             init_model_dir,
             torch_dtype=dtype,
-            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, enable_expert_parallel=True),
+            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, ep_size=2),
         )
         assert model.tp_size == 2 and model.fsdp_size == dp
-        assert model._device_mesh.mesh_dim_names == ("fsdp", "tp")
+        assert model._device_mesh.mesh_dim_names == ("pp", "fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
         dp_rank = model._device_mesh["fsdp"].get_local_rank()
