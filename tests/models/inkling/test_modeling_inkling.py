@@ -81,9 +81,8 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
 
 
 class InklingAudio2TextModelTester(ALMModelTester):
-    if is_torch_available():
-        base_model_class = InklingModel
-        conditional_generation_class = InklingForConditionalGeneration
+    base_model_class = InklingModel
+    conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
     text_config_class = InklingTextConfig
     audio_config_class = InklingAudioConfig
@@ -130,11 +129,6 @@ class InklingAudio2TextModelTester(ALMModelTester):
             "audio_config": self.get_audio_config(),
             "vision_config": InklingVisionConfig(patch_size=5, num_hidden_layers=2, num_channels=3),
         }
-
-    def get_config(self):
-        config = super().get_config()
-        config.num_hidden_layers = config.text_config.num_hidden_layers
-        return config
 
 
 @require_torch
@@ -230,9 +224,8 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
 
 
 class InklingVision2TextModelTester(VLMModelTester):
-    if is_torch_available():
-        base_model_class = InklingModel
-        conditional_generation_class = InklingForConditionalGeneration
+    base_model_class = InklingModel
+    conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
     text_config_class = InklingTextConfig
     vision_config_class = InklingVisionConfig
@@ -248,7 +241,6 @@ class InklingVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("n_routed_experts", 16)
-        kwargs.setdefault("vision_num_attention_heads", 4)
         super().__init__(parent, **kwargs)
         self.swa_num_attention_heads = self.num_attention_heads
         self.swa_num_key_value_heads = self.num_key_value_heads
@@ -268,21 +260,11 @@ class InklingVision2TextModelTester(VLMModelTester):
             [batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
         )
 
-    def get_vision_config(self):
-        vision_config = super().get_vision_config()
-        vision_config.num_attention_heads = self.vision_num_attention_heads
-        return vision_config
-
     def _build_modality_sub_configs(self):
         return {
             "vision_config": self.get_vision_config(),
             "audio_config": InklingAudioConfig(n_mel_bins=4, mel_vocab_size=8),
         }
-
-    def get_config(self):
-        config = super().get_config()
-        config.num_hidden_layers = config.text_config.num_hidden_layers
-        return config
 
 
 @require_torch

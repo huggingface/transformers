@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
-import copy
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -194,9 +193,8 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Gemma4Audio2TextModelTester(ALMModelTester):
-    if is_torch_available():
-        base_model_class = Gemma4Model
-        conditional_generation_class = Gemma4ForConditionalGeneration
+    base_model_class = Gemma4Model
+    conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
     text_config_class = Gemma4TextConfig
     audio_config_class = Gemma4AudioConfig
@@ -224,23 +222,17 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("enable_moe_block", True)
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("top_k_experts", 2)
+        kwargs.setdefault("subsampling_conv_channels", [16, 8])
+        kwargs.setdefault("conv_kernel_size", 3)
+        kwargs.setdefault("attention_chunk_size", 4)
+        kwargs.setdefault("attention_context_left", 5)
+        kwargs.setdefault("attention_context_right", 0)
+        kwargs.setdefault("output_proj_dims", 32)
+        # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
+        # comparison logic (inf - inf = NaN). Disable for testing.
+        kwargs.setdefault("use_clipped_linears", False)
         super().__init__(parent, **kwargs)
         self.head_dim = self.hidden_size // self.num_attention_heads
-        self.audio_config = {
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "hidden_act": "silu",
-            "subsampling_conv_channels": [16, 8],
-            "conv_kernel_size": 3,
-            "attention_chunk_size": 4,
-            "attention_context_left": 5,
-            "attention_context_right": 0,
-            "output_proj_dims": 32,
-            # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
-            # comparison logic (inf - inf = NaN). Disable for testing.
-            "use_clipped_linears": False,
-        }
         self.per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
@@ -254,9 +246,6 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
     @property
     def text_config_args(self):
         return super().text_config_args + ["per_layer_config"]
-
-    def get_audio_config(self):
-        return self.audio_config_class(**self.audio_config)
 
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
@@ -359,9 +348,8 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
 
 
 class Gemma4Vision2TextModelTester(VLMModelTester):
-    if is_torch_available():
-        base_model_class = Gemma4Model
-        conditional_generation_class = Gemma4ForConditionalGeneration
+    base_model_class = Gemma4Model
+    conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
     text_config_class = Gemma4TextConfig
     vision_config_class = Gemma4VisionConfig
@@ -389,17 +377,6 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("use_bidirectional_attention", "vision")
         kwargs.setdefault("tie_word_embeddings", True)
         super().__init__(parent, **kwargs)
-        self.vision_config = {
-            "hidden_size": 32,
-            "intermediate_size": 37,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 1,
-            "patch_size": self.patch_size,
-            "pooling_kernel_size": self.pooling_kernel_size,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        }
         self.per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
@@ -413,9 +390,6 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
     @property
     def text_config_args(self):
         return super().text_config_args + ["per_layer_config"]
-
-    def get_vision_config(self):
-        return self.vision_config_class(**self.vision_config)
 
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
@@ -436,15 +410,14 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
         position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
         return position_ids.unsqueeze(0).repeat(num_images, 1, 1)
 
-    def _prepare_modality_inputs(self, input_ids, config):
-        input_ids, modality_inputs = super()._prepare_modality_inputs(input_ids, config)
-        modality_inputs["image_position_ids"] = self.create_image_position_ids(self.batch_size)
-        return input_ids, modality_inputs
-
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == config.image_token_id] = 1
-        return {"mm_token_type_ids": mm_token_type_ids}
+        return {
+            "image_position_ids": self.create_image_position_ids(batch_size),
+            "mm_token_type_ids": mm_token_type_ids,
+        }
 
 
 @require_torch
@@ -468,33 +441,6 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
                 self.skipTest(
                     reason="The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4"
                 )
-
-    def test_mismatching_num_image_tokens(self):
-        # Override the base test because `image_position_ids` and `mm_token_type_ids` must follow the images/prompts
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            _ = model(**input_dict)
-
-            # remove one image but leave the image token in text
-            curr_input_dict = copy.deepcopy(input_dict)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            curr_input_dict["image_position_ids"] = curr_input_dict["image_position_ids"][-1:, ...]
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(**curr_input_dict)
-
-            # two prompts with image tokens but only one image
-            curr_input_dict = {key: val[:1] for key, val in input_dict.items()}
-            for key in ["input_ids", "attention_mask", "mm_token_type_ids"]:
-                curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(**curr_input_dict)
-
-            # two images and two prompts with image tokens
-            for key in ["pixel_values", "image_position_ids"]:
-                curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
-            _ = model(**curr_input_dict)
 
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors

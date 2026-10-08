@@ -193,12 +193,11 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
-    if is_torch_available():
-        base_model_class = Qwen3_5MoeModel
-        config_class = Qwen3_5MoeConfig
-        text_config_class = Qwen3_5MoeTextConfig
-        vision_config_class = Qwen3_5MoeVisionConfig
-        conditional_generation_class = Qwen3_5MoeForConditionalGeneration
+    base_model_class = Qwen3_5MoeModel
+    config_class = Qwen3_5MoeConfig
+    text_config_class = Qwen3_5MoeTextConfig
+    vision_config_class = Qwen3_5MoeVisionConfig
+    conditional_generation_class = Qwen3_5MoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("bos_token_id", 0)
@@ -252,12 +251,17 @@ class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
             ]
         )
 
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {
+            self.video_token_id,
+            self.vision_start_token_id,
+            self.vision_end_token_id,
+        }
+
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
         input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
         return input_ids
