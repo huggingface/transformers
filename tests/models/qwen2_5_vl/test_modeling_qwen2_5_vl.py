@@ -39,6 +39,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -773,3 +774,46 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             expected_decoded_texts,
         )
+
+
+class Qwen2_5_VLFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-Qwen2_5_VLForConditionalGeneration"
+    all_model_classes = (Qwen2_5_VLForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text", "video")
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls.processor is not None:
+            from transformers import Qwen2_5_VLConfig
+
+            config = Qwen2_5_VLConfig.from_pretrained(cls.model_id)
+            # The tiny model has spatial_merge_size=1, but the processor defaults to
+            # merge_size=2.  Align the processor so the video token count matches
+            # the number of features the model actually produces.
+            cls.processor.video_processor.merge_size = config.vision_config.spatial_merge_size
+            cls.processor.image_processor.merge_size = config.vision_config.spatial_merge_size
+
+    def _get_processor_inputs(self):
+        # Qwen2.5-VL requires the text to be formatted via apply_chat_template.
+        # Use a single frame: the tiny model's video_token_id (151656) exceeds its
+        # vocab_size (151643), so only 1 frame produces a consistent token count.
+        video = [self._load_image()]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video", "video": video},
+                    {"type": "text", "text": self._DEFAULT_TEXT_INPUT},
+                ],
+            }
+        ]
+        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        return {"text": text, "videos": [video]}
+
+    def _prepare_model_inputs(self, model, inputs):
+        # The tiny model's config has video_token_id=5 (a random default) but the
+        # processor uses the actual <|video_pad|> token id (151656). Align the config.
+        if model.config.video_token_id != self.processor.video_token_id:
+            model.config.video_token_id = self.processor.video_token_id
+        return inputs
