@@ -419,3 +419,35 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
         return x + 1 if helper(*args) else x - 1
 
     run(torch.zeros(3))  # a graph break inside the helper would raise here
+
+
+def test_module_aliases_ignore_dunder_attribute_probes():
+    """Alias modules must not import heavy targets for stdlib dunder probes.
+
+    ``unittest.TestCase.assertWarns`` clears ``__warningregistry__`` on every entry in
+    ``sys.modules``. Image-processor ``*_fast`` aliases used to forward that probe into
+    ``importlib.import_module``, which pulled in torchvision-backed processors and broke
+    otherwise unrelated unit tests when torchvision was not installed.
+
+    Regression for https://github.com/huggingface/transformers/issues/48966
+    """
+    import unittest
+
+    import transformers  # noqa: F401 — registers alias modules in sys.modules
+
+    alias_name = "transformers.models.aria.image_processing_aria_fast"
+    assert alias_name in sys.modules
+    alias = sys.modules[alias_name]
+    assert getattr(alias, "__warningregistry__", None) is None
+
+    class _WarnsWithoutWarning(unittest.TestCase):
+        def test_it(self):
+            with self.assertWarnsRegex(DeprecationWarning, r"hello"):
+                pass
+
+    try:
+        _WarnsWithoutWarning().test_it()
+    except AssertionError as error:
+        assert "DeprecationWarning not triggered" in str(error)
+    else:
+        raise AssertionError("expected AssertionError when no DeprecationWarning is raised")
