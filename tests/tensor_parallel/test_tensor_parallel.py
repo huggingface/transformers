@@ -17,7 +17,6 @@ from unittest.mock import patch
 import torch
 from torch.distributed.device_mesh import init_device_mesh
 
-from tests.test_tensor_parallel_mixin import _init_distributed
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
@@ -31,7 +30,10 @@ from transformers.distributed.tensor_parallel import (
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
+from ..test_tensor_parallel_mixin import _init_distributed
 
+
+# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
 def _shared_batch_runs_the_experts_masked(rank):
     seen = {}
 
