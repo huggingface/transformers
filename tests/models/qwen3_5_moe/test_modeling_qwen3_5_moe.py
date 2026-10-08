@@ -266,9 +266,6 @@ class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
         return input_ids
 
-    def create_attention_mask(self, input_ids):
-        return torch.ones_like(input_ids)
-
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)

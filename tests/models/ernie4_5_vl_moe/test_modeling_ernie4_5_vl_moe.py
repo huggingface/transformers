@@ -88,6 +88,7 @@ class Ernie4_5_VLMoeVisionText2TextModelTester(VLMModelTester):
         }
 
     def create_attention_mask(self, input_ids):
+        # The M-RoPE index only counts unmasked tokens, so the default mask would pad out image placeholders
         return torch.ones_like(input_ids)
 
     def create_pixel_values(self, batch_size: int | None = None):

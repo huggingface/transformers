@@ -119,9 +119,6 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
             ]
         )
 
-    def create_attention_mask(self, input_ids):
-        return torch.ones_like(input_ids)
-
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         return {"image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)}

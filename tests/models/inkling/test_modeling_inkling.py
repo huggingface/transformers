@@ -100,11 +100,11 @@ class InklingAudio2TextModelTester(ALMModelTester):
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("n_routed_experts", 16)
+        kwargs.setdefault("head_dim", 16)
+        kwargs.setdefault("swa_num_attention_heads", 2)
+        kwargs.setdefault("swa_num_key_value_heads", 2)
+        kwargs.setdefault("swa_head_dim", 16)
         super().__init__(parent, **kwargs)
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.swa_num_attention_heads = self.num_attention_heads
-        self.swa_num_key_value_heads = self.num_key_value_heads
-        self.swa_head_dim = self.head_dim
 
     @property
     def _special_token_ids(self):
@@ -241,10 +241,10 @@ class InklingVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("n_routed_experts", 16)
+        kwargs.setdefault("swa_num_attention_heads", 2)
+        kwargs.setdefault("swa_num_key_value_heads", 2)
+        kwargs.setdefault("swa_head_dim", 16)
         super().__init__(parent, **kwargs)
-        self.swa_num_attention_heads = self.num_attention_heads
-        self.swa_num_key_value_heads = self.num_key_value_heads
-        self.swa_head_dim = self.head_dim
 
     @property
     def _special_token_ids(self):
