@@ -1908,101 +1908,14 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.cross_attn\.ffn\.0\.", ".cross_mlp.fc1."),
         WeightRenaming(r"\.cross_attn\.ffn\.1\.", ".cross_mlp.layer_norm."),
         WeightRenaming(r"\.cross_attn\.ffn\.3\.", ".cross_mlp.fc2."),
+        WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.cross_attn\.to_v\.", ".cross_attn.v_proj."),
+        WeightRenaming(r"\.cross_attn\.to_out\.", ".cross_attn.o_proj."),
         WeightRenaming(r"\.self_attn\.", ".self_attention."),
         WeightRenaming(r"\.cross_attn\.", ".cross_attention."),
-        WeightRenaming(r"\.out_proj\.", ".o_proj."),
-        WeightRenaming(r"\.to_v\.", ".v_proj."),
-        WeightRenaming(r"\.to_out\.", ".o_proj."),
-        WeightRenaming(r"^log_assignment\.\d+\.final_proj\.", "match_assignment.final_projection."),
-        WeightRenaming(r"^log_assignment\.\d+\.matchability\.", "match_assignment.matchability."),
-        WeightRenaming(r"^_descriptor\.encoder\.vgg\.", "descriptor_network.encoder."),
-        WeightRenaming(r"^_descriptor\.decoder\.", "descriptor_network.decoder."),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.patch_embed\.proj\.",
-            "descriptor_network.auxiliary_backbone.embeddings.patch_embeddings.projection.",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.blocks\.(\d+)\.attn\.proj\.",
-            r"descriptor_network.auxiliary_backbone.encoder.layer.\1.attention.output.dense.",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.blocks\.(\d+)\.norm1\.",
-            r"descriptor_network.auxiliary_backbone.encoder.layer.\1.norm1.",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.blocks\.(\d+)\.norm2\.",
-            r"descriptor_network.auxiliary_backbone.encoder.layer.\1.norm2.",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.blocks\.(\d+)\.mlp\.",
-            r"descriptor_network.auxiliary_backbone.encoder.layer.\1.",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.blocks\.(\d+)\.ls1\.gamma$",
-            r"descriptor_network.auxiliary_backbone.encoder.layer.\1.layer_scale1.lambda1",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.blocks\.(\d+)\.ls2\.gamma$",
-            r"descriptor_network.auxiliary_backbone.encoder.layer.\1.layer_scale2.lambda1",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.(cls_token|pos_embed)$",
-            r"descriptor_network.auxiliary_backbone.embeddings.\1",
-        ),
-        WeightRenaming(
-            r"^descriptor_network\.auxiliary_backbone\.embeddings\.pos_embed$",
-            "descriptor_network.auxiliary_backbone.embeddings.position_embeddings",
-        ),
-        WeightRenaming(
-            r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.norm\.",
-            "descriptor_network.auxiliary_backbone.layernorm.",
-        ),
+        WeightRenaming(r"^log_assignment\.8\.final_proj\.", "match_assignment.final_projection."),
+        WeightRenaming(r"^log_assignment\.8\.matchability\.", "match_assignment.matchability."),
     ]
-    loma_mapping.extend(
-        [
-            WeightConverter(
-                source_patterns=r"^layers\.(\d+)\.self_attention\.Wqkv\.(weight|bias)$",
-                target_patterns=[
-                    r"layers.\1.self_attention.q_proj.\2",
-                    r"layers.\1.self_attention.k_proj.\2",
-                    r"layers.\1.self_attention.v_proj.\2",
-                ],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=r"^layers\.(\d+)\.cross_attention\.to_qk\.(weight|bias)$",
-                target_patterns=[
-                    r"layers.\1.cross_attention.q_proj.\2",
-                    r"layers.\1.cross_attention.k_proj.\2",
-                ],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=r"^_descriptor\.encoder\.frozen_dinov2\.dinov2_vitl14\.blocks\.(\d+)\.attn\.qkv\.(weight|bias)$",
-                target_patterns=[
-                    r"descriptor_network.auxiliary_backbone.encoder.layer.\1.attention.attention.query.\2",
-                    r"descriptor_network.auxiliary_backbone.encoder.layer.\1.attention.attention.key.\2",
-                    r"descriptor_network.auxiliary_backbone.encoder.layer.\1.attention.attention.value.\2",
-                ],
-                operations=[Chunk(dim=0)],
-            ),
-        ]
-    )
-
-    # Backward compatibility for published LoMa checkpoints with a flat VGG module list.
-    flat_index = 0
-    for stage_index, num_blocks in enumerate((2, 2, 4, 4)):
-        for block_index in range(num_blocks):
-            for module_offset, module_name in ((0, "conv"), (1, "norm")):
-                source_index = flat_index + module_offset
-                loma_mapping.append(
-                    WeightRenaming(
-                        source_patterns=rf"^descriptor_network\.encoder\.layers\.{source_index}\.",
-                        target_patterns=rf"descriptor_network.encoder.layers.{stage_index}.blocks.{block_index}.{module_name}.",
-                    )
-                )
-            flat_index += 3
-        flat_index += 1
     mapping["loma"] = loma_mapping
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
