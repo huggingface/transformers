@@ -239,6 +239,24 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
                     model(**model_inputs)
                 self.assertEqual(ValueError, cm.exception.__class__)
 
+    def test_compile_forward(self):
+        # Regression test: the list comprehensions in the forward pass used to shadow `last_hidden_state`,
+        # which raised an `UnboundLocalError` in the resume function generated after a dynamo graph break.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            torch._dynamo.reset()
+            compiled_model = torch.compile(model)
+
+            with torch.no_grad():
+                outputs = compiled_model(**self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertIsNotNone(outputs.keypoints)
+            self.assertIsNotNone(outputs.descriptors)
+
 
 def prepare_imgs():
     image1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
