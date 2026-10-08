@@ -921,11 +921,13 @@ class WeightTransform:
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
         # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
-        if r"\1" in replacement:
-            # The index of the internal group we need to replace is the index of the matched named group as it comes
-            # inside that matched named group
-            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
-            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
+        if group_refs := re.findall(r"\\[1-9]\d*", replacement):
+            group_start = self.compiled_sources.groupindex[matching_group_name]
+
+            for group_ref in sorted(set(group_refs), key=len, reverse=True):
+                group_idx = group_start + int(group_ref[1:])
+                replacement = replacement.replace(group_ref, match_object.group(group_idx))
+
         renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
         if prefix_dot is not None:
             renamed_key = prefix_dot + renamed_key
