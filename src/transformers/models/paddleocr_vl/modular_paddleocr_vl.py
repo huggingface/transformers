@@ -33,7 +33,6 @@ from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ...processing_utils import (
-    ProcessingKwargs,
     ProcessorMixin,
     Unpack,
 )
@@ -70,6 +69,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModelOutputWithPast,
     Qwen2VLRotaryEmbedding,
 )
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipMLP,
@@ -214,13 +214,8 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         return flatten_patches, grid_h, grid_w
 
 
-class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+class PaddleOCRVLProcessorKwargs(Qwen2VLProcessorKwargs):
+    pass
 
 
 class PaddleOCRVLProcessor(ProcessorMixin):
@@ -537,8 +532,7 @@ class PaddleOCRVisionMLP(SiglipMLP):
 
 
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+    pass
 
 
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):

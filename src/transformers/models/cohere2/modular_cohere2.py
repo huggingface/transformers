@@ -24,7 +24,6 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import (
     RopeParameters,
-    dynamic_rope_update,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -125,15 +124,7 @@ class Cohere2Config(PreTrainedConfig):
 
 
 class Cohere2RotaryEmbedding(CohereRotaryEmbedding):
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+    pass
 
 
 class Cohere2LayerNorm(CohereLayerNorm):

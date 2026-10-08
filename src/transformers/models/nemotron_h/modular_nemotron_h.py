@@ -212,14 +212,7 @@ class NemotronHTopkRouter(DeepseekV3TopkRouter):
 
 
 class NemotronHAttention(JambaAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return super().forward(hidden_states, attention_mask, past_key_values, **kwargs)
+    pass
 
 
 MIXER_TYPES = {

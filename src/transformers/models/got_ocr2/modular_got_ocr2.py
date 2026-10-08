@@ -184,7 +184,7 @@ class GotOcr2VisionLayer(SamVisionLayer):
 
 
 class GotOcr2PreTrainedModel(SamPreTrainedModel):
-    input_modalities = ("image", "text")
+    pass
 
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):

@@ -243,7 +243,7 @@ class Qwen3_5MoeVisionModel(Qwen3_5VisionModel):
 
 
 class Qwen3_5MoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    pass
 
 
 class Qwen3_5MoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):

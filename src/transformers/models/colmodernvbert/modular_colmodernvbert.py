@@ -313,7 +313,7 @@ class ColModernVBertProcessor(Idefics3Processor):
 
 @auto_docstring
 class ColModernVBertPreTrainedModel(ColPaliPreTrainedModel):
-    config: ColModernVBertConfig
+    pass
 
 
 @auto_docstring(
