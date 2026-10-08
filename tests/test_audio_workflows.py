@@ -22,12 +22,26 @@ import numpy as np
 from transformers.testing_utils import require_librosa, require_torch, require_torchaudio
 
 
+class _OnBackend:
+    """The processor class with its backend bound: called or loaded with `from_dict`, it builds on that backend."""
+
+    def __init__(self, cls, backend):
+        self.cls, self.backend = cls, backend
+
+    def __call__(self, *args, **kwargs):
+        return self.cls(*args, backend=self.backend, **kwargs)
+
+    def from_dict(self, config, **kwargs):
+        return self.cls.from_dict(config, backend=self.backend, **kwargs)
+
+    def __repr__(self):
+        return f"{self.cls.__name__}(backend={self.backend!r})"
+
+
 def processor_classes(model, name):
-    for numpy in (False, True):
-        module = importlib.import_module(
-            f"transformers.models.{model}.audio_processing_{'numpy_' if numpy else ''}{model}"
-        )
-        yield getattr(module, name + ("Numpy" if numpy else ""))
+    cls = getattr(importlib.import_module(f"transformers.models.{model}.audio_processing_{model}"), name)
+    for backend in ("torch", "numpy"):
+        yield _OnBackend(cls, backend)
 
 
 @require_torch
