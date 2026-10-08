@@ -22,7 +22,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..superpoint import SuperPointConfig
@@ -119,11 +119,8 @@ class LoMaConfig(PreTrainedConfig):
     """
 
     model_type = "loma"
-    sub_configs = {
-        "keypoint_detector_config": AutoConfig,
-        "encoder_config": LoMaVgg19EncoderConfig,
-        "decoder_config": LoMaDescriptorDecoderConfig,
-        "backbone_config": AutoConfig,
+    sub_configs_defaults = {
+        "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
     }
 
     keypoint_detector_config: dict | SuperPointConfig | None = None
@@ -136,6 +133,12 @@ class LoMaConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     attention_dropout: float | int = 0.0
     attention_bias: bool = True
+    sub_configs = {
+        "keypoint_detector_config": AutoConfig,
+        "encoder_config": LoMaVgg19EncoderConfig,
+        "decoder_config": LoMaDescriptorDecoderConfig,
+        "backbone_config": AutoConfig,
+    }
 
     input_descriptor_dim: int = 256
     head_dim: int | None = None

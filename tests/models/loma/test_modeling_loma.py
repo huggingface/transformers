@@ -402,10 +402,37 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 model_inputs = self._prepare_for_class(inputs_dict, model_class)
-                # Labels are silently ignored via **kwargs
+                # Provide an arbitrary sized Tensor as labels to model inputs
                 model_inputs["labels"] = torch.rand((128, 128))
-                outputs = model(**model_inputs)
-                self.assertIsNotNone(outputs.matches)
+
+                with self.assertRaises(ValueError) as cm:
+                    model(**model_inputs)
+                self.assertEqual(ValueError, cm.exception.__class__)
+
+    def test_precomputed_keypoints_require_normalized_coordinates(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device)
+        model.eval()
+        keypoints = torch.tensor(
+            [
+                [[[-0.5, 0.5]], [[0.5, 1.5]]],
+                [[[0.25, 0.75]], [[0.75, 0.25]]],
+            ],
+            device=torch_device,
+        )
+
+        with self.assertRaisesRegex(ValueError, "normalized coordinates"):
+            model(pixel_values, keypoints=keypoints)
+
+    def test_precomputed_keypoint_mask_has_matching_shape(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device)
+        model.eval()
+        keypoints = torch.rand(2, 2, 3, 2, device=torch_device)
+        mask = torch.ones(2, 2, 2, dtype=torch.bool, device=torch_device)
+
+        with self.assertRaisesRegex(ValueError, "mask must have shape"):
+            model(pixel_values, keypoints=keypoints, mask=mask)
 
 
 @require_torch
@@ -490,8 +517,8 @@ class LoMaModelIntegrationTest(unittest.TestCase):
         torch.manual_seed(0)
         num_kp = 32
         pixel_values = torch.rand(1, 2, 3, 120, 160, device=torch_device)
-        keypoints0 = torch.rand(1, num_kp, 2, device=torch_device) * 2 - 1
-        keypoints1 = torch.rand(1, num_kp, 2, device=torch_device) * 2 - 1
+        keypoints0 = torch.rand(1, num_kp, 2, device=torch_device)
+        keypoints1 = torch.rand(1, num_kp, 2, device=torch_device)
         keypoints = torch.stack([keypoints0, keypoints1], dim=1)
 
         with torch.no_grad():

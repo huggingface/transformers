@@ -561,10 +561,23 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        labels: torch.LongTensor | None = None,
         keypoints: torch.FloatTensor | None = None,
-        mask: torch.LongTensor | None = None,
+        mask: torch.BoolTensor | None = None,
         **kwargs,
     ) -> tuple | LoMaKeypointMatchingOutput:
+        """
+        Args:
+            keypoints (`torch.FloatTensor` of shape `(batch_size, 2, num_keypoints, 2)`, *optional*):
+                Normalized `(x, y)` coordinates in the `[0, 1]` range. When omitted, SuperPoint detects keypoints
+                for each image in the pair.
+            mask (`torch.BoolTensor` of shape `(batch_size, 2, num_keypoints)`, *optional*):
+                Mask indicating valid pre-computed keypoints. If omitted with `keypoints`, every supplied keypoint is
+                considered valid.
+        """
+        if labels is not None:
+            raise ValueError("LoMa is not trainable, no labels should be provided.")
+
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("pixel_values must have shape (batch_size, 2, num_channels, height, width)")
 
@@ -573,16 +586,26 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         pixel_values_flat = pixel_values.reshape(batch_size * 2, num_channels, height, width)
 
         if keypoints is None:
+            if mask is not None:
+                raise ValueError("mask can only be provided together with keypoints")
             keypoint_detections = self.keypoint_detector(pixel_values_flat)
             keypoints, _, _, mask = keypoint_detections[:4]
             keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
             mask = mask.reshape(batch_size, 2, -1)
         else:
+            if keypoints.ndim != 4 or keypoints.shape[:2] != (batch_size, 2) or keypoints.shape[-1] != 2:
+                raise ValueError("keypoints must have shape (batch_size, 2, num_keypoints, 2)")
+            if not torch.is_floating_point(keypoints):
+                raise ValueError("keypoints must be a floating-point tensor")
+            if torch.any((keypoints < 0) | (keypoints > 1)):
+                raise ValueError("keypoints must contain normalized coordinates in the [0, 1] range")
             keypoints = keypoints.to(pixel_values)
             if mask is None:
-                mask = torch.ones(keypoints.shape[:-1], dtype=torch.int32, device=keypoints.device)
+                mask = torch.ones(keypoints.shape[:-1], dtype=torch.bool, device=keypoints.device)
             else:
-                mask = mask.reshape(batch_size, 2, -1)
+                if mask.shape != keypoints.shape[:-1]:
+                    raise ValueError("mask must have shape (batch_size, 2, num_keypoints)")
+                mask = mask.to(device=keypoints.device, dtype=torch.bool)
 
         descriptor_keypoints = keypoints.reshape(batch_size * 2, -1, 2) * 2 - 1
         descriptors = self.descriptor_network.describe_keypoints(pixel_values_flat, descriptor_keypoints)
