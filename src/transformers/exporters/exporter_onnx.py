@@ -149,17 +149,14 @@ class OnnxExporter(DynamoExporter):
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
                 opset_version=config.opset_version,
-                external_data=config.external_data,
-                export_params=config.export_params,
                 optimize=config.optimize,
             )
 
         apply_onnx_ir_fixes(onnx_program)
 
         if config.onnxruntime_quantizer is not None:
-            _quantize_converted(onnx_program, config, sample_inputs)
+            _run_onnxruntime_quantizer(onnx_program, config, sample_inputs)
 
         if config.output_path is not None:
             onnx_program.save(
@@ -1245,44 +1242,50 @@ class OnnxRuntimeQuantizer:
         self.dynamic = dynamic
         self.kwargs = kwargs
 
-    def __call__(self, model: onnx.ModelProto, dataset: Iterable[dict[str, np.ndarray]]) -> onnx.ModelProto:
+    def __call__(self, model: onnx.ModelProto, feeds: Iterable[dict[str, np.ndarray]]) -> onnx.ModelProto:
         import onnx
-        from onnxruntime.quantization import CalibrationDataReader, quantize_dynamic, quantize_static
-
-        class _Reader(CalibrationDataReader):
-            def __init__(self):
-                self.samples = iter(dataset)
-
-            def get_next(self):
-                return next(self.samples, None)
-
-        # Dynamic mode transposes `Gemm` weights in place, which contradicts the exporter's `value_info` for them.
-        initializers = {initializer.name for initializer in model.graph.initializer}
-        value_info = [info for info in model.graph.value_info if info.name not in initializers]
-        del model.graph.value_info[:]
-        model.graph.value_info.extend(value_info)
+        from onnxruntime.quantization import quantize_dynamic, quantize_static
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "model.onnx")
             if self.dynamic:
-                # ONNX Runtime lacks kernels for some of the integer ops it would put elsewhere (`ConvInteger`)
-                kwargs = {"op_types_to_quantize": ["MatMul", "Gemm"], **self.kwargs}
-                quantize_dynamic(model, path, **kwargs)
+                _drop_initializer_shapes(model)
+                # ONNX Runtime has no kernels for some integer ops dynamic mode would emit elsewhere (`ConvInteger`).
+                quantize_dynamic(model, path, **{"op_types_to_quantize": ["MatMul", "Gemm"], **self.kwargs})
             else:
-                quantize_static(model, path, _Reader(), **self.kwargs)
+                quantize_static(model, path, _FeedReader(feeds), **self.kwargs)
             return onnx.load(path)
 
 
-def _quantize_converted(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs) -> None:
+class _FeedReader:
+    """The `get_next` interface `quantize_static` reads its calibration feeds through."""
+
+    def __init__(self, feeds: Iterable[dict[str, np.ndarray]]):
+        self.feeds = iter(feeds)
+
+    def get_next(self) -> dict[str, np.ndarray] | None:
+        return next(self.feeds, None)
+
+
+def _drop_initializer_shapes(model: onnx.ModelProto) -> None:
+    """Remove the `value_info` of initializers: dynamic mode transposes `Gemm` weights in place, then re-infers shapes
+    and trips over the stale ones."""
+    initializers = {initializer.name for initializer in model.graph.initializer}
+    value_info = [info for info in model.graph.value_info if info.name not in initializers]
+    del model.graph.value_info[:]
+    model.graph.value_info.extend(value_info)
+
+
+def _run_onnxruntime_quantizer(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs) -> None:
     """Replace `onnx_program`'s model with the `onnxruntime_quantizer`'s, calibrated on the model's inputs."""
     model = onnx_program.model_proto
     names = [graph_input.name for graph_input in model.graph.input]
-    samples = config.calibration_dataset or [sample_inputs]
-    dataset = (_onnx_feed(names, sample) for sample in samples)
-    onnx_program.model = onnx_ir.from_proto(config.onnxruntime_quantizer(model, dataset))
+    feeds = (_onnx_feed(names, sample) for sample in config.calibration_dataset or [sample_inputs])
+    onnx_program.model = onnx_ir.from_proto(config.onnxruntime_quantizer(model, feeds))
 
 
 def _onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
     """`sample`'s tensor leaves as the ONNX model's inputs, by input name (mutated inputs carry an `input.` prefix)."""
     leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    return {name: leaves[name.removeprefix("input.")] for name in input_names if name.removeprefix("input.") in leaves}
+    paths = {name: name.removeprefix("input.") for name in input_names}
+    return {name: leaves[path] for name, path in paths.items() if path in leaves}

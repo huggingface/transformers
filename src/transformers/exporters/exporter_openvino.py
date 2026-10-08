@@ -79,6 +79,8 @@ if is_openvino_available():
 
 
 if TYPE_CHECKING:
+    import nncf
+
     from ..modeling_utils import PreTrainedModel
 
 
@@ -132,7 +134,7 @@ class OpenVINOExporter(DynamoExporter):
 
         # Before the state folding, so calibration feeds each sample's cache as an input instead of empty state.
         if config.nncf_quantizer is not None:
-            ov_model = _quantize_converted(ov_model, config, sample_inputs)
+            ov_model = _run_nncf_quantizer(ov_model, config, sample_inputs)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -630,22 +632,21 @@ class NNCFQuantizer:
     """
 
     def __init__(self, weights_only: bool = False, **kwargs):
-        self.kwargs = kwargs
         self.weights_only = weights_only
+        self.kwargs = kwargs
 
-    def __call__(self, model: openvino.Model, dataset) -> openvino.Model:
+    def __call__(self, model: openvino.Model, dataset: nncf.Dataset) -> openvino.Model:
         import nncf
 
-        if self.weights_only:
-            # The int8 modes are data-free and refuse a dataset; the others use it for their data-aware methods.
-            mode = self.kwargs.get("mode", nncf.CompressWeightsMode.INT8_ASYM)
-            data_free = mode in (nncf.CompressWeightsMode.INT8_SYM, nncf.CompressWeightsMode.INT8_ASYM)
-            return nncf.compress_weights(model, **({} if data_free else {"dataset": dataset}), **self.kwargs)
+        if not self.weights_only:
+            return nncf.quantize(model, dataset, **{"model_type": nncf.ModelType.TRANSFORMER, **self.kwargs})
+        # The int8 modes are data-free and refuse a dataset; the others use it for their data-aware methods.
+        mode = self.kwargs.get("mode", nncf.CompressWeightsMode.INT8_ASYM)
+        data_free = mode in (nncf.CompressWeightsMode.INT8_SYM, nncf.CompressWeightsMode.INT8_ASYM)
+        return nncf.compress_weights(model, dataset=None if data_free else dataset, **self.kwargs)
 
-        return nncf.quantize(model, dataset, **{"model_type": nncf.ModelType.TRANSFORMER, **self.kwargs})
 
-
-def _quantize_converted(ov_model: openvino.Model, config: OpenVINOConfig, sample_inputs) -> openvino.Model:
+def _run_nncf_quantizer(ov_model: openvino.Model, config: OpenVINOConfig, sample_inputs) -> openvino.Model:
     """Run the `nncf_quantizer` on the converted model, with an `nncf.Dataset` of its inputs."""
     import nncf
 

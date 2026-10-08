@@ -156,11 +156,9 @@ class DynamoExporter(HfExporter):
             )
             calibration_dataset = [sample_inputs]
 
-        forward_keys = set(sample_inputs)
         for sample in calibration_dataset:
-            # Deep-copied: a calibration forward writes the cache in place, and the re-export reuses `sample_inputs`.
-            inputs = {name: copy.deepcopy(value) for name, value in sample.items() if name in forward_keys}
-            prepared(**inputs)
+            # Only the traced inputs: a sample may still carry the output flags `prepare_for_export` popped.
+            prepared(**copy.deepcopy({name: sample[name] for name in sample_inputs}))
 
         converted = convert_pt2e(prepared, fold_quantize=self.fold_quantized_weights)
         return torch.export.export(

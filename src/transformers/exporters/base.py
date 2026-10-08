@@ -187,7 +187,6 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
         )
 
-        calibration = {}
         if isinstance(config, dict):
             missing = set(components) - set(config)
             if missing:
@@ -205,15 +204,14 @@ class HfExporter(ABC):
                     generation_config=generation_config,
                     multi_token_decode=multi_token_decode,
                 )
+                configs = {
+                    name: dataclasses.replace(config, calibration_dataset=calibration[name]) for name in components
+                }
 
         exported: dict[str, object] = {}
         for name, (submodel, subinputs) in components.items():
-            component_config = configs[name]
-            component_calibration = calibration.get(name)
-            if component_calibration is not None:
-                component_config = dataclasses.replace(component_config, calibration_dataset=component_calibration)
             try:
-                exported[name] = self.export(submodel, subinputs, config=component_config)
+                exported[name] = self.export(submodel, subinputs, config=configs[name])
             except Exception as e:
                 raise RuntimeError(
                     f"{type(self).__name__}.export failed on component '{name}' "
