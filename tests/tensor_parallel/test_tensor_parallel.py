@@ -23,7 +23,7 @@ from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     ColwiseParallel,
-    EpDispatchExpertsParallel,
+    EpMaskedExpertsParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
@@ -34,22 +34,17 @@ from ..test_tensor_parallel_mixin import _init_distributed
 
 
 # Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
-def _shared_batch_runs_the_experts_masked(rank):
-    seen = {}
-
-    def experts(hidden_states, top_k_index, top_k_weights):
-        seen["index"] = top_k_index.tolist()
-        return hidden_states * top_k_weights.sum(-1, keepdim=True)
-
+def _masked_experts_keep_to_their_own_routes(rank):
     module = torch.nn.Module()
     module.num_experts = 2
-    hidden_states = torch.arange(16.0).view(2, 8)
-    output = EpDispatchExpertsParallel()._masked_forward(
-        module, experts, init_device_mesh("cpu", (2,)), hidden_states, torch.tensor([[0, 3], [1, 2]]), torch.ones(2, 2)
-    )
+    args = (torch.arange(16.0).view(2, 8), torch.tensor([[0, 3], [1, 2]]), torch.ones(2, 2))
+    mesh = init_device_mesh("cpu", (2,))
+    (_, top_k_index, top_k_weights), _ = EpMaskedExpertsParallel().transform_inputs_pre_forward(module, args, {}, mesh)
     # each rank owns 2 experts: its own become local ids, the other rank's go past them with weight 0
-    assert seen["index"] == ([[0, 2], [1, 2]] if rank == 0 else [[2, 1], [2, 0]]), seen
-    torch.testing.assert_close(output, 2 * hidden_states)
+    assert top_k_index.tolist() == ([[0, 2], [1, 2]] if rank == 0 else [[2, 1], [2, 0]]), top_k_index
+    assert top_k_weights.tolist() == ([[1.0, 0.0], [1.0, 0.0]] if rank == 0 else [[0.0, 1.0], [0.0, 1.0]]), (
+        top_k_weights
+    )
 
 
 @is_tensor_parallel_test
@@ -389,7 +384,7 @@ class TestTensorParallelLayer(TestCasePlus):
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
 
-    def test_a_shared_batch_runs_the_experts_masked(self):
-        """When the EP group holds one batch, each rank runs its own experts on all of it and the partial outputs
-        sum to the full result."""
-        _init_distributed(tp=2, backend="gloo")(_shared_batch_runs_the_experts_masked)()
+    def test_ep_masked_experts_keep_to_their_own_routes(self):
+        """When the EP group holds one batch, each rank runs its own experts on all of it: its experts' ids become
+        local and the other ranks' routes go past them with weight 0."""
+        _init_distributed(tp=2, backend="gloo")(_masked_experts_keep_to_their_own_routes)()

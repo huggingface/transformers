@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 import re
 from collections.abc import Callable
 from itertools import chain
@@ -877,47 +876,10 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         )
         return output.full_tensor()
 
-    def _masked_forward(self, module, experts_forward, ep_mesh, hidden_states, top_k_index, top_k_weights, **kwargs):
-        """The EP group shares one batch: every rank runs its own experts on all of it, the other ranks' routes
-        masked, and the partial outputs are summed. No tokens move and no split size is read back, so it captures in
-        a CUDA graph."""
-        ep_group = ep_mesh.get_group()
-        if isinstance(hidden_states, DTensor):
-            hidden_states = hidden_states.to_local()
-        if isinstance(top_k_weights, DTensor):
-            top_k_weights = top_k_weights.to_local()
-        # each rank backpropagates through its own experts only: the replicated inputs' gradients are summed
-        hidden_states = _AllReduceBackward.apply(hidden_states, ep_group)
-        if not isinstance(top_k_index, torch.Tensor):
-            # experts that route themselves (MXFP4 GPT-OSS hands its own routing data) keep to this rank's experts
-            # already: they take the batch as it is
-            with self.context_around_forward(module, ep_mesh):
-                output = experts_forward(hidden_states, top_k_index, top_k_weights, **kwargs)
-            return _AllReduceForward.apply(output, ep_group)
-        top_k_weights = _AllReduceBackward.apply(top_k_weights, ep_group)
-        num_local_experts = module.num_experts
-        local_index = top_k_index - ep_mesh.get_local_rank() * num_local_experts
-        off_rank = (local_index < 0) | (local_index >= num_local_experts)
-        with self.context_around_forward(module, ep_mesh):
-            output = experts_forward(
-                hidden_states,
-                local_index.masked_fill(off_rank, num_local_experts),
-                top_k_weights.masked_fill(off_rank, 0),
-                **kwargs,
-            )
-        return _AllReduceForward.apply(output, ep_group)
-
     def install_forward(self, module, ep_mesh, *, tp_mesh=None):
-        """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch.
-
-        When those ranks are the EP group itself, there is nothing to exchange: the experts run masked
-        (`_masked_forward`). Otherwise each rank's tokens are dispatched to their experts' owners."""
+        """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
         experts_forward = module.forward
         ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
-        batch_ranks = sorted(tp_mesh.mesh.flatten().tolist()) if tp_mesh is not None else []
-        if batch_ranks == sorted(ep_mesh.mesh.flatten().tolist()):
-            module.forward = functools.partial(self._masked_forward, module, experts_forward, ep_mesh)
-            return module
 
         def ep_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
             if kwargs or not isinstance(top_k_index, torch.Tensor):
@@ -943,6 +905,29 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
 
         module.forward = ep_forward
         return module
+
+
+class EpMaskedExpertsParallel(MoeExpertsParallel):
+    """Expert parallelism when the EP group shares one batch (`ep_size == tp_size`), what `ep_dispatch_experts`
+    resolves to there: every rank runs its own experts on the whole batch, the other ranks' routes masked past them,
+    and the partial outputs are summed. No tokens move and no split size is read back, so it captures in a CUDA
+    graph."""
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
+        (hidden_states, top_k_index, top_k_weights, *rest), kwargs = super().transform_inputs_pre_forward(
+            module, args, kwargs, mesh, is_expert_parallel=True
+        )
+        # experts that route themselves (MXFP4 GPT-OSS hands its own routing data) keep to this rank's experts
+        if not isinstance(top_k_index, torch.Tensor):
+            return (hidden_states, top_k_index, top_k_weights, *rest), kwargs
+        # each rank backpropagates through its own experts only: the replicated weights' gradients are summed
+        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+        rank = mesh.get_local_rank() if mesh.ndim == 1 else mesh.get_local_rank("tp")
+        local_index = top_k_index - rank * module.num_experts
+        off_rank = (local_index < 0) | (local_index >= module.num_experts)
+        local_index = local_index.masked_fill(off_rank, module.num_experts)
+        return (hidden_states, local_index, top_k_weights.masked_fill(off_rank, 0), *rest), kwargs
 
 
 class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
@@ -983,6 +968,7 @@ class ParallelInterface(GeneralInterface):
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "ep_router": EpRouterParallel(),
             "ep_dispatch_experts": EpDispatchExpertsParallel(),
+            "ep_masked_experts": EpMaskedExpertsParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
@@ -1025,6 +1011,13 @@ def resolve_parallel_plans(
             if unknown := override.keys() - names - plan.keys():
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
             setattr(model, f"_{plan_name}", plan | override)
+
+    if distributed_config.ep_size == distributed_config.tp_size and "ep_dispatch_experts" in model.ep_plan.values():
+        # the EP group shares one batch: nothing to exchange, the experts run masked
+        model._ep_plan = {
+            name: "ep_masked_experts" if style == "ep_dispatch_experts" else style
+            for name, style in model.ep_plan.items()
+        }
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
