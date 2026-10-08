@@ -15,6 +15,7 @@ import warnings
 from unittest.mock import patch
 
 import torch
+from torch.distributed._functional_collectives import AsyncCollectiveTensor
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
@@ -31,34 +32,6 @@ from transformers.distributed.tensor_parallel import (
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
-
-
-# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
-class _RecordingExperts(torch.nn.Module):
-    """Experts that record the type of the rows they receive and return them weighted."""
-
-    def __init__(self):
-        super().__init__()
-        self.num_experts = 2
-
-    def forward(self, tokens, expert_ids, weights):
-        self.received_type = type(tokens)
-        return tokens * weights
-
-
-def _dispatch_waits_only_for_quantized_experts(rank):
-    mesh = init_device_mesh("cpu", (2,))
-    hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
-    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]])
-    top_k_weights = torch.ones(4, 2)
-    # torch experts wait at their first op's entry; quantized experts read raw pointers
-    for quantized in (False, True):
-        experts = _RecordingExperts()
-        if quantized:
-            experts._hf_quantized_needs_local_tp = True
-        EpDispatchExpertsParallel().install_forward(experts, mesh)
-        experts(hidden_states, top_k_index, top_k_weights)
-        assert (experts.received_type is torch.Tensor) == quantized, quantized
 
 
 @is_tensor_parallel_test
@@ -403,3 +376,27 @@ class TestTensorParallelLayer(TestCasePlus):
         it. Torch experts get it as is and wait at that op's entry; quantized experts read raw pointers and get the
         received rows."""
         _init_distributed(tp=2, backend="gloo")(_dispatch_waits_only_for_quantized_experts)()
+
+
+class _DummyExperts(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.num_experts = 2
+
+    def forward(self, tokens, expert_ids, weights):
+        if getattr(self, "_hf_quantized_needs_local_tp", False):
+            assert type(tokens) is torch.Tensor
+        else:
+            assert type(tokens) is AsyncCollectiveTensor
+        return tokens
+
+
+# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
+def _dispatch_waits_only_for_quantized_experts(rank):
+    hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
+    for quantized in (False, True):
+        experts = _DummyExperts()
+        if quantized:
+            experts._hf_quantized_needs_local_tp = True
+        EpDispatchExpertsParallel().install_forward(experts, init_device_mesh("cpu", (2,)))
+        experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))
