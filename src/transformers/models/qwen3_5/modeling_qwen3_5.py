@@ -137,7 +137,7 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
 
 
 class Qwen3_5TextRotaryEmbedding(nn.Module):
-    def __init__(self, config: Qwen3_5TextConfig, device=None):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings

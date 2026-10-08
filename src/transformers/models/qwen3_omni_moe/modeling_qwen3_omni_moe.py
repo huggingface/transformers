@@ -1236,7 +1236,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
-    def __init__(self, config: Qwen3OmniMoeTextConfig, device=None):
+    def __init__(self, config: Qwen3OmniMoeTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
