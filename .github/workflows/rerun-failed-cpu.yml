@@ -37,10 +37,11 @@ on:
         type: string
         default: ""
 
-# One targeted run per PR at a time; never cancel one already running.
+# A new request replaces the previous rerun for this PR and lane. The dashboard
+# tracks each request independently through its correlation id.
 concurrency:
   group: rerun-failed-cpu-${{ inputs.pr_number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
