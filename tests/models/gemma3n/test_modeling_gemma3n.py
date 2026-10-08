@@ -15,6 +15,8 @@
 
 import copy
 import inspect
+import os
+import tempfile
 import unittest
 
 import numpy as np
@@ -24,6 +26,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoProcessor,
     AutoTokenizer,
     Gemma3nAudioConfig,
@@ -44,6 +47,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import WEIGHTS_NAME
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
@@ -736,6 +740,20 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    def test_from_pretrained_fp16_initializes_gradient_clipping(self):
+        config = self.model_tester.get_config()
+        checkpoint_model = Gemma3nForConditionalGeneration(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            torch.save(checkpoint_model.state_dict(), os.path.join(tmp_dir, WEIGHTS_NAME))
+
+            model = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float16)
+
+        gradient_clipping = model.model.audio_tower.conformer[0].attention.gradient_clipping
+        self.assertEqual(gradient_clipping.dtype, torch.float16)
+        self.assertEqual(gradient_clipping.item(), torch.finfo(torch.float16).max)
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         return 2
