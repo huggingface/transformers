@@ -24,13 +24,13 @@ This module provides:
   - ``MetalQuantize`` / ``MetalDequantize``: weight conversion operations that
     participate in the new ``WeightConverter`` pipeline.
 
-Weight layout (transposed, matching ``affine_qmm_t``):
+Weight layout (MLX's affine layout, transposed like ``nn.Linear``):
   - ``weight``: ``[N, K_packed]`` (``uint32``) -- K is the packed dimension.
   - ``scales``:  ``[N, K // group_size]`` (``float16 / bfloat16``)
   - ``qbiases``: ``[N, K // group_size]`` (same dtype as scales)
 
-The kernel call is ``affine_qmm_t(x, weight, scales, qbiases, group_size, bits)``
-which computes ``y = x @ dequant(weight).T``, identical to ``nn.Linear``.
+The kernel call is ``quantized_matmul(x, weight, scales, qbiases, transpose=True, group_size, bits)``
+(MLX's ``mx.quantized_matmul``), which computes ``y = x @ dequant(weight).T``, identical to ``nn.Linear``.
 """
 
 from ..core_model_loading import ConversionOps, _IdentityOp
@@ -55,7 +55,7 @@ def _get_metal_kernel():
         try:
             from .hub_kernels import get_kernel
 
-            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=1)
+            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=2)
         except Exception as e:
             raise ImportError(
                 f"Failed to load the quantization-mlx kernel from the Hub: {e}. "
@@ -118,13 +118,14 @@ class MetalLinear(nn.Linear):
 
         kernel = _get_metal_kernel()
 
-        output = kernel.affine_qmm_t(
+        output = kernel.quantized_matmul(
             input,
             self.weight,
             self.scales.to(input.dtype),
             self.qbiases.to(input.dtype),
-            self.group_size,
-            self.bits,
+            transpose=True,
+            group_size=self.group_size,
+            bits=self.bits,
         )
 
         if self.bias is not None:
@@ -196,15 +197,27 @@ def _affine_quantize_tensor(weight: torch.Tensor, group_size: int, bits: int):
     max_val = (1 << bits) - 1
     n_groups = K // group_size
 
-    w_grouped = weight.float().reshape(N, n_groups, group_size)
-    w_min = w_grouped.min(dim=-1).values  # [N, n_groups]
-    w_max = w_grouped.max(dim=-1).values
+    # MLX's `affine_quantize` kernel, so a weight quantized here gets the codes `mx.quantize` gives it.
+    # Metal's `round` is half away from zero, unlike `torch.round`.
+    def round_half_away(t):
+        return t.sign() * (t.abs() + 0.5).floor()
 
-    scales = ((w_max - w_min) / max_val).clamp(min=1e-8)
-    biases = w_min
+    w_grouped = weight.float().reshape(N, n_groups, group_size)
+    w_min = w_grouped.amin(dim=-1)  # [N, n_groups]
+    w_max = w_grouped.amax(dim=-1).clamp(min=0)  # upstream starts its running max at 0
+
+    scales = ((w_max - w_min) / max_val).clamp(min=1e-7)
+    # Snap the larger-magnitude edge onto the grid, so it is represented exactly.
+    side = w_min.abs() > w_max.abs()
+    scales = torch.where(side, scales, -scales)
+    edge = torch.where(side, w_min, w_max)
+    q0 = round_half_away(edge / scales)
+    at_zero = q0 == 0
+    scales = torch.where(at_zero, scales, edge / q0)
+    biases = torch.where(at_zero, torch.zeros_like(edge), edge)
 
     w_int = (w_grouped - biases.unsqueeze(-1)) / scales.unsqueeze(-1)
-    w_int = w_int.round().clamp(0, max_val).to(torch.int32).reshape(N, K)
+    w_int = round_half_away(w_int).clamp(0, max_val).to(torch.int32).reshape(N, K)
 
     # Pack into uint32
     k_packed = K // elems_per_int
