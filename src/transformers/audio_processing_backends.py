@@ -162,13 +162,14 @@ class AudioOps:
     - Binary ops (`maximum`, `matmul`, arithmetic) require operands of the *same* dtype; the base
       casts with `astype(x, dtype_name(y))` first. `masked_fill`'s mask broadcasts *to* `x`, never
       beyond it. `randn`'s `shape` is a tuple.
-    - `log`, `log10`, `sqrt`, `pow`, `clamp_min` and `mean` take float input; `clamp_min`'s `value`
-      may also be a 0-d array.
+    - `log`, `log10`, `sqrt`, `pow` and `mean` take float input. `clamp_min` takes any real dtype
+      (Fun-ASR calls it on int64); its `value` is a Python scalar of the array's kind or a 0-d array.
 
     Array protocol — what the base may do with a backend array besides calling ops:
     - arithmetic between two arrays of the same dtype, or between an array and a Python scalar
       *of the array's kind* (an int for int arrays, a float for float arrays, either for complex)
       on either side: ``+ - * /`` (no ``/`` on int arrays), and unary ``-``;
+    - a Python float ``**`` a float array (scalar base);
     - comparisons ``< <= > >= == !=`` giving bool arrays, and ``~ & |`` on bool arrays;
     - indexing with ints, slices with a positive step, `None` and `...` (views or copies; never
       rely on aliasing — torch rejects negative steps, so reversal is not part of the protocol;
@@ -279,7 +280,8 @@ class AudioOps:
         raise NotImplementedError
 
     def clamp_min(self, x, value):
-        """Elementwise ``max(x, value)`` for a scalar `value`."""
+        """Elementwise ``max(x, value)``. `value` is a Python scalar of the array's kind or a 0-d array;
+        any real dtype."""
         raise NotImplementedError
 
     def exp(self, x):
@@ -325,9 +327,9 @@ class AudioOps:
         in (only torch also evaluates in it). `dtype=None` is the one place a backend default
         differs: it means the backend's native precision for a window built for `like` -- `like`'s
         dtype on torch (what `torch.hann_window(..., dtype=audio.dtype)` did), float64 on numpy
-        (what the numpy leaves did). `like` is a device hint, as for `zeros`: torch builds the
-        window on `like`'s device (a change from the old CPU-then-`.to()` leaf, bit-identical on
-        CPU); numpy and MLX ignore it. Each backend builds its own way, so float32 windows differ
+        (what the numpy leaves did); outside backends use their native float (MLX: float32). `like`
+        is a device hint, as for `zeros`: torch builds the window on `like`'s device (a change from
+        the old CPU-then-`.to()` leaf, bit-identical on CPU); numpy and MLX ignore it. Each backend builds its own way, so float32 windows differ
         by ulps between backends; float64 ones agree to ~1e-16."""
         raise NotImplementedError
 

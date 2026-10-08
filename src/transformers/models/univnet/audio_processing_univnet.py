@@ -140,8 +140,8 @@ class UnivNetAudioProcessorMixin:
         # the root is taken in float64 (`.double().sqrt()`) and rounded through float32 (`.float()`)
         magnitudes_f64 = self.ops.sqrt(self.ops.astype(floored_power, "float64"))
         magnitudes_f32 = self.ops.astype(magnitudes_f64, "float32")
-        # float64 out: the legacy mel GEMM promoted to its float64 filters, and the torch
-        # `_project_to_mel` casts the filters to the feature dtype
+        # float64 out: the legacy mel GEMM promoted to its float64 filters, and the base
+        # `_project_to_mel` casts the bank to the features' dtype on every backend
         return self.ops.astype(magnitudes_f32, "float64")
 
     def _shape_log_features(
@@ -149,7 +149,7 @@ class UnivNetAudioProcessorMixin:
     ):
         features = super()._shape_log_features(features, spectrogram_config)
         if do_normalize:
-            features = 2 * ((features - normalize_min) / (normalize_max - normalize_min)) - 1
+            features = 2.0 * ((features - normalize_min) / (normalize_max - normalize_min)) - 1.0
         return features
 
 

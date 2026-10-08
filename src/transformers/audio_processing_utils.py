@@ -72,9 +72,12 @@ def _hertz_to_mel_ops(ops, freq, mel_scale, *, like):
         return 2595.0 * ops.log10(1.0 + freq / 700.0)
     if mel_scale == "kaldi":
         return 1127.0 * ops.log(1.0 + freq / 700.0)
-    # slaney: the log step is a float32 0-d array, as torchaudio's `27.0 / torch.log(torch.tensor(6.4))`
+    # slaney: the log step is evaluated as a float32 0-d array, as torchaudio's
+    # `27.0 / torch.log(torch.tensor(6.4))`, then cast (exactly) to `freq`'s dtype so that binary ops
+    # see one dtype; a float32 `freq` keeps the float32 step unchanged.
     linear = freq / (200.0 / 3.0)
     logstep = 27.0 / ops.log(ops.asarray(np.asarray(6.4, dtype=np.float32), like=like))
+    logstep = ops.astype(logstep, ops.dtype_name(freq))
     log_branch = 15.0 + ops.log(ops.clamp_min(freq, 1000.0) / 1000.0) * logstep
     return ops.where(freq >= 1000.0, log_branch, linear)
 
@@ -680,7 +683,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         audio_el = self._as_backend_array(audio_el)
         if audio_el.ndim == 2 and audio_el.shape[0] > audio_el.shape[1]:
-            audio_el = audio_el.T
+            audio_el = self.ops.swapaxes(audio_el, 0, 1)
         if audio_el.ndim > 1:
             # Multi-channel input is always averaged down to mono.
             audio_el = self._squeeze_axis0(audio_el) if audio_el.shape[0] == 1 else self._mean_axis0(audio_el)
@@ -1157,13 +1160,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return result
 
     # ── Backend array-API primitives ─────────────────────────────────────
-    # Thin names the model files still call; step 3 replaces the call sites with `self.ops.*`.
+    # Thin names the base workflow and the model files still call; step 3 replaces the call sites with
+    # `self.ops.*`.
 
     def _astype(self, x, dtype_name):
         return self.ops.astype(x, dtype_name)
-
-    def _zeros_int32(self, shape, *, like=None):
-        return self.ops.zeros(shape, dtype="int32", like=like)
 
     def _as_backend_array(self, x, *, like=None):
         return self.ops.asarray(x, like=like)
@@ -1184,9 +1185,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _stack(self, seq):
         return self.ops.stack(seq)
 
-    def _insert_channel_dim(self, batch):
-        return batch[:, None]
-
     def _mean_last(self, x):
         return self.ops.mean(x, -1, keepdims=True)
 
@@ -1196,12 +1194,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _lengths_from_ranges(self, ranges):
         """Host-side integer array of `end - start` per `(start, end)` range."""
         return np.asarray([end - start for start, end in ranges], dtype=np.int64)
-
-    def _log(self, x):
-        return self.ops.log(x)
-
-    def _log10(self, x):
-        return self.ops.log10(x)
 
     def _sqrt(self, x):
         return self.ops.sqrt(x)
