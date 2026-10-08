@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...masking_utils import (
     create_bidirectional_mask,
@@ -108,7 +108,10 @@ class T5GemmaConfig(PreTrainedConfig):
 
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder": T5GemmaModuleConfig, "decoder": T5GemmaModuleConfig}
+    sub_configs_defaults = {
+        "encoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
+        "decoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
+    }
 
     encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
     decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
@@ -120,16 +123,7 @@ class T5GemmaConfig(PreTrainedConfig):
     vocab_size: int = 256000
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder, dict):
-            self.encoder = T5GemmaModuleConfig(**self.encoder)
-        elif self.encoder is None:
-            self.encoder = T5GemmaModuleConfig()
-
-        if isinstance(self.decoder, dict):
-            self.decoder = T5GemmaModuleConfig(**self.decoder)
-        elif self.decoder is None:
-            self.decoder = T5GemmaModuleConfig()
-
+        super().__post_init__(**kwargs)
         self.encoder.is_decoder = False
         self.encoder.dropout_rate = self.dropout_rate
         self.encoder.attention_dropout = self.attention_dropout
@@ -144,9 +138,7 @@ class T5GemmaConfig(PreTrainedConfig):
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
             if special_token_key not in kwargs:
-                kwargs[special_token_key] = getattr(self.decoder, special_token_key)
-
-        super().__post_init__(**kwargs)
+                setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):

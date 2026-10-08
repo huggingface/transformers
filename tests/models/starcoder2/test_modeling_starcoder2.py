@@ -50,6 +50,10 @@ class Starcoder2ModelTester(CausalLMModelTester):
 class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Starcoder2ModelTester
 
+    def test_config(self):
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
+
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):
         pass
