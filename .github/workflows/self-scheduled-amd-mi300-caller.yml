@@ -39,6 +39,7 @@ permissions:
 
 jobs:
   setup:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository
     permissions: {}
     name: Setup
     runs-on: ubuntu-22.04
@@ -59,6 +60,7 @@ jobs:
           path: setup_values
 
   model-ci:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository
     name: Model CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
@@ -73,6 +75,7 @@ jobs:
     secrets: inherit
 
   torch-pipeline:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository
     name: Torch pipeline CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
@@ -87,6 +90,7 @@ jobs:
     secrets: inherit
 
   deepspeed-ci:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository
     name: DeepSpeed CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
