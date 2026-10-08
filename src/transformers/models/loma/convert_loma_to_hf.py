@@ -265,12 +265,8 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
 
     missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
 
-    required_prefixes = ("keypoint_detector", "input_projection", "positional_encoder", "layers", "match_assignment")
-    missing_required_keys = [key for key in missing_keys if key.startswith(required_prefixes)]
-    if missing_required_keys or unexpected_keys:
-        raise ValueError(
-            f"Conversion failed. Missing required keys: {missing_required_keys}. Unexpected keys: {unexpected_keys}."
-        )
+    if missing_keys or unexpected_keys:
+        raise ValueError(f"Conversion failed. Missing keys: {missing_keys}. Unexpected keys: {unexpected_keys}.")
 
     model.save_pretrained(output_dir)
     config.save_pretrained(output_dir)
