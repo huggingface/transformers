@@ -69,8 +69,8 @@ class InklingAudioProcessor(BaseAudioProcessor):
             "norm": "slaney",
             "mel_scale": "slaney",
             # The legacy extractor builds its filters with the numpy `mel_filter_bank` util
-            # (float64) and only casts to float32 at the end. The torch leaf otherwise builds
-            # them in float32 throughout, which differs by ~1e-07 in the filters and ~2e-06 in
+            # (float64) and only casts to float32 at the end. Without `computation_dtype` the bank
+            # is built in float32 throughout, which differs by ~1e-07 in the filters and ~2e-06 in
             # the output. Building in float64 and casting back reproduces the legacy exactly.
             "computation_dtype": "float64",
         },

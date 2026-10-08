@@ -534,9 +534,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
     ):
         """Compute the complete batched feature recipe before masks and output augmentation.
 
-        Backend adapters may replace this internal seam with an equivalent accelerated
-        implementation. The default composes the portable feature pipeline and the
-        processor's declared batched normalization.
+        Models whose recipe does not fit the portable pipeline override this seam (AST,
+        SeamlessM4T, Fun-ASR, Speech2Text). The default composes the portable feature pipeline
+        and the processor's declared batched normalization.
         """
         features = self.spectrogram(
             audio,

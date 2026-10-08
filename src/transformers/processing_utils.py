@@ -1938,9 +1938,22 @@ class ProcessorMixin(PushToHubMixin):
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
+        from .models.auto.feature_extraction_auto import _backend_kwargs
+
+        audio_modalities = ("feature_extractor", "audio_processor")
+        # With an audio sub-processor, `backend=` selects the audio backend: it goes to the audio sub-processors
+        # only (refused for one that is not a `BaseAudioProcessor`), never to a tokenizer, which would take it for
+        # its own backend and save it. Without one, it is left in `kwargs` for the sub-processors' own `backend`.
+        audio_backend = None
+        if any(_get_modality_for_attribute(name) in audio_modalities for name in sub_processors):
+            audio_backend = kwargs.pop("backend", None)
+
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
+            backend_kwargs = {}
+            if audio_backend is not None and modality in audio_modalities:
+                backend_kwargs = {"backend": audio_backend}
 
             if (
                 "tokenizer" in sub_processor_type
@@ -1968,8 +1981,10 @@ class ProcessorMixin(PushToHubMixin):
                         f"which is deprecated. Register the correct mapping in `{auto_processor_class.__name__}` instead.",
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
+                    if backend_kwargs:  # an auto class checks `backend` against the class it resolves
+                        backend_kwargs = _backend_kwargs(auto_processor_class, audio_backend)
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs, **backend_kwargs
                 )
                 args.append(sub_processor)
 
@@ -1987,7 +2002,9 @@ class ProcessorMixin(PushToHubMixin):
                             f"Config keys: {list(sub_processor_config.keys())}"
                         )
                     processor_class = cls.get_possibly_dynamic_module(class_name)
-                    sub_processor = processor_class(**sub_processor_config)
+                    if backend_kwargs:
+                        backend_kwargs = _backend_kwargs(processor_class, audio_backend)
+                    sub_processor = processor_class(**{**sub_processor_config, **backend_kwargs})
                     args.append(sub_processor)
                 else:
                     raise ValueError(

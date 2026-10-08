@@ -46,6 +46,9 @@ from transformers import (
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
+    WhisperAudioProcessor,
+    WhisperProcessor,
+    WhisperTokenizer,
 )
 from transformers.models.auto.feature_extraction_auto import get_feature_extractor_config
 from transformers.models.auto.image_processing_auto import get_image_processor_config
@@ -511,6 +514,22 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor.save_pretrained(tmp_dir)
             second_processor = AutoProcessor.from_pretrained(tmp_dir)
             self.assertEqual(second_processor.__class__.__name__, processor.__class__.__name__)
+
+    @require_tokenizers
+    def test_audio_backend_kwarg_reaches_only_the_audio_processor(self):
+        # `backend=` names an audio backend here; a tokenizer receiving it would store it as its own
+        # backend, save it to `tokenizer_config.json` and stop counting as fast.
+        tokenizer = WhisperTokenizer(vocab={"a": 0, "b": 1, "ab": 2, "<|endoftext|>": 3}, merges=[("a", "b")])
+        processor = WhisperProcessor(audio_processor=WhisperAudioProcessor(), tokenizer=tokenizer)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            loaded = AutoProcessor.from_pretrained(tmp_dir, backend="numpy")
+            self.assertEqual(loaded.audio_processor.backend, "numpy")
+            self.assertEqual(loaded.tokenizer.backend, "tokenizers")
+
+            loaded.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, TOKENIZER_CONFIG_FILE), encoding="utf-8") as f:
+                self.assertNotEqual(json.load(f).get("backend"), "numpy")
 
     def test_processor_with_multiple_tokenizers_save_load(self):
         """Test that processors with multiple tokenizers save and load correctly."""

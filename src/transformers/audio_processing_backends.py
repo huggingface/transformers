@@ -68,7 +68,8 @@ class AudioOps:
     # ── plumbing ───────────────────────────────────────────────────────────────────────────────
 
     def asarray(self, x, *, like=None):
-        """Backend array from a numpy array, a sequence, or an existing backend array. May copy; never rely on aliasing."""
+        """Backend array from a numpy array, a sequence, or an existing backend array, keeping its dtype (subject to
+        the widest-float rule in the class docstring). May copy; never rely on aliasing."""
         raise NotImplementedError
 
     def to_numpy(self, x):
@@ -124,8 +125,10 @@ class AudioOps:
         raise NotImplementedError
 
     def pad_many(self, seq, length, *, side="right", value=0.0):
-        """Each array of `seq` constant-padded on its last axis to `length` samples on `side` (``"left"`` or
-        ``"right"``) with `value`, as a list in input order; an empty `seq` gives ``[]``. An array already
+        """Each array of `seq` constant-padded on its last axis to `length` samples with `value`, as a list in
+        input order. `side` is where the padding goes: ``"right"`` appends the missing ``length - len`` samples
+        after the last one, ``"left"`` prepends them before the first; any other value raises `ValueError`,
+        even when no array needs padding; an empty `seq` gives ``[]``. An array already
         `length` or longer is returned with its values unchanged (not necessarily the same object). A backend
         may assemble the batch in one allocation (torch on CUDA); the values are those of per-item `pad`."""
         raise NotImplementedError
@@ -159,12 +162,15 @@ class AudioOps:
     # ── elementwise ────────────────────────────────────────────────────────────────────────────
 
     def log(self, x):
+        """Elementwise natural logarithm. Float input."""
         raise NotImplementedError
 
     def log10(self, x):
+        """Elementwise base-10 logarithm. Float input."""
         raise NotImplementedError
 
     def sqrt(self, x):
+        """Elementwise square root. Float input."""
         raise NotImplementedError
 
     def abs(self, x):
@@ -246,11 +252,11 @@ class AudioOps:
         ``"blackman"``; other keys are ignored. `dtype` is the dtype name the window is *returned*
         in (only torch also evaluates in it). `dtype=None` is the one place a backend default
         differs: it means the backend's native precision for a window built for `like` -- `like`'s
-        dtype on torch (what `torch.hann_window(..., dtype=audio.dtype)` did), float64 on numpy
-        (what the numpy leaves did); outside backends use their native float (MLX: float32). `like`
-        is a device hint, as for `zeros`: torch builds the window on `like`'s device (a change from
-        the old CPU-then-`.to()` leaf, bit-identical on CPU); numpy and MLX ignore it. Each backend builds its own way, so float32 windows differ
-        by ulps between backends; float64 ones agree to ~1e-16."""
+        dtype on torch (as `torch.hann_window(..., dtype=audio.dtype)`), float64 on numpy;
+        outside backends use their native float (MLX: float32). `like` is a device hint, as for
+        `zeros`: torch builds the window on `like`'s device; numpy and MLX ignore it. Each backend
+        builds its own way, so float32 windows differ by ulps between backends; float64 ones agree
+        to ~1e-16."""
         raise NotImplementedError
 
     def frame(self, x, frame_length, hop):
@@ -338,7 +344,10 @@ def get_audio_backend(name: str) -> type[AudioOps]:
 def register_audio_op(backend: str, name: str):
     """Attach `fn` as op `name` on the registered backend `backend`, for code outside the library
     (remote-code processors, outside backends adding an optional op). In-library ops are plain
-    methods in this module. Refuses to replace an existing op.
+    methods in this module. Raises if `name` is a built-in op or attribute of the backend, or an op
+    already registered with a different function. Registering a function with the same
+    `__qualname__` again replaces it silently: remote code is re-imported as a new module on a new
+    revision or `force_download`, and two repos may ship the same file under two module names.
 
     The function receives no `self`: it is attached as a staticmethod, so it cannot call the
     backend's other ops. An op attached to a shipped class is inherited by every subclass of it."""
@@ -347,9 +356,16 @@ def register_audio_op(backend: str, name: str):
         backend_cls = get_audio_backend(backend)
         if name.startswith("_"):
             raise ValueError(f"{name!r} is not a valid op name.")
-        if hasattr(backend_cls, name):
+        existing = getattr(backend_cls, name, None)
+        if hasattr(backend_cls, name) and not (
+            getattr(existing, "_registered_audio_op", False) and existing.__qualname__ == fn.__qualname__
+        ):
             raise ValueError(f"Op {name!r} already exists on audio backend {backend!r}.")
-        setattr(backend_cls, name, staticmethod(fn))
+        op = staticmethod(fn)
+        # Marks the function, which a class attribute lookup returns, so a later registration can
+        # tell an op registered here from a built-in one.
+        op.__func__._registered_audio_op = True
+        setattr(backend_cls, name, op)
         return fn
 
     return decorator
@@ -387,12 +403,11 @@ class NumpyAudioBackend(AudioOps):
     def to_numpy(self, x):
         return np.asarray(x)
 
-    @staticmethod
-    def _check_host(device):
+    def _check_host(self, device):
         # Every host spelling is accepted: "cpu", "cpu:0", torch.device("cpu").
         if device is not None and str(device).split(":")[0] != "cpu":
             raise ValueError(
-                f"The numpy audio backend has no devices; got device={device!r}. Use backend='torch' to place "
+                f"The {self.name!r} audio backend has no devices; got device={device!r}. Use backend='torch' to place "
                 "the arrays on an accelerator."
             )
 
