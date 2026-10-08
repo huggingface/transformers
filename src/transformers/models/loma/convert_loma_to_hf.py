@@ -34,7 +34,7 @@ from pathlib import Path
 
 import torch
 
-from transformers import LoMaConfig, LoMaForKeypointMatching
+from transformers import AutoModelForKeypointDetection, LoMaConfig, LoMaForKeypointMatching
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,8 @@ VARIANT_CONFIGS = {
     "loma_l": {"descriptor_dim": 512, "num_attention_heads": 8},
     "loma_g": {"descriptor_dim": 1024, "num_attention_heads": 16},
 }
+
+SUPERPOINT_CHECKPOINT = "magic-leap-community/superpoint"
 
 
 def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | list[str] | None:
@@ -129,8 +131,20 @@ def _rename_descriptor_key(key: str) -> str | None:
     """
     if key.startswith("_descriptor.encoder.frozen_dinov2."):
         return None
-    if key.startswith("_descriptor.encoder.vgg."):
-        return key.replace("_descriptor.encoder.vgg.", "descriptor_network.encoder.", 1)
+    vgg_match = re.fullmatch(r"_descriptor\.encoder\.vgg\.layers\.(\d+)\.(.+)", key)
+    if vgg_match is not None:
+        layer_index, parameter_name = vgg_match.groups()
+        layer_index = int(layer_index)
+        source_index = 0
+        for stage_index, num_blocks in enumerate((2, 2, 4, 4)):
+            for block_index in range(num_blocks):
+                if layer_index == source_index:
+                    return f"descriptor_network.encoder.layers.{stage_index}.blocks.{block_index}.conv.{parameter_name}"
+                if layer_index == source_index + 1:
+                    return f"descriptor_network.encoder.layers.{stage_index}.blocks.{block_index}.norm.{parameter_name}"
+                source_index += 3
+            source_index += 1  # max-pooling layer has no weights
+        return None
     if key.startswith("_descriptor.decoder."):
         return key.replace("_descriptor.", "descriptor_network.", 1)
     return None
@@ -222,14 +236,20 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
     model = LoMaForKeypointMatching(config)
     converted_state_dict = convert_state_dict(checkpoint, config.num_hidden_layers)
 
+    # The reference LoMa checkpoints use DaD as their keypoint detector, while this integration uses SuperPoint.
+    # Include its public weights in the same saved checkpoint so from_pretrained can load the complete model at once.
+    keypoint_detector = AutoModelForKeypointDetection.from_pretrained(SUPERPOINT_CHECKPOINT)
+    converted_state_dict.update(
+        {f"keypoint_detector.{key}": value for key, value in keypoint_detector.state_dict().items()}
+    )
+
     missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
 
-    # Only keypoint_detector keys are expected to be missing.
-    matcher_prefixes = ("input_projection", "positional_encoder", "layers", "match_assignment")
-    missing_matcher_keys = [key for key in missing_keys if key.startswith(matcher_prefixes)]
-    if missing_matcher_keys or unexpected_keys:
+    required_prefixes = ("keypoint_detector", "input_projection", "positional_encoder", "layers", "match_assignment")
+    missing_required_keys = [key for key in missing_keys if key.startswith(required_prefixes)]
+    if missing_required_keys or unexpected_keys:
         raise ValueError(
-            f"Conversion failed. Missing matcher keys: {missing_matcher_keys}. Unexpected keys: {unexpected_keys}."
+            f"Conversion failed. Missing required keys: {missing_required_keys}. Unexpected keys: {unexpected_keys}."
         )
 
     model.save_pretrained(output_dir)

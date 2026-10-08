@@ -84,37 +84,56 @@ class LoMaConvRefiner(nn.Module):
         return self.out_conv((refined_features + initial_features) / 1.4)
 
 
+class LoMaVgg19Block(nn.Module):
+    """A VGG convolution block with batch normalization and ReLU activation."""
+
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int) -> None:
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size // 2)
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.activation = nn.ReLU(inplace=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        return self.activation(hidden_states)
+
+
+class LoMaVgg19Stage(nn.Module):
+    """A sequence of VGG convolution blocks followed by spatial downsampling."""
+
+    def __init__(self, in_channels: int, out_channels: int, num_blocks: int, kernel_size: int) -> None:
+        super().__init__()
+        blocks = []
+        for _ in range(num_blocks):
+            blocks.append(LoMaVgg19Block(in_channels, out_channels, kernel_size))
+            in_channels = out_channels
+        self.blocks = nn.ModuleList(blocks)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        for block in self.blocks:
+            hidden_states = block(hidden_states)
+        feature_map = hidden_states
+        return self.pool(feature_map), feature_map
+
+
 class LoMaVgg19Encoder(nn.Module):
     """VGG-19 with batch normalization that returns feature maps before each pooling operation."""
 
     def __init__(self, config: LoMaVgg19EncoderConfig) -> None:
         super().__init__()
-        layers = []
         in_channels = config.in_channels
-        for out_channels, num_hidden_layers in zip(config.hidden_sizes, config.num_hidden_layers):
-            for _ in range(num_hidden_layers):
-                layers.extend(
-                    [
-                        nn.Conv2d(
-                            in_channels,
-                            out_channels,
-                            kernel_size=config.conv_kernel_size,
-                            padding=config.conv_kernel_size // 2,
-                        ),
-                        nn.BatchNorm2d(out_channels),
-                        nn.ReLU(inplace=True),
-                    ]
-                )
-                in_channels = out_channels
-            layers.append(nn.MaxPool2d(kernel_size=config.pool_kernel_size, stride=config.pool_stride))
-        self.layers = nn.ModuleList(layers)
+        self.layers = nn.ModuleList()
+        for out_channels, num_blocks in zip(config.hidden_sizes, config.num_hidden_layers):
+            self.layers.append(LoMaVgg19Stage(in_channels, out_channels, num_blocks, config.conv_kernel_size))
+            in_channels = out_channels
 
     def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
         feature_maps = []
         for layer in self.layers:
-            if isinstance(layer, nn.MaxPool2d):
-                feature_maps.append(pixel_values)
-            pixel_values = layer(pixel_values)
+            pixel_values, feature_map = layer(pixel_values)
+            feature_maps.append(feature_map)
         return feature_maps
 
 

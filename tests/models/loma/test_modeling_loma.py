@@ -182,7 +182,7 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         )
         model = LoMaDescriptorNetwork(config)
 
-        self.assertEqual(model.encoder.layers[0].out_channels, 8)
+        self.assertEqual(model.encoder.layers[0].blocks[0].conv.out_channels, 8)
         self.assertEqual(model.decoder.layers["14"].block1.conv.out_channels, 64)
         self.assertEqual(model.decoder.layers["8"].block1.conv.in_channels, 64 + 32)
 
