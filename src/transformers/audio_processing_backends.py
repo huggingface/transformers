@@ -232,7 +232,9 @@ class AudioOps:
         raise NotImplementedError
 
     def masked_fill(self, x, mask, value):
-        """`x` with `value` written where the boolean `mask` (broadcastable) is true."""
+        """`x` with `value` written where the boolean `mask` is true; `mask` must broadcast *to* `x`'s shape (the
+        result has `x`'s shape and dtype). Keeps `x`'s axis order, so a reduction over the result accumulates in
+        that order (MLX: best effort)."""
         raise NotImplementedError
 
     def swapaxes(self, x, axis1, axis2):
@@ -755,9 +757,9 @@ if is_torch_available():
             return padded.reshape(*moved.shape[:-1], padded.shape[-1]).movedim(-1, axis)
 
         def masked_fill(self, x, mask, value):
-            # keep `x`'s strides, as `np.where` does: out-of-place `masked_fill` returns a contiguous copy, and
-            # a reduction over a transposed (strided) batch then accumulates in another order (Parakeet's
-            # per-feature normalization moved by an ulp against legacy)
+            # keep `x`'s axis order (dense strides), as `np.where` does when the mask broadcasts to `x`: out-of-place
+            # `masked_fill` returns a row-major copy, and a reduction over a transposed batch then accumulates in
+            # another order (Parakeet's per-feature normalization moved by an ulp against legacy)
             return x.clone(memory_format=torch.preserve_format).masked_fill_(mask, value)
 
         def swapaxes(self, x, axis1, axis2):

@@ -548,8 +548,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         counts = self.ops.astype(counts, "float64")[:, None, None]
         mean = self.ops.sum(self.ops.masked_fill(features, ~valid, 0.0), 1, keepdims=True) / counts
         centered = self.ops.masked_fill(features - mean, ~valid, 0.0)
-        # `x * x`: bit-identical to the former `** 2` on both libraries
-        variance = self.ops.sum(centered * centered, 1, keepdims=True) / (counts - ddof)
+        variance = self.ops.sum(centered * centered, 1, keepdims=True) / (counts - float(ddof))
         return features, mean, variance
 
     def _standardize_features(self, features, frame_counts, eps):
@@ -559,12 +558,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         counts = self.ops.asarray(np.asarray(frame_counts, dtype=np.int64), like=features)
         valid = (self.ops.arange(features.shape[1], like=features)[None, :] < counts[:, None])[..., None]
-        # integer counts are exact in any float dtype, so the counts' dtype never changes a value
+        # integer counts are exact in float32/float64 (below 2**24 frames)
         counts = self.ops.astype(counts, self.ops.dtype_name(features))[:, None, None]
         masked = self.ops.masked_fill(features, ~valid, 0.0)
         mean = self.ops.sum(masked, 1, keepdims=True) / counts
         centered = self.ops.masked_fill(masked - mean, ~valid, 0.0)
-        variance = self.ops.sum(centered * centered, 1, keepdims=True) / (counts - 1)
+        variance = self.ops.sum(centered * centered, 1, keepdims=True) / (counts - 1.0)
         standardized = (features - mean) / (self.ops.sqrt(variance) + eps)
         return self.ops.masked_fill(standardized, ~valid, 0.0)
 
@@ -1007,7 +1006,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
         """Waveform-level preemphasis `x[n] - p * x[n-1]` (first sample unchanged), zeroing the samples
         past each clip's length in ``audio_ranges``. Used when ``spectrogram_config.preemphasis_mode ==
-        "waveform"`` (ASR models: Parakeet/Cohere/Nemotron)."""
+        "waveform"`` (ASR models: Parakeet/Cohere/Nemotron); assumes right-padded ranges (each starts at 0)."""
         out = self.ops.concat([audio[..., :1], audio[..., 1:] - preemphasis * audio[..., :-1]], -1)
         if audio_ranges is not None:
             lengths = self.ops.asarray(self._lengths_from_ranges(audio_ranges), like=audio)
@@ -1047,8 +1046,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Additive Gaussian dither, applied when the merged ``dither`` is nonzero, drawn from the
         library's global stream (`np.random.seed` / `torch.manual_seed` apply); deterministic models
         override (Cohere-ASR). ``audio_ranges`` is ``None`` on unbatched calls. The noise is drawn in
-        the audio's dtype on every backend (numpy formerly drew float64 noise and cast the scaled sum).
-        """
+        the audio's dtype on every backend."""
         return audio + dither * self.ops.randn(tuple(audio.shape), like=audio)
 
     def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
