@@ -811,6 +811,36 @@ def _get_resolved_checkpoint_files(
     return checkpoint_files, sharded_metadata
 
 
+def get_distributed_checkpoint_dir(
+    pretrained_model_name_or_path: str | os.PathLike | None,
+    subfolder: str,
+    gguf_file: str | None,
+    state_dict: dict | None,
+) -> str | os.PathLike | None:
+    if pretrained_model_name_or_path is None or gguf_file is not None or state_dict is not None:
+        return None
+
+    candidate_dir = os.path.join(pretrained_model_name_or_path, subfolder)
+    if is_sharded_checkpoint(candidate_dir):
+        return candidate_dir
+    return None
+
+
+def _get_resolved_distributed_checkpoint_files(
+    distributed_checkpoint_dir: str | os.PathLike,
+    hf_quantizer: HfQuantizer | None = None,
+) -> list[str]:
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
+    if hf_quantizer is not None:
+        raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
+    return sorted(
+        os.path.join(distributed_checkpoint_dir, name)
+        for name in os.listdir(distributed_checkpoint_dir)
+        if name.endswith(".safetensors")
+    )
+
+
 def _get_dtype(
     dtype: str | torch.dtype | dict | None,
     checkpoint_files: list[str] | None,
@@ -4241,25 +4271,11 @@ class PreTrainedModel(
             )
             use_kernels = True
 
-        # Local checkpoints saved with `save_pretrained(..., distributed_checkpoint=True)` hold rank-local shards
-        # that are loaded with DCP instead of the regular loading path.
-        distributed_checkpoint_dir = None
-        if pretrained_model_name_or_path is not None and gguf_file is None and state_dict is None:
-            candidate_dir = os.path.join(str(pretrained_model_name_or_path), subfolder)
-            if is_sharded_checkpoint(candidate_dir):
-                distributed_checkpoint_dir = candidate_dir
-
+        distributed_checkpoint_dir = get_distributed_checkpoint_dir(
+            pretrained_model_name_or_path, subfolder, gguf_file, state_dict
+        )
         if distributed_checkpoint_dir is not None:
-            if not _check_distributed_checkpointing_available():
-                raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
-            if hf_quantizer is not None:
-                raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
-            # Only used to infer `dtype="auto"` when the config does not define it.
-            checkpoint_files = sorted(
-                os.path.join(distributed_checkpoint_dir, name)
-                for name in os.listdir(distributed_checkpoint_dir)
-                if name.endswith(".safetensors")
-            )
+            checkpoint_files = _get_resolved_distributed_checkpoint_files(distributed_checkpoint_dir, hf_quantizer)
             sharded_metadata = None
         else:
             checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
