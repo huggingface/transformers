@@ -75,7 +75,7 @@ from .configuration_qwen4_exp import Qwen4ExpConfig, Qwen4ExpTextConfig, Qwen4Ex
 
 
 class Qwen4ExpTextRotaryEmbedding(nn.Module):
-    def __init__(self, config: Qwen4ExpTextConfig, device=None):
+    def __init__(self, config: Qwen4ExpTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings

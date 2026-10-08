@@ -22,10 +22,10 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite4_vision_text/granite4_vision_text-3.0-8b-base")
@@ -122,7 +122,21 @@ class Granite4VisionConfig(PreTrainedConfig):
 
     model_type = "granite4_vision"
     attribute_map = {"image_token_id": "image_token_index"}
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite4_vision_text"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
+        "qformer_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="blip_2_qformer",
+            init_kwargs={
+                "num_hidden_layers": 1,
+                "intermediate_size": 3072,
+                "cross_attention_frequency": 1,
+                "max_position_embeddings": 2048,
+                "use_qformer_text_input": False,
+            },
+        ),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -141,46 +155,21 @@ class Granite4VisionConfig(PreTrainedConfig):
     qformer_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         self.image_grid_pinpoints = (
             self.image_grid_pinpoints
             if self.image_grid_pinpoints is not None
             else [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
         )
+        self.qformer_config.hidden_size = self.vision_config.hidden_size
+        self.qformer_config.num_attention_heads = self.vision_config.hidden_size // 64
+        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
 
         if self.deepstack_layer_map is not None:
             self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
 
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "granite4_vision_text")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        if isinstance(self.qformer_config, dict):
-            model_type = self.qformer_config.get("model_type", "blip_2_qformer")
-            self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
-        if self.qformer_config is None:
-            vision_hidden_size = self.vision_config.hidden_size
-            self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
-                num_hidden_layers=1,
-                intermediate_size=3072,
-                cross_attention_frequency=1,
-                max_position_embeddings=2048,
-                use_qformer_text_input=False,
-                hidden_size=vision_hidden_size,
-                num_attention_heads=vision_hidden_size // 64,
-                encoder_hidden_size=vision_hidden_size,
-            )
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Granite4VisionConfig", "Granite4VisionTextConfig"]
