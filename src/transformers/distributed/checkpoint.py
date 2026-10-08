@@ -57,7 +57,10 @@ def _prepare_state_dict_for_dcp(state_dict):
             - Mesh size:    2
             - Rank 0 local: [10, 11, 14, 15]
 
-        The DTensor hooks expose the local storage as a single contiguous region, which would be saved
+        Torch DCP machinery uses DTensor hooks (`__create_write_items__`, `__create_chunk_list__`, and
+        `__get_tensor_shard__`) to save/load a state dict.
+
+        The issue is that they expose the local storage as a single contiguous region, which would be saved
         as a single chunk:
         ```
             __create_write_items__:
