@@ -368,16 +368,54 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
 
 
 class AllReduceParallel(TensorParallelLayer):
-    """All-reduce a module's partial forward output across the TP mesh."""
+    """Sum a module's partial output across the TP mesh, and the partial gradients of its replicated inputs."""
+
+    def should_use_local_tensors(self, module):
+        return True
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+
+        def replicated_input(x):
+            if isinstance(x, DTensor):
+                x = x.to_local()
+            if isinstance(x, torch.Tensor) and x.is_floating_point():
+                x = _AllReduceBackward.apply(x, process_group)
+            return x
+
+        return tuple(replicated_input(x) for x in args), {k: replicated_input(v) for k, v in kwargs.items()}
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
             return None
-        if not isinstance(output, DTensor):
-            output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
-        if output.placements != (Replicate(),):
-            output = output.redistribute(placements=[Replicate()])
-        return output.to_local()
+        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        return _AllReduceForward.apply(output, process_group)
+
+
+class AllReduceInputParallel(TensorParallelLayer):
+    """Reduce a module's partial input before its forward, for a module that a rowwise embedding calls inside its own
+    forward (a norm on the lookup)."""
+
+    def install_forward(self, module, mesh):
+        original_forward = module.forward
+
+        def tp_forward(hidden_states, *args, **kwargs):
+            if not isinstance(hidden_states, DTensor):
+                return original_forward(hidden_states, *args, **kwargs)
+            hidden_states = hidden_states.redistribute(placements=[Replicate()]).to_local()
+            output = original_forward(hidden_states, *args, **kwargs)
+            # the enclosing rowwise style reduces a plain output as a partial sum, so hand it back replicated
+            return DTensor.from_local(output, mesh, [Replicate()], run_check=False)
+
+        module.forward = tp_forward
+        return module
+
+
+class LocalParamsParallel(TensorParallelLayer):
+    """Run a module with sharded parameters but no style of its own (attention `sinks`) on its local shards."""
+
+    def should_use_local_tensors(self, module):
+        return True
 
 
 class MlaKvAProjParallel(TensorParallelLayer):
@@ -947,6 +985,7 @@ class ParallelInterface(GeneralInterface):
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
+            "all_reduce_input": AllReduceInputParallel(),
         }
         if is_torch_distributed_available()
         else {}
@@ -1011,6 +1050,7 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
+        has_sharded_params = False
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
             style_name = _get_parameter_plan(parameter_name=full, plan=tp_plan, is_weight=True)
@@ -1018,6 +1058,7 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
+                has_sharded_params = True
 
         # Install the input/output transforms required by this module's TP style.
         style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)
@@ -1027,6 +1068,8 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+        elif has_sharded_params:
+            LocalParamsParallel().install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model

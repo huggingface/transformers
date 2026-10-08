@@ -77,7 +77,8 @@ class InklingTextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     base_model_tp_plan = {
         "embed_tokens": "embedding_rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "colwise",
+        "embed_tokens.embed_norm": "all_reduce_input",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",

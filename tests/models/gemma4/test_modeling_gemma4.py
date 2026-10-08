@@ -145,6 +145,12 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
+    def _get_tp_config(self, tie_word_embeddings=None):
+        config = super()._get_tp_config(tie_word_embeddings)
+        # the per-layer embeddings index the same padded vocabulary
+        config.vocab_size_per_layer_input = config.vocab_size
+        return config
+
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_equivalence(self):
         pass

@@ -63,6 +63,12 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "olmoe",
     "qwen2_moe",
     "cohere2_moe",
+    "gemma4_text",
+    "granite_swa",
+    "granitemoe_swa",
+    "hy_v4",
+    "inkling_text",
+    "mimo_v2_flash",
 }
 
 

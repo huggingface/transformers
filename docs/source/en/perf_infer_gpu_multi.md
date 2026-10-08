@@ -125,6 +125,7 @@ class ParallelInterface(GeneralInterface):
         "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
         "mla_kv_a_proj": MlaKvAProjParallel(),
         "all_reduce": AllReduceParallel(),
+        "all_reduce_input": AllReduceInputParallel(),
     }
 ```
 
@@ -140,7 +141,8 @@ The table below describes each strategy.
 | `PackedRowwiseParallel` | The row-wise counterpart, for weights packed along the final dim. Replicates 1D parameters. |
 | `SequenceParallel` | Replicates the module's parameters and shards its input on `sequence_dim` (defaults to `1`). Used for norms that operate per-token, such as `LayerNorm` and `RMSNorm`. |
 | `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Needed for norms that sit between a column-wise and a row-wise layer and normalize along a sharded axis, where each rank only sees its own heads. |
-| `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
+| `AllReduceParallel` | All-reduces the partial output of a module that computes on its local shards, and all-reduces the gradients of its replicated inputs. Use it as a sync point for a module whose compute ends in a partial sum. |
+| `AllReduceInputParallel` | All-reduces a module's `Partial()` input before its forward. Use it for a module that a row-wise embedding calls inside its own forward, such as a norm on the embedding output, so the lookup's partial sum is reduced once before the norm. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
@@ -148,6 +150,8 @@ The table below describes each strategy.
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
 | `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
+
+A module whose parameters the plan shards but that has no strategy of its own, such as attention `sinks` sharded along with the heads, runs its forward on its local shards.
 
 ### Packed strategies
 
