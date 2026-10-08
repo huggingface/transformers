@@ -1917,6 +1917,11 @@ class StaticCache(Cache):
         offload_only_non_sliding (`bool`, *optional*, defaults to `True`):
             If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
             usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
+        full_size_sliding_layers (`bool`, *optional*, defaults to `False`):
+            Whether sliding window and chunked attention layers keep `max_cache_len` tokens like full attention layers,
+            instead of only the tokens of their window. The window is then applied by the attention mask only: this uses
+            more memory, but cache updates have no data-dependent control flow. These layers then count as non-sliding,
+            e.g. for `offload_only_non_sliding`.
 
     Example:
 
@@ -1945,9 +1950,17 @@ class StaticCache(Cache):
         max_cache_len: int,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
+        full_size_sliding_layers: bool = False,
         **kwargs,
     ):
         layer_types, per_layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
+        if full_size_sliding_layers:
+            full_layer_types = {
+                "sliding_attention": "full_attention",
+                "chunked_attention": "full_attention",
+                "hybrid_sliding": "hybrid",
+            }
+            layer_types = [full_layer_types.get(layer_type, layer_type) for layer_type in layer_types]
         # Dispatch the layer types
         layers = [
             STATIC_LAYER_TYPE_MAPPING[layer_type](max_cache_len=max_cache_len, **layer_kwargs)

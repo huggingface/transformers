@@ -14,6 +14,7 @@
 
 import copy
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -49,6 +50,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
+        CompileConfig,
         DynamicCache,
         Gemma2Config,
         Gemma4ForCausalLM,
@@ -177,6 +179,19 @@ class CacheTest(unittest.TestCase):
         )
         self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16]))
 
+    def test_generate_static_cache_on_static_shape_backends(self):
+        """On backends that compile static shapes only, `generate` stores the sliding window layers at full size"""
+        model = GenerationMixin()
+        model.config = Gemma2Config(num_hidden_layers=2, sliding_window=4)
+        for device_type, layer_class in [
+            ("cuda", StaticSlidingWindowLayer),
+            ("neuron", StaticLayer),
+            ("tpu", StaticLayer),
+        ]:
+            model.device = SimpleNamespace(type=device_type)
+            cache = model._prepare_static_cache("static", 1, 16, None, {})
+            self.assertIs(type(cache.layers[0]), layer_class)
+
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
         reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
@@ -266,6 +281,36 @@ class CacheTest(unittest.TestCase):
         self.assertFalse(layers[2].is_sliding)
         self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
         self.assertEqual(layers[3].max_cache_len, 48)
+
+    def test_static_cache_with_full_size_sliding_layers(self):
+        """
+        With full size sliding layers, the window is applied by the attention mask only: generation past the window matches a dynamic cache, and decoding compiles one graph with static shapes.
+        """
+        config = Gemma2Config(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            sliding_window=4,
+        )
+        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+        input_ids = torch.randint(1, 99, (1, 6), device=torch_device)
+        generation_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10, "do_sample": False}
+        expected = model.generate(input_ids, **generation_kwargs)
+
+        cache = StaticCache(config=config, max_cache_len=32, full_size_sliding_layers=True)
+        self.assertTrue(all(type(layer) is StaticLayer for layer in cache.layers))
+        compile_config = CompileConfig(dynamic=False)
+        compile_config._compile_all_devices = True
+        torch._dynamo.reset()
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            output = model.generate(
+                input_ids, past_key_values=cache, compile_config=compile_config, **generation_kwargs
+            )
+        self.assertTrue(torch.equal(output, expected))
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
