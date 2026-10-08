@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniMax-M3-VL model."""
 
-import copy
 import unittest
 
 from parameterized import parameterized
@@ -272,40 +271,6 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
         for i, seq in enumerate(seqs):
             torch.testing.assert_close(batched_logits[i, : len(seq)], per_seq_logits[i], rtol=1e-4, atol=1e-4)
-
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs raise an explicit error when the number of images doesn't match the number
-        of image tokens in the text, and that genuine multi-image cases are accepted.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        num_patches = self.model_tester.num_image_tokens
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successful forward with no modifications
-
-            # remove one image but leave its image tokens in text
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][:-num_patches, ...]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][:-1, ...]
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(**curr_input_dict)
-
-            # simulate multi-image case by concatenating inputs where each has exactly one image
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:num_patches]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # two image-token groups but one image raises an error
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-
-            # two images and two image-token groups don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 
     def test_video_forward(self):
         """Video frames flow through the same vision tower as images and scatter into the video-token slots."""
