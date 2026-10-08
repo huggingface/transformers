@@ -110,8 +110,14 @@ class TextToAudioPipeline(Pipeline):
         self.noise_scheduler = noise_scheduler
 
         super().__init__(*args, **kwargs)
-        if self.model.config.model_type == "bark":
-            # Bark passes generation parameters to each of its sub-models, which have their own generation configs
+        # These models pass generation parameters to each of their sub-models, which have their own generation configs:
+        # the pipeline doesn't add any
+        self._passes_generation_params_to_submodels = self.model.config.model_type in (
+            "bark",
+            "seamless_m4t",
+            "seamless_m4t_v2",
+        )
+        if self._passes_generation_params_to_submodels:
             self._generation_defaults = {}
 
         self.vocoder = None
@@ -212,9 +218,8 @@ class TextToAudioPipeline(Pipeline):
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
             # `generate_kwargs` take precedence over `forward_params`. Dict output facilitates postprocessing.
-            forward_params = self._prepare_generate_kwargs(
-                {**forward_params, **generate_kwargs}, return_dict_in_generate=True
-            )
+            overrides = {} if self._passes_generation_params_to_submodels else {"return_dict_in_generate": True}
+            forward_params = self._prepare_generate_kwargs({**forward_params, **generate_kwargs}, **overrides)
 
             if self.model.config.model_type in ["csm"]:
                 # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
@@ -312,6 +317,8 @@ class TextToAudioPipeline(Pipeline):
         if isinstance(audio, dict):
             if "audio" in audio:
                 audio = audio["audio"]
+            elif "waveform" in audio:  # e.g. SeamlessM4T with `return_intermediate_token_ids=True`
+                audio = audio["waveform"]
             else:
                 needs_decoding = True
                 audio = audio["sequences"]
