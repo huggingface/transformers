@@ -28,32 +28,38 @@ Johan Edstedt, Georg Bökman, Jonathan Astermark, Anders Heyden, Viktor Larsson,
 and Fredrik Kahl. It is a local feature matcher that refines local descriptors with alternating self- and
 cross-attention before selecting mutual matches with a dual-softmax score matrix.
 
-This initial integration supports LoMa with the native SuperPoint keypoint detector. The matching transformer uses
-learnable Fourier positional encoding for self-attention and leaves cross-attention position-free, matching the
-reference architecture. The local descriptor network is included as an internal component. The conversion utility maps
-official LoMa matcher weights (B, L, and G) into the SuperPoint-based model. Since the reference checkpoints pair the
-matcher with DaD and DeDoDe, end-to-end numerical parity with the reference pipeline is not expected in this initial
-scope.
+This integration pairs LoMa with the native SuperPoint keypoint detector and LoMa's local descriptor network. The
+matching transformer uses learnable Fourier positional encoding for self-attention and leaves cross-attention
+position-free, matching the reference architecture. The published LoMa-B checkpoint is available as
+[`Falcon7211/loma-b`](https://huggingface.co/Falcon7211/loma-b). The reference repository uses DaD and DeDoDe, so
+end-to-end keypoint and descriptor outputs differ from those original frontends.
 
 The original code is available in the [LoMa repository](https://github.com/davnords/LoMa).
 
 ## Usage examples
 
 ```python
+import requests
 import torch
+from PIL import Image
 
-from transformers import AutoImageProcessor, LoMaConfig, LoMaForKeypointMatching
+from transformers import AutoImageProcessor, AutoModelForKeypointMatching
 
-config = LoMaConfig()
-model = LoMaForKeypointMatching(config).eval()
-image_processor = AutoImageProcessor.from_config(config)
+checkpoint = "Falcon7211/loma-b"
+image_processor = AutoImageProcessor.from_pretrained(checkpoint)
+model = AutoModelForKeypointMatching.from_pretrained(checkpoint, dtype="auto", device_map="auto").eval()
 
-# `images` is a pair of images, or a batch of image pairs.
-inputs = image_processor(images=images, return_tensors="pt")
-with torch.no_grad():
+url_0 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+url_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in (url_0, url_1)]
+
+inputs = image_processor(images=images, return_tensors="pt").to(model.device)
+with torch.inference_mode():
     outputs = model(**inputs)
 
-# `outputs.matches` contains the mutually matched keypoint indices and -1 for unmatched points.
+image_sizes = [[(image.height, image.width) for image in images]]
+matches = image_processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
+print(matches[0])
 ```
 
 ## LoMaConfig
