@@ -15,8 +15,9 @@ import warnings
 from unittest.mock import patch
 
 import torch
-from torch.distributed._functional_collectives import AsyncCollectiveTensor
+import torch.distributed as dist
 
+from tests.test_tensor_parallel_mixin import _init_distributed
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
@@ -29,6 +30,13 @@ from transformers.distributed.tensor_parallel import (
     RowwiseParallel,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+
+
+def _dispatch_hands_the_experts_the_received_rows(rank):
+    hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]])
+    tokens, *_ = EpDispatchExpertsParallel()._dispatch_tokens(hidden_states, top_k_index, 2, dist.group.WORLD, 2)
+    assert type(tokens) is torch.Tensor, type(tokens)
 
 
 @is_tensor_parallel_test
@@ -169,17 +177,6 @@ class TestTensorParallelProperties(TestCasePlus):
 
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
-    def test_dispatch_hands_the_experts_the_received_rows(self):
-        """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
-        it, which a kernel launched straight from Python never does: the experts get the received rows."""
-        hidden_states, top_k_index = torch.randn(4, 8), torch.tensor([[0, 1], [1, 0], [0, 1], [1, 0]])
-        with (
-            patch.object(tensor_parallel, "all_to_all_single", lambda tokens, *args: AsyncCollectiveTensor(tokens)),
-            patch.object(torch.distributed, "all_to_all_single", lambda out, inp, group=None: out.copy_(inp)),
-        ):
-            tokens, *_ = EpDispatchExpertsParallel()._dispatch_tokens(hidden_states, top_k_index, 2, None, 1)
-        self.assertIs(type(tokens), torch.Tensor)
-
     class MockDeviceMesh:
         def __init__(self, world_size, rank):
             self.world_size = world_size
@@ -378,3 +375,8 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+    def test_dispatch_hands_the_experts_the_received_rows(self):
+        """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
+        it, which a kernel launched straight from Python never does: the experts get the received rows."""
+        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_the_experts_the_received_rows)()
