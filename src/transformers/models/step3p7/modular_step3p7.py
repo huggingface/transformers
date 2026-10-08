@@ -19,14 +19,15 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
@@ -39,13 +40,13 @@ from ...utils import (
     no_inherit_decorator,
     torch_int,
 )
-from ...utils.generic import maybe_autocast
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
-from ..gemma3.modeling_gemma3 import Gemma3TextModel
-from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
+from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_overlay
+from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
     LagunaAttention,
     LagunaDecoderLayer,
@@ -61,6 +62,10 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLVisionAttention,
     MiniMaxM3VLVisionMLP,
 )
+
+# Unused here, but load-bearing: `Step3p7VisionAttention` inherits `MiniMaxM3VLVisionAttention`, so
+# without this import the converter would pull MiniMax's 3-axis `apply_rotary_pos_emb_vision` into the
+# generated file. This tower is 2-D (t=1, spatial_merge_size=1), so it needs Qwen2-VL's 2-axis one.
 from ..qwen2_vl.modeling_qwen2_vl import apply_rotary_pos_emb_vision  # noqa: F401
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
@@ -87,6 +92,7 @@ __all__ = [
 class Step3p7VisionConfig(SiglipVisionConfig):
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     # SiGLIP field overrides
     hidden_size: int = 1536
@@ -99,7 +105,6 @@ class Step3p7VisionConfig(SiglipVisionConfig):
     # New fields
     mlp_ratio: float = 8960 / 1536
     layer_scale_init_value: float = 0.1
-    # RoPE config (compatible with Gemma4VisionRotaryEmbedding)
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
 
@@ -182,7 +187,6 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     index_block_size = AttributeError()
     index_topk_blocks = AttributeError()
     index_local_blocks = AttributeError()
-    output_router_logits = AttributeError()
     routed_scaling_factor = AttributeError()
     router_aux_loss_coef = AttributeError()
     router_jitter_noise = AttributeError()
@@ -314,7 +318,10 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 @strict
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
-    sub_configs = {"vision_config": Step3p7VisionConfig, "text_config": Step3p7TextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Step3p7VisionConfig),
+        "text_config": SubConfigSpec(config_class=Step3p7TextConfig),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -322,18 +329,11 @@ class Step3p7Config(PreTrainedConfig):
     image_token_id: int = 151679
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = Step3p7VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Step3p7VisionConfig(
-                **{k: v for k, v in self.vision_config.items() if k != "model_type"}
-            )
-
-        if self.text_config is None:
-            self.text_config = Step3p7TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Step3p7TextConfig(**{k: v for k, v in self.text_config.items() if k != "model_type"})
-
+        # Force default model-type - hub has a remote-code format config
+        if isinstance(self.vision_config, dict):
+            self.vision_config.pop("model_type", None)
+        if isinstance(self.text_config, dict):
+            self.text_config.pop("model_type", None)
         super().__post_init__(**kwargs)
 
 
@@ -584,16 +584,13 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 #  Vision encoder
 
 
-class Step3p7VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (position_ids[..., None].float() * self.inv_freq.to(x.device)).flatten(-2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
-        sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
-        return cos, sin
+class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_hw = freq.flatten(1)
+        return torch.cat((freq_hw, freq_hw), dim=-1)
 
 
 class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
@@ -673,6 +670,7 @@ class Step3p7VisionEmbeddings(SiglipVisionEmbeddings):
         return patch_pos_embed
 
 
+@auto_docstring
 class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
@@ -689,9 +687,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Step3p7VisionEmbeddings):
-            module.register_buffer(
-                "position_ids", torch.arange(module.num_positions).expand((1, -1)), persistent=False
-            )
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, Step3p7VisionEncoderLayer):
             nn.init.constant_(module.lambda_1, module.config.layer_scale_init_value)
             nn.init.constant_(module.lambda_2, module.config.layer_scale_init_value)
@@ -718,6 +714,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
 
 
+@auto_docstring
 class Step3p7VisionModel(Step3p7PreTrainedModel):
     """Vision encoder: patch embeddings → 2-D RoPE transformer layers → conv downsampler.
 
@@ -756,7 +753,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         # temporal/merge dims: t=1, spatial_merge_size=1) broadcasts across the whole batch, since
         # every image in `pixel_values` shares the same (grid_h, grid_w).
         grid_thw = torch.tensor([[1, grid_h, grid_w]], device=hidden_state.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1).unsqueeze(0)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
         position_embeddings = self.rotary_emb(hidden_state, position_ids)
         for layer in self.layers:
             hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
@@ -779,10 +776,12 @@ class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
 
 
 class Step3p7MLP(DeepseekV4MLP):
-    def __init__(self, config, intermediate_size=None, swiglu_limit=None):
+    def __init__(self, config, layer_idx, is_shared_expert=False):
         super().__init__(config)
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        self.intermediate_size = config.share_expert_dim if is_shared_expert else config.intermediate_size
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps layers 43-44 (bound 16) via `swiglu_limits_shared`;
+        # a `0.0` entry or no list at all means "no clamp", hence the `or float("inf")`.
+        self.limit = (config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0) or float("inf")
 
     def forward(self, x):
         gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
@@ -813,13 +812,12 @@ class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
 class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps the routed experts on layers 43-44 (bound 7) via
+        # `swiglu_limits`; a `0.0` entry or no list at all means "no clamp".
         swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
-        self.shared_experts = Step3p7MLP(
-            config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
-        )
+        self.shared_experts = Step3p7MLP(config, layer_idx, is_shared_expert=True)
         self.routed_scaling_factor = config.moe_router_scaling_factor
 
 
@@ -886,12 +884,10 @@ class Step3p7DecoderLayer(LagunaDecoderLayer):
         self.self_attn.config = config
         self.attention_type = config.layer_types[layer_idx]
 
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
-        self.mlp = (
-            Step3p7SparseMoeBlock(config, layer_idx)
-            if config.mlp_layer_types[layer_idx] == "sparse"
-            else Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
-        )
+        # CODEPATH: on stepfun-ai/Step-3.7-Flash `moe_layers_enum` marks layers 3-44 `"sparse"` and 0-2
+        # `"dense"`; a config without it is all-sparse and never builds the dense branch.
+        mlp_class = Step3p7SparseMoeBlock if config.mlp_layer_types[layer_idx] == "sparse" else Step3p7MLP
+        self.mlp = mlp_class(config, layer_idx)
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -902,6 +898,7 @@ class Step3p7TextModel(Gemma3TextModel):
     _can_record_outputs = {
         "hidden_states": Step3p7DecoderLayer,
         "attentions": Step3p7Attention,
+        "router_logits": OutputRecorder(Step3p7TopKRouter, index=0),
     }
 
     def __init__(self, config: Step3p7TextConfig):
@@ -910,6 +907,9 @@ class Step3p7TextModel(Gemma3TextModel):
         self.layers = nn.ModuleList([Step3p7DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Step3p7RotaryEmbedding(config=config)
+        # CODEPATH: stepfun-ai/Step-3.7-Flash sets `num_nextn_predict_layers=3`, so its weights carry
+        # three trailing MTP layers that this branch filters out of the plain (non-MTP) load. A
+        # checkpoint without MTP layers leaves the field at 0 and skips it.
         if config.num_nextn_predict_layers:
             # Checkpoints append `num_nextn_predict_layers` MTP layers; ignore them as unexpected keys
             # on regular load. Matches loosely on `layers.<N>.` (not anchored to this model's module
@@ -918,6 +918,78 @@ class Step3p7TextModel(Gemma3TextModel):
             patterns = {rf"(^|\.)layers\.{i}\." for i in mtp_layers}
             self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or []) | patterns
         self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            sliding_mask_kwargs = mask_kwargs.copy()
+
+            if self.config.use_bidirectional_attention:
+                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
+                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
+
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
+            }
+
+        # embed positions
+        hidden_states = inputs_embeds
+        position_embeddings = {}
+        for layer_type in set(self.config.layer_types):
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 class Step3p7Model(DeepseekOcr2Model):
@@ -980,6 +1052,7 @@ class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     config: Step3p7Config
 
 
+@auto_docstring
 class Step3p7Processor(ProcessorMixin):
     """Processor for Step-3.7-Flash.
 

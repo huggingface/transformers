@@ -14,12 +14,20 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+import warnings
+from datetime import timedelta
+from typing import TYPE_CHECKING, TypeGuard
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
+    from torch.distributed.device_mesh import DeviceMesh
+    from torch.distributed.tensor import DTensor
+
     from .configuration_utils import DistributedConfig
 
 
@@ -33,7 +41,7 @@ def _is_torch_distributed_initialized() -> bool:
     return torch.distributed.is_initialized()
 
 
-def is_dtensor(obj) -> bool:
+def is_dtensor(obj: object) -> TypeGuard[DTensor]:
     if not is_torch_distributed_available():
         return False
     from torch.distributed.tensor import DTensor
@@ -57,6 +65,24 @@ def is_local_dist_rank_0() -> bool:
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
 
+DISTRIBUTED_BACKEND_MAP = {
+    "cuda": "nccl",
+    "cpu": "gloo",
+    "xpu": "xccl",
+    "hpu": "hccl",
+    "neuron": "neuron",
+    "tpu": "tpu_dist",
+}
+
+
+def get_distributed_backend(device_type: str) -> str | None:
+    """Return the `torch.distributed` backend for `device_type`, or `None` if it has no dedicated one."""
+    dist_backend = DISTRIBUTED_BACKEND_MAP.get(device_type)
+    if dist_backend is None:
+        raise ValueError(f"No distributed backend found for device type '{device_type}'")
+    return dist_backend
+
+
 def _ensure_torch_distributed(device_type: str | None = None):
     """Initialize torch.distributed if not already initialized.
 
@@ -65,20 +91,17 @@ def _ensure_torch_distributed(device_type: str | None = None):
     if not torch.distributed.is_initialized():
         if device_type is None:
             device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
         try:
             rank = int(os.environ["RANK"])
             local_rank = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            backend_map = {
-                "cuda": "nccl",
-                "cpu": "gloo",
-                "xpu": "xccl",
-                "hpu": "hccl",
-                "neuron": "neuron",
-                "tpu": "tpu_dist",
-            }
-            backend = backend_map.get(device_type)
+            backend = get_distributed_backend(device_type)
 
             # Bind the accelerator before init so the process group is created with a
             # device_id, otherwise collectives like barrier() warn (and may spin up an
@@ -88,7 +111,12 @@ def _ensure_torch_distributed(device_type: str | None = None):
                 getattr(torch, device_type).set_device(local_rank)
                 device_id = torch.device(device_type, local_rank)
             torch.distributed.init_process_group(
-                backend=backend, rank=rank, world_size=world_size, device_id=device_id
+                backend=backend,
+                rank=rank,
+                world_size=world_size,
+                device_id=device_id,
+                # Sharded loading takes tens of minutes with high rank skew; the default 10-minute watchdog is too short
+                timeout=timedelta(hours=2),
             )
         except Exception as e:
             raise OSError(
@@ -113,7 +141,110 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
+class TransformersDeviceMesh:
+    """
+    Holds the device meshes used by a model.
+
+    dense layers and experts are sharded differently, so they need different views of the same ranks.
+
+        dense  : (pp, fsdp, tp)     attention, dense MLPs, embeddings, lm_heads
+        expert : (pp, efsdp, ep)    experts
+
+    Both views cover the same world, so pp * fsdp * tp == pp * efsdp * ep.
+    efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
+    efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
+    There is no etp (expert tensor parallel) axis: with EP on, experts are never tensor-sharded. (for now)
+    For experts, EP plays the role TP plays for dense layers (weights stay sharded during compute),
+    and efsdp plays the role of fsdp (weights all-gathered before compute).
+
+    If one were ever added, the relationship would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
+    (efsdp = fsdp * tp / (ep * etp))
+
+    When ep_size == tp_size, efsdp == fsdp (given the relationship efsdp = fsdp * tp / ep), thus same axis, same size and same groups of ranks.
+    In that case experts could reuse the dense mesh's fsdp axis.
+    When ep_size != tp_size, efsdp != fsdp, so we can't reuse the same mesh as they don't have the same groups of ranks
+    This explains why experts need their own efsdp axis.
+
+    Regarding ep value, one can decide to default the value to node width (8 on most machines) so that all-to-all never leaves the node.
+    That has several implications on efsdp value given your setup:
+    - On a single node, ep == fsdp * tp thus efsdp = 1, the axis does nothing.
+    - On several nodes, we still keep ep at node width, since all-to-all across nodes is expensive.
+    However, each node then holds a full copy of the expert group and efsdp is the number of copies, which is where FSDP happens for the experts
+    i.e: 2 nodes x 8 GPUs -> efsdp = 16 / 8 = 2, one EP group per node, two copies, sharded over efsdp.
+    """
+
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+        self._dense_mesh = dense_mesh
+        self._expert_mesh = expert_mesh
+
+    def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
+        """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
+        dims = (dims,) if isinstance(dims, str) else dims
+        mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
+        return mesh[dims]
+
+
+# Retained for the legacy transformers.integrations.tensor_parallel API.
+def initialize_tensor_parallelism(
+    tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
+):
+    r"""
+    Sets up the device mesh and initialized the backend for tensor parallelism.
+    This function is called when the model is loaded and the TP plan is set to 'auto'.
+    """
+    warnings.warn(
+        "`initialize_tensor_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
+    if tp_size is not None and tp_plan is None:
+        raise ValueError("tp_plan has to be set when tp_size is passed.")
+    if tp_plan is not None and device_map is not None:
+        raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
+    if device_mesh is None:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
+
+        # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+        device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
+        current_device = getattr(torch, device_type)
+
+        if device_type != "cpu":
+            current_device.set_device(int(os.environ["LOCAL_RANK"]))
+            index = current_device.current_device()
+            tp_device = torch.device(device_type, index)
+            device_map = tp_device
+        else:
+            tp_device = torch.device(device_type)
+            device_map = device_type or {}
+
+        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+    else:
+        if device_mesh.ndim > 1:
+            if "tp" not in device_mesh.mesh_dim_names:
+                raise ValueError(
+                    "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
+                    "Please provide a valid `device_mesh`."
+                )
+            device_mesh = device_mesh["tp"]
+        device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+
+    return device_map, device_mesh
+
+
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    warnings.warn(
+        "`initialize_fully_sharded_data_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
     # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
     if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
@@ -142,6 +273,46 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         mesh._flatten("_".join(names))
 
     return device_map, mesh
+
+
+def initialize_distributed_mesh(
+    distributed_config: DistributedConfig,
+) -> tuple[torch.device | None, TransformersDeviceMesh | None]:
+    """Create a device mesh containing every configured parallel dimension."""
+    mesh_shape = (distributed_config.pp_size, distributed_config.fsdp_size, distributed_config.tp_size)
+    if mesh_shape == (1, 1, 1):
+        return None, None
+
+    device_type = torch._C._get_accelerator().type
+    if distributed_config.tp_size > 1 and device_type == "mps":
+        raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
+
+    _ensure_torch_distributed(device_type)
+    world_size = torch.distributed.get_world_size()
+    expected_world_size = distributed_config.pp_size * distributed_config.fsdp_size * distributed_config.tp_size
+    if expected_world_size != world_size:
+        raise RuntimeError(
+            f"The parallel mesh requires {expected_world_size} processes, but world_size is {world_size}."
+        )
+
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
+
+    dense_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        mesh_shape,
+        mesh_dim_names=("pp", "fsdp", "tp"),
+    )
+    expert_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        (distributed_config.pp_size, distributed_config.efsdp_size, distributed_config.ep_size),
+        mesh_dim_names=("pp", "efsdp", "ep"),
+    )
+    return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:

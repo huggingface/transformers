@@ -67,10 +67,6 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
     - get_special_tokens_mask
     - save_vocabulary
 
-## SplinterTokenizerFast
-
-[[autodoc]] SplinterTokenizerFast
-
 ## SplinterModel
 
 [[autodoc]] SplinterModel

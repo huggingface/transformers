@@ -24,7 +24,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -35,10 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import (
-    maybe_autocast,
-    merge_with_config_defaults,
-)
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
@@ -60,7 +57,7 @@ from ..gemma2.modeling_gemma2 import (
     apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm, Gemma4VisionRotaryEmbedding
+from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
 from ..kimi_k25.modeling_kimi_k25 import (
@@ -72,6 +69,7 @@ from ..kimi_k25.modeling_kimi_k25 import (
 )
 from ..llama.modeling_llama import eager_attention_forward
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -424,9 +422,10 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
+        fps = fps if fps is not None else self.fps
+        num_frames = num_frames if num_frames is not None else self.num_frames
         if metadata.fps is None:
             logger.warning_once(
                 "The `fps` of the input video could not be inferred. Defaulting to `fps=24`. "
@@ -445,7 +444,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         self,
         videos: list[torch.Tensor],
         do_resize: bool,
-        do_convert_rgb: bool,
         resample: PILImageResampling | tvF.InterpolationMode | int | None,
         do_rescale: bool,
         rescale_factor: float,
@@ -464,8 +462,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     stacked_videos,
@@ -530,6 +526,15 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     """
 
     model_type = "muse_glimmer_vision"
+    base_model_tp_plan = {
+        "patch_embedder.patch_embedding": "colwise_gather_output",
+        "layers.*.attn.q_proj": "colwise",
+        "layers.*.attn.k_proj": "colwise",
+        "layers.*.attn.v_proj": "colwise",
+        "layers.*.attn.proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
+    }
 
     hidden_size: int = 1536
     num_hidden_layers: int = 50
@@ -576,6 +581,7 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
 
     model_type = "muse_glimmer_text"
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -657,7 +663,15 @@ class MuseGlimmerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "muse_glimmer"
-    sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
+        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+    }
+    base_model_tp_plan = {
+        "vision_adapter.fc1": "colwise",
+        "vision_adapter.fc2": "rowwise",
+        "vision_projection": "colwise_gather_output",
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -666,21 +680,6 @@ class MuseGlimmerConfig(PreTrainedConfig):
     out_hidden_size: int = 6144
     projector_hidden_size: int = 4096
     projector_hidden_act: str = "gelu"
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = MuseGlimmerTextConfig()
-            logger.info("text_config is None, using default MuseGlimmerTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = MuseGlimmerTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = MuseGlimmerVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MuseGlimmerVisionConfig()
-            logger.info("vision_config is None, using default MuseGlimmerVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 class MuseGlimmerRMSNorm(Gemma4RMSNorm):
@@ -775,6 +774,9 @@ class MuseGlimmerPreTrainedModel(Gemma2PreTrainedModel):
         raise NotImplementedError("No need to inherit, we can use the base one")
 
 
+# Not a pass-through wrapper: this *is* the embedding (nn.Embedding subclass) and forward does the
+# lookup via super().forward() before the norm, so there is no inner module to hoist out.
+# trf-ignore: TRF026
 class MuseGlimmerTextNormedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
@@ -928,22 +930,19 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         return embeddings
 
 
-class MuseGlimmerVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
+class MuseGlimmerVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def forward(self, x, position_ids):
-        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in MuseGlimmer
-        inv_freq = self.inv_freq.to(device=x.device, dtype=torch.float32)
-        w_ids = position_ids[:, 0].float()  # position_ids: (seq, 2), unbatched
-        h_ids = position_ids[:, 1].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freq_w = w_ids[:, None] * inv_freq[None, :]
-            freq_h = h_ids[:, None] * inv_freq[None, :]
-            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
-            cos = freq.cos() * self.attention_scaling
-            sin = freq.sin() * self.attention_scaling
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def get_vision_pixel_shuffle_index(
@@ -971,6 +970,7 @@ def get_vision_pixel_shuffle_index(
     return torch.cat(indices, dim=0)
 
 
+@auto_docstring
 class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
     config: MuseGlimmerVisionConfig
     main_input_name = "pixel_values"
@@ -999,17 +999,22 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         factor = self.merge_size
         dim = hidden_states.shape[-1]
         shuffle_index = get_vision_pixel_shuffle_index(grid_thw, factor, kwargs=kwargs)
-        hidden_states = hidden_states[shuffle_index]
+        hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -1088,6 +1093,8 @@ class MuseGlimmerModel(Kimi_K25Model):
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1102,6 +1109,7 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         outputs = self.model(
@@ -1115,6 +1123,7 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

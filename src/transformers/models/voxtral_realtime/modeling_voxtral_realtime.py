@@ -39,8 +39,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_voxtral_realtime import (
     VoxtralRealtimeConfig,
@@ -151,8 +150,7 @@ class VoxtralRealtimeCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 
 class VoxtralRealtimeRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: VoxtralRealtimeConfig, device=None):
+    def __init__(self, config: VoxtralRealtimeConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -163,16 +161,13 @@ class VoxtralRealtimeRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: VoxtralRealtimeConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: VoxtralRealtimeConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -188,23 +183,15 @@ class VoxtralRealtimeRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -930,6 +917,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
 
         return audio_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1123,7 +1111,18 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         encoder_inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ):
+        input_features = kwargs.get("input_features")
+        input_features_generator = kwargs.get("input_features_generator")
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        # In streaming mode, `input_features` is a generator yielding audio chunks one at a time.
+        # The base prepare_inputs_for_generation drops multimodal inputs outside the prefill step,
+        # but VoxtralRealtime needs each new chunk for its streaming encoder, so restore it here.
+        if (
+            input_features_generator is not None
+            and input_features is not None
+            and "input_features" not in model_inputs
+        ):
+            model_inputs["input_features"] = input_features
 
         if encoder_inputs_embeds is not None:
             past_key_values = model_inputs.get("past_key_values")
@@ -1204,15 +1203,13 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
 
         # NOTE: we use the encoder prefix here this is not a classical encoder-decoder model - no cross-attention
         # the model is better seen as a VLM/ AudioLM, so with an encoder that can take psat_key_values for it's forward pass
-        if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in ("static", "offloaded_static"):
-                model_kwargs["encoder_past_key_values"] = self._get_encoder_cache(
-                    cache_implementation=generation_config.cache_implementation,
-                    batch_size=batch_size,
-                    max_cache_len=self.config.audio_config.sliding_window,
-                )
-            else:
-                raise ValueError(f"{generation_config.cache_implementation} is not supported for VoxtralRealtime")
+        # Only static caches need pre-allocation here: dynamic ones are lazily initialized by the encoder itself.
+        if generation_config.cache_implementation in ("static", "offloaded_static"):
+            model_kwargs["encoder_past_key_values"] = self._get_encoder_cache(
+                cache_implementation=generation_config.cache_implementation,
+                batch_size=batch_size,
+                max_cache_len=self.config.audio_config.sliding_window,
+            )
 
     def _get_encoder_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int) -> Cache:
         offload_cache = "offloaded" in cache_implementation

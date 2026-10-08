@@ -429,10 +429,6 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip(reason="ModernVBERT model parallelism causes error: self.dtype is broken.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="Vision head's probe has no gradient.")
     def test_training_gradient_checkpointing(self):
         pass

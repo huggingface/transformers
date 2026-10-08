@@ -27,7 +27,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
-    require_torch_gpu,
 )
 
 
@@ -148,6 +147,13 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(
+        "TimmWrapper sets _supports_sdpa=True (timm uses F.scaled_dot_product_attention internally) but does not "
+        "support flash-only dispatch via sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False)."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
@@ -364,10 +370,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
         pass
-
-    @require_torch_gpu  # pe-video contains triton code which cannot run on CPU, so we only test on GPU
-    def test_all_tensors_are_parameter_or_buffer(self):
-        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch

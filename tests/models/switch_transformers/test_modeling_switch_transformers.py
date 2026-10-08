@@ -605,6 +605,35 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
+    def test_router_losses_are_computed_from_router_logits(self):
+        # Regression test for #48293: the router used to return its max routing probability in place of the raw
+        # logits, and `_unpack_router_logits` silently collected nothing from the recorded router outputs.
+        config, input_ids, decoder_input_ids, _, _, lm_labels = self.model_tester.prepare_config_and_inputs()
+        config.encoder_sparse_step = 2
+        config.decoder_sparse_step = 2
+        model = SwitchTransformersForConditionalGeneration(config=config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs = model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                labels=lm_labels,
+                output_router_logits=True,
+            )
+
+        for layer_router_logits in outputs.encoder_router_logits:
+            self.assertEqual(layer_router_logits.shape, (*input_ids.shape, config.num_experts))
+        for layer_router_logits in outputs.decoder_router_logits:
+            self.assertEqual(layer_router_logits.shape, (*decoder_input_ids.shape, config.num_experts))
+        for value in (
+            outputs.loss,
+            outputs.encoder_z_loss,
+            outputs.decoder_z_loss,
+            outputs.encoder_aux_loss,
+            outputs.decoder_aux_loss,
+        ):
+            self.assertTrue(torch.isfinite(value).all())
+
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -909,8 +938,9 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         router_z_loss = router_z_loss_func(router_logits)
         auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
 
-        self.assertAlmostEqual(router_z_loss.item(), 0.25389, places=5)
-        self.assertAlmostEqual(auxiliary_loss.item(), 1.000, places=5)
+        # Expected values computed with the pre-#40132 (v4.57) implementation, which matched the original router
+        self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
+        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
         #
         # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
@@ -929,6 +959,35 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         expert_index = expert_index * expert_capacity_mask
 
         assert torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity
+
+    def test_token_dropping_above_capacity(self):
+        r"""
+        This test checks that tokens routed to an expert beyond its capacity are dropped from the dispatch mask, i.e.
+        that the cumulative token count is accumulated along the sequence dimension (regression test for #48293).
+        """
+        torch.manual_seed(0)
+        model = SwitchTransformersTop1Router(self.config)
+        hidden_states = torch.rand((2, 10, self.config.hidden_size))
+
+        expert_index, _, _ = model(hidden_states)
+
+        tokens_kept_per_expert = expert_index.sum(dim=-2)
+        self.assertTrue((tokens_kept_per_expert <= self.config.expert_capacity).all())
+
+    def test_router_logits_are_raw_logits(self):
+        r"""
+        This test checks that the router returns the raw logits of its classifier and not the routing probabilities,
+        since the router z-loss is computed from the logits (regression test for #48293).
+        """
+        torch.manual_seed(0)
+        model = SwitchTransformersTop1Router(self.config)
+        hidden_states = torch.rand((2, 6, self.config.hidden_size))
+
+        _, router_probs, router_logits = model(hidden_states)
+
+        self.assertEqual(router_logits.shape, (2, 6, self.config.num_experts))
+        expected_probs = torch.softmax(router_logits, dim=-1).max(dim=-1, keepdim=True).values
+        torch.testing.assert_close(router_probs, expected_probs.to(router_probs.dtype))
 
 
 @slow

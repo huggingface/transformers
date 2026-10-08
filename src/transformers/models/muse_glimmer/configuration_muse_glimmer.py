@@ -19,12 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B")
@@ -42,6 +39,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     """
 
     model_type = "muse_glimmer_vision"
+    default_rope_type = "axial"
 
     patch_size: int = 14
     pos_emb_height: int = 32
@@ -52,10 +50,19 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     hidden_size: int = 1536
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
-    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
-    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
+    rope_parameters: dict | None = None
+    base_model_tp_plan = {
+        "patch_embedder.patch_embedding": "colwise_gather_output",
+        "layers.*.attn.q_proj": "colwise",
+        "layers.*.attn.k_proj": "colwise",
+        "layers.*.attn.v_proj": "colwise",
+        "layers.*.attn.proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
+    }
     patch_temporal: int = 2
     merge_size: int = 2
+    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
@@ -91,6 +98,7 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
     model_type = "muse_glimmer_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -187,7 +195,15 @@ class MuseGlimmerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "muse_glimmer"
-    sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
+        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+    }
+    base_model_tp_plan = {
+        "vision_adapter.fc1": "colwise",
+        "vision_adapter.fc2": "rowwise",
+        "vision_projection": "colwise_gather_output",
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -196,21 +212,6 @@ class MuseGlimmerConfig(PreTrainedConfig):
     out_hidden_size: int = 6144
     projector_hidden_size: int = 4096
     projector_hidden_act: str = "gelu"
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = MuseGlimmerTextConfig()
-            logger.info("text_config is None, using default MuseGlimmerTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = MuseGlimmerTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = MuseGlimmerVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MuseGlimmerVisionConfig()
-            logger.info("vision_config is None, using default MuseGlimmerVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["MuseGlimmerTextConfig", "MuseGlimmerVisionConfig", "MuseGlimmerConfig"]

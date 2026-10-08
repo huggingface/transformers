@@ -37,14 +37,13 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_axk2 import AXK2Config
 
 
@@ -91,9 +90,9 @@ class AXK2GatedRMSNorm(nn.Module):
     return y * sigmoid(gate_mlp(y))
     """
 
-    def __init__(self, config: AXK2Config, eps: float):
+    def __init__(self, config: AXK2Config):
         super().__init__()
-        self.norm = AXK2RMSNorm(config.hidden_size, eps=eps)
+        self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -102,8 +101,7 @@ class AXK2GatedRMSNorm(nn.Module):
 
 
 class AXK2RotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: AXK2Config, device=None):
+    def __init__(self, config: AXK2Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -114,14 +112,13 @@ class AXK2RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: AXK2Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: AXK2Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -137,23 +134,15 @@ class AXK2RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -228,8 +217,8 @@ class AXK2Indexer(nn.Module):
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -279,12 +268,10 @@ class AXK2Indexer(nn.Module):
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
         else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
+            index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
@@ -362,7 +349,7 @@ class AXK2Experts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -588,7 +575,7 @@ class AXK2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -616,22 +603,21 @@ class AXK2Attention(nn.Module):
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
+        # Cache read / write is performed while latent KV is still compressed
+        if past_key_values is not None:
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        # Sparse-attention models cache the expanded K/V, not the compressed latents
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
-            indexer_mask,
-            position_ids,
+            attention_mask[:, 0, :, :],
+            position_ids,  # Kept for BC
             past_key_values=past_key_values,
         )
 
@@ -642,11 +628,11 @@ class AXK2Attention(nn.Module):
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
             )
-            if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask & ~index_mask
+            else:
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 
@@ -678,13 +664,10 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = AXK2Attention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = AXK2MoE(config)
-        else:
-            self.mlp = AXK2MLP(config)
-        self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+        self.mlp = AXK2MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK2MLP(config)
+        self.input_layernorm = AXK2GatedRMSNorm(config)
         self.post_attention_layernorm = (
-            AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+            AXK2GatedRMSNorm(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         )
@@ -737,6 +720,7 @@ class AXK2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AXK2DecoderLayer,
         "attentions": AXK2Attention,
+        "router_logits": OutputRecorder(AXK2TopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
@@ -759,7 +743,6 @@ class AXK2Model(AXK2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [AXK2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -783,7 +766,7 @@ class AXK2Model(AXK2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -806,8 +789,9 @@ class AXK2Model(AXK2PreTrainedModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
+                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
-            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -815,7 +799,7 @@ class AXK2Model(AXK2PreTrainedModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -824,7 +808,7 @@ class AXK2Model(AXK2PreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -859,7 +843,7 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -877,7 +861,7 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -896,12 +880,13 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

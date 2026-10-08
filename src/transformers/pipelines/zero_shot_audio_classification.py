@@ -14,8 +14,8 @@
 from collections import UserDict
 from typing import Any
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from ..utils import (
     add_end_docstrings,

@@ -22,9 +22,9 @@ from tqdm.auto import tqdm
 from .integrations import (
     GGUF_CONFIG_DEFAULTS_MAPPING,
     GGUF_CONFIG_MAPPING,
-    GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
 )
+from .integrations.gguf import GGUF_TOKENIZER_MAPPING
 from .utils import is_torch_available
 from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger

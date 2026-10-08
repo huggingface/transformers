@@ -957,7 +957,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

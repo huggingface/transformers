@@ -11,6 +11,12 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was published in HF papers on 2023-12-08 and contributed to Hugging Face Transformers on 2023-11-30.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # SeamlessM4T-v2
 
 
@@ -18,7 +24,7 @@ specific language governing permissions and limitations under the License.
 
 The SeamlessM4T-v2 model was proposed in [Seamless: Multilingual Expressive and Streaming Speech Translation](https://huggingface.co/papers/2312.05187) by the Seamless Communication team from Meta AI.
 
-SeamlessM4T-v2 is a collection of models designed to provide high quality translation, allowing people from different linguistic communities to communicate effortlessly through speech and text. It is an improvement on the [previous version](https://huggingface.co/docs/transformers/main/model_doc/seamless_m4t). For more details on the differences between v1 and v2, refer to section [Difference with SeamlessM4T-v1](#difference-with-seamlessm4t-v1).
+SeamlessM4T-v2 is a collection of models designed to provide high quality translation, allowing people from different linguistic communities to communicate effortlessly through speech and text. It is an improvement on the [previous version](./seamless_m4t). For more details on the differences between v1 and v2, refer to section [Difference with SeamlessM4T-v1](#difference-with-seamlessm4t-v1).
 
 SeamlessM4T-v2 enables multiple tasks without relying on separate models:
 

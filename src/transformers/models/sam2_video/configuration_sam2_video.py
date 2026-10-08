@@ -19,9 +19,12 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring, logging
+from ..auto import AutoConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
@@ -37,6 +40,7 @@ class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "prompt_encoder_config"
+    model_type = "sam2_video_prompt_encoder"
 
     hidden_size: int = 256
     image_size: int | list[int] | tuple[int, int] = 1024
@@ -71,6 +75,7 @@ class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "mask_decoder_config"
+    model_type = "sam2_video_mask_decoder"
 
     hidden_size: int = 256
     hidden_act: str = "gelu"
@@ -132,8 +137,6 @@ class Sam2VideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
@@ -199,10 +202,11 @@ class Sam2VideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam2_video"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "prompt_encoder_config": Sam2VideoPromptEncoderConfig,
-        "mask_decoder_config": Sam2VideoMaskDecoderConfig,
+    default_rope_type = "axial"
+    sub_configs_defaults = {
+        "prompt_encoder_config": SubConfigSpec(config_class=Sam2VideoPromptEncoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=Sam2VideoMaskDecoderConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_vision_model"),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -228,11 +232,12 @@ class Sam2VideoConfig(PreTrainedConfig):
     memory_attention_feed_forward_hidden_size: int = 2048
     memory_attention_feed_forward_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: int = 10000
     memory_attention_rope_feat_sizes: list[int] | None = None
     memory_attention_rope_dropout: float | int = 0.1
     memory_encoder_hidden_size: int = 256
     memory_encoder_output_channels: int = 64
+    rope_parameters: dict | None = None
+
     mask_downsampler_embed_dim: int = 256
     mask_downsampler_kernel_size: int = 3
     mask_downsampler_stride: int = 2
@@ -251,24 +256,23 @@ class Sam2VideoConfig(PreTrainedConfig):
         self.memory_attention_rope_feat_sizes = (
             [64, 64] if self.memory_attention_rope_feat_sizes is None else self.memory_attention_rope_feat_sizes
         )
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam2_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam2_vision_model"]()
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = Sam2VideoPromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = Sam2VideoPromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = Sam2VideoPromptEncoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
-
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 __all__ = ["Sam2VideoMaskDecoderConfig", "Sam2VideoPromptEncoderConfig", "Sam2VideoConfig"]

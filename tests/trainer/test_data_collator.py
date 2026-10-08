@@ -526,6 +526,20 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
         self.assertEqual(batch["input_ids"].shape, (2, 6))
         self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2, -100, -100, -100])
 
+    def test_numpy_output_with_singular_label_key(self):
+        """Test with NumPy output when feature key is 'label' rather than 'labels'."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        collator = DataCollatorForTokenClassification(tokenizer, return_tensors="np")
+        features = [
+            {"input_ids": [0, 1, 2], "label": [0, 1, 2]},
+            {"input_ids": [0, 1, 2, 3, 4, 5], "label": [0, 1, 2, 3, 4, 5]},
+        ]
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 6))
+        self.assertIn("label", batch)
+        self.assertEqual(batch["label"][0].tolist(), [0, 1, 2, -100, -100, -100])
+
     def test_immutability(self):
         """Test that collation does not mutate input data."""
         tokenizer = BertTokenizer(self.vocab_file)
@@ -776,6 +790,17 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
         collator3 = DataCollatorForLanguageModeling(tokenizer, seed=43)
         batch3 = collator3(features)
         self.assertFalse(torch.all(batch1["input_ids"] == batch3["input_ids"]))
+
+    def test_mlm_seed_zero_reproducibility(self):
+        """Test that `seed=0` is not treated as "no seed"."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        for return_tensors in ("pt", "np"):
+            batch1 = DataCollatorForLanguageModeling(tokenizer, seed=0, return_tensors=return_tensors)(features)
+            batch2 = DataCollatorForLanguageModeling(tokenizer, seed=0, return_tensors=return_tensors)(features)
+            self.assertTrue((batch1["input_ids"] == batch2["input_ids"]).all())
+            self.assertTrue((batch1["labels"] == batch2["labels"]).all())
 
     def test_mlm_multiworker_dataloader(self):
         """Test seed works with multi-worker DataLoader."""

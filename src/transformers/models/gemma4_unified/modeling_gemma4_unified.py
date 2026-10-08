@@ -40,7 +40,7 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -50,8 +50,7 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4_unified import (
@@ -74,17 +73,6 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
 
     pooler_output: torch.FloatTensor | None = None
     attention_mask: torch.BoolTensor | None = None
-
-
-@auto_docstring
-@dataclass
-class Gemma4UnifiedVisionModelOutput(ModelOutput):
-    r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, ..., hidden_size)`):
-        Last hidden state that went through the vision specific multimodal projectors.
-    """
-
-    pooler_output: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -194,14 +182,13 @@ class Gemma4UnifiedRMSNorm(nn.Module):
 
 
 class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma4UnifiedTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.layer_types = set(config.layer_types)
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
         self.rope_type: dict[str, str] = {}
 
@@ -227,7 +214,6 @@ class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Gemma4UnifiedTextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -259,18 +245,10 @@ class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = (
-            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -770,6 +748,8 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         )
 
 
+# Actually it should be a VisionModel(PreTrainedModel) and a separate proj module
+# Can't change it due to BC
 class Gemma4UnifiedVisionEmbedder(nn.Module):
     """Encoder-free vision embedder: projects raw merged pixel patches into LM space.
 
@@ -799,18 +779,17 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
         # Final multimodal projection (same as for audio): RMSNorm → Linear
         self.multimodal_embedder = Gemma4UnifiedMultimodalEmbedder(vision_config, text_config)
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        Args:
-            pixel_values: (batch, num_patches, model_patch_size²*3) — raw merged pixel patches.
-            image_position_ids: (batch, num_patches, 2) — integer XY positions (-1 for padding).
-
-        Returns:
-            (batch, num_patches, mm_embed_dim) — embedded features (including padding positions).
+        return_dict: bool = False,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
         # Step 1: Patch embedding (LN → Dense → LN)
         if (target_dtype := self.patch_dense.weight.dtype).is_floating_point:
@@ -828,9 +807,12 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
         hidden_states = self.pos_norm(hidden_states)
 
         # Step 3: Base multimodal embedder (RMSNorm → Dense)
-        hidden_states = self.multimodal_embedder(hidden_states)
+        pooled_states = self.multimodal_embedder(hidden_states)
 
-        return hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled_states,
+        )
 
 
 class Gemma4UnifiedMultimodalEmbedder(nn.Module):
@@ -899,9 +881,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     def __init__(self, config: Gemma4UnifiedConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.language_model = AutoModel.from_config(config.text_config)
 
         self.embed_vision = (
             Gemma4UnifiedVisionEmbedder(config.vision_config, config.text_config)
@@ -923,25 +903,24 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Gemma4UnifiedVisionModelOutput:
+    ) -> BaseModelOutputWithPooling:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
-        vision_outputs = self.embed_vision(pixel_values, image_position_ids)
+        vision_outputs = self.embed_vision(pixel_values, image_position_ids, **kwargs)
 
         # Strip padding patches before scattering into text sequence.
         # Padding patches have position_ids == -1 on both axes.
         # We only scatter non-padding patches into the placeholder token positions.
-        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.device)  # (batch, num_patches)
+        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across the batch
-        vision_outputs = vision_outputs[non_pad_mask]  # (total_valid_patches, text_hidden_size)
-
+        # The final output shape is (total_valid_patches, text_hidden_size)
+        pooler_output = vision_outputs.pooler_output[non_pad_mask]
         split_sizes = non_pad_mask.sum(dim=-1).tolist()
-        return Gemma4UnifiedVisionModelOutput(
-            pooler_output=torch.split(vision_outputs, split_sizes),
-        )
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -1006,6 +985,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
         r"""
@@ -1014,12 +994,17 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
@@ -1032,9 +1017,14 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1045,13 +1035,19 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
                 f" {image_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
+            )
 
-        if pixel_values_videos is not None:
-            video_features = self.get_video_features(
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
-            ).pooler_output
-            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("video") is not None:
+            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1062,7 +1058,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
                 f" {video_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_features)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                video_mask.to(inputs_embeds.device), video_features.to(inputs_embeds.device)
+            )
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
@@ -1170,24 +1168,40 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Gemma4UnifiedVisionModelOutput:
+    ) -> BaseModelOutputWithPooling:
         r"""
-        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+        pixel_values_videos (`torch.FloatTensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+            The frames of every video in the batch, concatenated along the frame axis rather than stacked
+            on a separate video axis, so that videos of different lengths can be batched together.
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
+            Number of frames belonging to each video, used to split the flat frame sequence back per video.
         """
-        vision_outputs = self.embed_vision(pixel_values_videos.flatten(0, 1), video_position_ids.flatten(0, 1))
+        if num_frames_per_video is None:
+            raise ValueError(
+                "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "
+                "videos are concatenated along a single axis, so the per-video frame counts are the only "
+                "way to split the result back per video. The video processor returns them."
+            )
+
+        vision_outputs = self.embed_vision(pixel_values_videos, video_position_ids)
 
         # Strip padding patches before scattering into text sequence.
-        non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.device)
+        non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across all frames
-        vision_outputs = vision_outputs[non_pad_mask.flatten(0, 1)]  # (total_valid_patches, text_hidden_size)
+        pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
 
-        split_sizes = non_pad_mask.sum(dim=(-2, -1)).tolist()
-        return Gemma4UnifiedVisionModelOutput(
-            pooler_output=torch.split(vision_outputs, split_sizes),
-        )
+        num_tokens_per_frame = non_pad_mask.sum(dim=-1)
+        split_sizes = [
+            int(video_frames.sum())
+            for video_frames in torch.split(num_tokens_per_frame, num_frames_per_video.tolist())
+        ]
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        return vision_outputs
 
 
 def create_masks_for_vision_model(
@@ -1217,11 +1231,18 @@ def create_masks_for_vision_model(
     # Full attention: causal only — no bidirectional blockwise overlay.
     full_mask = create_causal_mask(**mask_kwargs)
 
+    # The sliding mask must be sized against a `sliding_attention` layer, but layer 0 may not be one
+    # and `create_causal_mask` defaults to the first `full_attention` layer, which has a different kv_length.
+    if getattr(past_key_values, "is_sliding", None) and True in past_key_values.is_sliding:
+        sliding_layer_idx = past_key_values.is_sliding.index(True)
+    else:
+        sliding_layer_idx = 0
+
     # We need to manually pad the sequence IDs for the sliding mask
     # as it's passed as an `or_mask_function` which bypasses internal padding.
     early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
         **mask_kwargs,
-        layer_idx=0,
+        layer_idx=sliding_layer_idx,
     )
     if early_exit:
         padded_block_sequence_ids = block_sequence_ids
@@ -1237,6 +1258,7 @@ def create_masks_for_vision_model(
         **mask_kwargs,
         or_mask_function=blockwise_overlay(padded_block_sequence_ids),
         and_mask_function=sliding_window_overlay(config.sliding_window),
+        layer_idx=sliding_layer_idx,
     )
 
     return {
@@ -1289,12 +1311,14 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         position_ids: torch.LongTensor | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
@@ -1303,9 +1327,12 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
+            Number of frames belonging to each video. Required whenever `pixel_values_videos` is passed,
+            since the frames of all videos are concatenated along a single axis.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1322,6 +1349,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             use_cache=use_cache,
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )

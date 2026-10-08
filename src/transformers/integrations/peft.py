@@ -17,20 +17,20 @@ import os
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from safetensors import safe_open
+from transformers.utils.import_utils import is_peft_greater_or_equal
 
 from .._typing import PeftConfigLike
 from ..conversion_mapping import get_model_conversion_mapping
+from ..core_model_loading import WeightRenaming
 from ..utils import (
     CONFIG_NAME,
-    cached_file,
     check_peft_version,
-    extract_commit_hash,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
     is_torch_available,
     logging,
+    resolve_revision,
 )
 from ..utils.hub import DownloadKwargs
 from ..utils.loading_report import log_state_dict_report
@@ -44,7 +44,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.19.1"
+MIN_PEFT_VERSION = "0.20.0"
 
 
 logger = logging.get_logger(__name__)
@@ -64,7 +64,7 @@ class PeftAdapterMixin:
     prompt tuning, prompt learning are out of scope as these adapters are not "injectable" into a torch module. For
     using these methods, please refer to the usage guide of PEFT library.
 
-    With this mixin, if the correct PEFT version is installed (>= 0.19.1), it is possible to:
+    With this mixin, if the correct PEFT version is installed (>= 0.20.0), it is possible to:
 
     - Load an adapter stored on a local path or in a remote Hub repository, and inject it in the model
     - Attach new adapters in the model and train them with Trainer or by your own.
@@ -155,9 +155,8 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
-        from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
 
-        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files, load_state_dict
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
         if local_files_only:
             kwargs["local_files_only"] = True
@@ -200,6 +199,18 @@ class PeftAdapterMixin:
 
         if peft_config is None:
             load_config.download_kwargs.update(**adapter_kwargs)
+
+        if peft_model_id is not None:
+            # Resolve the revision once, so the adapter config and its weights come from the same repository state.
+            load_config.download_kwargs["revision"] = resolve_revision(
+                peft_model_id,
+                load_config.download_kwargs.get("revision"),
+                token=load_config.download_kwargs.get("token"),
+                local_files_only=bool(load_config.download_kwargs.get("local_files_only", False)),
+                cache_dir=load_config.download_kwargs.get("cache_dir"),
+            )
+
+        if peft_config is None:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 **load_config.download_kwargs,
@@ -231,6 +242,16 @@ class PeftAdapterMixin:
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
             inject_adapter_in_model(peft_config, self, adapter_name)
+
+        from peft.utils.other import AuxiliaryTrainingWrapper
+
+        for module_name, module in self.named_modules():
+            if not isinstance(module, AuxiliaryTrainingWrapper):
+                continue
+            for source_key, target_key in module.adapter_state_dict_load_map(adapter_name).items():
+                peft_weight_conversions.append(
+                    WeightRenaming(f"{module_name}.{source_key}", f"{module_name}.{target_key}")
+                )
 
         adapter_key_markers = {adapter_name}
         if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
@@ -274,44 +295,23 @@ class PeftAdapterMixin:
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
 
-        # If the model is tensor parallel, we handle the sharding of the state dict here since the logic in `self._load_pretrained_model`
-        # is not compatible with the way PEFT adapter should be sharded.
         has_tp_adapters = False
         for module in self.modules():
+            # Legacy, pre-DTensor TP integration: PEFT stamps a `_tp_info` marker on each TP-sharded LoRA module.
             tp_info = getattr(module, "_tp_info", None)
             if tp_info is not None:
                 has_tp_adapters = True
                 break
+        # DTensor TP integration: `_tp_size > 1` records that TP was actually applied to the model, so any adapter
+        # injected into it will be TP-sharded too; no per-module PEFT marker is needed to detect this.
+        tp_size = getattr(self, "_tp_size", 1)
+        has_tp_adapters = has_tp_adapters or (tp_size is not None and tp_size > 1)
 
-        if has_tp_adapters:
-            all_pointer = set()
-            if adapter_state_dict is not None:
-                merged_state_dict = adapter_state_dict
-            elif (
-                checkpoint_files is not None
-                and checkpoint_files[0].endswith(".safetensors")
-                and adapter_state_dict is None
-            ):
-                merged_state_dict = {}
-                for file in checkpoint_files:
-                    file_pointer = safe_open(file, framework="pt", device="cpu")
-                    all_pointer.add(file_pointer)
-                    for k in file_pointer.keys():
-                        merged_state_dict[k] = file_pointer.get_tensor(k)
-            # Checkpoints are .bin
-            elif checkpoint_files is not None:
-                merged_state_dict = {}
-                for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(load_state_dict(ckpt_file))
-            else:
-                raise ValueError("Neither a state dict nor checkpoint files were found.")
-
-            adapter_state_dict = merged_state_dict
-
-            if any(not isinstance(v, torch.Tensor) for v in adapter_state_dict.values()):
-                raise ValueError("Expected all values in the adapter state dict to be tensors.")
-
-            _maybe_shard_state_dict_for_tp(self, adapter_state_dict, adapter_name)
+        if has_tp_adapters and not is_peft_greater_or_equal("0.21.0"):
+            raise ValueError(
+                "Loading a tensor-parallel PEFT adapter requires peft >= 0.21.0, please upgrade your peft "
+                "installation."
+            )
 
         load_config = replace(
             load_config,
@@ -669,34 +669,15 @@ def maybe_load_adapters(
 
     token = download_kwargs.get("token")
 
-    if download_kwargs.get("commit_hash") is None:
-        resolved_config_file = cached_file(
-            pretrained_model_name_or_path,
-            CONFIG_NAME,
-            cache_dir=download_kwargs.get("cache_dir"),
-            force_download=bool(download_kwargs.get("force_download", False)),
-            proxies=download_kwargs.get("proxies"),
-            local_files_only=bool(download_kwargs.get("local_files_only", False)),
-            token=token,
-            revision=download_kwargs.get("revision"),
-            subfolder=download_kwargs.get("subfolder"),
-            _raise_exceptions_for_gated_repo=False,
-            _raise_exceptions_for_missing_entries=False,
-            _raise_exceptions_for_connection_errors=False,
-        )
-        download_kwargs["commit_hash"] = extract_commit_hash(resolved_config_file, None)
-
     _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
     token_from_adapter_kwargs = adapter_kwargs.pop("token", None)
 
     if _adapter_model_path is None:
         peft_kwargs = adapter_kwargs.copy()
-        for arg_name in ("cache_dir", "proxies", "subfolder"):  # don't override revision
+        for arg_name in ("cache_dir", "proxies", "subfolder", "revision"):  # never override the user's own value
             if (arg_name not in peft_kwargs) and (arg_name in download_kwargs):
                 peft_kwargs[arg_name] = download_kwargs[arg_name]
-        if "commit_hash" in download_kwargs:
-            peft_kwargs["_commit_hash"] = download_kwargs["commit_hash"]
         peft_kwargs["force_download"] = bool(download_kwargs.get("force_download", False))
         peft_kwargs["local_files_only"] = bool(download_kwargs.get("local_files_only", False))
         peft_kwargs["token"] = token or token_from_adapter_kwargs

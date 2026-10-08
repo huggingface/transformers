@@ -77,10 +77,9 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {
@@ -97,6 +96,7 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     num_key_value_heads: int = 20
     n_shared_experts: int = 1
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     routed_scaling_factor: float = 1.8
     kv_lora_rank: int = 512
     q_lora_rank: int | None = 768
@@ -165,10 +165,7 @@ class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = Glm4MoeLiteMoE(config)
-        else:
-            self.mlp = Glm4MoeLiteMLP(config)
+        self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
 
         self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)

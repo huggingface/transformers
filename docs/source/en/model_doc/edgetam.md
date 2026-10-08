@@ -168,7 +168,7 @@ processor = Sam2Processor.from_pretrained("yonigozlan/edgetam-1")
 # Load multiple images
 image_urls = [
     "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg",
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png"
 ]
 raw_images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in image_urls]
 

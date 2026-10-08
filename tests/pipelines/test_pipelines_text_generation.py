@@ -17,6 +17,9 @@ from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
     TextGenerationPipeline,
     logging,
     pipeline,
@@ -629,3 +632,38 @@ class TextGenerationPipelineTests(unittest.TestCase):
             kw_call_args = mock.call_args[1]
             self.assertIn("enable_thinking", kw_call_args)
             self.assertEqual(kw_call_args["enable_thinking"], True)
+
+    @require_torch
+    def test_pipeline_respects_model_generation_config(self):
+        """Test for #47752: Verify priority order: kwargs > user_generation_config > model.generation_config > pipeline_default."""
+        model_id = "hf-internal-testing/tiny-random-gpt2"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # 1. Modify model.generation_config directly (model_config > pipeline_default)
+        model.generation_config.max_new_tokens = 500
+        model.generation_config.temperature = 0.7
+
+        # Instantiate pipeline without extra generation kwargs
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        # Assert user settings on model.generation_config were respected over pipeline defaults
+        self.assertEqual(pipe.generation_config.max_new_tokens, 500)
+        self.assertEqual(pipe.generation_config.temperature, 0.7)
+
+        # 2. Explicit generation_config object overrides model_config and pipeline_default
+        custom_gc = GenerationConfig(max_new_tokens=250, temperature=0.9)
+        pipe_gc = pipeline("text-generation", model=model, tokenizer=tokenizer, generation_config=custom_gc)
+        self.assertEqual(pipe_gc.generation_config.max_new_tokens, 250)
+        self.assertEqual(pipe_gc.generation_config.temperature, 0.9)
+
+        # 3. Explicit kwargs override user_generation_config, model_config, and pipeline_default
+        pipe_kwargs = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            generation_config=custom_gc,
+            max_new_tokens=100,
+        )
+        self.assertEqual(pipe_kwargs.generation_config.max_new_tokens, 100)
+        self.assertEqual(pipe_kwargs.generation_config.temperature, 0.9)

@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 # MiniMax
 
-> [MiniMax-M2](https://huggingface.co/docs/transformers/en/model_doc/minimax_m2) was released on 2025‑10‑27. We recommend using MiniMax‑M2 for most use cases due to better overall performance.
+> [MiniMax-M2](./minimax_m2) was released on 2025‑10‑27. We recommend using MiniMax‑M2 for most use cases due to better overall performance.
 
 ## Overview
 
@@ -81,7 +81,7 @@ As can be seen, the instruction-tuned model requires a [chat template](../chat_t
 
 ## Speeding up MiniMax by using Flash Attention
 
-The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
+The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../kernel_doc/loading_kernels#attention-kernels), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 
@@ -163,6 +163,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - The [Alignment Handbook](https://github.com/huggingface/alignment-handbook) by Hugging Face includes scripts and recipes to perform supervised fine-tuning (SFT) and direct preference optimization with Mistral-7B. This includes scripts for full fine-tuning, QLoRa on a single GPU as well as multi-GPU fine-tuning.
 - [Causal language modeling task guide](../tasks/language_modeling)
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## MiniMaxConfig
 

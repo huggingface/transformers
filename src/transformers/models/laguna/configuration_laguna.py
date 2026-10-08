@@ -84,10 +84,9 @@ class LagunaConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 100352
@@ -146,7 +145,6 @@ class LagunaConfig(PreTrainedConfig):
         super().__post_init__(**kwargs, ignore_keys_at_rope_validation={"sliding_attention", "full_attention"})
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
     def validate_architecture(self):

@@ -17,8 +17,8 @@ import os
 import re
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (

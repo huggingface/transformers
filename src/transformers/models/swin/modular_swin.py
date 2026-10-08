@@ -895,7 +895,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SwinForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -992,12 +992,6 @@ class SwinForImageClassification(SwinPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SwinImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.swin(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1059,7 +1053,7 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

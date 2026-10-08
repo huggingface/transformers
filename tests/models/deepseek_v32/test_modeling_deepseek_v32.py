@@ -121,6 +121,7 @@ class DeepseekV32ModelTester(CausalLMModelTester):
         first_k_dense_replace=1,
         n_group=1,
         topk_group=1,
+        index_topk=8,
     ):
         super().__init__(parent=parent)
         self.n_routed_experts = n_routed_experts
@@ -131,6 +132,7 @@ class DeepseekV32ModelTester(CausalLMModelTester):
         self.first_k_dense_replace = first_k_dense_replace
         self.n_group = n_group
         self.topk_group = topk_group
+        self.index_topk = index_topk
 
 
 @require_torch
@@ -143,8 +145,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV32ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
@@ -203,10 +203,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
     def test_eager_matches_batched_and_grouped_inference(self, *args, **kwargs):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to padding shifts (selection can flip).")
-    def test_left_padding_compatibility(self):
         pass
 
     @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")

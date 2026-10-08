@@ -17,11 +17,13 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...integrations import use_kernel_forward_from_hub
+from ...cache_utils import Cache
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, no_inherit_decorator
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -31,6 +33,10 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionModel,
     Qwen3_5VisionRotaryEmbedding,
+    causal_conv1d_fn,
+    causal_conv1d_update,
+    torch_chunk_gated_delta_rule,
+    torch_recurrent_gated_delta_rule,
 )
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
@@ -161,8 +167,10 @@ class Qwen3_5MoeTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
-# Same GDN core as the dense variant, so it reuses the dense Hub kernel name.
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
+@use_kernelized_func(
+    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+)
 class Qwen3_5MoeGatedDeltaNet(Qwen3_5GatedDeltaNet):
     pass
 
@@ -180,6 +188,7 @@ class Qwen3_5MoeExperts(Qwen3NextExperts):
     pass
 
 
+@use_kernel_forward_from_hub("SoftmaxTopKRouter")
 class Qwen3_5MoeTopKRouter(Qwen3VLMoeTextTopKRouter):
     pass
 
@@ -188,6 +197,7 @@ class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
     pass
 
 
+@use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5MoeRMSNorm(Qwen3NextRMSNorm):
     pass
 
@@ -226,9 +236,6 @@ class Qwen3_5MoePreTrainedModel(Qwen3NextPreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Qwen3_5MoeSparseMoeBlock):
             init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Qwen3_5MoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen3_5MoeVisionModel(Qwen3_5VisionModel):
@@ -248,7 +255,88 @@ class Qwen3_5MoeTextModel(Qwen3_5TextModel):
 
 
 class Qwen3_5MoeModel(Qwen3_5Model):
-    pass
+    # Model needs to return `outputs.router_logits`
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen3_5MoeModelOutputWithPast:
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        return Qwen3_5MoeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas,
+            router_logits=outputs.router_logits,
+        )
 
 
 class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
@@ -280,7 +368,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
                     },
                     {"type": "text", "text": "Describe this image in short."},
                 ],

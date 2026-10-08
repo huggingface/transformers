@@ -1,7 +1,6 @@
 from typing import ClassVar
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration

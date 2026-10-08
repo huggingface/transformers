@@ -21,14 +21,58 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
 
 
-# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
-# InklingTextConfig.__init__'s signature, but not documented):
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingTextConfig(PreTrainedConfig):
+    r"""
+    unpadded_vocab_size (`int`, *optional*, defaults to `None`):
+        Number of rows the checkpoint's unembedding matrix actually holds when the head is not padded to
+        `vocab_size`. Logits beyond it are dropped. If `None`, the head is not padded.
+    swa_num_attention_heads (`int`, *optional*, defaults to 64):
+        Number of attention heads in the sliding-window layers.
+    swa_num_key_value_heads (`int`, *optional*, defaults to 16):
+        Number of key/value heads in the sliding-window layers.
+    swa_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of query and key heads in the sliding-window layers.
+    sliding_window_size (`int`, *optional*, defaults to 512):
+        Size of the sliding attention window used by layers whose `layer_types` entry is `"hybrid_sliding"`.
+    d_rel (`int`, *optional*, defaults to 16):
+        Per-head dimension of the relative states that are mixed into the relative position bias.
+    rel_extent (`int`, *optional*, defaults to 1024):
+        Backward distance, in tokens, over which the relative position bias is applied. The bias is zero beyond it.
+    log_scaling_n_floor (`int`, *optional*, defaults to `None`):
+        Position from which logits start being scaled up logarithmically in the full-attention layers. If `None`,
+        the scaling is disabled.
+    log_scaling_alpha (`float`, *optional*, defaults to 0.1):
+        Strength of the logarithmic logit scaling controlled by `log_scaling_n_floor`.
+    local_layer_ids (`list[int]`, *optional*, defaults to `None`):
+        Indices of the layers using sliding window attention. Used to derive `layer_types` when it is not provided.
+        If `None`, every layer whose index is not a multiple of 6 uses sliding window attention.
+    mlp_layer_types (`list[str]`, *optional*, defaults to `None`):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). If `None`, every layer is sparse.
+    shared_expert_sink (`bool`, *optional*, defaults to `True`):
+        Whether the router scores the shared experts alongside the routed ones, so that they act as a sink in the
+        softmax over expert weights.
+    logits_mup_width_multiplier (`float`, *optional*, defaults to 24.0):
+        muP width multiplier the final hidden states are divided by before the language modeling head.
+    rms_norm_eps_moe_gate (`float`, *optional*, defaults to 1e-6):
+        Epsilon of the RMS normalization applied inside the mixture-of-experts router.
+    num_mtp_layers (`int`, *optional*, defaults to `None`):
+        Number of multi-token-prediction layers. If `None`, multi-token prediction is disabled.
+    chain_hidden_post_norm (`bool`, *optional*, defaults to `False`):
+        Whether the hidden states chained between multi-token-prediction layers are normalized after each layer.
+    mtp_hidden_states_first (`bool`, *optional*, defaults to `True`):
+        Whether the hidden states come before the token embeddings when the two are concatenated as the input of a
+        multi-token-prediction layer.
+    mtp_local_layer_ids (`list[int]`, *optional*, defaults to `None`):
+        Indices of the multi-token-prediction layers using sliding window attention. If `None`, every
+        multi-token-prediction layer uses full attention.
+    """
+
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
@@ -126,6 +170,10 @@ class InklingTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["dense" if i < dense_mlp_idx else "sparse" for i in range(self.num_hidden_layers)]
 
         if kwargs.get("dense_intermediate_size") is not None:
+            # In checkpoints with `dense_intermediate_size`, `intermediate_size` is the routed experts' width and
+            # `dense_intermediate_size` is the dense MLP's width. Keep the experts' width before it is
+            # overwritten below (see #49416).
+            self.moe_intermediate_size = self.intermediate_size
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
@@ -152,11 +200,18 @@ class InklingTextConfig(PreTrainedConfig):
         return None
 
 
-# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
-# InklingAudioConfig.__init__'s signature, but not documented):
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingAudioConfig(PreTrainedConfig):
+    r"""
+    n_mel_bins (`int`, *optional*, defaults to 80):
+        Number of mel-frequency bins per audio frame.
+    mel_vocab_size (`int`, *optional*, defaults to 256):
+        Number of discrete bins each mel value is quantized into before being embedded.
+    text_hidden_size (`int`, *optional*, defaults to 6144):
+        Dimensionality the audio embeddings are projected to, matching the text backbone.
+    """
+
     model_type = "inkling_audio"
     base_config_key = "audio_config"
     attribute_map = {
@@ -172,11 +227,14 @@ class InklingAudioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
-# InklingVisionConfig.__init__'s signature, but not documented):
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingVisionConfig(PreTrainedConfig):
+    r"""
+    text_hidden_size (`int`, *optional*, defaults to 6144):
+        Dimensionality the vision features are projected to by the last encoder layer, matching the text backbone.
+    """
+
     model_type = "inkling_vision"
     base_config_key = "vision_config"
     attribute_map = {"num_hidden_layers": "n_layers"}
@@ -192,18 +250,24 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
-# InklingConfig.__init__'s signature, but not documented):
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
+@auto_docstring(
+    checkpoint="thinkingmachines/Inkling",
+    custom_intro="Top-level multimodal config (`InklingMMConfig` in the SGLang source).",
+)
 @strict
 class InklingConfig(PreTrainedConfig):
-    """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
+    r"""
+    image_bos_token_id (`int`, *optional*, defaults to 200005):
+        The beginning-of-image token index used to mark the start of image spans.
+    audio_bos_token_id (`int`, *optional*, defaults to 200020):
+        The beginning-of-audio token index used to mark the start of audio spans.
+    """
 
     model_type = "inkling_mm_model"
-    sub_configs = {
-        "text_config": InklingTextConfig,
-        "audio_config": InklingAudioConfig,
-        "vision_config": InklingVisionConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=InklingTextConfig),
+        "vision_config": SubConfigSpec(config_class=InklingVisionConfig),
+        "audio_config": SubConfigSpec(config_class=InklingAudioConfig),
     }
 
     text_config: InklingTextConfig | dict | None = None
@@ -222,24 +286,9 @@ class InklingConfig(PreTrainedConfig):
             self.text_config.setdefault("chain_hidden_post_norm", mtp_config.get("chain_hidden_post_norm", False))
             self.text_config.setdefault("mtp_local_layer_ids", mtp_config.get("local_layer_ids"))
 
-        if isinstance(self.audio_config, dict):
-            self.audio_config = self.sub_configs["audio_config"](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = self.sub_configs["audio_config"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+        super().__post_init__(**kwargs)
         self.vision_config.text_hidden_size = self.text_config.hidden_size
         self.audio_config.text_hidden_size = self.text_config.hidden_size
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["InklingConfig", "InklingTextConfig", "InklingAudioConfig", "InklingVisionConfig"]

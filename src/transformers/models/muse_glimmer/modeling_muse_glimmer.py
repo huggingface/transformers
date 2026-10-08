@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -41,7 +40,6 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -158,8 +156,7 @@ class MuseGlimmerTextMLP(nn.Module):
 
 
 class MuseGlimmerTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MuseGlimmerConfig, device=None):
+    def __init__(self, config: MuseGlimmerConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -170,16 +167,13 @@ class MuseGlimmerTextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: MuseGlimmerConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: MuseGlimmerConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -195,20 +189,15 @@ class MuseGlimmerTextRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -391,7 +380,7 @@ class MuseGlimmerTextDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -433,6 +422,9 @@ class MuseGlimmerPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
 
+# Not a pass-through wrapper: this *is* the embedding (nn.Embedding subclass) and forward does the
+# lookup via super().forward() before the norm, so there is no inner module to hoist out.
+# trf-ignore: TRF026
 class MuseGlimmerTextNormedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
@@ -685,31 +677,6 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
         self.interpolation_align_corners = False
         self.interpolation_padding = "zeros"
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and no class embeddings.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-        warnings.warn(
-            f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
-            "Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-        )
-        return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
-
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -743,26 +710,27 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
 
 
 class MuseGlimmerVisionRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MuseGlimmerVisionConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
+    def __init__(self, config: MuseGlimmerVisionConfig):
+        super().__init__()
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
+    def compute_axial_rope_parameters(
         config: MuseGlimmerVisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
@@ -776,11 +744,6 @@ class MuseGlimmerVisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -788,22 +751,26 @@ class MuseGlimmerVisionRotaryEmbedding(nn.Module):
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in MuseGlimmer
-        inv_freq = self.inv_freq.to(device=x.device, dtype=torch.float32)
-        w_ids = position_ids[:, 0].float()  # position_ids: (seq, 2), unbatched
-        h_ids = position_ids[:, 1].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freq_w = w_ids[:, None] * inv_freq[None, :]
-            freq_h = h_ids[:, None] * inv_freq[None, :]
-            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
-            cos = freq.cos() * self.attention_scaling
-            sin = freq.sin() * self.attention_scaling
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 def get_vision_pixel_shuffle_index(
@@ -831,6 +798,7 @@ def get_vision_pixel_shuffle_index(
     return torch.cat(indices, dim=0)
 
 
+@auto_docstring
 class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
     config: MuseGlimmerVisionConfig
     main_input_name = "pixel_values"
@@ -859,17 +827,22 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         factor = self.merge_size
         dim = hidden_states.shape[-1]
         shuffle_index = get_vision_pixel_shuffle_index(grid_thw, factor, kwargs=kwargs)
-        hidden_states = hidden_states[shuffle_index]
+        hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -920,6 +893,7 @@ class MuseGlimmerVisionAdapter(nn.Module):
         return self.act(self.fc2(self.act(self.fc1(x))))
 
 
+@auto_docstring
 class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
@@ -956,6 +930,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
         return vision_outputs
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -965,8 +940,6 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -1025,25 +998,44 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MuseGlimmerModelOutputWithPast:
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             multimodal_mask = (input_ids == self.config.image_token_id) | (input_ids == self.config.video_token_id)
             llm_input_ids = input_ids.clone()
             llm_input_ids[multimodal_mask] = 0
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1066,10 +1058,12 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         )
 
 
+@auto_docstring
 class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1120,6 +1114,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MuseGlimmerCausalLMOutputWithPast:
         r"""
@@ -1170,6 +1165,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

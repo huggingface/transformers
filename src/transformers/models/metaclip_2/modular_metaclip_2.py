@@ -313,7 +313,7 @@ class MetaClip2Model(CLIPModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -371,7 +371,7 @@ class MetaClip2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -442,7 +442,7 @@ class MetaClip2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -486,7 +486,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -515,7 +515,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -560,7 +560,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
@@ -588,7 +588,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
