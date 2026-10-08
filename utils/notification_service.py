@@ -1251,7 +1251,7 @@ if __name__ == "__main__":
                 for gpu, job in matrix_name_to_github_jobs[matrix_name].items():
                     matrix_job_results[matrix_name]["job_link"][gpu] = job["html_url"]
             for gpu in matrix_name_to_github_jobs.get(matrix_name, {}):
-                matrix_job_results[matrix_name]["error_type"][gpu] = "no_artifact"
+                matrix_job_results[matrix_name]["error_type"][gpu] = "crashed"
             continue
         actual_gpus = {p["gpu"] for p in available_artifacts[artifact_key].paths}
         for artifact_path_dict in available_artifacts[artifact_key].paths:
@@ -1344,7 +1344,7 @@ if __name__ == "__main__":
         # One GPU slot was scheduled but uploaded nothing (e.g. OCI exec error on upload step).
         for gpu in set(matrix_name_to_github_jobs.get(matrix_name, {}).keys()) - actual_gpus:
             matrix_job_results[matrix_name]["error"] = True
-            matrix_job_results[matrix_name]["error_type"][gpu] = "no_artifact"
+            matrix_job_results[matrix_name]["error_type"][gpu] = "crashed"
             step_artifact_name = f"{gpu}-gpu_{artifact_key}"
             if step_artifact_name in artifact_name_to_job_map:
                 matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[step_artifact_name]["html_url"]
