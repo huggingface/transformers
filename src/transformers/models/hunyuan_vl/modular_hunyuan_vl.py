@@ -289,7 +289,6 @@ class HunYuanVLConfig(Qwen2VLConfig):
     ```"""
 
     model_type = "hunyuan_vl"
-    sub_configs = {"vision_config": HunYuanVLVisionConfig, "text_config": HunYuanVLTextConfig}
 
     image_token_id: int = 120120
     im_start_id: int = 120118
@@ -306,30 +305,21 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_config_class = self.sub_configs["text_config"]
-        text_keys = (
-            set(text_config_class.__dataclass_fields__)
-            | set(text_config_class.attribute_map)
-            | {"rope_scaling", "rope_theta"}
-        )
-        text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = text_config_class(**{**self.text_config, **text_kwargs})
-        elif self.text_config is None:
-            self.text_config = text_config_class(**text_kwargs)
+        if self.text_config is None:
+            text_config_class = self.sub_configs_defaults["text_config"].config_class
+            text_keys = (
+                set(text_config_class.__dataclass_fields__)
+                | set(text_config_class.attribute_map)
+                | {"rope_scaling", "rope_theta"}
+            )
+            self.text_config = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
-
         # The attr is saved inside `text_config` on most VLMs, use it if available
-        kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
-        PreTrainedConfig.__post_init__(self, **kwargs)
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
 
 class HunYuanVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):

@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
@@ -36,7 +36,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
@@ -153,10 +153,10 @@ class JanusConfig(PreTrainedConfig):
     ```"""
 
     model_type = "janus"
-    sub_configs = {
-        "text_config": AutoConfig,
-        "vision_config": JanusVisionConfig,
-        "vq_config": JanusVQVAEConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+        "vision_config": SubConfigSpec(config_class=JanusVisionConfig),
+        "vq_config": SubConfigSpec(config_class=JanusVQVAEConfig),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -166,28 +166,9 @@ class JanusConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        if self.vision_config is None:
-            logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
-            self.vision_config = JanusVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = JanusVisionConfig(**self.vision_config)
-
-        if self.vq_config is None:
-            logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
-            self.vq_config = JanusVQVAEConfig()
-        elif isinstance(self.vq_config, dict):
-            self.vq_config = JanusVQVAEConfig(**self.vq_config)
-
+        super().__post_init__(**kwargs)
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring

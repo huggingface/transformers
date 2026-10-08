@@ -23,7 +23,7 @@ from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processo
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import logging
+from ...utils import logging, to_py_obj
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 
 
@@ -494,6 +494,7 @@ class WhisperTokenizer(TokenizersBackend):
             **kwargs,
         )
         if decode_with_timestamps:
+            filtered_ids = to_py_obj(filtered_ids)
             # legacy method to decode timestamps when not included in the tokenizer vocabulary
             if isinstance(filtered_ids, list) and filtered_ids and isinstance(filtered_ids[0], list):
                 # batched input: process each sequence individually

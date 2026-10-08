@@ -5416,18 +5416,23 @@ class ModelTesterMixin(ExportTesterMixin):
                     "hidden_dim",
                     "mm_embed_dim",  # gemma4-only
                 ]
-                hidden_size = None
-                for attr in attribute_candidates:
-                    if hasattr(vision_config, attr):
-                        hidden_size = getattr(vision_config, attr)
-                        break
-                    elif isinstance(vision_config, dict) and attr in vision_config:
-                        hidden_size = vision_config[attr]
-                        break
+                if "Fuyu" in model_class.__name__:
+                    # very old model without an encoder - simple MLP as vision backbone
+                    # add a knob here to not overwrite the whole test
+                    hidden_size = config.get_text_config().hidden_size
                 else:
-                    raise ValueError("Cannot find the hidden size attribute in vision_config")
-                if isinstance(hidden_size, (list, tuple)):
-                    hidden_size = hidden_size[-1]
+                    hidden_size = None
+                    for attr in attribute_candidates:
+                        if hasattr(vision_config, attr):
+                            hidden_size = getattr(vision_config, attr)
+                            break
+                        elif isinstance(vision_config, dict) and attr in vision_config:
+                            hidden_size = vision_config[attr]
+                            break
+                    else:
+                        raise ValueError("Cannot find the hidden size attribute in vision_config")
+                    if isinstance(hidden_size, (list, tuple)):
+                        hidden_size = hidden_size[-1]
                 self.assertEqual(
                     last_hidden_state_shape[-1],
                     hidden_size,
