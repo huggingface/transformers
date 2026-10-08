@@ -51,7 +51,8 @@ class TokenizerMismatchWarningTest(unittest.TestCase):
 
             self.assertTrue(
                 any(
-                    "However, the `tokenizer.json` file found in this checkpoint contains a 'ByteLevel' pipeline." in log
+                    "However, the `tokenizer.json` file found in this checkpoint contains a 'ByteLevel' pipeline."
+                    in log
                     for log in cm.output
                 )
             )
