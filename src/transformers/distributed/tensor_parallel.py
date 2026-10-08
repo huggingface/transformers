@@ -971,8 +971,7 @@ def resolve_parallel_plans(
 
     Returns the TP plan to apply to the dense modules and the EP plan to apply to the experts. Each plan is empty
     when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
-    are dropped: expert weights are sharded once, by the EP plan. The resolved plans are also written back to
-    `model.tp_plan` and `model.ep_plan`, so they describe what is applied and no parameter is named by both.
+    are dropped: expert weights are sharded once, by the EP plan.
     """
     # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
     names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
@@ -1002,7 +1001,6 @@ def resolve_parallel_plans(
 
     _validate_parallel_plan_styles(tp_plan)
     _validate_parallel_plan_styles(ep_plan)
-    model._tp_plan, model._ep_plan = tp_plan, ep_plan
     return tp_plan, ep_plan
 
 

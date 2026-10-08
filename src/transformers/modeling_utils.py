@@ -57,11 +57,8 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
-from .distributed.utils import (
-    _is_torch_distributed_initialized,
-    is_local_dist_rank_0,
-)
+from .distributed.tensor_parallel import verify_tp_plan
+from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -4997,14 +4994,6 @@ def get_total_byte_count(
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
 
-    sharded_plans = []
-    distributed_config = getattr(model.config, "distributed_config", None)
-    if _is_torch_distributed_initialized() and distributed_config is not None:
-        if distributed_config.tp_size > 1:
-            sharded_plans.append((model.tp_plan, distributed_config.tp_size))
-        if distributed_config.ep_size > 1:
-            sharded_plans.append((model.ep_plan, distributed_config.ep_size))
-
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
         if param_name in tied_param_names:
@@ -5017,13 +5006,10 @@ def get_total_byte_count(
         else:
             dtype_size = param.element_size()
 
-        param_byte_count = param.numel() * dtype_size
-
-        for plan, shard_size in sharded_plans:
-            if _get_parameter_plan(param_name, plan, is_weight=True) is not None:
-                param_byte_count //= shard_size
-
-        total_byte_count[device] += param_byte_count
+        # Parallelism is applied before loading, so a sharded parameter is already a DTensor placeholder
+        # Therefore, we can use the local tensor size to determine the total byte count.
+        numel = param._local_tensor.numel() if is_dtensor(param) else param.numel()
+        total_byte_count[device] += numel * dtype_size
     return total_byte_count
 
 
