@@ -538,9 +538,3 @@ class BoundaryHead(nn.Module):
         )
 
 
-__all__ = [
-    "BoundaryHead",
-    "RecordHead",
-    "SparseRelationScorer",
-    "TypedRelationPairGenerator",
-]

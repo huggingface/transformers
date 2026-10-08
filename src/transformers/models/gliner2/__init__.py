@@ -24,9 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .boundary import *
     from .configuration_gliner2 import *
-    from .decoding_gliner2 import *
     from .modeling_gliner2 import *
     from .processing_gliner2 import *
 else:

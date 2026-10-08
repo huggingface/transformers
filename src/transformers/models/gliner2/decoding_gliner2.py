@@ -22,10 +22,3 @@ from .decoding_joint import decode_joint, resolve_overlaps
 
 
 decode_classification = decode_constrained_classification
-
-__all__ = [
-    "decode_classification",
-    "decode_constrained_classification",
-    "decode_joint",
-    "resolve_overlaps",
-]

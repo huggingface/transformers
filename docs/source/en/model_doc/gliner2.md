@@ -62,3 +62,11 @@ extractor(
 
 [[autodoc]] Gliner2ForSchemaExtraction
     - forward
+
+## Gliner2ModelOutput
+
+[[autodoc]] Gliner2ModelOutput
+
+## Gliner2SchemaExtractionOutput
+
+[[autodoc]] Gliner2SchemaExtractionOutput
