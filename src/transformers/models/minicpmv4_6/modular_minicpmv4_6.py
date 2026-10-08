@@ -41,11 +41,12 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..idefics3.modeling_idefics3 import Idefics3VisionEmbeddings
 from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlModel
 from ..qwen2_vl.modeling_qwen2_vl import VisionAttention, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipMLP
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
@@ -143,7 +144,7 @@ class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):
         return embeddings
 
 
-class MiniCPMV4_6VisionMLP(SiglipMLP):
+class MiniCPMV4_6VisionMLP(CLIPMLP):
     pass
 
 

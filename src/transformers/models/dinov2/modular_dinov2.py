@@ -28,12 +28,12 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..beit.modeling_beit import BeitEmbeddings
 from ..bert.modeling_bert import eager_attention_forward  # noqa: F401
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaMLP
 from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import (
     ViTAttention,
     ViTForImageClassification,
-    ViTMLP,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
 )
@@ -116,7 +116,7 @@ class Dinov2LayerScale(nn.Module):
         return hidden_state * self.lambda1
 
 
-class Dinov2MLP(ViTMLP):
+class Dinov2MLP(CLIPMLP):
     def __init__(self, config) -> None:
         super().__init__(config)
         # the hidden size comes from mlp_ratio; the config has no intermediate_size

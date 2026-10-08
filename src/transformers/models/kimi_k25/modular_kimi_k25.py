@@ -42,13 +42,13 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vVisionRotaryEmbedding
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
     Qwen2VLVisionBlock,
     VisionAttention,
-    VisionMlp,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
@@ -256,7 +256,7 @@ class Kimi_K25VisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
         return torch.cat([freq_wh, freq_wh], dim=-1)
 
 
-class Kimi_K25VisionMLP(VisionMlp):
+class Kimi_K25VisionMLP(CLIPMLP):
     pass
 
 
@@ -349,7 +349,7 @@ class Kimi_K25VisionEncoderLayer(Qwen2VLVisionBlock):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.attn = Kimi_K25VisionAttention(config=config)
-        self.mlp = Kimi_K25VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.mlp = Kimi_K25VisionMLP(config)
 
 
 class Kimi_K25PreTrainedModel(Qwen2VLPreTrainedModel):

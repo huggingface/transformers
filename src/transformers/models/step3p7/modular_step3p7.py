@@ -43,6 +43,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
+from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_overlay
@@ -60,7 +61,6 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLSparseMoeBlock,
     MiniMaxM3VLTopKRouter,
     MiniMaxM3VLVisionAttention,
-    MiniMaxM3VLVisionMLP,
 )
 
 # Unused here, but load-bearing: `Step3p7VisionAttention` inherits `MiniMaxM3VLVisionAttention`, so
@@ -597,7 +597,7 @@ class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
         return torch.cat((freq_hw, freq_hw), dim=-1)
 
 
-class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
+class Step3p7VisionMLP(CLIPMLP):
     pass
 
 

@@ -39,6 +39,7 @@ from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
+from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
@@ -56,7 +57,6 @@ from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, Glm4vMoeTextRo
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
-from ..siglip.modeling_siglip import SiglipMLP
 
 
 logger = logging.get_logger(__name__)
@@ -205,7 +205,7 @@ class GlmImageTextRotaryEmbedding(Glm4vMoeTextRotaryEmbedding):
     pass
 
 
-class GlmImageVisionMLP(SiglipMLP):
+class GlmImageVisionMLP(CLIPMLP):
     pass
 
 

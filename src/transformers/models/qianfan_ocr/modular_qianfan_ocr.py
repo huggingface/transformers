@@ -29,6 +29,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..beit.modeling_beit import BeitDropPath
+from ..clip.modeling_clip import CLIPMLP
 from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
 from ..internvl.modeling_internvl import (
     InternVLCausalLMOutputWithPast,
@@ -40,7 +41,6 @@ from ..internvl.modeling_internvl import (
     InternVLVisionAttention,
     InternVLVisionEmbeddings,
     InternVLVisionLayer,
-    InternVLVisionMLP,
     InternVLVisionModel,
     InternVLVisionPreTrainedModel,
 )
@@ -131,7 +131,7 @@ class QianfanOCRVisionAttention(InternVLVisionAttention):
     pass
 
 
-class QianfanOCRVisionMLP(InternVLVisionMLP):
+class QianfanOCRVisionMLP(CLIPMLP):
     pass
 
 

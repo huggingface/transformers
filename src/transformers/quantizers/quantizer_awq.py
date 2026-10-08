@@ -78,7 +78,18 @@ class AwqQuantizer(HfQuantizer):
             device_map=kwargs.get("device_map"),
         )
 
+        self._model_type = model.config.model_type
         model = replace_quantization_scales(model, model.config.model_type)
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightRenaming
+        from ..integrations.awq import AWQ_SCALES_MAPPINGS
+
+        scales_mapping = AWQ_SCALES_MAPPINGS.get(getattr(self, "_model_type", None), {})
+        if "checkpoint_act" not in scales_mapping:
+            return []
+        # The activation module (which holds the AWQ `scales`) was renamed, but quantized checkpoints keep the old name
+        return [WeightRenaming(rf"\.{scales_mapping['checkpoint_act']}\.scales$", f".{scales_mapping['act']}.scales")]
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         from gptqmodel.utils.model import hf_gptqmodel_post_init

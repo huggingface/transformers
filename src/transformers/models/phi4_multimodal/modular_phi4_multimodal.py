@@ -42,6 +42,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
@@ -54,7 +55,6 @@ from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipEncoder,
     SiglipEncoderLayer,
-    SiglipMLP,
     SiglipMultiheadAttentionPoolingHead,
     SiglipPreTrainedModel,
     SiglipVisionEmbeddings,
@@ -236,7 +236,7 @@ class Phi4MultimodalConfig(Phi3Config):
         super().__post_init__(**kwargs)
 
 
-class Phi4MultimodalVisionMLP(SiglipMLP):
+class Phi4MultimodalVisionMLP(CLIPMLP):
     pass
 
 

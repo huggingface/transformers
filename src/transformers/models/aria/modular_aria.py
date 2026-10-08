@@ -45,6 +45,7 @@ from ...utils import (
 )
 from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -148,7 +149,7 @@ class AriaTextRMSNorm(LlamaRMSNorm):
     pass
 
 
-class AriaProjectorMLP(nn.Module):
+class AriaProjectorMLP(CLIPMLP):
     """
     Feed-Forward Network module for the Aria Projector.
 
@@ -162,15 +163,10 @@ class AriaProjectorMLP(nn.Module):
     """
 
     def __init__(self, in_features, hidden_features, output_dim):
-        super().__init__()
-        self.linear_in = nn.Linear(in_features, hidden_features, bias=False)
-        self.linear_out = nn.Linear(hidden_features, output_dim, bias=False)
-        self.act = ACT2FN["gelu_new"]
-
-    def forward(self, hidden_states):
-        hidden_states = self.act(self.linear_in(hidden_states))
-        hidden_states = self.linear_out(hidden_states)
-        return hidden_states
+        nn.Module.__init__(self)
+        self.fc1 = nn.Linear(in_features, hidden_features, bias=False)
+        self.fc2 = nn.Linear(hidden_features, output_dim, bias=False)
+        self.activation_fn = ACT2FN["gelu_new"]
 
 
 class AriaCrossAttention(nn.Module):

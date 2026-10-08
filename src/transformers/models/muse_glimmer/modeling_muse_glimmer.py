@@ -625,14 +625,18 @@ class MuseGlimmerVisionAttention(nn.Module):
 
 
 class MuseGlimmerVisionMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class MuseGlimmerVisionEncoderLayer(GradientCheckpointingLayer):
@@ -641,7 +645,7 @@ class MuseGlimmerVisionEncoderLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.attn = MuseGlimmerVisionAttention(config=config)
-        self.mlp = MuseGlimmerVisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.mlp = MuseGlimmerVisionMLP(config)
 
     def forward(
         self,

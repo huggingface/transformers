@@ -89,12 +89,15 @@ class VibeVoiceAsrMultiModalProjector(nn.Module):
 class VibeVoiceAsrFeedForward(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
-        self.linear1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
-        self.activation = ACT2FN[config.hidden_act]
-        self.linear2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
+        self.fc1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
 
-    def forward(self, hidden_states):
-        return self.linear2(self.activation(self.linear1(hidden_states)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class VibeVoiceAsrConv1dCacheLayer:

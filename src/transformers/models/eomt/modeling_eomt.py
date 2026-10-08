@@ -815,7 +815,6 @@ class EomtMLP(nn.Module):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
-
         return hidden_states
 
 

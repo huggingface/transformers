@@ -746,7 +746,7 @@ class PaddleOCRVisionAttention(nn.Module):
 
 
 class PaddleOCRVisionMLP(nn.Module):
-    def __init__(self, config: PaddleOCRVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]

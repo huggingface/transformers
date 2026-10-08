@@ -43,6 +43,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
+from ..clip.modeling_clip import CLIPMLP
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeAttention,
@@ -66,7 +67,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel
 
 
 logger = logging.get_logger(__name__)
@@ -500,11 +501,7 @@ class Ernie4_5_VLMoeVisionBlock(Qwen2_5_VLVisionBlock):
 
         self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.mlp = Ernie4_5VLVisionMLP(
-            dim=config.hidden_size,
-            hidden_dim=config.intermediate_size,
-            hidden_act=config.hidden_act,
-        )
+        self.mlp = Ernie4_5VLVisionMLP(config)
 
 
 class Ernie4_5_VLMoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
@@ -614,7 +611,7 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
         )
 
 
-class Ernie4_5VLVisionMLP(VisionMlp):
+class Ernie4_5VLVisionMLP(CLIPMLP):
     pass
 
 

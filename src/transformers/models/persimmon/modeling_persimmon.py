@@ -140,14 +140,15 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 class PersimmonMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dense_4h_to_h = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_states):
-        hidden_states = self.dense_h_to_4h(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dense_4h_to_h(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 

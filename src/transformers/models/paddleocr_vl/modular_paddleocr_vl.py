@@ -50,6 +50,7 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..clip.modeling_clip import CLIPMLP
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
@@ -71,10 +72,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import (
-    SiglipMLP,
-    SiglipVisionEmbeddings,
-)
+from ..siglip.modeling_siglip import SiglipVisionEmbeddings
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3VisionAttention,
     VideoLlama3VisionEncoder,
@@ -526,9 +524,8 @@ class PaddleOCRVisionAttention(VideoLlama3VisionAttention):
         super().__init__()
 
 
-class PaddleOCRVisionMLP(SiglipMLP):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+class PaddleOCRVisionMLP(CLIPMLP):
+    pass
 
 
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):

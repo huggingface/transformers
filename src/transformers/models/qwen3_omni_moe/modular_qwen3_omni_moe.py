@@ -54,6 +54,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput
+from ..clip.modeling_clip import CLIPMLP
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
@@ -1433,15 +1434,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         )
 
 
-class Qwen3OmniMoeTalkerResizeMLP(nn.Module):
+class Qwen3OmniMoeTalkerResizeMLP(CLIPMLP):
     def __init__(self, config: Qwen3OmniMoeTalkerConfig):
-        super().__init__()
-        self.linear_fc1 = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.text_config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+        nn.Module.__init__(self)
+        self.fc1 = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
+        self.fc2 = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
+        self.activation_fn = ACT2FN[config.text_config.hidden_act]
 
 
 @dataclass

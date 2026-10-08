@@ -47,6 +47,7 @@ from ...video_utils import group_videos_by_shape, reorder_videos
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
@@ -66,7 +67,6 @@ from ..siglip.modeling_siglip import (
     SiglipAttention,
     SiglipEncoder,
     SiglipEncoderLayer,
-    SiglipMLP,
 )
 from ..video_llava.modeling_video_llava import VideoLlavaCausalLMOutputWithPast, VideoLlavaModelOutputWithPast
 
@@ -144,7 +144,7 @@ class VideoLlama3VisionEmbeddings(nn.Module):
         return embeddings
 
 
-class VideoLlama3VisionMLP(SiglipMLP):
+class VideoLlama3VisionMLP(CLIPMLP):
     pass
 
 

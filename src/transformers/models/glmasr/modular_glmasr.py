@@ -16,7 +16,6 @@ from collections.abc import Callable
 
 import numpy as np
 
-from ...activations import ACT2FN
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
@@ -35,6 +34,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
+from ..clip.modeling_clip import CLIPMLP
 from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, rotate_half
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
@@ -231,18 +231,8 @@ class GlmAsrAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class GlmAsrMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+class GlmAsrMLP(CLIPMLP):
+    pass
 
 
 class GlmAsrEncoderLayer(GradientCheckpointingLayer):

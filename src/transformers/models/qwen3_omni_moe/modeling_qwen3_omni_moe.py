@@ -1065,14 +1065,16 @@ class Qwen3OmniMoeTextTopKRouter(nn.Module):
 class Qwen3OmniMoeVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
@@ -2289,12 +2291,15 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
 class Qwen3OmniMoeTalkerResizeMLP(nn.Module):
     def __init__(self, config: Qwen3OmniMoeTalkerConfig):
         super().__init__()
-        self.linear_fc1 = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.text_config.hidden_act]
+        self.fc1 = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
+        self.fc2 = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
+        self.activation_fn = ACT2FN[config.text_config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 @dataclass

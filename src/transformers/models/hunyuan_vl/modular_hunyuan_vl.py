@@ -42,6 +42,7 @@ from ...utils.generic import (
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens
+from ..clip.modeling_clip import CLIPMLP
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Attention,
@@ -62,7 +63,7 @@ from ..qwen2_vl.image_processing_pil_qwen2_vl import (
 )
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
-from ..siglip.modeling_siglip import SiglipEncoderLayer, SiglipMLP
+from ..siglip.modeling_siglip import SiglipEncoderLayer
 
 
 @auto_docstring
@@ -593,7 +594,7 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
         return freq
 
 
-class HunYuanVLVisionMLP(SiglipMLP):
+class HunYuanVLVisionMLP(CLIPMLP):
     pass
 
 

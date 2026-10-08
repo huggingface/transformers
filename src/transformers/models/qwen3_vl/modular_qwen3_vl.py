@@ -21,7 +21,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
@@ -44,6 +43,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.processing_glm4v import Glm4vProcessorKwargs
 from ..glm4v.video_processing_glm4v import smart_resize
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -219,17 +219,8 @@ class Qwen3VLConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Qwen3VLVisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+class Qwen3VLVisionMLP(CLIPMLP):
+    pass
 
 
 class Qwen3VLVisionPatchEmbed(PatchEmbed):

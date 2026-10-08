@@ -46,6 +46,7 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderResnetBlock,
     ChameleonVQVAEVectorQuantizer,
 )
+from ..dinov2.modeling_dinov2 import Dinov2MLP
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -328,14 +329,9 @@ class JanusVisionAttention(nn.Module):
         return output, attn_weights
 
 
-class JanusVisionMLP(nn.Module):
+class JanusVisionMLP(Dinov2MLP):
     def __init__(self, config: JanusVisionConfig):
-        super().__init__()
-        self.config = config
-        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
-        self.activation_fn = ACT2FN[config.hidden_act]  # Gelu act
-        self.fc1 = nn.Linear(config.hidden_size, self.intermediate_size)
-        self.fc2 = nn.Linear(self.intermediate_size, config.hidden_size)
+        super().__init__(config)
         self.dropout1 = nn.Dropout(config.hidden_dropout_rate)
         self.dropout2 = nn.Dropout(config.hidden_dropout_rate)
 

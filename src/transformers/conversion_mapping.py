@@ -70,6 +70,14 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
     "sam3_tracker_video": "sam3_tracker",
+    "qwen3_vl_moe_vision": "qwen3_vl_vision",
+    "qwen3_5_vision": "qwen3_vl_vision",
+    "qwen3_5_moe_vision": "qwen3_vl_vision",
+    "qwen3_omni_moe_vision_encoder": "qwen3_vl_vision",
+    "qwen4_exp_vision": "qwen3_vl_vision",
+    "cohere_compass_vision": "qwen3_vl_vision",
+    "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
+    "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
     "AltCLIPVisionModel": "CLIPVisionModel",
     "ChineseCLIPVisionModel": "CLIPVisionModel",
     "CLIPSegVisionModel": "CLIPVisionModel",
@@ -84,7 +92,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "SiglipTextModel": "CLIPTextModel",
     "Siglip2TextModel": "CLIPTextModel",
     "xCLIPTextModel": "CLIPTextModel",
-    "aria": "llava",
     "paligemma": "llava",
     "aya_vision": "llava",
     "got_ocr2": "llava",
@@ -107,7 +114,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
     # class-based mappings
-    "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",
     "AyaVisionModel": "LlavaModel",
     "GotOcr2Model": "LlavaModel",
@@ -249,9 +255,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"mlp_sconv\.weight$", target_patterns=r"mlp_sconv.conv1d.weight"),
             WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
-        ],
-        "GPTNeoXForCausalLM": [
-            WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
         ],
         "axk2": [
             # The A.X-K2 hub checkpoints store the routed experts as individual `experts.{i}` projections
@@ -758,6 +761,10 @@ def _build_checkpoint_conversion_mapping():
         ],
         "GraniteSpeechModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "vibevoice_acoustic_tokenizer": [
+            WeightRenaming(r"\.ffn\.linear1\.", ".ffn.fc1."),
+            WeightRenaming(r"\.ffn\.linear2\.", ".ffn.fc2."),
         ],
         "vibevoice_asr": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
@@ -1876,6 +1883,32 @@ def _build_checkpoint_conversion_mapping():
     ]
 
     mapping["pixio"] = mapping["ViTModel"].copy()
+    mapping["qwen3_vl_vision"] = [
+        WeightRenaming(r"\.mlp\.linear_fc1\.", ".mlp.fc1."),
+        WeightRenaming(r"\.mlp\.linear_fc2\.", ".mlp.fc2."),
+    ]
+    gpt_neox_mlp_renames = [
+        WeightRenaming(r"\.mlp\.dense_h_to_4h\.", ".mlp.fc1."),
+        WeightRenaming(r"\.mlp\.dense_4h_to_h\.", ".mlp.fc2."),
+    ]
+    mapping["gpt_neox"] = gpt_neox_mlp_renames
+    mapping["persimmon"] = gpt_neox_mlp_renames.copy()
+    mapping["GPTNeoXForCausalLM"] = [
+        WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
+        *gpt_neox_mlp_renames,
+    ]
+    mapping["Qwen3OmniMoeTalkerForConditionalGeneration"] = [
+        WeightRenaming(r"text_projection\.linear_fc1\.", "text_projection.fc1."),
+        WeightRenaming(r"text_projection\.linear_fc2\.", "text_projection.fc2."),
+        WeightRenaming(r"hidden_projection\.linear_fc1\.", "hidden_projection.fc1."),
+        WeightRenaming(r"hidden_projection\.linear_fc2\.", "hidden_projection.fc2."),
+    ]
+    aria_projector_renames = [
+        WeightRenaming(r"\.feed_forward\.linear_in\.", ".feed_forward.fc1."),
+        WeightRenaming(r"\.feed_forward\.linear_out\.", ".feed_forward.fc2."),
+    ]
+    mapping["aria"] = mapping["llava"].copy() + aria_projector_renames
+    mapping["AriaModel"] = mapping["LlavaModel"].copy() + aria_projector_renames
     mapping["pixio"] += [
         WeightRenaming("norm1", "layernorm_before"),
         WeightRenaming("norm2", "layernorm_after"),
