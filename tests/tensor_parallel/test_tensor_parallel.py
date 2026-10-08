@@ -11,10 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import warnings
 from unittest.mock import patch
 
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
@@ -22,11 +26,40 @@ from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     ColwiseParallel,
+    EpDispatchExpertsParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
 )
-from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+from transformers.testing_utils import TestCasePlus, get_torch_dist_unique_port, is_tensor_parallel_test
+
+
+class _RecordingExperts(torch.nn.Module):
+    """Stand-in experts: the identity, recording the type of the rows it is handed."""
+
+    def __init__(self, num_experts):
+        super().__init__()
+        self.num_experts = num_experts
+        self.received = None
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        self.received = type(hidden_states)
+        return hidden_states.clone()
+
+
+def _dispatch_hands_the_experts_the_received_rows(rank, world_size, port):
+    os.environ.update(MASTER_ADDR="127.0.0.1", MASTER_PORT=str(port))
+    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    try:
+        experts = _RecordingExperts(num_experts=2)
+        EpDispatchExpertsParallel().install_forward(experts, init_device_mesh("cpu", (world_size,)))
+        hidden_states = torch.arange(4 * 8, dtype=torch.float32).view(4, 8) + 100 * rank
+        top_k_index = torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]])
+        output = experts(hidden_states, top_k_index, torch.full((4, 2), 0.5))
+        assert experts.received is torch.Tensor, experts.received
+        torch.testing.assert_close(output, hidden_states)
+    finally:
+        dist.destroy_process_group()
 
 
 @is_tensor_parallel_test
@@ -167,6 +200,12 @@ class TestTensorParallelProperties(TestCasePlus):
 
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
+    def test_dispatch_hands_the_experts_the_received_rows(self):
+        """The experts get the all-to-all's received rows as a plain tensor. Its pending result
+        (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on it, which a kernel launched straight
+        from Python (Triton, a raw pointer) never does."""
+        mp.spawn(_dispatch_hands_the_experts_the_received_rows, args=(2, get_torch_dist_unique_port()), nprocs=2)
+
     class MockDeviceMesh:
         def __init__(self, world_size, rank):
             self.world_size = world_size
