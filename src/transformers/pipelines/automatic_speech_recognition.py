@@ -220,6 +220,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "ctc"
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
+        if self.type == "tdt":
+            # The pipeline defaults (e.g. beam search) target seq2seq models, transducers decode with their own
+            # generation config
+            self._generation_defaults = {}
+        elif self.model.config.model_type == "kyutai_speech_to_text":
+            # Kyutai's `generate()` sets the generation length from the audio length
+            self._generation_defaults.pop("max_new_tokens", None)
 
     def __call__(self, inputs: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
@@ -620,9 +627,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             inputs = {self.model.main_input_name: model_inputs.pop(self.model.main_input_name)}
             if attention_mask is not None:
                 inputs["attention_mask"] = attention_mask
-            # Only forward the caller's generation parameters: the pipeline defaults (e.g. beam search) target
-            # seq2seq models, transducers decode with their own generation config.
-            outputs = self.model.generate(**inputs, **generate_kwargs)
+            outputs = self.model.generate(**inputs, **self._prepare_generate_kwargs(generate_kwargs))
             out = {"tokens": outputs.sequences}
         else:
             raise ValueError(f"Unsupported model type {self.type}.")

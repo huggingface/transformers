@@ -70,22 +70,6 @@ else:
 
 logger = logging.get_logger(__name__)
 
-_SAMPLING_PARAMS = {"temperature", "top_k", "top_p", "min_p", "top_h", "typical_p", "epsilon_cutoff", "eta_cutoff"}
-# Pipeline defaults that are dropped when the user or the model sets a parameter they conflict with
-_CONFLICTING_PARAMS = {"max_new_tokens": {"max_length"}}
-# Pipeline defaults that would override how some models' `generate()` sets these parameters: Bark's sub-models have
-# their own generation configs, and Kyutai's generation length follows the audio length
-_IGNORED_GENERATION_DEFAULTS = {
-    "bark": {"max_new_tokens", "pad_token_id"},
-    "kyutai_speech_to_text": {"max_new_tokens"},
-}
-
-
-def _generation_params(generation_config) -> dict:
-    """The parameters set in `generation_config`."""
-    params = generation_config.to_diff_dict()
-    return {key: value for key, value in params.items() if not key.startswith("_") and key != "transformers_version"}
-
 
 def no_collate_fn(items):
     if len(items) != 1:
@@ -801,6 +785,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     # Pipelines that call `generate` have shared logic, e.g. preparing the generation config.
     _pipeline_calls_generate = False
+    # Defaults for the generation parameters that neither the user nor the model's generation config set
+    _default_generation_config: GenerationConfig | None = None
     # Parameters of the pipeline that are named like generation parameters but aren't any (e.g. `top_k` as a number of
     # answers). They are handled like the other pipeline parameters, rather than passed to `generate()`.
     _non_generation_params: tuple[str, ...] = ()
@@ -908,12 +894,11 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             generation_keys.difference_update(self._non_generation_params)
             generation_keys.add("generation_config")
             self._generate_kwargs = {key: kwargs.pop(key) for key in generation_keys & kwargs.keys()}
-            defaults = getattr(self, "_default_generation_config", None)
-            self._generation_defaults = {} if defaults is None else _generation_params(defaults)
+            defaults = self._default_generation_config
+            self._generation_defaults = {} if defaults is None else defaults.to_diff_dict()
+            self._generation_defaults.pop("transformers_version", None)
             if self.tokenizer is not None and self.tokenizer.pad_token_id is not None:
                 self._generation_defaults["pad_token_id"] = self.tokenizer.pad_token_id
-            for key in _IGNORED_GENERATION_DEFAULTS.get(self.model.config.model_type, ()):
-                self._generation_defaults.pop(key, None)
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)
@@ -1062,37 +1047,35 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         What the pipeline adds goes in a copy of the user's `generation_config` if there is one, as `generate()`
         deprecates passing one together with generation parameters.
         """
+        # Pipeline defaults for these only apply when sampling, otherwise `generate()` warns about them
+        _SAMPLING_PARAMS = {"temperature", "top_k", "top_p", "min_p", "top_h", "typical_p", "epsilon_cutoff","eta_cutoff"}
         if "generation_config" not in generate_kwargs:
             generate_kwargs = {**self._generate_kwargs, **generate_kwargs}
-        user_config = generate_kwargs.get("generation_config")
-        is_set = generate_kwargs.keys() | _generation_params(self.model.generation_config).keys()
-        if user_config is not None:
-            is_set |= _generation_params(user_config).keys()
+        set_params = self._get_set_generation_params(generate_kwargs)
+        # A default `max_new_tokens` would also override a set `max_length`, e.g. Whisper's 448
         added_params = {
             key: value
             for key, value in self._generation_defaults.items()
-            if not ({key} | _CONFLICTING_PARAMS.get(key, set())) & is_set
+            if key not in set_params and not (key == "max_new_tokens" and "max_length" in set_params)
         }
-        if not self._get_generation_param({**added_params, **generate_kwargs}, "do_sample"):
+        if not {**set_params, **added_params}.get("do_sample"):
             added_params = {key: value for key, value in added_params.items() if key not in _SAMPLING_PARAMS}
         added_params.update(overrides)
-        if user_config is None:
+        if (user_config := generate_kwargs.get("generation_config")) is None:
             return {**generate_kwargs, **added_params}
         user_config = copy.deepcopy(user_config)
         user_config.update(**added_params)
         return {**generate_kwargs, "generation_config": user_config}
 
-    def _get_generation_param(self, generate_kwargs: dict, key: str):
+    def _get_set_generation_params(self, generate_kwargs: dict) -> dict:
         """
-        The value of the generation parameter `key` in a `generate()` call with `generate_kwargs`, or `None` if
-        `generate()` would use its global default.
+        The generation parameters that a `generate()` call with `generate_kwargs` doesn't take from its global
+        defaults: the kwargs, on top of their `generation_config` if any, on top of the model's generation config.
         """
-        if key in generate_kwargs:
-            return generate_kwargs[key]
-        for generation_config in (generate_kwargs.get("generation_config"), self.model.generation_config):
-            if (value := getattr(generation_config, key, None)) is not None:
-                return value
-        return None
+        params = self.model.generation_config.to_diff_dict()
+        if (generation_config := generate_kwargs.get("generation_config")) is not None:
+            params.update(generation_config.to_diff_dict())
+        return {**params, **generate_kwargs}
 
     def ensure_tensor_on_device(self, **inputs):
         """

@@ -719,7 +719,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         def generation_param(pipe, key):
             # The value that `generate()` uses
-            return pipe._get_generation_param(pipe._prepare_generate_kwargs({}), key)
+            return pipe._get_set_generation_params(pipe._prepare_generate_kwargs({})).get(key)
 
         # 1. Modify model.generation_config directly (model_config > pipeline_default)
         model.generation_config.max_new_tokens = 500

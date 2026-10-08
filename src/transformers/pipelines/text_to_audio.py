@@ -107,12 +107,12 @@ class TextToAudioPipeline(Pipeline):
     _default_generation_config = GenerationConfig(max_new_tokens=256)
 
     def __init__(self, *args, vocoder=None, sampling_rate=None, noise_scheduler=None, **kwargs):
-        # Some models (e.g., VibeVoice) require noise_scheduler during initialization because `_prepare_generation_config` is called in super().__init__
-        if noise_scheduler is not None:
-            kwargs["noise_scheduler"] = noise_scheduler
         self.noise_scheduler = noise_scheduler
 
         super().__init__(*args, **kwargs)
+        if self.model.config.model_type == "bark":
+            # Bark passes generation parameters to each of its sub-models, which have their own generation configs
+            self._generation_defaults = {}
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():

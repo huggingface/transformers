@@ -351,10 +351,10 @@ class TextGenerationPipeline(Pipeline):
 
         if handle_long_generation == "hole":
             cur_len = inputs["input_ids"].shape[-1]
-            generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
-            new_tokens = self._get_generation_param(generate_kwargs, "max_new_tokens")
+            generation_params = self._get_set_generation_params(self._prepare_generate_kwargs(generate_kwargs))
+            new_tokens = generation_params.get("max_new_tokens")
             if new_tokens is None:
-                new_tokens = self._get_generation_param(generate_kwargs, "max_length") - cur_len
+                new_tokens = generation_params["max_length"] - cur_len
                 if new_tokens < 0:
                     raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
@@ -386,10 +386,10 @@ class TextGenerationPipeline(Pipeline):
         prefix_length = generate_kwargs.pop("prefix_length", 0)
         generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
         if prefix_length:  # a total length (as opposed to a number of new tokens) has to include the prefix
+            generation_params = self._get_set_generation_params(generate_kwargs)
             for length, new_tokens in (("max_length", "max_new_tokens"), ("min_length", "min_new_tokens")):
-                total_length = self._get_generation_param(generate_kwargs, length)
-                if total_length is not None and self._get_generation_param(generate_kwargs, new_tokens) is None:
-                    generate_kwargs[length] = total_length + prefix_length
+                if length in generation_params and new_tokens not in generation_params:
+                    generate_kwargs[length] = generation_params[length] + prefix_length
 
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
 
