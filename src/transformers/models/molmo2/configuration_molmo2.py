@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -192,10 +192,10 @@ class Molmo2Config(PreTrainedConfig):
 
     model_type = "molmo2"
     attribute_map = {"image_token_id": "image_patch_id", "video_token_id": "image_patch_id"}
-    sub_configs = {
-        "text_config": Molmo2TextConfig,
-        "vision_config": Molmo2VisionConfig,
-        "adapter_config": Molmo2AdapterConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Molmo2TextConfig),
+        "vision_config": SubConfigSpec(config_class=Molmo2VisionConfig),
+        "adapter_config": SubConfigSpec(config_class=Molmo2AdapterConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -216,20 +216,7 @@ class Molmo2Config(PreTrainedConfig):
         if self.vision_config is None and legacy_vision_config is not None:
             self.vision_config = legacy_vision_config
 
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.adapter_config, dict):
-            self.adapter_config = self.sub_configs["adapter_config"](**self.adapter_config)
-        elif self.adapter_config is None:
-            self.adapter_config = self.sub_configs["adapter_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
+        super().__post_init__(**kwargs)
 
         # The hub `config.json` declares a 27-layer ViT, but the released weights stop at layer 24, the deepest one
         # `vit_layers` reads. Without this trim, layers 25-26 are built with random weights. Do not remove.
@@ -239,8 +226,6 @@ class Molmo2Config(PreTrainedConfig):
                 layer % num_vit_layers for layer in self.adapter_config.vision_feature_layer
             ]
             self.vision_config.num_hidden_layers = max(self.adapter_config.vision_feature_layer) + 1
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
