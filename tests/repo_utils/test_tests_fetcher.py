@@ -719,8 +719,6 @@ src/transformers/configuration_utils.py
             "src/transformers/models/cosmos3_edge/modular_cosmos3_edge.py",
             "src/transformers/models/granite4_vision/modeling_granite4_vision.py",
             "src/transformers/models/llava/configuration_llava.py",
-            "src/transformers/models/cohere_asr/modular_cohere_asr.py",
-            "src/transformers/models/fun_asr_nano/modular_fun_asr_nano.py",
             "src/transformers/models/sam3/configuration_sam3.py",
             "src/transformers/models/vision_text_dual_encoder/modeling_vision_text_dual_encoder.py",
             "src/transformers/models/minimax_m3_vl/modular_minimax_m3_vl.py",
@@ -733,11 +731,11 @@ src/transformers/configuration_utils.py
             "src/transformers/models/vipllava/modeling_vipllava.py",
             "src/transformers/models/video_llava/modeling_video_llava.py",
             "src/transformers/models/granite4_vision/configuration_granite4_vision.py",
-            "src/transformers/models/vibevoice/modular_vibevoice.py",
-            "src/transformers/models/jina_embeddings_v3/modular_jina_embeddings_v3.py",
         }
         assert expected_clip_multimodals.issubset(set(reverse_map["src/transformers/models/clip/modeling_clip.py"]))
-        assert expected_clip_multimodals.issubset(set(reverse_map["src/transformers/models/clip/configuration_clip.py"]))
+        assert expected_clip_multimodals.issubset(
+            set(reverse_map["src/transformers/models/clip/configuration_clip.py"])
+        )
 
         # reverse backbone mapping works only if modeling or configuration files are modified
         # because multimodals re-use only config/model of its backbone
