@@ -295,11 +295,9 @@ class LoMaKeypointMatchingOutput(ModelOutput):
 
 
 class LoMaPositionalEncoder(nn.Module):
-    def __init__(self, config: "LoMaConfig") -> None:
+    def __init__(self, config: LoMaConfig):
         super().__init__()
         self.projector = nn.Linear(2, config.descriptor_dim // config.num_attention_heads // 2, bias=False)
-        self.positional_encoding_type = config.positional_encoding_type
-        self.gamma = config.positional_encoding_gamma
 
     def forward(
         self, keypoints: torch.Tensor, output_hidden_states: bool | None = False

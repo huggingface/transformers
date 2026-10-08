@@ -424,10 +424,7 @@ class LoMaKeypointMatchingOutput(LightGlueKeypointMatchingOutput):
 
 
 class LoMaPositionalEncoder(LightGluePositionalEncoder):
-    def __init__(self, config: "LoMaConfig") -> None:
-        super().__init__(config)
-        self.positional_encoding_type = config.positional_encoding_type
-        self.gamma = config.positional_encoding_gamma
+    pass
 
 
 class LoMaAttention(LightGlueAttention):
