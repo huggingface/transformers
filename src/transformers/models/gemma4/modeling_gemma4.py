@@ -36,12 +36,15 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
 from ...masking_utils import (
     _preprocess_mask_arguments,
+    and_masks,
+    bidirectional_mask_function,
     blockwise_overlay,
     create_bidirectional_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
     maybe_pad_block_sequence_ids,
+    sdpa_mask,
     sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -1951,16 +1954,24 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
         hidden_states, output_mask = self.subsample_conv_projection(input_features, attention_mask)
         position_embeddings = self.rel_pos_enc(hidden_states)
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=output_mask,
-            and_mask_function=sliding_window_mask_function(
-                (self.config.attention_context_left - 1, self.config.attention_context_right)
+        # The chunked audio attention always consumes a boolean mask, whatever the attention implementation
+        batch_size, seq_len = hidden_states.shape[:2]
+        attention_mask = sdpa_mask(
+            batch_size=batch_size,
+            q_length=seq_len,
+            kv_length=seq_len,
+            mask_function=and_masks(
+                bidirectional_mask_function,
+                sliding_window_mask_function(
+                    (self.config.attention_context_left - 1, self.config.attention_context_right)
+                ),
             ),
+            attention_mask=output_mask,
+            allow_is_causal_skip=False,
+            use_vmap=True,
+            device=hidden_states.device,
         )
-        if attention_mask is not None:
-            attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
+        attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
 
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = encoder_layer(
