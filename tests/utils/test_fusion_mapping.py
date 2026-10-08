@@ -109,11 +109,14 @@ class FusionMappingTest(unittest.TestCase):
         self.patch_mapping_patcher.start()
         self.discovery_cache_patcher = patch.object(fusion_mapping, "_FUSION_DISCOVERY_CACHE", {})
         self.discovery_cache_patcher.start()
+        self.registered_sources_patcher = patch.object(fusion_mapping, "_REGISTERED_FUSION_SOURCE_PATTERNS", {})
+        self.registered_sources_patcher.start()
         self.checkpoint_conversion_mapping_cache = deepcopy(conversion_mapping._checkpoint_conversion_mapping_cache)
 
     def tearDown(self):
         self.patch_mapping_patcher.stop()
         self.discovery_cache_patcher.stop()
+        self.registered_sources_patcher.stop()
         conversion_mapping._checkpoint_conversion_mapping_cache = deepcopy(self.checkpoint_conversion_mapping_cache)
 
     def test_register_fusion_patches_is_effective_on_dummy_model(self):
@@ -169,6 +172,22 @@ class FusionMappingTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "conflicts with an existing conversion mapping"):
             register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
+
+    def test_register_fusion_patches_is_idempotent(self):
+        # Registering the same fusion again (e.g. loading the same checkpoint twice in one process)
+        # used to collide with the converters the first registration had added.
+        DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
+        config = DummyFusionConfig()
+
+        register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
+        converters = get_checkpoint_conversion_mapping(config.model_type)
+
+        register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
+
+        self.assertEqual(
+            [converter.source_patterns for converter in get_checkpoint_conversion_mapping(config.model_type)],
+            [converter.source_patterns for converter in converters],
+        )
 
     def test_from_pretrained_uses_serialized_fusion_config(self):
         # A serialized `fusion_config` is reused on a later load.
