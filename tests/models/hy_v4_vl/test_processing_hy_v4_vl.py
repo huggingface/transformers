@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -26,6 +29,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    IMAGE_PROCESSOR_NAME,
     is_tokenizers_available,
     is_torch_available,
     is_torchvision_available,
@@ -49,7 +53,14 @@ if is_vision_available():
     from PIL import Image
 
     if is_torchvision_available():
-        from transformers import HYV4VLImageProcessor, HYV4VLProcessor, HYV4VLVideoProcessor
+        from transformers import (
+            AutoImageProcessor,
+            HunYuanVLImageProcessor,
+            HunYuanVLImageProcessorPil,
+            HYV4VLConfig,
+            HYV4VLProcessor,
+            HYV4VLVideoProcessor,
+        )
 
 
 @require_vision
@@ -83,7 +94,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        return HYV4VLImageProcessor(size={"shortest_edge": 32 * 32, "longest_edge": 64 * 128}, device=torch_device)
+        return HunYuanVLImageProcessor(size={"shortest_edge": 32 * 32, "longest_edge": 64 * 128}, device=torch_device)
 
     @classmethod
     def _setup_video_processor(cls):
@@ -143,13 +154,49 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with patch("transformers.image_processing_base.load_image", return_value=self.prepare_images_inputs()):
             super().test_processor_text_has_no_visual()
 
+    @parameterized.expand([("torchvision",), ("pil",)])
+    def test_auto_image_registration_and_canonical_metadata(self, backend):
+        image_class = HunYuanVLImageProcessor if backend == "torchvision" else HunYuanVLImageProcessorPil
+        settings = {
+            "size": {"shortest_edge": 4096, "longest_edge": 4194304},
+            "image_mean": [0.4, 0.5, 0.6],
+            "image_std": [0.2, 0.3, 0.4],
+            "resample": 1,
+        }
+        image_processor = image_class(**settings)
+        with tempfile.TemporaryDirectory() as directory:
+            image_processor.save_pretrained(directory)
+            HYV4VLConfig().save_pretrained(directory)
+            restored = AutoImageProcessor.from_pretrained(directory, backend=backend, local_files_only=True)
+            self.assertIs(type(restored), image_class)
+            metadata_path = Path(directory) / IMAGE_PROCESSOR_NAME
+            metadata = json.loads(metadata_path.read_text())
+            self.assertEqual(metadata.pop("image_processor_type"), "HunYuanVLImageProcessor")
+            metadata_path.write_text(json.dumps(metadata))
+            # Without an explicit processor type, the HY4 config must select the parent implementation.
+            inferred = AutoImageProcessor.from_pretrained(directory, backend=backend, local_files_only=True)
+        for processor in (restored, inferred):
+            self.assertIs(type(processor), image_class)
+            self.assertEqual(processor.backend, backend)
+            self.assertEqual(processor.size, settings["size"])
+            self.assertEqual(tuple(processor.image_mean), tuple(settings["image_mean"]))
+            self.assertEqual(tuple(processor.image_std), tuple(settings["image_std"]))
+            self.assertEqual(processor.resample, settings["resample"])
+
+    def test_no_default_padding(self):
+        processor = self.get_processor()
+        output = processor(text=["lower newer", "upper older longer string"])
+        self.assertEqual([len(row) for row in output.input_ids], [2, 4])
+        self.assertEqual([len(row) for row in output.attention_mask], [2, 4])
+        self.assertTrue(all(processor.tokenizer.pad_token_id not in row for row in output.input_ids))
+
     def test_text_only_and_padding(self):
         processor = self.get_processor()
         text = ["lower newer", "upper older longer string"]
         for side in ("left", "right"):
             with self.subTest(padding_side=side):
                 processor.tokenizer.padding_side = side
-                output = processor(text=text, return_tensors="pt")
+                output = processor(text=text, padding=True, return_tensors="pt")
                 expected = processor.tokenizer(text, padding=True, add_special_tokens=False, return_tensors="pt")
                 self.assertEqual(set(output), {"input_ids", "attention_mask", "mm_token_type_ids"})
                 torch.testing.assert_close(output.input_ids, expected.input_ids)
@@ -166,7 +213,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             kwargs["images"] = self.prepare_images_inputs(batch_size=2)
         if "video" in modalities:
             kwargs["videos"] = self.prepare_videos_inputs(batch_size=2)
-        output = processor(text=self.prepare_text_inputs(2, modalities), return_tensors="pt", **kwargs)
+        output = processor(text=self.prepare_text_inputs(2, modalities), padding=True, return_tensors="pt", **kwargs)
         for name in modalities:
             pixels_name = "pixel_values" if name == "image" else "pixel_values_videos"
             self.assertEqual(output[pixels_name].device.type, torch.device(torch_device).type)
@@ -190,13 +237,30 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for count in (1, 2):
             with self.subTest(images_per_prompt=count):
                 prompts = ["<image_start><image><image_end>" * count] * len(sizes)
-                output = processor(text=prompts, images=images * count, return_tensors="pt")
+                output = processor(text=prompts, images=images * count, padding=True, return_tensors="pt")
                 estimate = processor._get_num_multimodal_tokens(image_sizes=sizes * count)
                 self.assertEqual(
                     (output.input_ids == processor.image_token_id).sum().item(), sum(estimate.num_image_tokens)
                 )
                 self.assertEqual(len(estimate.num_image_patches), len(sizes) * count)
                 self.assertEqual(sum(estimate.num_image_patches), output.pixel_values.shape[0])
+
+    def test_non_square_image_grid_patch_counts_and_batch_order(self):
+        processor = self.get_processor()
+        sizes = [(32, 64), (64, 32), (32, 64)]
+        images = [
+            np.full((height, width, 3), index * 100, dtype=np.uint8) for index, (height, width) in enumerate(sizes)
+        ]
+        prompt = "<image_start><image><image_end>"
+        batched = processor(text=[prompt] * len(images), images=images, padding=True, return_tensors="pt")
+        singles = [processor(text=prompt, images=image, return_tensors="pt") for image in images]
+        self.assertEqual(batched.image_grid_thw.tolist(), [[1, 2, 4], [1, 4, 2], [1, 2, 4]])
+        torch.testing.assert_close(batched.pixel_values, torch.cat([output.pixel_values for output in singles]))
+        self.assertEqual(batched.pixel_values.device.type, torch.device(torch_device).type)
+        estimate = processor._get_num_multimodal_tokens(image_sizes=sizes)
+        self.assertEqual(estimate.num_image_patches, [output.pixel_values.shape[0] for output in singles])
+        self.assertEqual(estimate.num_image_tokens, [3, 4, 3])
+        self.assertEqual((batched.input_ids == processor.image_token_id).sum(-1).tolist(), estimate.num_image_tokens)
 
     @parameterized.expand([("landscape", 3, 32, 64), ("portrait", 3, 64, 32), ("resize", 5, 96, 160)])
     def test_non_square_video_token_estimate(self, _, frames, height, width):
@@ -220,6 +284,8 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand(
         [
             ("size", {"size": {"shortest_edge": 1024, "longest_edge": 3 * 1024}}),
+            ("cap", {"max_image_size": {"longest_edge": 2048}}),
+            ("resample", {"resample": 0}),
             ("merge", {"merge_size": 1}),
             ("temporal", {"temporal_patch_size": 2}),
             (
@@ -230,6 +296,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     )
     def test_videos_kwargs_match_grid_and_estimate(self, _, videos_kwargs):
         processor = self.get_processor()
+        original_video_config = processor.video_processor.to_dict()
         video = np.zeros((3, 64, 128, 3), dtype=np.uint8)
         output = processor(
             text="<video_start><video><video_end>", videos=video, videos_kwargs=videos_kwargs, return_tensors="pt"
@@ -249,8 +316,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor.video_processor.get_num_of_video_patches(3, 64, 128, videos_kwargs),
             output.pixel_values_videos.shape[0],
         )
-        self.assertEqual(processor.video_processor.merge_size, 2)
-        self.assertEqual(processor.video_processor.temporal_patch_size, 1)
+        self.assertEqual(processor.video_processor.to_dict(), original_video_config)
 
     def test_apply_chat_template_video_frame_sampling(self):
         # Predecoded frames exercise sampling without the common mixin's remote MP4/image downloads.

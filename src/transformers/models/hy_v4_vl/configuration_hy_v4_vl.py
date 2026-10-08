@@ -24,24 +24,16 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring
+@auto_docstring(checkpoint="tencent/Hy4")
 @strict
 class HYV4VLVisionConfig(PreTrainedConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"bilinear"`):
-        Interpolation mode used when resizing learned patch positional embeddings to match the current image grid.
+        Interpolation mode for the learned patch positional embeddings.
     out_hidden_size (`int`, *optional*, defaults to 6144):
-        Output hidden size produced by the vision tower before it is consumed by the text backbone.
-    img_max_token_num (`int`, *optional*, defaults to 4096):
-        Maximum image token count expected by the vision stack.
+        Width of the visual features passed to the text backbone.
     max_image_size (`int`, *optional*, defaults to 2048):
-        Maximum supported image size, which sets the size of the learned positional grid.
-    min_image_size (`int`, *optional*, defaults to 512):
-        Minimum supported image size.
-    max_vit_seq_len (`int`, *optional*, defaults to 16384):
-        Maximum sequence length produced by the vision transformer.
-    text_hidden_size (`int`, *optional*, defaults to 3072):
-        Hidden size of the text backbone. Unused by HY4-VL, whose projector outputs `out_hidden_size`.
+        Image size used to define the learned positional embedding grid.
     """
 
     model_type = "hy_v4_vl_vision"
@@ -62,12 +54,7 @@ class HYV4VLVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 6144
     patch_size: int = 16
     spatial_merge_size: int = 2
-    temporal_patch_size: int = 1
-    img_max_token_num: int = 4096
     max_image_size: int = 2048
-    min_image_size: int = 512
-    max_vit_seq_len: int = 16384
-    text_hidden_size: int = 3072
 
     def __post_init__(self, **kwargs):
         if not self.num_key_value_heads:
@@ -75,7 +62,7 @@ class HYV4VLVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="tencent/Hy4")
 @strict
 class HYV4VLTextConfig(PreTrainedConfig):
     r"""
@@ -185,7 +172,8 @@ class HYV4VLTextConfig(PreTrainedConfig):
     swiglu_limit: float = 10.0
     rope_parameters: RopeParameters | dict | None = None
     base_config_key = "text_config"
-    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
+    ignore_keys_at_rope_validation = {"mrope_section"}
+    output_router_logits: bool = False
 
     def __post_init__(self, **kwargs):
         # MLA expands the latent to one key/value per query head, so keys are never grouped.
@@ -208,44 +196,36 @@ class HYV4VLTextConfig(PreTrainedConfig):
             ]
 
         super().__post_init__(**kwargs)
-        rope_parameters = self.rope_parameters
-        rope_parameters.setdefault("mrope_section", [12, 10, 10])
-        mrope_section = rope_parameters["mrope_section"]
-        if len(mrope_section) != 3:
-            raise ValueError(
-                f"HY4-VL uses three multimodal RoPE axes (time, height, width), got {len(mrope_section)}."
-            )
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        kwargs = super().convert_rope_params_to_dict(**kwargs)
+        self.rope_parameters.setdefault("mrope_section", [12, 10, 10])
+        return kwargs
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.qk_rope_head_dim <= 0 or self.qk_rope_head_dim % 2:
+            raise ValueError("`qk_rope_head_dim` must be a positive even integer.")
+        if self.nested_rope_parameter_keys(self.rope_parameters):
+            raise ValueError("HY4-VL requires a single multimodal RoPE configuration.")
+        mrope_section = self.rope_parameters["mrope_section"]
+        if not isinstance(mrope_section, (list, tuple)) or len(mrope_section) != 3:
+            raise ValueError("HY4-VL requires three `mrope_section` entries (time, height, width).")
+        if any(type(section) is not int or section < 0 for section in mrope_section):
+            raise ValueError("`mrope_section` entries must be non-negative integers.")
         expected = self.qk_rope_head_dim // 2
-        total = sum(int(section) for section in mrope_section)
-        if total != expected:
-            raise ValueError(
-                f"`mrope_section` must sum to `qk_rope_head_dim // 2` = {expected}, got {mrope_section} (sum {total})."
-            )
-        rope_parameters["mrope_section"] = [int(section) for section in mrope_section]
+        if sum(mrope_section) != expected:
+            raise ValueError(f"`mrope_section` must sum to `qk_rope_head_dim // 2` = {expected}.")
+        if mrope_section[1] > len(range(1, expected, 3)) or mrope_section[2] > len(range(2, expected, 3)):
+            raise ValueError("`mrope_section` height/width entries exceed the interleaved frequency slots.")
+        if self.rope_parameters.get("partial_rotary_factor", 1.0) != 1.0:
+            raise ValueError("HY4-VL rotates the complete `qk_rope_head_dim` slice.")
 
 
-@auto_docstring
+@auto_docstring(checkpoint="tencent/Hy4")
 @strict
 class HYV4VLConfig(PreTrainedConfig):
-    r"""
-    im_start_id (`int`, *optional*, defaults to 120118):
-        Token id marking the beginning of an image span.
-    im_end_id (`int`, *optional*, defaults to 120119):
-        Token id marking the end of an image span.
-    im_newline_id (`int`, *optional*, defaults to 120121):
-        Token id of the newline separator appended to every merged visual row.
-    video_token_id (`int`, *optional*, defaults to 120124):
-        Token id of the video placeholder.
-
-    Example:
-
-    ```python
-    >>> from transformers import HYV4VLConfig, HYV4VLForConditionalGeneration
-    >>>
-    >>> configuration = HYV4VLConfig()
-    >>> model = HYV4VLForConditionalGeneration(configuration)
-    >>> configuration = model.config
-    ```"""
+    """Configuration for the HY4-VL text and vision backbones."""
 
     model_type = "hy_v4_vl"
     sub_configs = {"vision_config": HYV4VLVisionConfig, "text_config": HYV4VLTextConfig}
@@ -256,40 +236,16 @@ class HYV4VLConfig(PreTrainedConfig):
 
     image_token_id: int = 120120
     tie_word_embeddings: bool = False
-    im_start_id: int = 120118
-    im_end_id: int = 120119
-    im_newline_id: int = 120121
 
     video_token_id: int = 120124
 
     def __post_init__(self, **kwargs):
-        # When loading legacy "flat" Tencent checkpoints (where text fields live at the top level instead of inside a
-        # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
-        # ``HYV4VLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
-        # public OCR checkpoints.
-        text_config_class = self.sub_configs["text_config"]
-        text_keys = (
-            set(text_config_class.__dataclass_fields__)
-            | set(text_config_class.attribute_map)
-            | {"rope_scaling", "rope_theta"}
-        )
-        text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = text_config_class(**{**self.text_config, **text_kwargs})
-        elif self.text_config is None:
-            self.text_config = text_config_class(**text_kwargs)
-
-        # Keep the vision tower in sync with the consuming text backbone size.
-        self.vision_config.text_hidden_size = self.text_config.hidden_size
-
-        # The attr is saved inside `text_config` on most VLMs, use it if available
-        kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
+        for key, config_class in self.sub_configs.items():
+            config = getattr(self, key)
+            if isinstance(config, dict):
+                setattr(self, key, config_class(**config))
+            elif config is None:
+                setattr(self, key, config_class())
         super().__post_init__(**kwargs)
 
 

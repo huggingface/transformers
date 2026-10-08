@@ -558,6 +558,8 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     def __init__(self, config: HunYuanVLTextConfig):
         super().__init__(config)
+        if device is not None:
+            self.to(device)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
     def forward(self, x, position_ids):
@@ -663,17 +665,13 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         self.before_rms = HunYuanVLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.after_rms = HunYuanVLRMSNorm(config.text_hidden_size, eps=config.rms_norm_eps)
 
-    def _reshape_features(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+        hidden_states = self.before_rms(hidden_states)
+        dtype = hidden_states.dtype
         hidden_states = hidden_states.permute(0, 2, 1)
         hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], *size)
         torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
         torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
-        return hidden_states
-
-    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
-        hidden_states = self.before_rms(hidden_states)
-        dtype = hidden_states.dtype
-        hidden_states = self._reshape_features(hidden_states, size)
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
@@ -688,10 +686,6 @@ class HunYuanVLVisionPatchMerger(nn.Module):
             dim=-1,
         )
         hidden_states = hidden_states.reshape(batch_size, channels, -1).permute(0, 2, 1)
-        return self._postprocess_features(hidden_states, dtype)
-
-    def _postprocess_features(self, hidden_states: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-        batch_size = hidden_states.shape[0]
         hidden_states = self.mlp(hidden_states)
 
         begin = (

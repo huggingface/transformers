@@ -22,18 +22,23 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...distributed.utils import is_dtensor
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_processing_utils import BatchFeature
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import accepts_precomputed_kwargs
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils.output_capturing import OutputRecorder
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import group_videos_by_shape, reorder_videos
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
 from ..hunyuan_vl.configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLVisionConfig
-from ..hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
-from ..hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessorPil
 from ..hunyuan_vl.modeling_hunyuan_vl import (
     HunYuanVLRMSNorm,
     HunYuanVLVisionPatchEmbed,
@@ -41,9 +46,15 @@ from ..hunyuan_vl.modeling_hunyuan_vl import (
     HunYuanVLVisionTransformer,
 )
 from ..hy_v4.configuration_hy_v4 import HYV4Config
-from ..hy_v4.modeling_hy_v4 import HYV4Attention, HYV4Model, HYV4PreTrainedModel, repeat_kv
+from ..hy_v4.modeling_hy_v4 import (
+    HYV4Attention,
+    HYV4DecoderLayer,
+    HYV4Model,
+    HYV4PreTrainedModel,
+    HYV4TopkRouter,
+    repeat_kv,
+)
 from ..qwen2_vl.modeling_qwen2_vl import (
-    Qwen2VLCausalLMOutputWithPast,
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
 )
@@ -52,25 +63,23 @@ from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 from ..qwen3_vl.video_processing_qwen3_vl import Qwen3VLVideoProcessor, Qwen3VLVideoProcessorInitKwargs
 
 
-@auto_docstring
+@auto_docstring(checkpoint="tencent/Hy4")
 @strict
 class HYV4VLVisionConfig(HunYuanVLVisionConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"bilinear"`):
-        Interpolation mode used when resizing learned patch positional embeddings to match the current image grid.
+        Interpolation mode for the learned patch positional embeddings.
     out_hidden_size (`int`, *optional*, defaults to 6144):
-        Output hidden size produced by the vision tower before it is consumed by the text backbone.
-    img_max_token_num (`int`, *optional*, defaults to 4096):
-        Maximum image token count expected by the vision stack.
+        Width of the visual features passed to the text backbone.
     max_image_size (`int`, *optional*, defaults to 2048):
-        Maximum supported image size, which sets the size of the learned positional grid.
-    min_image_size (`int`, *optional*, defaults to 512):
-        Minimum supported image size.
-    max_vit_seq_len (`int`, *optional*, defaults to 16384):
-        Maximum sequence length produced by the vision transformer.
-    text_hidden_size (`int`, *optional*, defaults to 3072):
-        Hidden size of the text backbone. Unused by HY4-VL, whose projector outputs `out_hidden_size`.
+        Image size used to define the learned positional embedding grid.
     """
+
+    img_max_token_num = AttributeError()
+    min_image_size = AttributeError()
+    max_vit_seq_len = AttributeError()
+    text_hidden_size = AttributeError()
+    temporal_patch_size = AttributeError()
 
     model_type = "hy_v4_vl_vision"
     base_config_key = "vision_config"
@@ -81,7 +90,7 @@ class HYV4VLVisionConfig(HunYuanVLVisionConfig):
     out_hidden_size: int = 6144
 
 
-@auto_docstring
+@auto_docstring(checkpoint="tencent/Hy4")
 @strict
 class HYV4VLTextConfig(HYV4Config):
     r"""
@@ -113,7 +122,7 @@ class HYV4VLTextConfig(HYV4Config):
 
     model_type = "hy_v4_vl_text"
     base_config_key = "text_config"
-    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
+    ignore_keys_at_rope_validation = {"mrope_section"}
     base_model_tp_plan = {
         "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_b_proj": "colwise",
@@ -140,53 +149,56 @@ class HYV4VLTextConfig(HYV4Config):
     num_attention_heads: int = 64
     q_lora_rank: int = 2048
     index_n_heads: int = 32
+    output_router_logits: bool = False
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-        rope_parameters = self.rope_parameters
-        rope_parameters.setdefault("mrope_section", [12, 10, 10])
-        mrope_section = rope_parameters["mrope_section"]
-        if len(mrope_section) != 3:
-            raise ValueError(
-                f"HY4-VL uses three multimodal RoPE axes (time, height, width), got {len(mrope_section)}."
-            )
+    def convert_rope_params_to_dict(self, **kwargs):
+        kwargs = PreTrainedConfig.convert_rope_params_to_dict(self, **kwargs)
+        self.rope_parameters.setdefault("mrope_section", [12, 10, 10])
+        return kwargs
+
+    def validate_architecture(self):
+        PreTrainedConfig.validate_architecture(self)
+        if self.qk_rope_head_dim <= 0 or self.qk_rope_head_dim % 2:
+            raise ValueError("`qk_rope_head_dim` must be a positive even integer.")
+        if self.nested_rope_parameter_keys(self.rope_parameters):
+            raise ValueError("HY4-VL requires a single multimodal RoPE configuration.")
+        mrope_section = self.rope_parameters["mrope_section"]
+        if not isinstance(mrope_section, (list, tuple)) or len(mrope_section) != 3:
+            raise ValueError("HY4-VL requires three `mrope_section` entries (time, height, width).")
+        if any(type(section) is not int or section < 0 for section in mrope_section):
+            raise ValueError("`mrope_section` entries must be non-negative integers.")
         expected = self.qk_rope_head_dim // 2
-        total = sum(int(section) for section in mrope_section)
-        if total != expected:
-            raise ValueError(
-                f"`mrope_section` must sum to `qk_rope_head_dim // 2` = {expected}, got {mrope_section} (sum {total})."
-            )
-        rope_parameters["mrope_section"] = [int(section) for section in mrope_section]
+        if sum(mrope_section) != expected:
+            raise ValueError(f"`mrope_section` must sum to `qk_rope_head_dim // 2` = {expected}.")
+        if mrope_section[1] > len(range(1, expected, 3)) or mrope_section[2] > len(range(2, expected, 3)):
+            raise ValueError("`mrope_section` height/width entries exceed the interleaved frequency slots.")
+        if self.rope_parameters.get("partial_rotary_factor", 1.0) != 1.0:
+            raise ValueError("HY4-VL rotates the complete `qk_rope_head_dim` slice.")
 
 
-@auto_docstring
+@auto_docstring(checkpoint="tencent/Hy4")
 @strict
 class HYV4VLConfig(HunYuanVLConfig):
-    r"""
-    im_start_id (`int`, *optional*, defaults to 120118):
-        Token id marking the beginning of an image span.
-    im_end_id (`int`, *optional*, defaults to 120119):
-        Token id marking the end of an image span.
-    im_newline_id (`int`, *optional*, defaults to 120121):
-        Token id of the newline separator appended to every merged visual row.
-    video_token_id (`int`, *optional*, defaults to 120124):
-        Token id of the video placeholder.
+    """Configuration for the HY4-VL text and vision backbones."""
 
-    Example:
-
-    ```python
-    >>> from transformers import HYV4VLConfig, HYV4VLForConditionalGeneration
-    >>>
-    >>> configuration = HYV4VLConfig()
-    >>> model = HYV4VLForConditionalGeneration(configuration)
-    >>> configuration = model.config
-    ```"""
+    im_start_id = AttributeError()
+    im_end_id = AttributeError()
+    im_newline_id = AttributeError()
 
     model_type = "hy_v4_vl"
     sub_configs = {"vision_config": HYV4VLVisionConfig, "text_config": HYV4VLTextConfig}
 
     video_token_id: int = 120124
     tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        for key, config_class in self.sub_configs.items():
+            config = getattr(self, key)
+            if isinstance(config, dict):
+                setattr(self, key, config_class(**config))
+            elif config is None:
+                setattr(self, key, config_class())
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class HYV4VLAttention(HYV4Attention):
@@ -197,8 +209,21 @@ class HYV4VLAttention(HYV4Attention):
         self.kv_a_layernorm = HYV4VLRMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps)
 
 
+class HYV4VLTopkRouter(HYV4TopkRouter):
+    pass
+
+
+class HYV4VLDecoderLayer(HYV4DecoderLayer):
+    pass
+
+
 @auto_docstring
 class HYV4VLPreTrainedModel(HYV4PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": HYV4VLDecoderLayer,
+        "attentions": HYV4VLAttention,
+        "router_logits": OutputRecorder(HYV4VLTopkRouter, index=0),
+    }
     config: HYV4VLConfig
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["HYV4VLDecoderLayer", "HYV4VLVisionBlock"]
@@ -236,31 +261,39 @@ class HYV4VLVisionPatchMerger(HunYuanVLVisionPatchMerger):
     def __init__(self, config: HYV4VLVisionConfig):
         nn.Module.__init__(self)
         self.config = config
-        self.spatial_merge_size = config.spatial_merge_size
-        self.hidden_size = config.hidden_size * config.spatial_merge_size**2
+        hidden_size = config.hidden_size * config.spatial_merge_size**2
         self.out_hidden_size = config.out_hidden_size
 
-        self.norm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.before_rms = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.proj_conv = nn.Conv2d(
             config.hidden_size,
-            self.hidden_size,
+            hidden_size,
             kernel_size=config.spatial_merge_size,
             stride=config.spatial_merge_size,
         )
         self.proj_act = ACT2FN[config.hidden_act]
-        self.proj_out = nn.Conv2d(self.hidden_size, config.out_hidden_size, kernel_size=1)
+        self.proj_out = nn.Conv2d(hidden_size, config.out_hidden_size, kernel_size=1)
         self.image_newline = nn.Parameter(torch.empty(config.out_hidden_size))
 
-    @property
-    def before_rms(self):
-        return self.norm
-
-    def _reshape_features(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
-        height, width = int(size[0]), int(size[1])
-        # Frames are merged independently.
-        return hidden_states.reshape(-1, height, width, self.config.hidden_size).permute(0, 3, 1, 2)
-
-    def _postprocess_features(self, hidden_states: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+        hidden_states = self.before_rms(hidden_states)
+        dtype = hidden_states.dtype
+        # Frames are merged independently, without HunYuanVL's final MLP or boundary embeddings.
+        hidden_states = hidden_states.reshape(-1, *size, self.config.hidden_size).permute(0, 3, 1, 2)
+        hidden_states = self.proj_conv(hidden_states)
+        hidden_states = self.proj_act(hidden_states)
+        hidden_states = self.proj_out(hidden_states)
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = torch.cat(
+            [
+                hidden_states,
+                self.image_newline.reshape(1, channels, 1, 1)
+                .expand(batch_size, channels, height, 1)
+                .to(dtype, non_blocking=True),
+            ],
+            dim=-1,
+        )
+        hidden_states = hidden_states.reshape(batch_size, channels, -1).permute(0, 2, 1)
         return hidden_states.reshape(1, -1, self.out_hidden_size)
 
 
@@ -305,7 +338,10 @@ class HYV4VLVisionTransformer(HunYuanVLVisionTransformer):
 
 
 class HYV4VLRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
-    pass
+    def __init__(self, config: HYV4VLTextConfig, device=None):
+        super().__init__(config, device=device)
+        if device is not None:
+            self.to(device)
 
 
 class HYV4VLTextModel(HYV4Model):
@@ -321,7 +357,7 @@ class HYV4VLTextModel(HYV4Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -356,17 +392,22 @@ class HYV4VLTextModel(HYV4Model):
                 )
             }
 
-        input_ids = None
-        attention_mask = causal_mask_mapping
-        return super().forward(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            **kwargs,
-        )
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+        hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
+        topk_indices = None
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states, topk_indices = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping["indexed_attention"],
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                prev_topk_indices=topk_indices,
+                **kwargs,
+            )
+        hidden_states = self.norm(self.hc_head(hidden_states))
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
 @auto_docstring
@@ -380,23 +421,28 @@ class HYV4VLModel(Qwen2VLModel):
 
     def get_vision_position_ids(
         self,
-        grid_hw: list[int] | torch.Tensor,
+        start_position: int,
+        grid_thw: list[int] | torch.Tensor,
+        temporal_merge_size: int = 1,
         spatial_merge_size: int = 1,
+        time_interval: int = 1,
         device: str | torch.device | None = None,
     ) -> torch.Tensor:
-        """`(time, height, width)` positions of one frame; the width axis includes the newline column."""
-        grid_h, grid_w = (int(value) for value in grid_hw)
+        """All frame positions, with a newline column and a fresh position block for each frame."""
+        grid_t, grid_h, grid_w = (int(value) for value in grid_thw)
         merged_h = grid_h // spatial_merge_size
         merged_w = grid_w // spatial_merge_size
-
         position_height, position_width = torch.meshgrid(
             torch.arange(merged_h, dtype=torch.long, device=device),
             torch.arange(merged_w + 1, dtype=torch.long, device=device),
             indexing="ij",
         )
-        position_height = position_height.flatten()
-        position_width = position_width.flatten()
-        return torch.stack([torch.zeros_like(position_height), position_height, position_width], dim=0)
+        frame_positions = torch.stack(
+            [torch.zeros_like(position_height), position_height, position_width], dim=0
+        ).flatten(1)
+        # All three axes advance past the previous frame, including its newline column.
+        offsets = torch.arange(grid_t, device=device) * max(merged_h, merged_w + 1) + start_position
+        return (frame_positions[:, None, :] + offsets[None, :, None]).flatten(1)
 
     def get_rope_index(
         self,
@@ -449,29 +495,22 @@ class HYV4VLModel(Qwen2VLModel):
                     if grid is None:
                         raise ValueError("Found more image placeholder spans than entries in `image_grid_thw`.")
                     image_count += 1
-                    frames = 1
                 else:
                     grid = next(video_grids, None)
                     if grid is None:
                         raise ValueError("Found more video placeholder spans than entries in `video_grid_thw`.")
                     video_count += 1
-                    frames = int(grid[0])
 
-                frame_positions = self.get_vision_position_ids(
-                    grid[1:], spatial_merge_size=spatial_merge_size, device=input_ids.device
+                vision_positions = self.get_vision_position_ids(
+                    running, grid, spatial_merge_size=spatial_merge_size, device=input_ids.device
                 )
-                tokens_per_frame = frame_positions.shape[1]
-                if span_length != tokens_per_frame * frames:
+                if span_length != vision_positions.shape[1]:
                     raise ValueError(
                         f"Placeholder span length does not match the visual grid: span_length={span_length}, "
-                        f"expected {tokens_per_frame * frames} ({frames} frame(s) x {tokens_per_frame} tokens)."
+                        f"expected {vision_positions.shape[1]}."
                     )
-
-                for frame_idx in range(frames):
-                    start = span_start + frame_idx * tokens_per_frame
-                    end = start + tokens_per_frame
-                    current_position_ids[:, start:end] = frame_positions + running
-                    running += int(frame_positions.max()) + 1
+                current_position_ids[:, span_start:span_end] = vision_positions
+                running = int(vision_positions.max()) + 1
 
             if valid_token_mask is not None:
                 position_ids[:, batch_idx, valid_token_mask] = current_position_ids
@@ -493,9 +532,134 @@ class HYV4VLModel(Qwen2VLModel):
         rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, rope_deltas
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None = None,
+        video_grid_thw: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        position_ids: torch.Tensor | None = None,
+    ) -> torch.Tensor | None:
+        if position_ids is not None:
+            if not is_torchdynamo_compiling() and (past_key_values is None or past_key_values.get_seq_length() == 0):
+                # Explicit prefill positions define the offset for later automatic decoding, too.
+                vision_positions = position_ids[-3:] if position_ids.ndim == 3 else position_ids.unsqueeze(0)
+                if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
+                    valid_lengths = attention_mask.long().sum(-1)
+                    vision_positions = vision_positions.masked_fill(~attention_mask.bool().unsqueeze(0), -1)
+                elif position_ids.ndim == 3 and position_ids.shape[0] == 4:
+                    valid_lengths = position_ids[0].amax(-1) + 1
+                else:
+                    valid_lengths = inputs_embeds.shape[1]
+                self.rope_deltas = (vision_positions.amax(dim=(0, 2)) + 1 - valid_lengths).unsqueeze(1)
+            return position_ids
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if past_length == 0:
+            # A new request must not reuse offsets from a previous multimodal sequence.
+            self.rope_deltas = None
+            if image_grid_thw is not None or video_grid_thw is not None:
+                if mm_token_type_ids is None:
+                    raise ValueError("Multimodal prefill requires mm_token_type_ids or explicit position_ids.")
+                # The scanner uses modality spans, not token values, so embeddings-only inputs are sufficient.
+                position_input = input_ids if input_ids is not None else mm_token_type_ids.long()
+                position_ids, self.rope_deltas = self.get_rope_index(
+                    position_input,
+                    mm_token_type_ids,
+                    image_grid_thw=image_grid_thw,
+                    video_grid_thw=video_grid_thw,
+                    attention_mask=attention_mask,
+                )
+                return position_ids
+
+        batch_size, seq_length = inputs_embeds.shape[:2]
+        if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
+            positions = attention_mask.long().cumsum(-1) - 1
+            positions = positions.masked_fill(attention_mask == 0, 0)[:, -seq_length:]
+        else:
+            positions = torch.arange(past_length, past_length + seq_length, device=inputs_embeds.device)
+            positions = positions.unsqueeze(0).expand(batch_size, -1)
+        position_ids = positions.unsqueeze(0).expand(3, -1, -1).to(inputs_embeds.device)
+        if past_length > 0 and self.rope_deltas is not None:
+            delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
+            position_ids = position_ids + delta.to(inputs_embeds.device)
+        return position_ids
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | MoeModelOutputWithPast:
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs.")
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+        position_ids = self.compute_3d_position_ids(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            mm_token_type_ids=mm_token_type_ids,
+            position_ids=position_ids,
+        )
+        kwargs.setdefault("output_router_logits", self.config.text_config.output_router_logits)
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        return MoeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -509,9 +673,6 @@ class HYV4VLModel(Qwen2VLModel):
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output.squeeze(0), split_sizes.tolist())
         return vision_outputs
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -525,10 +686,6 @@ class HYV4VLModel(Qwen2VLModel):
         split_sizes = video_grid_thw[:, 0] * (video_grid_thw[:, 1] // merge) * (video_grid_thw[:, 2] // merge + 1)
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output.squeeze(0), split_sizes.tolist())
         return vision_outputs
-
-
-class HYV4VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
-    pass
 
 
 @auto_docstring
@@ -555,21 +712,17 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | HYV4VLCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         Example:
 
         ```python
-        >>> import os
-        >>> import torch
         >>> from transformers import AutoProcessor, DistributedConfig, HYV4VLForConditionalGeneration
 
-        >>> model_path = "/path/to/hy4-vl-checkpoint"
-        >>> torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+        >>> model_path = "tencent/Hy4"  # Tentative release identifier.
         >>> processor = AutoProcessor.from_pretrained(model_path)
         >>> model = HYV4VLForConditionalGeneration.from_pretrained(
-        ...     model_path, dtype=torch.bfloat16,
-        ...     distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
+        ...     model_path, distributed_config=DistributedConfig(tp_plan="auto"),
         ... )
 
         >>> messages = [
@@ -617,13 +770,13 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return HYV4VLCausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
     def _expand_multimodal_outputs(
@@ -649,7 +802,7 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             features = outputs.pooler_output
             feature_ends = itertools.accumulate(feature.shape[0] for feature in features)
             offsets = [0] + [index + 1 for index, end in enumerate(feature_ends) if end in sample_ends]
-            # Repeat the whole sample's visual sequence, not each image independently.
+            # This base repeats individual images; repeat the whole sample's visual sequence instead.
             outputs.pooler_output = [
                 feature
                 for start, end in zip(offsets[:-1], offsets[1:])
@@ -659,18 +812,62 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return mm_encoder_output
 
 
-@auto_docstring
-class HYV4VLImageProcessor(HunYuanVLImageProcessor):
-    pass
+def smart_resize(
+    num_frames: int,
+    height: int,
+    width: int,
+    factor: int,
+    min_pixels: int,
+    max_pixels: int,
+    max_image_size: int,
+) -> tuple[int, int]:
+    """Resize a frame under both the clip's pixel budget and the per-frame area limit."""
+    if min(num_frames, height, width, factor, min_pixels, max_pixels, max_image_size) <= 0:
+        raise ValueError("Video dimensions, resize factor, and pixel budgets must be positive.")
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    per_frame_budget = min(max_pixels / num_frames, max_image_size)
+    min_cells = math.ceil(min_pixels / factor**2)
+    max_cells = math.floor(per_frame_budget / factor**2)
+    if min_cells > max_cells:
+        raise ValueError("The video pixel budget cannot fit a factor-aligned frame at the minimum pixel area.")
 
+    h_bar = max(factor, round(height / factor) * factor)
+    w_bar = max(factor, round(width / factor) * factor)
+    if h_bar * w_bar > per_frame_budget:
+        beta = math.sqrt((height * width) / per_frame_budget)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
 
-@auto_docstring
-class HYV4VLImageProcessorPil(HunYuanVLImageProcessorPil):
-    pass
+    if min_pixels <= h_bar * w_bar <= per_frame_budget:
+        return h_bar, w_bar
+
+    # Only repair boundary cases where clamping or rounding violated the area limits.
+    # Enumerate the shorter grid edge to find a feasible shape close to the input aspect ratio.
+    candidates = []
+    for short_edge in range(1, math.isqrt(max_cells) + 1):
+        lower = max(short_edge, math.ceil(min_cells / short_edge))
+        upper = max_cells // short_edge
+        if lower <= upper:
+            long_edge = min(upper, max(lower, round(short_edge * max(height, width) / min(height, width))))
+            grid_h, grid_w = (short_edge, long_edge) if height <= width else (long_edge, short_edge)
+            candidates.append((grid_h, grid_w))
+    grid_h, grid_w = min(
+        candidates, key=lambda grid: (abs(math.log(grid[0] * width / (grid[1] * height))), -grid[0] * grid[1])
+    )
+    return grid_h * factor, grid_w * factor
 
 
 class HYV4VLVideoProcessorInitKwargs(Qwen3VLVideoProcessorInitKwargs, total=False):
     r"""
+    size (`dict[str, int]`, *optional*):
+        Minimum per-frame pixel area (`shortest_edge`) and total clip pixel budget (`longest_edge`).
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
@@ -681,63 +878,29 @@ class HYV4VLVideoProcessorInitKwargs(Qwen3VLVideoProcessorInitKwargs, total=Fals
         The minimum number of frames to sample from a video.
     max_frames (`int`, *optional*, defaults to 1024):
         The maximum number of frames to sample from a video.
-    cap_pixels_per_frame (`bool`, *optional*, defaults to `False`):
-        Unused, the per-frame limit is `max_image_size`.
-    max_video_tokens (`int`, *optional*, defaults to 768):
-        Unused, see `cap_pixels_per_frame`.
     max_image_size (`dict[str, int]`, *optional*):
         Per-frame pixel-area limit, specified by the `longest_edge` key.
     """
 
+    cap_pixels_per_frame = AttributeError()
+    max_video_tokens = AttributeError()
     max_image_size: dict[str, int]
 
 
 @auto_docstring
 class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
+    resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 4096, "longest_edge": 33554432}
     max_image_size = {"longest_edge": 1024 * 1024}
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     min_frames = 2
     max_frames = 1024
     do_sample_frames = False
-    cap_pixels_per_frame = False
+    cap_pixels_per_frame = AttributeError()
+    max_video_tokens = AttributeError()
     valid_kwargs = HYV4VLVideoProcessorInitKwargs
-
-    def __init__(self, **kwargs: Unpack[HYV4VLVideoProcessorInitKwargs]):
-        # Checkpoint spellings of `size` and `max_image_size`
-        size = dict(kwargs.pop("size", None) or self.size)
-        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
-            size["shortest_edge"] = min_pixels
-        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
-            size["longest_edge"] = max_pixels
-        if (video_max_image_size := kwargs.pop("video_max_image_size", None)) is not None:
-            kwargs["max_image_size"] = {"longest_edge": int(video_max_image_size) ** 2}
-        for unused in ("timestamp_token_per_frame", "timestamp_token_reserve", "spatial_patch_size"):
-            kwargs.pop(unused, None)
-        BaseVideoProcessor.__init__(self, size=size, **kwargs)
-
-    def _get_frame_size(
-        self, num_frames: int, height: int, width: int, factor: int, size: SizeDict
-    ) -> tuple[int, int]:
-        if max(height, width) / min(height, width) > 200:
-            raise ValueError(
-                f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-            )
-        # `longest_edge` is a budget for the whole clip, further capped per frame by `max_image_size`
-        per_frame_budget = min(size.longest_edge / max(num_frames, 1), self.max_image_size["longest_edge"])
-        h_bar = max(factor, round(height / factor) * factor)
-        w_bar = max(factor, round(width / factor) * factor)
-        if h_bar * w_bar > per_frame_budget:
-            beta = math.sqrt((height * width) / per_frame_budget)
-            h_bar = max(factor, math.floor(height / beta / factor) * factor)
-            w_bar = max(factor, math.floor(width / beta / factor) * factor)
-        elif h_bar * w_bar < size.shortest_edge:
-            beta = math.sqrt(size.shortest_edge / (height * width))
-            h_bar = math.ceil(height * beta / factor) * factor
-            w_bar = math.ceil(width * beta / factor) * factor
-        return h_bar, w_bar
 
     def resize(
         self,
@@ -745,17 +908,25 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
+        max_image_size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-        height, width = self._get_frame_size(videos.shape[1], *videos.shape[-2:], factor, size)
+        height, width = smart_resize(
+            num_frames=videos.shape[1],
+            height=videos.shape[-2],
+            width=videos.shape[-1],
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+            max_image_size=max_image_size["longest_edge"],
+        )
         return BaseVideoProcessor.resize(
             self,
             image=videos,
             size=SizeDict(height=height, width=width),
-            # The reference implementation resizes with PIL's default (BICUBIC)
-            resample=PILImageResampling.BICUBIC,
+            resample=resample,
         )
 
     def patchify(
@@ -793,6 +964,64 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         )
         return flatten_patches, grid_t, grid_h, grid_w
 
+    def _preprocess(
+        self,
+        videos: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        max_image_size: dict[str, int],
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        **kwargs,
+    ):
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        resized_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            if do_resize:
+                stacked_videos = self.resize(
+                    videos=stacked_videos,
+                    size=size,
+                    resample=resample,
+                    factor=patch_size * merge_size,
+                    max_image_size=max_image_size,
+                )
+            resized_videos_grouped[shape] = stacked_videos
+        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
+        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
+        processed_videos_grouped = {}
+        processed_grids = {}
+        for shape, stacked_videos in grouped_videos.items():
+            stacked_videos = self.rescale_and_normalize(
+                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            patches, grid_t, grid_h, grid_w = self.patchify(
+                stacked_videos,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
+            )
+            processed_videos_grouped[shape] = patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
+
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
+        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
+        return BatchFeature(
+            data={
+                "pixel_values_videos": torch.cat(processed_videos, dim=0),
+                "video_grid_thw": torch.tensor(processed_grids),
+            },
+            tensor_type=return_tensors,
+        )
+
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None) -> int:
         """
         Number of video patches for a given clip size.
@@ -806,23 +1035,28 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
     ) -> tuple[int, int, int]:
         videos_kwargs = videos_kwargs or {}
-        size = videos_kwargs.get("size") or self.size
-        size = SizeDict(
-            shortest_edge=videos_kwargs.get("min_pixels") or size["shortest_edge"],
-            longest_edge=videos_kwargs.get("max_pixels") or size["longest_edge"],
-        )
-        patch_size = videos_kwargs.get("patch_size") or self.patch_size
-        merge_size = videos_kwargs.get("merge_size") or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size") or self.temporal_patch_size
+        size = videos_kwargs.get("size", self.size)
+        max_image_size = videos_kwargs.get("max_image_size", self.max_image_size)
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
         if videos_kwargs.get("do_resize", self.do_resize):
-            height, width = self._get_frame_size(num_frames, height, width, patch_size * merge_size, size)
-        return math.ceil(num_frames / temporal_patch_size), height // patch_size, width // patch_size
+            height, width = smart_resize(
+                num_frames=num_frames,
+                height=height,
+                width=width,
+                factor=patch_size * merge_size,
+                min_pixels=size["shortest_edge"],
+                max_pixels=size["longest_edge"],
+                max_image_size=max_image_size["longest_edge"],
+            )
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t, height // patch_size, width // patch_size
 
 
 class HYV4VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": True,
             "return_mm_token_type_ids": True,
         },
     }
@@ -838,12 +1072,12 @@ class HYV4VLProcessor(Qwen2VLProcessor):
         return (grid_h // merge_size) * (grid_w // merge_size + 1)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        _, grid_h, grid_w = (int(value) for value in image_inputs["image_grid_thw"][image_idx])
+        _, grid_h, grid_w = image_inputs["image_grid_thw"][image_idx]
         merge_size = kwargs.get("merge_size") or self.image_processor.merge_size
         return self.image_token * self._num_frame_tokens(grid_h, grid_w, merge_size)
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
-        grid_t, grid_h, grid_w = (int(value) for value in video_inputs["video_grid_thw"][video_idx])
+        grid_t, grid_h, grid_w = video_inputs["video_grid_thw"][video_idx]
         merge_size = kwargs.get("merge_size") or self.video_processor.merge_size
         return self.video_token * (grid_t * self._num_frame_tokens(grid_h, grid_w, merge_size))
 
@@ -881,8 +1115,6 @@ __all__ = [
     "HYV4VLTextModel",
     "HYV4VLVisionTransformer",
     "HYV4VLForConditionalGeneration",
-    "HYV4VLImageProcessor",
-    "HYV4VLImageProcessorPil",
     "HYV4VLVideoProcessor",
     "HYV4VLProcessor",
 ]

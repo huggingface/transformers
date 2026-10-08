@@ -20,17 +20,31 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import HYV4VLConfig, HYV4VLTextConfig, HYV4VLVisionConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
+from transformers.testing_utils import (
+    CaptureLogger,
+    require_torch,
+    require_torch_greater_or_equal,
+    require_torch_multi_gpu,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    torch_device,
+)
+from transformers.utils import logging
 
+from ...generation.test_utils import assert_similar_generate_outputs
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
+    from torch.distributed.device_mesh import init_device_mesh
+    from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
 
     from transformers import (
         AutoConfig,
@@ -42,16 +56,19 @@ if is_torch_available():
         HYV4VLTextModel,
         HYV4VLVisionTransformer,
     )
+    from transformers.conversion_mapping import get_model_conversion_mapping
+    from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+    from transformers.distributed.tensor_parallel import apply_tensor_parallelism
+    from transformers.generation import CompileConfig
+    from transformers.modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+    from transformers.models.hy_v4_vl.modeling_hy_v4_vl import (
+        HYV4VLVisionPatchMerger,
+        apply_rotary_pos_emb,
+        eager_attention_forward,
+    )
 
 
 def _check_sharded_attention_sinks(rank, rendezvous):
-    import torch.distributed as dist
-    from torch.distributed.device_mesh import init_device_mesh
-    from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
-
-    from transformers.distributed.tensor_parallel import apply_tensor_parallelism
-    from transformers.models.hy_v4_vl.modeling_hy_v4_vl import eager_attention_forward
-
     torch.cuda.set_device(rank)
     device = torch.device("cuda", rank)
     dist.init_process_group(
@@ -128,12 +145,10 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
     def __init__(self, parent, **kwargs):
         defaults = {
             "batch_size": 2,
-            "seq_length": 13,
             "vocab_size": 256,
             "hidden_size": 48,
             "intermediate_size": 96,
             "moe_intermediate_size": 32,
-            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 4,
             "head_dim": 16,
@@ -144,35 +159,19 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
             "kv_lora_rank": 16,
             "n_routed_experts": 4,
             "n_shared_experts": 1,
-            "num_experts_per_tok": 2,
             "index_head_dim": 16,
             "index_n_heads": 2,
             "index_topk": 16,
             "hc_mult": 2,
-            "max_position_embeddings": 512,
             "rope_parameters": {
                 "rope_type": "default",
                 "rope_theta": 10000.0,
                 "mrope_section": [4, 2, 2],
-                "mrope_interleaved": True,
             },
-            "pad_token_id": 0,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "image_token_id": 3,
             "video_token_id": 4,
-            "im_start_id": 5,
-            "im_end_id": 6,
-            "im_newline_id": 7,
-            "video_start_token_id": 8,
-            "video_end_token_id": 9,
-            "tie_word_embeddings": False,
             "image_size": 16,
-            "patch_size": 4,
-            "num_channels": 3,
             "spatial_merge_size": 2,
             "spatial_patch_size": 1,
-            "temporal_patch_size": 1,
             "num_image_tokens": 6,
         }
         for key, value in defaults.items():
@@ -183,14 +182,7 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
 
     @property
     def _special_token_ids(self):
-        return super()._special_token_ids | {
-            self.video_token_id,
-            self.im_start_id,
-            self.im_end_id,
-            self.im_newline_id,
-            self.video_start_token_id,
-            self.video_end_token_id,
-        }
+        return super()._special_token_ids | {self.video_token_id}
 
     def get_config(self):
         config = super().get_config()
@@ -206,23 +198,23 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
             patch_size=self.patch_size,
             spatial_merge_size=self.spatial_merge_size,
             spatial_patch_size=self.spatial_patch_size,
-            temporal_patch_size=self.temporal_patch_size,
             max_image_size=64,
             out_hidden_size=self.hidden_size,
-            text_hidden_size=self.hidden_size,
         )
 
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids)
 
-    def create_pixel_values(self):
-        return floats_tensor([self.batch_size * self.num_image_patches, self.num_channels * self.patch_size**2]).to(
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor([batch_size * self.num_image_patches, self.num_channels * self.patch_size**2]).to(
             torch_device
         )
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return {
-            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * batch_size, device=torch_device),
             "mm_token_type_ids": (input_ids == self.image_token_id).long(),
         }
 
@@ -243,9 +235,9 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
             num_tokens = frames * (height // merge) * (width // merge + 1)
             input_ids.extend([token_id] * num_tokens + [13])
             token_types.extend([modality] * num_tokens + [0])
-            inputs[pixel_key] = floats_tensor(
-                [frames * height * width, self.num_channels * self.temporal_patch_size * self.patch_size**2]
-            ).to(torch_device)
+            inputs[pixel_key] = floats_tensor([frames * height * width, self.num_channels * self.patch_size**2]).to(
+                torch_device
+            )
             inputs[grid_key] = torch.tensor([grid], device=torch_device)
         inputs["input_ids"] = torch.tensor([input_ids], device=torch_device)
         inputs["mm_token_type_ids"] = torch.tensor([token_types], device=torch_device)
@@ -292,16 +284,69 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 model.set_attn_implementation({"text_config": "sdpa"})
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs = {
-            key: value[: batch_size * self.model_tester.num_image_patches]
-            if key == "pixel_values"
-            else value[:batch_size]
-            for key, value in inputs.items()
-        }
+        # The shared helper on this base slices the packed patch stream as if it were a batch.
+        original_batch_size = self.model_tester.batch_size
+        try:
+            self.model_tester.batch_size = batch_size
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        finally:
+            self.model_tester.batch_size = original_batch_size
         config.text_config.eos_token_id = None
         config.text_config.forced_eos_token_id = None
         return config, inputs
+
+    @require_torch_greater_or_equal("2.6")
+    def test_generate_compile_model_forward_fullgraph(self):
+        config, inputs = self.prepare_config_and_inputs_for_generate(batch_size=4)
+        set_config_for_less_flaky_test(config)
+        model = HYV4VLForConditionalGeneration(config).to(torch_device)
+        set_model_for_less_flaky_test(model)
+        model.eval()
+        half_batch = inputs[model.main_input_name].shape[0] // 2
+        input_sets = []
+        for start in (0, half_batch):
+            # The shared test slices every tensor as a batch, but pixels are a flat patch stream.
+            row = {}
+            for key, value in inputs.items():
+                if key == "pixel_values":
+                    offset = start * self.model_tester.num_image_patches
+                    row[key] = value[offset : offset + half_batch * self.model_tester.num_image_patches]
+                elif isinstance(value, torch.Tensor):
+                    row[key] = value[start : start + half_batch]
+                else:
+                    row[key] = value
+            input_sets.append(row)
+        torch.compiler.reset()
+        compile_config = CompileConfig(fullgraph=True, dynamic=False)
+        compile_config._compile_all_devices = True
+        kwargs = {
+            "use_cache": True,
+            "do_sample": False,
+            "max_new_tokens": 5,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+            "compile_config": compile_config,
+        }
+        with torch.compiler.set_stance("force_eager"):
+            dynamic_outputs = [model.generate(**row, **kwargs) for row in input_sets]
+        for output in dynamic_outputs:
+            self.assertIsInstance(output.past_key_values, DynamicCache)
+        self.assertFalse(hasattr(model, "_compiled_call"))
+        kwargs["cache_implementation"] = "static"
+        try:
+            torch._logging.set_logs(recompiles_verbose=True)
+            with CaptureLogger(logging.get_logger("torch._dynamo.guards")) as captured:
+                compiled_outputs = [model.generate(**row, **kwargs) for row in input_sets]
+        finally:
+            torch._logging.set_logs()
+        for output in compiled_outputs:
+            self.assertNotIsInstance(output.past_key_values, DynamicCache)
+            self.assertTrue(output.past_key_values.is_compileable)
+        self.assertTrue(hasattr(model, "_compiled_call"))
+        self.assertNotIn("Recompiling", captured.out)
+        self.assertFalse("guard" in captured.out and "failure" in captured.out)
+        for eager, compiled in zip(dynamic_outputs, compiled_outputs):
+            assert_similar_generate_outputs(eager, compiled, atol=1e-3, rtol=1e-3)
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -315,6 +360,21 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
             for state in layer_states[:-1]:
                 self.assertEqual(state.shape, (batch_size, length, config.hc_mult, config.hidden_size))
             self.assertEqual(layer_states[-1].shape, (batch_size, length, config.hidden_size))
+
+    def test_router_logits_are_recorded_on_pr_base(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+            with torch.no_grad():
+                self.assertIsNone(model(**inputs).router_logits)
+                explicit = model(**inputs, output_router_logits=True).router_logits
+                model.config.text_config.output_router_logits = True
+                configured = model(**inputs).router_logits
+                self.assertIsNone(model(**inputs, output_router_logits=False).router_logits)
+            self.assertEqual(len(explicit), config.text_config.mlp_layer_types.count("sparse"))
+            for actual, expected in zip(configured, explicit):
+                self.assertEqual(actual.shape[-1], config.text_config.n_routed_experts)
+                torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
     def test_hidden_states_output(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -336,11 +396,10 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         # Source prefixes describe the complete checkpoint, including the model wrapper.
         return super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model)
 
-    def test_checkpoint_projection_and_text_renaming(self):
-        from transformers.conversion_mapping import get_model_conversion_mapping
-        from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
-
-        model = HYV4VLForConditionalGeneration(self.model_tester.get_config()).to(torch_device)
+    @parameterized.expand([(False,), (True,)])
+    def test_checkpoint_projection_and_text_renaming(self, with_lm_head):
+        model_class = HYV4VLForConditionalGeneration if with_lm_head else HYV4VLModel
+        model = model_class(self.model_tester.get_config()).to(torch_device)
         transforms = get_model_conversion_mapping(model)
         renamings = [item for item in transforms if isinstance(item, WeightRenaming)]
         converters = [
@@ -352,10 +411,42 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
             "vit.perceive.proj.0.bias": "model.vision_tower.patch_merger.proj_conv.bias",
             "vit.perceive.proj.2.weight": "model.vision_tower.patch_merger.proj_out.weight",
             "vit.perceive.proj.2.bias": "model.vision_tower.patch_merger.proj_out.bias",
-            "vit.perceive.norm.weight": "model.vision_tower.patch_merger.norm.weight",
+            "vit.perceive.norm.weight": "model.vision_tower.patch_merger.before_rms.weight",
+            "model.vision_tower.patch_merger.norm.weight": "model.vision_tower.patch_merger.before_rms.weight",
+            "model.vision_tower.patch_merger.before_rms.weight": "model.vision_tower.patch_merger.before_rms.weight",
             "vit.layers.0.input_layernorm.weight": "model.vision_tower.layers.0.layer_norm1.weight",
             "model.layers.0.self_attn.learnable_sink_param": "model.language_model.layers.0.self_attn.sinks",
+            "model.layers.0.hc_attn_layer.hc_pre.hc_fn": "model.language_model.layers.0.attn_hc.fn",
+            "model.layers.0.hc_mlp_layer.hc_pre.hc_fn": "model.language_model.layers.0.ffn_hc.fn",
+            "model.hc_head.hc_head_fn": "model.language_model.hc_head.hc_fn",
+            "model.language_model.norm.weight": "model.language_model.norm.weight",
+            "model.vision_tower.layers.0.layer_norm1.weight": "model.vision_tower.layers.0.layer_norm1.weight",
         }
+        for source, target in mappings.items():
+            if not with_lm_head:
+                target = target.removeprefix("model.")
+                if source.startswith(("model.vision_tower.", "model.language_model.")):
+                    source = source.removeprefix("model.")
+            with self.subTest(source=source):
+                actual, _ = rename_source_key(
+                    source, renamings, converters, base_model_prefix=model.base_model_prefix, meta_state_dict=state
+                )
+                self.assertEqual(actual, target)
+                self.assertIn(actual, state)
+
+    def test_standalone_text_checkpoint_renaming(self):
+        model = HYV4VLTextModel(self.model_tester.get_text_config()).to(torch_device)
+        transforms = get_model_conversion_mapping(model)
+        renamings = [item for item in transforms if isinstance(item, WeightRenaming)]
+        converters = [item for item in transforms if isinstance(item, WeightConverter)]
+        mappings = {
+            "layers.0.self_attn.learnable_sink_param": "layers.0.self_attn.sinks",
+            "layers.0.hc_attn_layer.hc_pre.hc_fn": "layers.0.attn_hc.fn",
+            "layers.0.hc_mlp_layer.hc_pre.hc_fn": "layers.0.ffn_hc.fn",
+            "hc_head.hc_head_fn": "hc_head.hc_fn",
+            "norm.weight": "norm.weight",
+        }
+        state = model.state_dict()
         for source, target in mappings.items():
             with self.subTest(source=source):
                 actual, _ = rename_source_key(
@@ -364,7 +455,7 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 self.assertEqual(actual, target)
                 self.assertIn(actual, state)
 
-    def test_auto_classes_and_local_save_load(self):
+    def test_auto_classes_load_legacy_merger_weights(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.assertIsInstance(AutoConfig.for_model("hy_v4_vl"), HYV4VLConfig)
         for auto_class, model_class in (
@@ -375,9 +466,18 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 model = auto_class.from_config(copy.deepcopy(config)).to(torch_device).eval()
                 self.assertIsInstance(model, model_class)
                 with torch.no_grad():
+                    model.base_model.vision_tower.patch_merger.before_rms.weight.uniform_(0.5, 1.5)
+                    for layer in model.base_model.language_model.layers:
+                        layer.self_attn.sinks.uniform_(-1, 1)
                     expected = model(**inputs)[0]
+                legacy_state = {
+                    name.replace("vision_tower.patch_merger.before_rms.", "vision_tower.patch_merger.norm.").replace(
+                        ".self_attn.sinks", ".self_attn.learnable_sink_param"
+                    ): tensor
+                    for name, tensor in model.state_dict().items()
+                }
                 with tempfile.TemporaryDirectory() as directory:
-                    model.save_pretrained(directory)
+                    model.save_pretrained(directory, state_dict=legacy_state, save_original_format=False)
                     restored_config = AutoConfig.from_pretrained(directory, local_files_only=True)
                     self.assertIsInstance(restored_config.text_config, HYV4VLTextConfig)
                     self.assertIsInstance(restored_config.vision_config, HYV4VLVisionConfig)
@@ -387,35 +487,51 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                     )
                 self.assertFalse(loading_info["missing_keys"])
                 self.assertFalse(loading_info["unexpected_keys"])
+                self.assertFalse(loading_info["mismatched_keys"])
                 restored = restored.to(torch_device).eval()
-                self.assertEqual(model.state_dict().keys(), restored.state_dict().keys())
-                for name, tensor in model.state_dict().items():
-                    torch.testing.assert_close(restored.state_dict()[name], tensor, rtol=0, atol=0)
+                expected_merger = model.base_model.vision_tower.patch_merger.state_dict()
+                actual_merger = restored.base_model.vision_tower.patch_merger.state_dict()
+                self.assertEqual(actual_merger.keys(), expected_merger.keys())
+                for name, tensor in expected_merger.items():
+                    torch.testing.assert_close(actual_merger[name], tensor, rtol=0, atol=0)
+                for layer, restored_layer in zip(
+                    model.base_model.language_model.layers, restored.base_model.language_model.layers
+                ):
+                    torch.testing.assert_close(layer.self_attn.sinks, restored_layer.self_attn.sinks, atol=0, rtol=0)
                 with torch.no_grad():
                     torch.testing.assert_close(restored(**inputs)[0], expected)
 
-    def test_mrope_configuration_rejects_invalid_partitions(self):
-        for sections, message in (([2, 2, 2, 2], "three multimodal RoPE axes"), ([2, 2, 2], "must sum")):
-            with self.subTest(sections=sections):
-                config_dict = self.model_tester.get_text_config().to_dict()
-                config_dict["rope_parameters"]["mrope_section"] = sections
-                with self.assertRaisesRegex(ValueError, message):
-                    HYV4VLTextConfig.from_dict(config_dict)
+    @parameterized.expand(
+        [
+            ([2, 2, 2, 2], "three.*mrope_section"),
+            ([2, 2, 2], "must sum"),
+            ([4.5, 2, 2], "non-negative integers"),
+            ([4.0, 2, 2], "non-negative integers"),
+            ([-1, 5, 4], "non-negative integers"),
+            ([True, 5, 2], "non-negative integers"),
+            ([2, 4, 2], "interleaved frequency slots"),
+            ([3, 2, 3], "interleaved frequency slots"),
+        ]
+    )
+    def test_mrope_configuration_rejects_invalid_partitions(self, sections, message):
+        config_dict = self.model_tester.get_text_config().to_dict()
+        config_dict["rope_parameters"]["mrope_section"] = sections
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, message):
+            HYV4VLTextConfig.from_dict(config_dict)
 
-    def test_tiny_special_tokens_fit_vocabulary(self):
-        config = self.model_tester.get_config()
-        self.assertEqual(config.text_config.vocab_size, 256)
-        for name in (
-            "image_token_id",
-            "video_token_id",
-            "im_start_id",
-            "im_end_id",
-            "im_newline_id",
-        ):
-            self.assertEqual(getattr(config, name), getattr(self.model_tester, name))
-            self.assertLess(getattr(config, name), config.text_config.vocab_size)
-        for name in ("pad_token_id", "bos_token_id", "eos_token_id"):
-            self.assertEqual(getattr(config.text_config, name), getattr(self.model_tester, name))
+    @parameterized.expand([(0,), (-2,), (15,)])
+    def test_mrope_configuration_requires_positive_even_dimension(self, dimension):
+        config_dict = self.model_tester.get_text_config().to_dict()
+        config_dict["qk_rope_head_dim"] = dimension
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "positive even integer"):
+            HYV4VLTextConfig.from_dict(config_dict)
+
+    @parameterized.expand([([8, 0, 0],), ([3, 3, 2],)])
+    def test_mrope_configuration_accepts_frequency_slot_boundaries(self, sections):
+        config_dict = self.model_tester.get_text_config().to_dict()
+        config_dict["rope_parameters"]["mrope_section"] = sections
+        config = HYV4VLTextConfig.from_dict(config_dict)
+        self.assertEqual(config.rope_parameters["mrope_section"], sections)
 
     @parameterized.expand([(None, None), ((1, 4, 6), None), (None, (2, 4, 4)), ((1, 4, 6), (2, 4, 4))])
     def test_text_image_video_and_mixed_forward(self, image_grid, video_grid):
@@ -430,6 +546,12 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 if model_class is HYV4VLForConditionalGeneration
                 else config.text_config.hidden_size
             )
+            output_class = (
+                MoeCausalLMOutputWithPast if model_class is HYV4VLForConditionalGeneration else MoeModelOutputWithPast
+            )
+            self.assertIsInstance(outputs, output_class)
+            self.assertNotIn("rope_deltas", outputs)
+            self.assertFalse(hasattr(outputs, "rope_deltas"))
             self.assertEqual(outputs[0].shape, (*inputs["input_ids"].shape, width))
             self.assertTrue(torch.isfinite(outputs[0]).all())
 
@@ -462,8 +584,6 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                     )
 
     def test_eager_attention_without_sinks(self):
-        from transformers.models.hy_v4_vl.modeling_hy_v4_vl import eager_attention_forward
-
         module = torch.nn.Module()
         module.num_key_value_groups = 1
         query, key, value = [torch.randn(1, 2, 3, 8, device=torch_device) for _ in range(3)]
@@ -516,6 +636,29 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(positions, expected)
         torch.testing.assert_close(deltas, torch.tensor([[-10]], device=torch_device))
 
+    @parameterized.expand([((1, 4, 6), 2), ((3, 4, 6), 2), ((2, 12, 4), 2), ((2, 1, 3), 1)])
+    def test_vision_position_ids_include_all_frames_and_newlines(self, grid, spatial_merge_size):
+        model = HYV4VLModel(self.model_tester.get_config()).to(torch_device)
+        start = 7
+        frames, height, width = grid
+        height //= spatial_merge_size
+        width //= spatial_merge_size
+        positions = model.get_vision_position_ids(
+            start_position=start,
+            grid_thw=torch.tensor(grid, device=torch_device),
+            spatial_merge_size=spatial_merge_size,
+            device=torch_device,
+        )
+        expected = [
+            (offset, offset + row, offset + column)
+            for frame in range(frames)
+            for offset in [start + frame * max(height, width + 1)]
+            for row in range(height)
+            for column in range(width + 1)
+        ]
+        self.assertEqual(positions.shape, (3, frames * height * (width + 1)))
+        torch.testing.assert_close(positions, torch.tensor(expected, device=torch_device).T)
+
     def test_mrope_left_padding_does_not_shift_valid_positions(self):
         model = HYV4VLModel(self.model_tester.get_config()).to(torch_device)
         inputs = self.model_tester.prepare_multimodal_inputs((1, 4, 6))
@@ -536,8 +679,6 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
 
     @parameterized.expand([(1, 2, 2, 2), (1, 2, 6, 2), (3, 6, 4, 2), (2, 1, 3, 1)])
     def test_patch_merger_matches_conv_reference(self, frames, height, width, merge_size):
-        from transformers.models.hy_v4_vl.modeling_hy_v4_vl import HYV4VLVisionPatchMerger
-
         config = self.model_tester.get_vision_config()
         config.spatial_merge_size = merge_size
         for dtype in (torch.float32, torch.bfloat16):
@@ -547,7 +688,7 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 channels = config.hidden_size
                 merged_channels = channels * merge_size**2
                 shapes = {
-                    "norm.weight": (channels,),
+                    "before_rms.weight": (channels,),
                     "proj_conv.weight": (merged_channels, channels, merge_size, merge_size),
                     "proj_conv.bias": (merged_channels,),
                     "proj_out.weight": (config.out_hidden_size, merged_channels, 1, 1),
@@ -555,13 +696,11 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                     "image_newline": (config.out_hidden_size,),
                 }
                 self.assertEqual({key: tuple(value.shape) for key, value in merger.state_dict().items()}, shapes)
-                self.assertIs(merger.before_rms, merger.norm)
                 reference = copy.deepcopy(merger)
-                reference.load_state_dict(merger.state_dict(), strict=True)
                 hidden = torch.randn(1, frames * height * width, channels * 2, device=torch_device, dtype=dtype)
                 hidden = hidden[..., ::2].detach().requires_grad_(True)
                 reference_hidden = hidden.detach().clone().requires_grad_(True)
-                expected = reference.norm(reference_hidden)
+                expected = reference.before_rms(reference_hidden)
                 expected = expected.reshape(-1, height, width, channels).permute(0, 3, 1, 2)
                 expected = reference.proj_out(reference.proj_act(reference.proj_conv(expected)))
                 expected = expected.permute(0, 2, 3, 1)
@@ -612,23 +751,38 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "features and (image|video) tokens do not match"):
                     model(**missing_token)
 
-    def test_inputs_embeds_matches_input_ids(self):
+    def test_mixed_inputs_embeds_matches_explicit_mrope(self):
+        config = self.model_tester.get_config()
+        inputs = self.model_tester.prepare_multimodal_inputs((1, 4, 6), (2, 4, 4))
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+            positions, deltas = model.base_model.get_rope_index(**inputs)
+            embeds_inputs = dict(inputs)
+            input_ids = embeds_inputs.pop("input_ids")
+            with torch.no_grad():
+                embeds_inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+                self.assertIsNone(model.base_model.rope_deltas)
+                actual = model(**embeds_inputs)[0]
+                torch.testing.assert_close(model.base_model.rope_deltas, deltas)
+                expected = model(**embeds_inputs, position_ids=positions)[0]
+                expected_ids = model(**inputs)[0]
+            torch.testing.assert_close(actual, expected)
+            torch.testing.assert_close(actual, expected_ids)
+
+    def test_multimodal_inputs_embeds_requires_types_or_explicit_positions(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config)).to(torch_device).eval()
-            base_model = model if model_class is HYV4VLModel else model.model
-            positions, _ = base_model.get_rope_index(
-                inputs["input_ids"],
-                inputs["mm_token_type_ids"],
-                inputs["image_grid_thw"],
-                attention_mask=inputs["attention_mask"],
-            )
-            # Explicit positions preserve MRoPE when only embeddings, not token IDs, are supplied.
-            embeds_inputs = dict(inputs, position_ids=positions)
+            positions, _ = model.base_model.get_rope_index(**inputs)
+            embeds_inputs = dict(inputs)
             input_ids = embeds_inputs.pop("input_ids")
+            embeds_inputs.pop("mm_token_type_ids")
             with torch.no_grad():
+                embeds_inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+                with self.assertRaisesRegex(ValueError, "mm_token_type_ids or explicit position_ids"):
+                    model(**embeds_inputs)
+                actual = model(**embeds_inputs, position_ids=positions)[0]
                 expected = model(**inputs)[0]
-                actual = model(inputs_embeds=model.get_input_embeddings()(input_ids), **embeds_inputs)[0]
             torch.testing.assert_close(actual, expected)
 
     def test_rotary_embeddings_are_built_once_per_forward(self):
@@ -639,30 +793,93 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
             model(**inputs)
         self.assertEqual(rotary_forward.call_count, 1)
 
-    def test_cached_decode_matches_full_multimodal_forward(self):
+    @parameterized.expand(
+        [(prefill, decode, padding) for prefill in (False, True) for decode in (False, True) for padding in (0, 3)]
+    )
+    def test_cached_decode_matches_full_multimodal_forward(self, explicit_prefill, explicit_positions, left_padding):
         config = self.model_tester.get_config()
-        model = HYV4VLForConditionalGeneration(config).to(torch_device).eval()
         inputs = self.model_tester.prepare_multimodal_inputs((1, 4, 6), (2, 4, 4))
+        for key in ("input_ids", "attention_mask", "mm_token_type_ids"):
+            inputs[key] = torch.nn.functional.pad(inputs[key], (left_padding, 0))
         next_tokens = torch.tensor([[14, 15]], device=torch_device)
         extended = dict(inputs)
         extended["input_ids"] = torch.cat([inputs["input_ids"], next_tokens], dim=-1)
-        extended["attention_mask"] = torch.ones_like(extended["input_ids"])
+        extended["attention_mask"] = torch.nn.functional.pad(inputs["attention_mask"], (0, 2), value=1)
         extended["mm_token_type_ids"] = torch.nn.functional.pad(inputs["mm_token_type_ids"], (0, 2))
-        with torch.no_grad():
-            full_logits = model(**extended, use_cache=False).logits[:, -2:]
-            prefill = model(**inputs, use_cache=True)
-            self.assertEqual(prefill.past_key_values.get_seq_length(), inputs["input_ids"].shape[-1])
-            past_length = prefill.past_key_values.get_seq_length()
-            decode_positions = torch.arange(past_length, past_length + 2, device=torch_device)[None, None]
-            decode = model(
-                input_ids=next_tokens,
-                attention_mask=extended["attention_mask"],
-                position_ids=(decode_positions + model.model.rope_deltas).expand(3, -1, -1),
-                past_key_values=prefill.past_key_values,
-                use_cache=True,
-            )
-        self.assertEqual(decode.past_key_values.get_seq_length(), extended["input_ids"].shape[-1])
-        torch.testing.assert_close(decode.logits, full_logits, atol=1e-5, rtol=1e-5)
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+            base_model = model.base_model
+            expected_positions, _ = base_model.get_rope_index(**extended)
+            with torch.no_grad():
+                full_output = model(**extended, use_cache=False)[0][:, -2:]
+                base_model.rope_deltas = None
+                prefill_kwargs = {"position_ids": expected_positions[:, :, :-2]} if explicit_prefill else {}
+                prefill = model(**inputs, use_cache=True, **prefill_kwargs)
+                self.assertEqual(prefill.past_key_values.get_seq_length(), inputs["input_ids"].shape[-1])
+                decode_kwargs = {}
+                if explicit_positions:
+                    past_length = prefill.past_key_values.get_seq_length() - left_padding
+                    positions = torch.arange(past_length, past_length + 2, device=torch_device)[None, None]
+                    decode_kwargs["position_ids"] = (positions + base_model.rope_deltas).expand(3, -1, -1)
+                with patch.object(
+                    base_model.language_model, "forward", wraps=base_model.language_model.forward
+                ) as forward:
+                    decode = model(
+                        input_ids=next_tokens,
+                        attention_mask=extended["attention_mask"],
+                        past_key_values=prefill.past_key_values,
+                        use_cache=True,
+                        **decode_kwargs,
+                    )
+                decode_positions = forward.call_args.kwargs["position_ids"]
+                self.assertEqual(decode_positions.shape, (3, 1, next_tokens.shape[-1]))
+                torch.testing.assert_close(decode_positions, expected_positions[:, :, -2:])
+            self.assertEqual(decode.past_key_values.get_seq_length(), extended["input_ids"].shape[-1])
+            torch.testing.assert_close(decode[0], full_output, atol=1e-5, rtol=1e-5)
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    def test_fresh_text_request_resets_multimodal_rope_deltas(self, use_inputs_embeds, use_empty_cache):
+        config = self.model_tester.get_config()
+        multimodal = self.model_tester.prepare_multimodal_inputs((1, 4, 6), (2, 4, 4))
+        input_ids = torch.tensor([[10, 11, 12], [0, 13, 14]], device=torch_device)
+        attention_mask = (input_ids != config.text_config.pad_token_id).long()
+        expected_positions = (attention_mask.cumsum(-1) - 1).masked_fill(attention_mask == 0, 0)
+        next_tokens = torch.tensor([[15, 16], [17, 18]], device=torch_device)
+        extended_mask = torch.nn.functional.pad(attention_mask, (0, 2), value=1)
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+            base_model = model.base_model
+            with torch.no_grad():
+                expected = model(
+                    input_ids=torch.cat([input_ids, next_tokens], dim=-1),
+                    attention_mask=extended_mask,
+                    use_cache=False,
+                )[0][:, -2:]
+                model(**multimodal)
+                self.assertTrue((base_model.rope_deltas != 0).any())
+                text_inputs = (
+                    {"inputs_embeds": model.get_input_embeddings()(input_ids)}
+                    if use_inputs_embeds
+                    else {"input_ids": input_ids}
+                )
+                cache = DynamicCache(config=config.text_config) if use_empty_cache else None
+                with patch.object(
+                    base_model.language_model, "forward", wraps=base_model.language_model.forward
+                ) as forward:
+                    prefill = model(
+                        **text_inputs, attention_mask=attention_mask, past_key_values=cache, use_cache=True
+                    )
+                self.assertIsNone(base_model.rope_deltas)
+                torch.testing.assert_close(
+                    forward.call_args.kwargs["position_ids"], expected_positions.unsqueeze(0).expand(3, -1, -1)
+                )
+                decode = model(
+                    input_ids=next_tokens,
+                    attention_mask=extended_mask,
+                    past_key_values=prefill.past_key_values,
+                    use_cache=True,
+                )
+            torch.testing.assert_close(decode[0], expected, atol=1e-5, rtol=1e-5)
 
     def test_generation_injects_image_and_video_only_at_prefill(self):
         config = self.model_tester.get_config()
@@ -897,24 +1114,34 @@ class HYV4VLComponentTest(unittest.TestCase):
                 config, inputs, expected_shape = self.component_inputs(model_class)
                 model = model_class(config).to(torch_device).eval()
                 with torch.no_grad():
+                    if model_class is HYV4VLTextModel:
+                        for layer in model.layers:
+                            layer.self_attn.sinks.uniform_(-1, 1)
                     expected = model(**inputs).last_hidden_state
                 self.assertEqual(expected.shape, expected_shape)
                 self.assertTrue(torch.isfinite(expected).all())
+                state = {
+                    name.replace(".self_attn.sinks", ".self_attn.learnable_sink_param"): tensor
+                    for name, tensor in model.state_dict().items()
+                }
                 with tempfile.TemporaryDirectory() as directory:
-                    model.save_pretrained(directory)
+                    model.save_pretrained(directory, state_dict=state, save_original_format=False)
                     restored, loading = model_class.from_pretrained(
                         directory, local_files_only=True, output_loading_info=True
                     )
                 self.assertFalse(loading["missing_keys"])
                 self.assertFalse(loading["unexpected_keys"])
                 restored.to(torch_device).eval()
+                if model_class is HYV4VLTextModel:
+                    for layer, restored_layer in zip(model.layers, restored.layers):
+                        torch.testing.assert_close(
+                            layer.self_attn.sinks, restored_layer.self_attn.sinks, atol=0, rtol=0
+                        )
                 with torch.no_grad():
                     actual = restored(**inputs).last_hidden_state
                 torch.testing.assert_close(actual, expected)
 
     def test_rotary_matches_interleaved_checkpoint_channels(self):
-        from transformers.models.hy_v4_vl.modeling_hy_v4_vl import apply_rotary_pos_emb
-
         torch.manual_seed(7)
         for dtype in (torch.float32, torch.bfloat16):
             for unsqueeze_dim in (1, 2):

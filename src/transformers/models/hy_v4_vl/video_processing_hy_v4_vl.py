@@ -24,7 +24,7 @@ import torch
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
@@ -36,6 +36,8 @@ logger = logging.get_logger(__name__)
 
 class HYV4VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
+    size (`dict[str, int]`, *optional*):
+        Minimum per-frame pixel area (`shortest_edge`) and total clip pixel budget (`longest_edge`).
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
@@ -46,10 +48,6 @@ class HYV4VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         The minimum number of frames to sample from a video.
     max_frames (`int`, *optional*, defaults to 1024):
         The maximum number of frames to sample from a video.
-    cap_pixels_per_frame (`bool`, *optional*, defaults to `False`):
-        Unused, the per-frame limit is `max_image_size`.
-    max_video_tokens (`int`, *optional*, defaults to 768):
-        Unused, see `cap_pixels_per_frame`.
     max_image_size (`dict[str, int]`, *optional*):
         Per-frame pixel-area limit, specified by the `longest_edge` key.
     """
@@ -59,18 +57,67 @@ class HYV4VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
-    cap_pixels_per_frame: bool
-    max_video_tokens: int
-
     max_image_size: dict[str, int]
+
+
+def smart_resize(
+    num_frames: int,
+    height: int,
+    width: int,
+    factor: int,
+    min_pixels: int,
+    max_pixels: int,
+    max_image_size: int,
+) -> tuple[int, int]:
+    """Resize a frame under both the clip's pixel budget and the per-frame area limit."""
+    if min(num_frames, height, width, factor, min_pixels, max_pixels, max_image_size) <= 0:
+        raise ValueError("Video dimensions, resize factor, and pixel budgets must be positive.")
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    per_frame_budget = min(max_pixels / num_frames, max_image_size)
+    min_cells = math.ceil(min_pixels / factor**2)
+    max_cells = math.floor(per_frame_budget / factor**2)
+    if min_cells > max_cells:
+        raise ValueError("The video pixel budget cannot fit a factor-aligned frame at the minimum pixel area.")
+
+    h_bar = max(factor, round(height / factor) * factor)
+    w_bar = max(factor, round(width / factor) * factor)
+    if h_bar * w_bar > per_frame_budget:
+        beta = math.sqrt((height * width) / per_frame_budget)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+
+    if min_pixels <= h_bar * w_bar <= per_frame_budget:
+        return h_bar, w_bar
+
+    # Only repair boundary cases where clamping or rounding violated the area limits.
+    # Enumerate the shorter grid edge to find a feasible shape close to the input aspect ratio.
+    candidates = []
+    for short_edge in range(1, math.isqrt(max_cells) + 1):
+        lower = max(short_edge, math.ceil(min_cells / short_edge))
+        upper = max_cells // short_edge
+        if lower <= upper:
+            long_edge = min(upper, max(lower, round(short_edge * max(height, width) / min(height, width))))
+            grid_h, grid_w = (short_edge, long_edge) if height <= width else (long_edge, short_edge)
+            candidates.append((grid_h, grid_w))
+    grid_h, grid_w = min(
+        candidates, key=lambda grid: (abs(math.log(grid[0] * width / (grid[1] * height))), -grid[0] * grid[1])
+    )
+    return grid_h * factor, grid_w * factor
 
 
 @auto_docstring
 class HYV4VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 4096, "longest_edge": 33554432}
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     do_resize = True
     do_rescale = True
     do_normalize = True
@@ -81,8 +128,6 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
     min_frames = 2
     max_frames = 1024
     do_sample_frames = False
-    cap_pixels_per_frame = False
-    max_video_tokens = 768
     valid_kwargs = HYV4VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     max_image_size = {"longest_edge": 1024 * 1024}
@@ -91,17 +136,7 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
     fps = 2
 
     def __init__(self, **kwargs: Unpack[HYV4VLVideoProcessorInitKwargs]):
-        # Checkpoint spellings of `size` and `max_image_size`
-        size = dict(kwargs.pop("size", None) or self.size)
-        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
-            size["shortest_edge"] = min_pixels
-        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
-            size["longest_edge"] = max_pixels
-        if (video_max_image_size := kwargs.pop("video_max_image_size", None)) is not None:
-            kwargs["max_image_size"] = {"longest_edge": int(video_max_image_size) ** 2}
-        for unused in ("timestamp_token_per_frame", "timestamp_token_reserve", "spatial_patch_size"):
-            kwargs.pop(unused, None)
-        super().__init__(size=size, **kwargs)
+        super().__init__(**kwargs)
 
     def sample_frames(
         self,
@@ -157,17 +192,25 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
+        max_image_size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-        height, width = self._get_frame_size(videos.shape[1], *videos.shape[-2:], factor, size)
+        height, width = smart_resize(
+            num_frames=videos.shape[1],
+            height=videos.shape[-2],
+            width=videos.shape[-1],
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+            max_image_size=max_image_size["longest_edge"],
+        )
         return super().resize(
             image=videos,
             size=SizeDict(height=height, width=width),
-            # The reference implementation resizes with PIL's default (BICUBIC)
-            resample=PILImageResampling.BICUBIC,
+            resample=resample,
         )
 
     def patchify(
@@ -216,24 +259,13 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        max_image_size: dict[str, int],
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
-        cap_pixels_per_frame: bool | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
-        if cap_pixels_per_frame is None:
-            logger.warning_once(
-                "HYV4VL video processing does not apply the per-frame pixel cap the reference "
-                "implementation (qwen-vl-utils) applies, so some videos cost far more tokens than they "
-                "would there. In v5.22 the capped behavior will become the default and "
-                "`cap_pixels_per_frame` will be removed. Pass `cap_pixels_per_frame=True` to adopt the "
-                "reference behavior now, or `False` to keep the current behavior and silence this "
-                "warning."
-            )
-            cap_pixels_per_frame = False
-        # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
@@ -243,19 +275,15 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,
-                    temporal_factor=temporal_patch_size,
-                    cap_pixels_per_frame=cap_pixels_per_frame,
+                    max_image_size=max_image_size,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 
-        # Group videos by size for further processing
-        # Needed in case do_resize is False, or resize returns videos with different sizes
         grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
         processed_videos_grouped = {}
         processed_grids = {}
         for shape, stacked_videos in grouped_videos.items():
-            # Fused rescale and normalize
             stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
@@ -265,17 +293,16 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
                 merge_size=merge_size,
                 temporal_patch_size=temporal_patch_size,
             )
-
             processed_videos_grouped[shape] = patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
-        pixel_values_videos = torch.cat(processed_videos, dim=0)
-        video_grid_thw = torch.tensor(processed_grids)
-
         return BatchFeature(
-            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
+            data={
+                "pixel_values_videos": torch.cat(processed_videos, dim=0),
+                "video_grid_thw": torch.tensor(processed_grids),
+            },
             tensor_type=return_tensors,
         )
 
@@ -288,42 +315,27 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
         grid_t, grid_h, grid_w = self.get_video_grid(num_frames, height, width, videos_kwargs)
         return grid_t * grid_h * grid_w
 
-    def _get_frame_size(
-        self, num_frames: int, height: int, width: int, factor: int, size: SizeDict
-    ) -> tuple[int, int]:
-        if max(height, width) / min(height, width) > 200:
-            raise ValueError(
-                f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-            )
-        # `longest_edge` is a budget for the whole clip, further capped per frame by `max_image_size`
-        per_frame_budget = min(size.longest_edge / max(num_frames, 1), self.max_image_size["longest_edge"])
-        h_bar = max(factor, round(height / factor) * factor)
-        w_bar = max(factor, round(width / factor) * factor)
-        if h_bar * w_bar > per_frame_budget:
-            beta = math.sqrt((height * width) / per_frame_budget)
-            h_bar = max(factor, math.floor(height / beta / factor) * factor)
-            w_bar = max(factor, math.floor(width / beta / factor) * factor)
-        elif h_bar * w_bar < size.shortest_edge:
-            beta = math.sqrt(size.shortest_edge / (height * width))
-            h_bar = math.ceil(height * beta / factor) * factor
-            w_bar = math.ceil(width * beta / factor) * factor
-        return h_bar, w_bar
-
     def get_video_grid(
         self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
     ) -> tuple[int, int, int]:
         videos_kwargs = videos_kwargs or {}
-        size = videos_kwargs.get("size") or self.size
-        size = SizeDict(
-            shortest_edge=videos_kwargs.get("min_pixels") or size["shortest_edge"],
-            longest_edge=videos_kwargs.get("max_pixels") or size["longest_edge"],
-        )
-        patch_size = videos_kwargs.get("patch_size") or self.patch_size
-        merge_size = videos_kwargs.get("merge_size") or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size") or self.temporal_patch_size
+        size = videos_kwargs.get("size", self.size)
+        max_image_size = videos_kwargs.get("max_image_size", self.max_image_size)
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
         if videos_kwargs.get("do_resize", self.do_resize):
-            height, width = self._get_frame_size(num_frames, height, width, patch_size * merge_size, size)
-        return math.ceil(num_frames / temporal_patch_size), height // patch_size, width // patch_size
+            height, width = smart_resize(
+                num_frames=num_frames,
+                height=height,
+                width=width,
+                factor=patch_size * merge_size,
+                min_pixels=size["shortest_edge"],
+                max_pixels=size["longest_edge"],
+                max_image_size=max_image_size["longest_edge"],
+            )
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t, height // patch_size, width // patch_size
 
 
 __all__ = ["HYV4VLVideoProcessor"]

@@ -24,7 +24,6 @@ from ...utils import auto_docstring
 class HYV4VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": True,
             "return_mm_token_type_ids": True,
         },
     }
@@ -50,12 +49,12 @@ class HYV4VLProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        _, grid_h, grid_w = (int(value) for value in image_inputs["image_grid_thw"][image_idx])
+        _, grid_h, grid_w = image_inputs["image_grid_thw"][image_idx]
         merge_size = kwargs.get("merge_size") or self.image_processor.merge_size
         return self.image_token * self._num_frame_tokens(grid_h, grid_w, merge_size)
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
-        grid_t, grid_h, grid_w = (int(value) for value in video_inputs["video_grid_thw"][video_idx])
+        grid_t, grid_h, grid_w = video_inputs["video_grid_thw"][video_idx]
         merge_size = kwargs.get("merge_size") or self.video_processor.merge_size
         return self.video_token * (grid_t * self._num_frame_tokens(grid_h, grid_w, merge_size))
 

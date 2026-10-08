@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_torchvision, require_vision, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 from transformers.video_utils import VideoMetadata
@@ -31,8 +33,11 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+    from transformers.image_utils import PILImageResampling, SizeDict
+
     if is_torchvision_available():
-        from transformers import HYV4VLVideoProcessor
+        from transformers import AutoVideoProcessor, HYV4VLVideoProcessor
+        from transformers.video_processing_utils import BaseVideoProcessor
 
 
 class HYV4VLVideoProcessingTester:
@@ -41,21 +46,28 @@ class HYV4VLVideoProcessingTester:
         self.batch_size = 3
         self.num_frames = 3
         self.num_channels = 3
+        self.size = {"shortest_edge": 1024, "longest_edge": 32768}
+        self.max_image_size = {"longest_edge": 8192}
+        self.patch_size = 16
+        self.merge_size = 2
+        self.temporal_patch_size = 1
+        self.image_mean = IMAGENET_STANDARD_MEAN
+        self.image_std = IMAGENET_STANDARD_STD
 
     def prepare_video_processor_dict(self):
         return {
             "device": torch_device,
-            "size": {"shortest_edge": 1024, "longest_edge": 32768},
-            "max_image_size": {"longest_edge": 8192},
-            "patch_size": 16,
-            "merge_size": 2,
-            "temporal_patch_size": 1,
+            "size": self.size.copy(),
+            "max_image_size": self.max_image_size.copy(),
+            "patch_size": self.patch_size,
+            "merge_size": self.merge_size,
+            "temporal_patch_size": self.temporal_patch_size,
             "do_sample_frames": False,
             "do_resize": True,
             "do_rescale": True,
             "do_normalize": True,
-            "image_mean": [0.5, 0.5, 0.5],
-            "image_std": [0.5, 0.5, 0.5],
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
         }
 
     def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
@@ -85,17 +97,21 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     def video_processor_dict(self):
         return self.video_processor_tester.prepare_video_processor_dict()
 
-    def test_defaults_and_model_input_names(self):
-        processor = self.fast_video_processing_class()
-        self.assertEqual(processor.size, {"shortest_edge": 4096, "longest_edge": 33554432})
-        self.assertEqual(processor.max_image_size, {"longest_edge": 1024**2})
-        self.assertEqual((processor.patch_size, processor.merge_size, processor.temporal_patch_size), (16, 2, 1))
-        self.assertEqual((processor.min_frames, processor.max_frames, processor.fps), (2, 1024, 2))
+    def test_processor_attributes_and_model_input_names(self):
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        tester = self.video_processor_tester
+        for name in ("size", "max_image_size", "patch_size", "merge_size", "temporal_patch_size"):
+            self.assertEqual(getattr(processor, name), getattr(tester, name))
+        defaults = self.fast_video_processing_class()
+        for name in ("image_mean", "image_std"):
+            self.assertEqual(tuple(getattr(processor, name)), tuple(getattr(tester, name)))
+            self.assertEqual(tuple(getattr(defaults, name)), tuple(getattr(tester, name)))
+        self.assertEqual(processor.resample, PILImageResampling.BICUBIC)
         self.assertFalse(processor.do_sample_frames)
-        self.assertIsNone(processor.num_frames)
-        self.assertEqual(tuple(processor.image_mean), (0.5,) * 3)
-        self.assertEqual(tuple(processor.image_std), (0.5,) * 3)
         self.assertEqual(processor.model_input_names, ["pixel_values_videos", "video_grid_thw"])
+        for name in ("cap_pixels_per_frame", "max_video_tokens"):
+            self.assertNotIn(name, processor.valid_kwargs.__annotations__)
+            self.assertFalse(hasattr(processor, name))
 
     def test_video_processor_from_dict_with_kwargs(self):
         processor = self.fast_video_processing_class.from_dict(
@@ -104,11 +120,22 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(processor.size, {"shortest_edge": 2048, "longest_edge": 16384})
         self.assertEqual(processor.max_frames, 7)
 
-    def test_checkpoint_pixel_budget_aliases(self):
-        processor = self.fast_video_processing_class(min_pixels=1024, max_pixels=16384, video_max_image_size=64)
-        self.assertEqual(processor.size, {"shortest_edge": 1024, "longest_edge": 16384})
-        self.assertEqual(processor.max_image_size, {"longest_edge": 4096})
-        self.assertEqual(self.fast_video_processing_class().size, {"shortest_edge": 4096, "longest_edge": 33554432})
+    def test_canonical_pixel_budget_roundtrip(self):
+        processor = self.fast_video_processing_class(**self.video_processor_dict, resample=PILImageResampling.BILINEAR)
+        video = torch.randint(0, 256, (3, 3, 64, 128), dtype=torch.uint8, device=torch_device)
+        with tempfile.TemporaryDirectory() as directory:
+            processor.save_pretrained(directory)
+            restored = AutoVideoProcessor.from_pretrained(directory, local_files_only=True, device=torch_device)
+        self.assertIs(type(restored), self.fast_video_processing_class)
+        self.assertEqual(restored.size, processor.size)
+        self.assertEqual(restored.max_image_size, processor.max_image_size)
+        self.assertEqual(restored.resample, PILImageResampling.BILINEAR)
+        for name in ("min_pixels", "max_pixels", "video_max_image_size", "cap_pixels_per_frame", "max_video_tokens"):
+            self.assertNotIn(name, restored.to_dict())
+        expected = processor(video, input_data_format="channels_first", return_tensors="pt")
+        actual = restored(video, input_data_format="channels_first", return_tensors="pt")
+        torch.testing.assert_close(actual.pixel_values_videos, expected.pixel_values_videos, atol=0, rtol=0)
+        torch.testing.assert_close(actual.video_grid_thw, expected.video_grid_thw)
 
     def _check_input_type(self, return_tensors, nested=False):
         processor = self.fast_video_processing_class(**self.video_processor_dict)
@@ -181,6 +208,99 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(output.pixel_values_videos.shape, (32, 768))
         self.assertGreater(output.video_grid_thw[0, 2].item() * 16, 64)
 
+    @parameterized.expand(
+        [
+            ("round_half_to_even", 3, 80, 112, 4, 8),
+            ("downscale", 2, 128, 256, 4, 8),
+            ("upscale", 3, 32, 32, 4, 4),
+        ]
+    )
+    def test_regular_resize_rounding(self, _, frames, height, width, grid_h, grid_w):
+        settings = {**self.video_processor_dict, "size": {"shortest_edge": 4096, "longest_edge": 32768}}
+        processor = self.fast_video_processing_class(**settings)
+        video = torch.zeros((frames, 3, height, width), dtype=torch.uint8, device=torch_device)
+        output = processor(video, input_data_format="channels_first", return_tensors="pt")
+        self.assertEqual(output.video_grid_thw.tolist(), [[frames, grid_h, grid_w]])
+        self.assertEqual(processor.get_video_grid(frames, height, width), (frames, grid_h, grid_w))
+
+    def test_call_time_area_cap_overrides_instance_without_mutating_it(self):
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        video = torch.zeros((3, 3, 64, 128), dtype=torch.uint8, device=torch_device)
+        original_cap = processor.max_image_size.copy()
+        default = processor(video, input_data_format="channels_first", return_tensors="pt")
+        kwargs = {"max_image_size": {"longest_edge": 2048}}
+        capped = processor(video, input_data_format="channels_first", return_tensors="pt", **kwargs)
+        self.assertEqual(default.video_grid_thw.tolist(), [[3, 4, 8]])
+        self.assertEqual(capped.video_grid_thw.tolist(), [[3, 2, 4]])
+        self.assertEqual(processor.get_video_grid(3, 64, 128, kwargs), tuple(capped.video_grid_thw[0].tolist()))
+        self.assertEqual(processor.get_num_of_video_patches(3, 64, 128, kwargs), capped.pixel_values_videos.shape[0])
+        self.assertEqual(processor.max_image_size, original_cap)
+        repeated = processor(video, input_data_format="channels_first", return_tensors="pt")
+        torch.testing.assert_close(repeated.pixel_values_videos, default.pixel_values_videos, atol=0, rtol=0)
+
+    @parameterized.expand([("landscape", 64, 8192), ("portrait", 8192, 64)])
+    def test_extreme_aspect_ratio_respects_clip_budget(self, _, height, width):
+        processor = self.fast_video_processing_class(device=torch_device)
+        grid_t, grid_h, grid_w = processor.get_video_grid(1024, height, width)
+        patch_area = processor.patch_size**2
+        self.assertLessEqual(grid_t * grid_h * grid_w * patch_area, processor.size["longest_edge"])
+        self.assertEqual((grid_h, grid_w), (2, 64) if height < width else (64, 2))
+        # The same per-frame budget on two frames exercises real resizing without a 1024-frame allocation.
+        size = {
+            "shortest_edge": processor.size["shortest_edge"],
+            "longest_edge": processor.size["longest_edge"] // 512,
+        }
+        video = torch.zeros((2, 3, height, width), dtype=torch.uint8, device=torch_device)
+        actual = processor(video, size=size, input_data_format="channels_first", return_tensors="pt")
+        self.assertEqual(actual.video_grid_thw.tolist(), [[2, grid_h, grid_w]])
+        self.assertLessEqual(actual.video_grid_thw.prod().item() * patch_area, size["longest_edge"])
+
+    @parameterized.expand(
+        [
+            ("below_patch", 1024, 512),
+            ("minimum_exceeds_cap", 4096, 2048),
+            ("no_aligned_area", 1025, 2047),
+        ]
+    )
+    def test_rejects_infeasible_minimum_and_cap(self, _, minimum, cap):
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        kwargs = {
+            "size": {"shortest_edge": minimum, "longest_edge": processor.size["longest_edge"]},
+            "max_image_size": {"longest_edge": cap},
+        }
+        video = torch.zeros((2, 3, 32, 64), dtype=torch.uint8, device=torch_device)
+        with self.assertRaisesRegex(ValueError, "pixel budget"):
+            processor(video, input_data_format="channels_first", return_tensors="pt", **kwargs)
+        with self.assertRaisesRegex(ValueError, "pixel budget"):
+            processor.get_video_grid(2, 32, 64, kwargs)
+
+    def test_resample_argument_controls_pixels(self):
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        video = torch.randint(0, 256, (3, 3, 97, 193), dtype=torch.uint8, device=torch_device)
+        kwargs = {
+            "do_rescale": False,
+            "do_normalize": False,
+            "input_data_format": "channels_first",
+            "return_tensors": "pt",
+        }
+        default = processor(video, **kwargs)
+        for resample in (PILImageResampling.BILINEAR, PILImageResampling.NEAREST):
+            with self.subTest(resample=resample):
+                actual = processor(video, resample=resample, **kwargs)
+                _, grid_h, grid_w = actual.video_grid_thw[0].tolist()
+                resized = BaseVideoProcessor.resize(
+                    processor,
+                    image=video.unsqueeze(0),
+                    size=SizeDict(height=grid_h * processor.patch_size, width=grid_w * processor.patch_size),
+                    resample=resample,
+                )
+                expected, *_ = processor.patchify(
+                    resized, processor.patch_size, processor.merge_size, processor.temporal_patch_size
+                )
+                torch.testing.assert_close(actual.pixel_values_videos, expected[0], atol=0, rtol=0)
+                self.assertFalse(torch.equal(actual.pixel_values_videos, default.pixel_values_videos))
+        self.assertEqual(processor.resample, PILImageResampling.BICUBIC)
+
     def test_sample_frames_fps_and_mutual_exclusion(self):
         processor = self.fast_video_processing_class()
         metadata = VideoMetadata(total_num_frames=12, fps=6)
@@ -216,6 +336,20 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mutually exclusive"):
             processor(video, do_sample_frames=True, fps=2, num_frames=3)
 
+    def test_row_major_patch_order(self):
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        video = torch.arange(3 * 3 * 32 * 64, dtype=torch.float32, device=torch_device).reshape(3, 3, 32, 64)
+        output = processor(
+            video,
+            do_resize=False,
+            do_rescale=False,
+            do_normalize=False,
+            input_data_format="channels_first",
+            return_tensors="pt",
+        )
+        expected = video.reshape(3, 3, 2, 16, 4, 16).permute(0, 2, 4, 1, 3, 5).reshape(24, 768)
+        torch.testing.assert_close(output.pixel_values_videos, expected, atol=0, rtol=0)
+
     def test_temporal_padding_repeats_last_frame(self):
         processor = self.fast_video_processing_class(**self.video_processor_dict)
         video = np.stack([np.full((32, 64, 3), i * 100, dtype=np.uint8) for i in range(3)])
@@ -228,6 +362,8 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     @parameterized.expand(
         [
             ("default", {}),
+            ("no_resize", {"do_resize": False}),
+            ("patch", {"patch_size": 8}),
             ("size", {"size": {"shortest_edge": 1024, "longest_edge": 3072}}),
             ("merge", {"merge_size": 1}),
             ("temporal", {"temporal_patch_size": 2}),
@@ -239,6 +375,8 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         video = np.zeros((3, 64, 128, 3), dtype=np.uint8)
         output = processor(video, **kwargs, return_tensors="pt")
         estimate = processor.get_num_of_video_patches(3, 64, 128, kwargs)
+        self.assertIsInstance(estimate, int)
+        self.assertEqual(processor.get_video_grid(3, 64, 128, kwargs), tuple(output.video_grid_thw[0].tolist()))
         self.assertEqual(estimate, output.pixel_values_videos.shape[0])
         self.assertEqual(estimate, output.video_grid_thw.prod().item())
 
