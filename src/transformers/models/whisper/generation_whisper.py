@@ -1167,7 +1167,6 @@ class WhisperGenerationMixin(GenerationMixin):
 
         def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
             if beam_indices is not None and key == "scores":
-                # read on the host once: indexing with each element of a device tensor is a device op per step
                 beam_idxs = beam_indices[batch_idx][: len(values)].tolist()
                 return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_idxs)]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
@@ -1979,7 +1978,6 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # retrieve logprob of selected tokens and sum
         # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
-        # (gathered in one op and summed on the host: indexing token by token would be a device op per token)
         token_logprobs = logprobs.gather(-1, tokens.unsqueeze(-1)).squeeze(-1).cpu()
         sum_logprobs = sum(token_logprobs[i] for i in range(token_logprobs.shape[0]))
 
@@ -2003,7 +2001,6 @@ class WhisperGenerationMixin(GenerationMixin):
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
-        # They are found on the host: `torch.where` would sync, and recompile for every new length on TPU.
         timestamp_tokens = [token >= timestamp_begin for token in seek_sequence.tolist()]
         single_timestamp_ending = timestamp_tokens[-2:] == [False, True]
         timestamp_segment_indices = [

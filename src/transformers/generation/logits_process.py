@@ -2025,8 +2025,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         scores_processed[:, self.no_timestamps_token_id] = -float("inf")
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
-        # The checks run on one host copy of `input_ids`: per-row device ops would each sync, and backends that compile
-        # per shape (e.g. TPU) would recompile them every step, as `input_ids` grows.
         timestamps_last = []
         for k, seq in enumerate(input_ids.tolist()):
             seq = seq[self.begin_index :]
@@ -2052,8 +2050,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                     timestamp_last = timestamps[-1] + 1
             timestamps_last.append(timestamp_last)
 
-        # Forbid the timestamps below each row's `timestamp_last` in one fixed-shape op: a slice per row would change
-        # width as timestamps advance, and backends that compile per shape would recompile it.
+        # Forbid the timestamps below each row's `timestamp_last`
         vocab_ids = torch.arange(scores_processed.shape[-1], device=scores_processed.device)
         timestamps_last = torch.tensor(timestamps_last, device=scores_processed.device).unsqueeze(-1)
         scores_processed.masked_fill_(
