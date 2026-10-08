@@ -36,15 +36,12 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
 from ...masking_utils import (
     _preprocess_mask_arguments,
-    and_masks,
-    bidirectional_mask_function,
     blockwise_overlay,
     create_bidirectional_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
     maybe_pad_block_sequence_ids,
-    sdpa_mask,
     sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -317,7 +314,7 @@ class Gemma4AudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
-        attention_mask: torch.BoolTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, None]:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, self.num_heads, self.head_dim)
@@ -352,9 +349,7 @@ class Gemma4AudioAttention(nn.Module):
         attn_weights = attn_weights * self.softcap
 
         if attention_mask is not None:
-            attn_weights = attn_weights.masked_fill(
-                attention_mask.logical_not(), self.config.attention_invalid_logits_value
-            )
+            attn_weights = attn_weights.masked_fill(attention_mask != 0, self.config.attention_invalid_logits_value)
 
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(value_states.dtype)
         attn_output = attn_weights @ value_states.permute(0, 3, 1, 2, 4)
@@ -1897,6 +1892,11 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
     config: Gemma4AudioConfig
     main_input_name = "input_features"
     base_model_prefix = "model.audio_tower"  # prefix for Gemma4ForConditionalGeneration saved checkpoints, required for Gemma4AudioModel.from_pretrained()
+    # The chunked local attention is only implemented in eager
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+    _supports_attention_backend = False
     _can_record_outputs = {
         "hidden_states": Gemma4AudioLayer,
         "attentions": Gemma4AudioAttention,
@@ -1931,9 +1931,10 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
         padded_seq_len = num_blocks * chunk_size
         pad_amount = padded_seq_len - seq_len
 
-        mask_4d = F.pad(mask_4d, (0, pad_amount, 0, pad_amount), value=False)
+        min_dtype = torch.finfo(mask_4d.dtype).min
+        mask_4d = F.pad(mask_4d, (0, pad_amount, 0, pad_amount), value=min_dtype)
         mask_5d = mask_4d.reshape(batch_size, 1, num_blocks, chunk_size, padded_seq_len)
-        mask_5d = F.pad(mask_5d, (max_past_horizon, max_future_horizon), value=False)
+        mask_5d = F.pad(mask_5d, (max_past_horizon, max_future_horizon), value=min_dtype)
 
         block_starts = torch.arange(num_blocks, device=device) * chunk_size
         offsets = torch.arange(chunk_size + max_past_horizon + max_future_horizon, device=device)
@@ -1954,24 +1955,16 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
         hidden_states, output_mask = self.subsample_conv_projection(input_features, attention_mask)
         position_embeddings = self.rel_pos_enc(hidden_states)
 
-        # The chunked audio attention always consumes a boolean mask, whatever the attention implementation
-        batch_size, seq_len = hidden_states.shape[:2]
-        attention_mask = sdpa_mask(
-            batch_size=batch_size,
-            q_length=seq_len,
-            kv_length=seq_len,
-            mask_function=and_masks(
-                bidirectional_mask_function,
-                sliding_window_mask_function(
-                    (self.config.attention_context_left - 1, self.config.attention_context_right)
-                ),
-            ),
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
             attention_mask=output_mask,
-            allow_is_causal_skip=False,
-            use_vmap=True,
-            device=hidden_states.device,
+            and_mask_function=sliding_window_mask_function(
+                (self.config.attention_context_left - 1, self.config.attention_context_right)
+            ),
         )
-        attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
+        if attention_mask is not None:
+            attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
 
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = encoder_layer(
