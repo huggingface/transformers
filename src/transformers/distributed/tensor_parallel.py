@@ -532,7 +532,7 @@ class MoEParamShard(TensorParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
     Shards dim 0 and updates module.num_experts to the per-rank local count so the
-    experts forward and ep_router sentinel agree.
+    experts forward and the masked EP sentinel agree.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -1027,9 +1027,6 @@ def resolve_parallel_plans(
             "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
             "`base_model_ep_plan` to the model's config, or disable expert parallelism."
         )
-
-    if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
-        raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
 
     # EP rules take precedence: drop TP rules on EP modules and their children.
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch

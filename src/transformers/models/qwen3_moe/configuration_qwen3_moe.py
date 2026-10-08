@@ -67,10 +67,8 @@ class Qwen3MoeConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    # Token dispatch by default, so `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`, 4 on
-    # Qwen3-30B): with `tp_size=1` the attention is left to FSDP2. For router masking with all-reduce, set
-    # `ep_size=tp_size` and pass `ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}`
-    # (prefixed with `model.` on the causal LM).
+    # `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`, 4 on Qwen3-30B): with `tp_size=1` the
+    # attention is left to FSDP2.
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

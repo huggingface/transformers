@@ -180,7 +180,7 @@ def sonicmoe_experts_forward(
     # EP sentinel handling: leave `expert_ids` unclamped — the kernel's metadata stage drops
     # `expert_ids >= num_experts` from the per-expert histogram and masks them out of the
     # scatter indices, so sentinels never enter the grouped GEMM. Their routing weights are
-    # already zero (RouterParallel masks them at dispatch), so the per-token reduction
+    # already zero (masked EP zeroes them), so the per-token reduction
     # contributes nothing for sentinel slots.
 
     w1 = self.gate_up_proj

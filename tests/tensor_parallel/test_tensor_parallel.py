@@ -17,8 +17,8 @@ from unittest.mock import patch
 import torch
 from torch.distributed.device_mesh import init_device_mesh
 
-from transformers import AutoModelForCausalLM
-from transformers.distributed import tensor_parallel
+from transformers import AutoModelForCausalLM, Qwen3MoeConfig, Qwen3MoeModel
+from transformers.distributed import DistributedConfig, tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -27,6 +27,7 @@ from transformers.distributed.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    resolve_parallel_plans,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -388,3 +389,34 @@ class TestTensorParallelLayer(TestCasePlus):
         """When the EP group holds one batch, each rank runs its own experts on all of it: its experts' ids become
         local and the other ranks' routes go past them with weight 0."""
         _init_distributed(tp=2, backend="gloo")(_masked_experts_keep_to_their_own_routes)()
+
+    def test_ep_router_with_dispatch_is_refused(self):
+        """The router-masked plan resolves as written; next to `ep_dispatch_experts`, which masks or routes the tokens
+        itself, an `ep_router` rule would mask them twice and is refused."""
+        config = Qwen3MoeConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=16,
+            moe_intermediate_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            num_experts=4,
+            num_experts_per_tok=2,
+        )
+        with torch.device("meta"):
+            model = Qwen3MoeModel(config)
+        router_masked = {"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}
+        distributed_config = DistributedConfig(tp_size=2, ep_size=2, ep_plan=router_masked)
+        _, ep_plan = resolve_parallel_plans(model, distributed_config)
+        self.assertEqual({name: ep_plan[name] for name in router_masked}, router_masked)
+        distributed_config._validate_resolved_ep_plan(ep_plan)
+
+        # `ep_size == tp_size` resolves the default experts rule to masked EP
+        distributed_config = DistributedConfig(tp_size=2, ep_size=2, ep_plan={"layers.*.mlp.gate": "ep_router"})
+        with torch.device("meta"):
+            model = Qwen3MoeModel(config)
+        _, ep_plan = resolve_parallel_plans(model, distributed_config)
+        self.assertEqual(ep_plan["layers.*.mlp.experts"], "ep_masked_experts")
+        with self.assertRaisesRegex(ValueError, "remove the `ep_router` rules"):
+            distributed_config._validate_resolved_ep_plan(ep_plan)

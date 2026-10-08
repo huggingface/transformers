@@ -118,6 +118,8 @@ class ParallelInterface(GeneralInterface):
         "sequence_parallel": SequenceParallel(use_local_output=True),
         "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
         "ep_router": EpRouterParallel(),
+        "ep_dispatch_experts": EpDispatchExpertsParallel(),
+        "ep_masked_experts": EpMaskedExpertsParallel(),
         "megamoe_router": RouterParallelMegaMoe(),
         "moe_tp_experts": MoeExpertsParallel(),
         "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
@@ -145,6 +147,8 @@ The table below describes each strategy.
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 | `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
+| `EpDispatchExpertsParallel` | Expert-parallel experts with token dispatch: sends each routed (token, expert) pair to the rank owning the expert with an all-to-all and returns the outputs with a second one. Backs `ep_dispatch_experts`. |
+| `EpMaskedExpertsParallel` | What `ep_dispatch_experts` resolves to when `ep_size=tp_size`: remaps global expert IDs to local ones, masks the routes to other ranks' experts, and all-reduces the partial outputs. |
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
 | `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
