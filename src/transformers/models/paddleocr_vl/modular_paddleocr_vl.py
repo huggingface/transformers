@@ -27,6 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import SubConfigSpec
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -310,7 +311,10 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
     >>> configuration = model.config
     ```"""
 
-    sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=PaddleOCRVisionConfig),
+        "text_config": SubConfigSpec(config_class=PaddleOCRTextConfig),
+    }
 
     image_token_id: int = 100295
     video_token_id: int = 100296

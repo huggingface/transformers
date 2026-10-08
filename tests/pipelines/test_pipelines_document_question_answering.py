@@ -13,10 +13,16 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
     AutoTokenizer,
+    BartConfig,
+    DonutImageProcessor,
+    DonutSwinConfig,
+    VisionEncoderDecoderConfig,
+    VisionEncoderDecoderModel,
     is_torch_available,
     is_vision_available,
 )
@@ -199,6 +205,38 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4), [{"score": 0.8799, "answer": "2"}, {"score": 0.296, "answer": "1"}]
         )
+
+    @require_torch
+    @require_vision
+    def test_top_k_is_not_a_generation_parameter(self):
+        # With a generative (Donut) model, `top_k` is still the number of answers, not the sampling parameter
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        encoder = DonutSwinConfig(image_size=32, patch_size=4, embed_dim=8, depths=[1], num_heads=[1], window_size=2)
+        decoder = BartConfig(
+            vocab_size=len(tokenizer),
+            d_model=8,
+            encoder_layers=1,
+            decoder_layers=1,
+            encoder_attention_heads=1,
+            decoder_attention_heads=1,
+            encoder_ffn_dim=8,
+            decoder_ffn_dim=8,
+        )
+        model = VisionEncoderDecoderModel(VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder, decoder))
+        model.generation_config.decoder_start_token_id = tokenizer.bos_token_id
+        dqa_pipeline = pipeline(
+            "document-question-answering",
+            model=model,
+            tokenizer=tokenizer,
+            image_processor=DonutImageProcessor(size={"height": 32, "width": 32}),
+            top_k=2,
+            max_new_tokens=3,
+        )
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = dqa_pipeline(image=Image.new("RGB", (32, 32)), question="What is this?")
+        self.assertNotIn("top_k", generate.call_args.kwargs)
+        self.assertEqual(generate.call_args.kwargs["max_new_tokens"], 3)
+        self.assertEqual(dqa_pipeline._postprocess_params["top_k"], 2)
 
     @slow
     @require_torch
