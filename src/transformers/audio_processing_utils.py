@@ -60,11 +60,14 @@ _MATMUL_ORDERS = ("filters_first", "filters_first_matmul", "features_first")
 # numpy extractors' (float64 geometry on the host, rounded to float32 at the end); `"torchaudio"` is
 # torchaudio's, evaluated op by op through the backend's own kernels (float32 by default) because
 # torch's float32 `log`/`exp`/`linspace` are not correctly rounded: only the same kernels give the
-# same bits, and `to_numpy` carries them to the host unchanged.
+# same bits, and `to_numpy` carries them to the host unchanged. The builders no longer reach
+# `audio_utils`' torch branches (`hertz_to_mel`/`mel_to_hertz`): those are now public-API-only.
 
 
 def _hertz_to_mel_ops(ops, freq, mel_scale, *, like):
-    """`hertz_to_mel` on a backend array, torchaudio's arithmetic (`audio_utils.hertz_to_mel`'s torch branch)."""
+    """`hertz_to_mel` on a backend array, torchaudio's arithmetic (`audio_utils.hertz_to_mel`'s torch branch).
+    A transcription, not a call: `audio_utils` dispatches on the array type and imports torch in its branch,
+    so it cannot run on `self.ops`."""
     if mel_scale == "htk":
         return 2595.0 * ops.log10(1.0 + freq / 700.0)
     if mel_scale == "kaldi":
@@ -77,7 +80,9 @@ def _hertz_to_mel_ops(ops, freq, mel_scale, *, like):
 
 
 def _mel_to_hertz_ops(ops, mels, mel_scale):
-    """`mel_to_hertz` on a backend array, torchaudio's arithmetic (`audio_utils.mel_to_hertz`'s torch branch)."""
+    """`mel_to_hertz` on a backend array, torchaudio's arithmetic (`audio_utils.mel_to_hertz`'s torch branch).
+    A transcription, not a call: `audio_utils` dispatches on the array type and imports torch in its branch,
+    so it cannot run on `self.ops`."""
     if mel_scale == "htk":
         return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
     if mel_scale == "kaldi":
@@ -105,7 +110,8 @@ def _triangular_banks_librosa(fft_freqs, filter_freqs, dtype):
 
 def _kaldi_banks_torchaudio(ops, n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, dtype):
     """`torchaudio.compliance.kaldi.get_mel_banks`, op by op: hard-coded ``1127 * log`` in `dtype` (float32 by
-    default), edges from `mel_low + k * mel_delta`, a padded zero Nyquist column."""
+    default), edges from `mel_low + k * mel_delta`, a zero Nyquist bin (padded before the transpose).
+    `num_bins` is unused (the bins follow from `n_fft`); it keeps the builders' uniform signature."""
     dtype = dtype or "float32"
     bin_width = sampling_rate / n_fft
     mel_low = 1127.0 * math.log(1.0 + f_min / 700.0)
@@ -151,8 +157,8 @@ def _kaldi_banks_zero_bands_torchaudio(ops, n_mels, num_bins, f_min, f_max, samp
 def _standard_banks(ops, n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, mel_cfg, dtype):
     """Standard triangular bank. `bank_rounding="torchaudio"`: `melscale_fbanks`' order op by op (construction
     in `dtype`, float32 by default, slaney norm after in that dtype). `"librosa"`: `librosa.filters.mel`'s
-    order on the host (float64 geometry, rounded to float32 before the norm and again after it, without a
-    dtype). `frequency_bin_mode` is honoured by both: `"rfft"` is `rfftfreq`'s bin spacing, `"linspace"`
+    order on the host (float64 geometry, rounded to `dtype`, float32 by default, before the norm and again
+    after it). `frequency_bin_mode` is honoured by both: `"rfft"` is `rfftfreq`'s bin spacing, `"linspace"`
     is `linspace(0, sr // 2, bins)`, the legacy numpy extractors' (and librosa's) form; the two differ
     when `sr // 2` is not a multiple of the bin width."""
     mel_min = hertz_to_mel(f_min, mel_scale=mel_cfg.mel_scale)
@@ -167,8 +173,7 @@ def _standard_banks(ops, n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, m
         if mel_cfg.norm == "slaney":
             enorm = 2.0 / (filter_freqs[2 : n_mels + 2] - filter_freqs[:n_mels])
             banks = banks * enorm[None, :]
-            if dtype is None:
-                banks = banks.astype(np.float32)
+            banks = banks.astype(np.dtype(dtype or "float32"), copy=False)
         return np.pad(banks, ((mel_cfg.bands_to_zero, 0), (0, 0))) if mel_cfg.bands_to_zero else banks
     dtype = dtype or "float32"
     filter_freqs = _mel_to_hertz_ops(ops, ops.linspace(mel_min, mel_max, n_mels + 2, dtype=dtype), mel_cfg.mel_scale)
@@ -1226,6 +1231,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         rounding = mel_cfg.bank_rounding
         if rounding not in ("torchaudio", "librosa"):
             raise ValueError(f"bank_rounding must be 'torchaudio' or 'librosa', got {rounding!r}.")
+        # validated here so a bad `matmul_order` fails at init, not on the first call
         if mel_cfg.matmul_order not in _MATMUL_ORDERS:
             raise ValueError(f"matmul_order must be one of {_MATMUL_ORDERS}, got {mel_cfg.matmul_order!r}.")
         args = (mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency, self.sampling_rate, n_fft)

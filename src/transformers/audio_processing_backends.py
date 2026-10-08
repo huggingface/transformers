@@ -319,6 +319,7 @@ class AudioOps:
         raise NotImplementedError
 
     def exp(self, x):
+        """Elementwise ``e**x``. Float input."""
         raise NotImplementedError
 
     def where(self, cond, x, y):
