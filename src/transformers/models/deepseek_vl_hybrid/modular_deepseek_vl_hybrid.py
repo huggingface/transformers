@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -43,7 +43,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
 from ..deepseek_vl.image_processing_pil_deepseek_vl import DeepseekVLImageProcessorPil
@@ -90,24 +90,13 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     ```"""
 
     model_type = "deepseek_vl_hybrid"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "high_res_vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+        "high_res_vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam_vision_model"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+    }
 
     high_res_vision_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.high_res_vision_config is None:
-            self.high_res_vision_config = {}
-            logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
-
-        if isinstance(self.high_res_vision_config, dict):
-            self.high_res_vision_config["model_type"] = self.high_res_vision_config.get(
-                "model_type", "sam_vision_model"
-            )
-            self.high_res_vision_config = CONFIG_MAPPING[self.high_res_vision_config["model_type"]](
-                **self.high_res_vision_config
-            )
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring

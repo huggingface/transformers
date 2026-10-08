@@ -52,6 +52,7 @@ class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
+    _is_distributed_loading_by_transformers = False
     _mesh_manager: TransformersDeviceMesh | None = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
@@ -59,6 +60,14 @@ class DistributedMixin:
     _fsdp_size = None
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
+
+    @property
+    def is_distributed_loading_by_transformers(self) -> bool:
+        """
+        Whether `from_pretrained(distributed_config=...)` sharded the model at load time (each rank reads only its
+        shard through `DtensorShardOperation`), rather than a wrapper such as Accelerate sharding it afterwards.
+        """
+        return self._is_distributed_loading_by_transformers
 
     def init_parallel_plans(self) -> None:
         """Copy class-level plans onto the instance and merge config/children contributions."""
@@ -161,11 +170,6 @@ class DistributedMixin:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
-        if distributed_config.ep_size > 1 and distributed_config.ep_size != distributed_config.tp_size:
-            raise ValueError(
-                "All-reduce expert parallelism requires `ep_size=tp_size` and identical tokens per EP group."
-            )
-
         if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
             return distributed_config, device_map, None
 
@@ -192,6 +196,7 @@ class DistributedMixin:
         model.config.distributed_config = distributed_config
         model._mesh_manager = mesh_manager
         model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
+        model._is_distributed_loading_by_transformers = True
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
 
@@ -218,7 +223,7 @@ class DistributedMixin:
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
-        if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
+        if distributed_config.fsdp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
 
         return model
@@ -281,11 +286,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or (
-            distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
-        ):
-            # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and the
-            # full state dict is only materialized on rank 0.
+        if distributed_config.fsdp_size > 1:
+            # Also covers the 2-D (fsdp, tp) mesh and token dispatch with expert replicas: every parameter is
+            # FSDP-managed, and the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
                 raise ValueError(
                     "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "

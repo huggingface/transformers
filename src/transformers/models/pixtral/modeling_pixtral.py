@@ -437,7 +437,17 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         if is_flash_attention_requested(self.config):
-            # We only rely on position_ids when using flash attention
+            # Axial RoPE positions have two coordinates per patch, so they cannot
+            # describe the packed image boundaries expected by Flash Attention.
+            sequence_lengths = [p.shape[-2] * p.shape[-1] for p in patch_embeds_list]
+            cu_seqlens = torch.tensor([0, *sequence_lengths], device=patch_embeds.device, dtype=torch.int32)
+            cu_seqlens = cu_seqlens.cumsum(dim=0, dtype=torch.int32)
+            kwargs.update(
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max(sequence_lengths),
+                max_length_k=max(sequence_lengths),
+            )
             attention_mask = None
         else:
             attention_mask = generate_block_attention_mask(
@@ -448,7 +458,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            position_ids=position_ids,
             **kwargs,
         )
 
