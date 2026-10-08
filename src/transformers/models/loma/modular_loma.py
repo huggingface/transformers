@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import field
-
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -43,24 +41,18 @@ class LoMaVgg19EncoderConfig(PreTrainedConfig):
     r"""
     in_channels (`int`, *optional*, defaults to 3):
         Number of input image channels.
-    hidden_sizes (`list[int]`, *optional*, defaults to `[64, 128, 256, 512]`):
+    hidden_sizes (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(64, 128, 256, 512)`):
         Number of channels in the four VGG encoder stages.
-    num_hidden_layers (`list[int]`, *optional*, defaults to `[2, 2, 4, 4]`):
+    num_hidden_layers (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(2, 2, 4, 4)`):
         Number of convolution blocks in each VGG encoder stage.
     conv_kernel_size (`int`, *optional*, defaults to 3):
         Kernel size used by the convolution blocks.
-    pool_kernel_size (`int`, *optional*, defaults to 2):
-        Kernel size used by the pooling layers between encoder stages.
-    pool_stride (`int`, *optional*, defaults to 2):
-        Stride used by the pooling layers between encoder stages.
     """
 
     in_channels: int = 3
-    hidden_sizes: list[int] = field(default_factory=lambda: [64, 128, 256, 512])
-    num_hidden_layers: list[int] = field(default_factory=lambda: [2, 2, 4, 4])
+    hidden_sizes: list[int] | tuple[int, ...] = (64, 128, 256, 512)
+    num_hidden_layers: list[int] | tuple[int, ...] = (2, 2, 4, 4)
     conv_kernel_size: int = 3
-    pool_kernel_size: int = 2
-    pool_stride: int = 2
 
     def __post_init__(self, **kwargs):
         if len(self.hidden_sizes) != len(self.num_hidden_layers):
@@ -82,9 +74,9 @@ class LoMaDescriptorDecoderConfig(PreTrainedConfig):
         Number of context channels produced by each decoder stage.
     """
 
-    scales: list[str] = field(default_factory=lambda: ["14", "8", "4", "2", "1"])
-    hidden_sizes: list[int] = field(default_factory=lambda: [768, 512, 256, 64, 32])
-    context_channels: list[int] = field(default_factory=lambda: [512, 256, 128, 32, 1])
+    scales: list[str] | tuple[str, ...] = ("14", "8", "4", "2", "1")
+    hidden_sizes: list[int] | tuple[int, ...] = (768, 512, 256, 64, 32)
+    context_channels: list[int] | tuple[int, ...] = (512, 256, 128, 32, 1)
 
     def __post_init__(self, **kwargs):
         if len(self.scales) != len(self.hidden_sizes) or len(self.scales) != len(self.context_channels):
@@ -177,10 +169,10 @@ class LoMaConfig(LightGlueConfig):
         if isinstance(self.keypoint_detector_config, dict):
             self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
             self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
-                **self.keypoint_detector_config, attn_implementation="eager"
+                **self.keypoint_detector_config
             )
         elif self.keypoint_detector_config is None:
-            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
+            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
 
         if isinstance(self.encoder_config, dict):
             self.encoder_config = LoMaVgg19EncoderConfig(**self.encoder_config)
