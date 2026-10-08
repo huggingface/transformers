@@ -30,27 +30,19 @@ if is_torch_available():
 
 
 class NumpyAudioBackend(BaseAudioProcessor):
-    """NumPy backend for portable CPU-only audio processing."""
+    """Transitional (step 3): a model's numpy sibling, i.e. the model on `backend="numpy"`. Deleted in Task 4."""
 
     def __init__(self, *args, **kwargs: Unpack[AudioKwargs]):
+        kwargs.setdefault("backend", "numpy")
         super().__init__(*args, **kwargs)
-        self._set_attributes(**kwargs)
-
-    @property
-    def backend(self) -> str:
-        return "numpy"
 
 
 class TorchAudioBackend(BaseAudioProcessor):
-    """Torch backend for audio processing."""
+    """Transitional (step 3): the model on `backend="torch"`. Deleted in Task 4."""
 
     def __init__(self, *args, **kwargs: Unpack[AudioKwargs]):
+        kwargs.setdefault("backend", "torch")
         super().__init__(*args, **kwargs)
-        self._set_attributes(**kwargs)
-
-    @property
-    def backend(self) -> str:
-        return "torch"
 
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -115,7 +107,8 @@ class AudioOps:
         raise NotImplementedError
 
     def to_device(self, x, device):
-        """`x` on `device` (a backend-specific designator). Backends without devices return `x`."""
+        """`x` on `device` (a backend-specific designator). Backends without devices accept `None` and `"cpu"`
+        (returning `x`) and raise on anything else."""
         raise NotImplementedError
 
     def to_device_many(self, seq, device):
@@ -426,6 +419,11 @@ class NumpyOps(AudioOps):
         return np.asarray(x)
 
     def to_device(self, x, device):
+        if device is not None and str(device) != "cpu":
+            raise ValueError(
+                f"The numpy audio backend has no devices; got device={device!r}. Use backend='torch' to place "
+                "the arrays on an accelerator."
+            )
         return x
 
     def to_device_many(self, seq, device):

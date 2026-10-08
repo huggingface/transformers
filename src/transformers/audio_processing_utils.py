@@ -31,7 +31,7 @@ from .audio_utils import (
 )
 from .processing_utils import AudioKwargs
 from .tokenization_utils_base import TruncationStrategy
-from .utils import PaddingStrategy, TensorType, logging
+from .utils import PaddingStrategy, TensorType, is_torch_available, logging
 
 
 if TYPE_CHECKING:
@@ -217,9 +217,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
     # returns alongside its features (e.g. Cohere-ASR's `audio_chunk_index`).
     skip_tensor_conversion: list[str] = []
 
+    # Ops this model calls beyond the core table (`OPTIONAL_OPS`, or ops attached by `register_audio_op`).
+    # Checked at construction, so a backend lacking one fails at `from_pretrained`, not at the first call.
+    required_ops: tuple[str, ...] = ()
+
     def __init__(
         self,
         sampling_rate: int | None = None,
+        *,
+        backend: str | None = None,
         **kwargs: Unpack[AudioKwargs],
     ):
         if sampling_rate is not None:
@@ -231,18 +237,28 @@ class BaseAudioProcessor(AudioProcessingMixin):
             )
 
         super().__init__(**kwargs)
-        # _set_attributes runs in the backend subclasses' __init__, not here, for remote-code BC.
+        # The op table is a load-time choice like `device`: never serialized, not a `valid_kwargs` option.
+        if backend is None:
+            backend = "torch" if is_torch_available() else "numpy"
+        if not isinstance(backend, str):
+            raise TypeError(f"`backend` must be a string, got {type(backend).__name__}.")
+        # Imported here until the inheritance-era classes leave `audio_processing_backends` (it imports this module).
+        from .audio_processing_backends import get_audio_backend
+
+        self.backend = backend
+        self.ops = get_audio_backend(backend)()
+        for op in self.required_ops:
+            if not hasattr(self.ops, op):
+                raise ValueError(f"{type(self).__name__} on backend {backend!r} is missing op {op!r}.")
+        self._set_attributes(**kwargs)
 
     def _set_attributes(self, **kwargs):
-        """Called from the backend subclasses' ``__init__`` (not the base, for remote-code BC)."""
+        """Validate the resolved attributes and build the init-time constants (mel bank). Runs at the end of
+        `__init__`."""
         super()._set_attributes(**kwargs)
         # Validate the *resolved* attribute set, not just what the caller passed: a bad value reaching us
         # from a class default or a hub config should fail here, not crash somewhere inside `_preprocess`.
         validate_typed_dict(self.valid_kwargs, {key: getattr(self, key) for key in self._valid_kwargs_names})
-        # Imported here: `audio_processing_backends` imports this module.
-        from .audio_processing_backends import get_audio_backend
-
-        self.ops = get_audio_backend(self.backend)()
         if (
             self.spectrogram_config is not None
             and self.spectrogram_config.mel_scale_config is not None

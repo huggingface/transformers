@@ -133,7 +133,10 @@ class AudioProcessingMixin(PreprocessingMixin):
     _nested_config_keys = ["audio_processor", "feature_extractor"]
     _auto_class_default = "AutoAudioProcessor"
     _file_type_label = "audio processor"
-    _excluded_dict_keys = {"mel_filters", "window", "ops"}
+    _excluded_dict_keys = {"mel_filters", "window", "ops", "backend"}
+    # Constructor arguments that are load-time choices, not config values: `from_dict` passes them to
+    # `__init__` and never reads them from a config (they are in `_excluded_dict_keys`).
+    _load_time_kwargs = ("backend",)
     _extra_init_pops = ["feature_extractor_type"]
     _config_filename_kwarg = "audio_processor_filename"
     _subfolder_default = ""

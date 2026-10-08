@@ -54,6 +54,7 @@ class MusicgenMelodyAudioProcessorMixin:
         "power_spectrogram_config",
         "_chroma_key",
         "ops",
+        "backend",
     }
     # The legacy FE mapped its chroma count to `num_chroma`.
     legacy_field_mapping = {"num_chroma": "n_chroma", "return_attention_mask": None, "return_padding_mask": None}

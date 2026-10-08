@@ -283,6 +283,9 @@ class PreprocessingMixin(PushToHubMixin):
 
     # --- Optional overrides ---
     _excluded_dict_keys: set[str] = set()
+    # Constructor arguments that `from_dict` takes from its kwargs and passes to `__init__` (never from a
+    # config): load-time choices such as an audio processor's `backend`.
+    _load_time_kwargs: tuple[str, ...] = ()
     # Drop None-valued attrs whose class default is None from to_dict(). On by default for the
     # modern processor classes; legacy FeatureExtractionMixin opts out to keep full serialization.
     _filter_none_class_defaults: bool = True
@@ -434,11 +437,14 @@ class PreprocessingMixin(PushToHubMixin):
         for excluded in cls._excluded_dict_keys:
             config_dict.pop(excluded, None)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        # Passed to the constructor, not set afterwards: the BC loop below would `setattr` them after `__init__`
+        # ran, renaming a choice without redoing what `__init__` derived from it.
+        load_time = {key: kwargs.pop(key) for key in cls._load_time_kwargs if key in kwargs}
 
         # Use valid_kwargs pattern when available (image/audio processors)
         if hasattr(cls, "valid_kwargs") and hasattr(cls.valid_kwargs, "__annotations__"):
             config_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
-            processor = cls(**config_dict)
+            processor = cls(**config_dict, **load_time)
 
             # Apply extra kwargs to instance (BC for remote code)
             extra_keys = []
@@ -452,7 +458,7 @@ class PreprocessingMixin(PushToHubMixin):
                     f"To avoid this warning, add them to valid_kwargs."
                 )
         else:
-            processor = cls(**config_dict)
+            processor = cls(**config_dict, **load_time)
 
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:

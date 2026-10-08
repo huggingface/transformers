@@ -72,6 +72,8 @@ class ClapAudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class ClapAudioProcessorMixin:
+    # The fusion path shrinks the full mel with `bilinear_resize`, an optional op.
+    required_ops = ("bilinear_resize",)
     """CLAP's HTSAT encoder consumes a fixed 1001 x 64 log-mel image: 10 s at 48 kHz, hop 480.
 
     `_preprocess` makes one from any clip. A short clip is filled to the clip length (tiled, then

@@ -74,5 +74,11 @@ class SequenceFeatureExtractor(BaseAudioProcessor):
                 mel_scale_config=replace(mel_scale_config, n_mels=feature_size),
             )
 
+    def _set_attributes(self, **kwargs):
+        # Remote-code subclasses of this deprecated base set their attributes after `super().__init__()`, and
+        # this `__init__` rewrites `n_mels` after it too; they never ran the base's validation and init-time
+        # mel bank, and still do not. `self.ops` is composed for them like for every processor.
+        pass
+
 
 __all__ = ["SequenceFeatureExtractor"]

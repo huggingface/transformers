@@ -454,7 +454,8 @@ class AudioKwargs(TypedDict, total=False):
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
         device (`str`, *optional*):
-            The device to use for processing (e.g. "cpu", "cuda"), only relevant for the torch backend.
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for the torch backend; other
+            backends raise on a device other than CPU.
         load_audio_backend (`str`, *optional*):
             Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
             in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.

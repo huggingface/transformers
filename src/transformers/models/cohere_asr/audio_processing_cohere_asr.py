@@ -98,10 +98,12 @@ class CohereAsrAudioProcessorMixin:
         rows = []
         for start, end in audio_ranges:
             valid = max(0, min(end - start, width))
-            parts = [self.ops.randn((valid,), seed=valid, like=audio)] if valid else []
-            if valid < width:
-                parts.append(self.ops.zeros((width - valid,), dtype=dtype, like=audio))
-            rows.append(self.ops.concat(parts, -1))
+            noise = (
+                self.ops.randn((valid,), seed=valid, like=audio)
+                if valid
+                else self.ops.zeros((0,), dtype=dtype, like=audio)
+            )
+            rows.append(self.ops.pad(noise, 0, width - valid))
         return audio + dither * self.ops.stack(rows)
 
     def _preprocess(self, audio, *args, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples, **kwargs):
