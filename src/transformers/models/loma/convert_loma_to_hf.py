@@ -89,13 +89,16 @@ def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | list[str] | N
                 "ffn.3": "self_mlp.fc2",
             }
         else:
-            # Shared query-key → duplicate into q_proj and k_proj
+            # Shared query-key → duplicate (not chunk) into q_proj and k_proj
             if suffix.startswith("to_qk."):
                 param = suffix.split(".")[1]
-                return [
-                    f"layers.{layer_index}.cross_attention.q_proj.{param}",
-                    f"layers.{layer_index}.cross_attention.k_proj.{param}",
-                ]
+                return (
+                    "duplicate",
+                    [
+                        f"layers.{layer_index}.cross_attention.q_proj.{param}",
+                        f"layers.{layer_index}.cross_attention.k_proj.{param}",
+                    ],
+                )
             replacements = {
                 "to_v": "cross_attention.v_proj",
                 "to_out": "cross_attention.o_proj",
@@ -139,14 +142,26 @@ def _rename_descriptor_key(key: str) -> str | None:
         for stage_index, num_blocks in enumerate((2, 2, 4, 4)):
             for block_index in range(num_blocks):
                 if layer_index == source_index:
-                    return f"descriptor_network.encoder.layers.{stage_index}.blocks.{block_index}.conv.{parameter_name}"
+                    return (
+                        f"descriptor_network.encoder.layers.{stage_index}.blocks.{block_index}.conv.{parameter_name}"
+                    )
                 if layer_index == source_index + 1:
-                    return f"descriptor_network.encoder.layers.{stage_index}.blocks.{block_index}.norm.{parameter_name}"
+                    return (
+                        f"descriptor_network.encoder.layers.{stage_index}.blocks.{block_index}.norm.{parameter_name}"
+                    )
                 source_index += 3
             source_index += 1  # max-pooling layer has no weights
         return None
     if key.startswith("_descriptor.decoder."):
-        return key.replace("_descriptor.", "descriptor_network.", 1)
+        new_key = key.replace("_descriptor.", "descriptor_network.", 1)
+        # Map Sequential indices to named modules:
+        # .0. → .conv.  (3×3 conv)
+        # .1. → .norm.  (BatchNorm2d)
+        # .3. → .pointwise.  (1×1 conv / ReLU skipped)
+        new_key = re.sub(r"\.(block1|hidden_blocks\.\d+)\.0\.", r".\1.conv.", new_key)
+        new_key = re.sub(r"\.(block1|hidden_blocks\.\d+)\.1\.", r".\1.norm.", new_key)
+        new_key = re.sub(r"\.(block1|hidden_blocks\.\d+)\.3\.", r".\1.pointwise.", new_key)
+        return new_key
     return None
 
 
@@ -204,7 +219,12 @@ def convert_state_dict(
             destination_key = _rename_dinov2_keys(source_key)
 
         if destination_key is not None:
-            if isinstance(destination_key, list):
+            if isinstance(destination_key, tuple) and destination_key[0] == "duplicate":
+                # Duplicate: copy the full tensor to each destination key (e.g. to_qk → q_proj + k_proj).
+                for dest in destination_key[1]:
+                    converted_state_dict[dest] = tensor
+            elif isinstance(destination_key, list):
+                # Chunk: split the tensor along dim=0 (e.g. Wqkv → q/k/v, attn.qkv → q/k/v).
                 chunks = tensor.chunk(len(destination_key), dim=0)
                 for dest, chunk in zip(destination_key, chunks):
                     converted_state_dict[dest] = chunk
