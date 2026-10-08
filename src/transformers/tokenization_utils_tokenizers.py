@@ -160,6 +160,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # Pass the decoder and pre_tokenizer types to detect mismatches with the Python class
             if tokenizer_json.get("decoder") is not None:
                 local_kwargs["_json_decoder_type"] = tokenizer_json["decoder"].get("type")
+                local_kwargs["_json_decoder"] = tok_from_file.decoder
+            if tokenizer_json.get("pre_tokenizer") is not None:
+                local_kwargs["_json_pre_tokenizer_type"] = tokenizer_json["pre_tokenizer"].get("type")
+                local_kwargs["_json_pre_tokenizer"] = tok_from_file.pre_tokenizer
 
             # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
             # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
@@ -373,6 +377,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         _json_truncation = kwargs.pop("_json_truncation", None)
         _json_padding = kwargs.pop("_json_padding", None)
         _json_decoder_type = kwargs.pop("_json_decoder_type", None)
+        _json_decoder = kwargs.pop("_json_decoder", None)
+        _json_pre_tokenizer_type = kwargs.pop("_json_pre_tokenizer_type", None)
+        _json_pre_tokenizer = kwargs.pop("_json_pre_tokenizer", None)
         # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
@@ -432,18 +439,35 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
 
+        mismatch_decoder = False
+        mismatch_pre_tokenizer = False
+        built_decoder = ""
+        built_pre_tokenizer = ""
+        
         if _json_decoder_type is not None and self._tokenizer.decoder is not None:
             decoder_repr = str(self._tokenizer.decoder)
             built_decoder = decoder_repr.split("(")[0]
             if _json_decoder_type == "ByteLevel" and "ByteLevel" not in decoder_repr:
-                logger.warning(
-                    f"The tokenizer class you loaded from this checkpoint ({self.__class__.__name__}) is a "
-                    f"'{built_decoder}' tokenizer. "
-                    f"However, the `tokenizer.json` file found in this checkpoint contains a '{_json_decoder_type}' decoder. "
-                    f"This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set. "
-                    f"If you experience decoding issues, consider changing the `tokenizer_class` to a ByteLevel-compatible "
-                    f"class (e.g. `Qwen2TokenizerFast` for Qwen2 models) in `tokenizer_config.json`."
-                )
+                mismatch_decoder = True
+                
+        if _json_pre_tokenizer_type is not None and self._tokenizer.pre_tokenizer is not None:
+            pre_tokenizer_repr = str(self._tokenizer.pre_tokenizer)
+            built_pre_tokenizer = pre_tokenizer_repr.split("(")[0]
+            if _json_pre_tokenizer_type == "ByteLevel" and "ByteLevel" not in pre_tokenizer_repr:
+                mismatch_pre_tokenizer = True
+
+        if mismatch_decoder or mismatch_pre_tokenizer:
+            logger.warning(
+                f"The tokenizer class you loaded from this checkpoint ({self.__class__.__name__}) is a "
+                f"'{built_decoder or built_pre_tokenizer}' tokenizer. "
+                f"However, the `tokenizer.json` file found in this checkpoint contains a '{_json_decoder_type or _json_pre_tokenizer_type}' pipeline. "
+                f"This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set. "
+                f"We will load the pipeline from `tokenizer.json` to ensure correct tokenization."
+            )
+            if _json_decoder is not None:
+                self._tokenizer.decoder = _json_decoder
+            if _json_pre_tokenizer is not None:
+                self._tokenizer.pre_tokenizer = _json_pre_tokenizer
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:

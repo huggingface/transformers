@@ -18,11 +18,11 @@ class TokenizerMismatchWarningTest(unittest.TestCase):
             "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True, "use_regex": True},
             "post_processor": {
                 "type": "ByteLevel",
-                "add_prefix_space": True,
+                "add_prefix_space": False,
                 "trim_offsets": False,
                 "use_regex": True,
             },
-            "decoder": {"type": "ByteLevel", "add_prefix_space": True, "trim_offsets": True, "use_regex": True},
+            "decoder": {"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True, "use_regex": True},
             "model": {
                 "type": "BPE",
                 "dropout": None,
@@ -51,7 +51,7 @@ class TokenizerMismatchWarningTest(unittest.TestCase):
 
             self.assertTrue(
                 any(
-                    "However, the `tokenizer.json` file found in this checkpoint contains a 'ByteLevel' decoder" in log
+                    "However, the `tokenizer.json` file found in this checkpoint contains a 'ByteLevel' pipeline." in log
                     for log in cm.output
                 )
             )
