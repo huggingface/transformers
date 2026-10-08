@@ -149,7 +149,8 @@ class MusicgenMelodyAudioProcessor(BaseAudioProcessor):
         norm_chroma = self.ops.swapaxes(raw_chroma / denom, 1, 2)
         idx = self.ops.argmax(norm_chroma, -1)
         one_hot = self.ops.arange(norm_chroma.shape[-1], like=norm_chroma)[None, None, :] == idx[..., None]
-        return self.ops.astype(one_hot, self.ops.dtype_name(norm_chroma))
+        # float32 like the legacy one-hot, on every backend: numpy's spectrum (float64 window) would make it float64.
+        return self.ops.astype(one_hot, "float32")
 
 
 __all__ = ["MusicgenMelodyAudioProcessor"]

@@ -204,8 +204,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
         backend (`str`, *optional*):
             Which op table the processor computes with: `"torch"`, `"numpy"`, or a backend registered with
             [`register_audio_backend`] (e.g. `"mlx"` after `import mlx_audio.transformers_backend`). Defaults to
-            `"torch"` when torch is importable, else `"numpy"`. A load-time choice, like `device`: it is passed to
-            the constructor (or to `from_pretrained` / `from_dict`), kept as `self.backend` with the op table in
+            `"torch"` when torch is importable, else `"numpy"`. A load-time choice: it is passed to the
+            constructor (or to `from_pretrained` / `from_dict`), kept as `self.backend` with the op table in
             `self.ops`, and never serialized, so a saved processor loads on any backend. A model that calls ops
             beyond the core table lists them in `required_ops`; a backend lacking one is refused here.
         **kwargs ([`AudioKwargs`]):
@@ -255,7 +255,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             )
 
         super().__init__(**kwargs)
-        # The op table is a load-time choice like `device`: never serialized, not a `valid_kwargs` option.
+        # The op table is a load-time choice: never serialized, not a `valid_kwargs` option.
         if backend is None:
             backend = "torch" if is_torch_available() else "numpy"
         if not isinstance(backend, str):

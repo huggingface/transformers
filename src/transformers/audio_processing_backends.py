@@ -270,9 +270,9 @@ class AudioOps:
     def resample(self, x, orig_sr, target_sr):
         """Resample the last axis from `orig_sr` to `target_sr` Hz with the backend's resampler,
         keeping the dtype. Sample rates are ints. Output length is ``len * target_sr // orig_sr``: resamplers disagree on
-        the last sample at non-integer ratios, so every backend trims to that rule. Resamplers are
-        different filters (soxr, torchaudio, scipy polyphase); they agree to ~3e-4 relative on
-        band-limited audio, away from the edges."""
+        the last sample at non-integer ratios, so every backend trims to that rule. Each backend resamples
+        with its own library's filter (numpy: soxr HQ; torch: torchaudio's windowed sinc); they differ by
+        up to ~1e-3 relative in-band and more near Nyquist; see the step-3 record."""
         raise NotImplementedError
 
     # ── randomness ─────────────────────────────────────────────────────────────────────────────
