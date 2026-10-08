@@ -309,6 +309,10 @@ def flex_attention_forward(
         enable_gqa = False
 
     kernel_options = kwargs.get("kernel_options")
+    # The default block sizes fault at head_dim 512 on Blackwell ("misaligned address") and are 1.7x slower than
+    # 32-row blocks on Hopper (e.g. Gemma 4 global layers)
+    if kernel_options is None and query.shape[-1] > 256 and query.device.type == "cuda":
+        kernel_options = {"BLOCK_M": 32, "BLOCK_N": 32, "num_stages": 2, "num_warps": 4}
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
 
