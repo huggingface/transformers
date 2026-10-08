@@ -33,8 +33,8 @@ from .tensor_parallel import (
     resolve_parallel_plans,
 )
 from .utils import (
-    _check_distributed_checkpointing_available,
     TransformersDeviceMesh,
+    _check_distributed_checkpointing_available,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
