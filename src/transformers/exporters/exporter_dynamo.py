@@ -143,8 +143,6 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
     - Applies `output_flags` (popped from inputs by `prepare_for_export`) onto
       `model.config.<flag>` so the model picks them up via its usual `<flag> if <flag> is
       not None else self.config.<flag>` fallback.
-    - Disables `use_mamba_kernels` on every submodel's config that declares it (mamba/jamba
-      kernels are not exportable).
 
     Originals are restored on exit. Flags whose value is `None`, or that the config doesn't
     declare, are silently skipped — useful for submodels that don't accept every parent flag.
@@ -154,9 +152,6 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
         if value is None or not hasattr(model, "config") or not hasattr(model.config, flag):
             continue
         config_patches.append((model.config, flag, lambda _original, v=value: v))
-    for module in model.modules():
-        if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
-            config_patches.append((module.config, "use_mamba_kernels", lambda _original: False))
     with patch_attributes(config_patches):
         yield
 
