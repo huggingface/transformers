@@ -105,13 +105,13 @@ class AutoTokenizerTest(unittest.TestCase):
         "microsoft/wavecoder-ultra-6.7b",
         "LSX-UniWue/LLaMmlein_1B_prerelease",
         "AI-MO/NuminaMath-7B-TIR",
-    ]
+        "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
 
     @slow
     @require_tokenizers
     @parameterized.expand(BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS)
     def test_byte_level_llama_tokenizer_class_uses_tokenizers_backend(self, repo_id):
-        text = "Hello world. I'm an AI."
+        text = "Hello world. 嗯，"
         tokenizer = AutoTokenizer.from_pretrained(repo_id)
         # exact type: LlamaTokenizer subclasses TokenizersBackend
         self.assertIs(type(tokenizer), TokenizersBackend)
