@@ -121,12 +121,6 @@ if is_kernels_available():
             module_names = [module_names]
         return _kernels_use_kernelized_func(*module_names)
 
-    def use_kernel_func_from_hub(layer_name: str):
-        logger.warning_once(
-            "`use_kernel_func_from_hub` is deprecated in transformers v5.16 and will be removed in the future. Please use `use_kernel_forward_from_hub` instead."
-        )
-        return _kernels_use_kernel_forward_from_hub(layer_name)
-
     # The default kernel mapping is built lazily (see `get_kernel_mapping_transformers`) so that simply
     # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
     # `FuncRepository`. This keeps the `kernels` library decoupled from normal transformers usage: the
@@ -633,12 +627,6 @@ else:
 
         return decorator
 
-    def use_kernel_func_from_hub(*args, **kwargs):
-        def decorator(cls):
-            return cls
-
-        return decorator
-
     class LayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
@@ -1134,6 +1122,5 @@ __all__ = [
     "register_kernel_replacements_and_fusions",
     "replace_kernel_forward_from_hub",
     "use_kernel_forward_from_hub",
-    "use_kernel_func_from_hub",
     "use_kernelized_func",
 ]  # type: ignore
