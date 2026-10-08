@@ -967,10 +967,17 @@ class HQQQuantizedLayer(QuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a LinearAttention layer, so it is compilable
-    is_compileable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
+
+    @property
+    def is_compileable(self) -> bool:
+        """
+        All shapes are static by essence in a LinearAttention layer, so it is compilable. The exception is when we
+        record the past to be able to `crop` later: the conv states then grow, and they are assigned instead of
+        copied in place, so they lose their static address and may alias a cudagraph output.
+        """
+        return not self.record_past
 
     def __init__(self, number_of_states: int = 1, **kwargs):
         self.number_of_states = number_of_states

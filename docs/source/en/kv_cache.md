@@ -73,7 +73,9 @@ A fixed-size cache ([`StaticCache`]) pre-allocates a specific maximum cache size
 
 As for [`DynamicCache`], note that for models using sliding window attention (Mistral, Gemma2,...) or chunked attention (Llama4), the cache will never be larger than the sliding window/chunk size on layers using these types of attention, even if the maximum length specified is larger.
 
-You can enable [`StaticCache`] by configuring `cache_implementation="static"` in [`~GenerationMixin.generate`]. This will also turn on automatic `compilation` of the decoding stage for greedy and sample decoding strategies.
+You can enable [`StaticCache`] by configuring `cache_implementation="static"` in [`~GenerationMixin.generate`]. This will also turn on automatic `compilation` of the decoding stage for greedy, sample and [assisted](./assisted_decoding) decoding strategies.
+
+For assisted decoding, the rejected drafts are rolled back in place, which only works as long as no state was evicted. A sliding window layer is therefore only usable while the window is wide enough to hold the whole generation; otherwise `generate` raises rather than silently reading evicted states.
 
 ```py
 import torch

@@ -3954,8 +3954,6 @@ class GenerationMixin(ContinuousMixin):
         cache = model_kwargs.get("past_key_values")
         if cache is None:
             raise RuntimeError("assisted decoding requires a cache")
-        if not cache.is_croppable:
-            raise ValueError(f"assisted generate is not supported with a non-croppable cache, got {type(cache)}")
 
         # Same tensor the stopping criteria are built from
         eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
@@ -4067,7 +4065,13 @@ class GenerationMixin(ContinuousMixin):
             # 2.2. Run a forward pass on the candidate sequence
             outputs = (self.__call__ if is_first_iteration else model_forward)(**model_inputs)
 
-            # 2.3. Process the new logits
+            # 2.3. The cache must be able to roll back the drafts we are about to reject. Some layers only know whether
+            # they can once they hold states (e.g. linear attention, which cannot roll back a recurrent state), so this
+            # is checked after prefill and before the first `crop`.
+            if is_first_iteration and not cache.is_croppable:
+                raise ValueError(f"assisted generate is not supported with a non-croppable cache, got {type(cache)}")
+
+            # 2.4. Process the new logits
             # .float() is needed to retain precision for later logits manipulations
             new_logits = outputs.logits[:, -candidate_length - 1 :].to(
                 dtype=torch.float32, device=input_ids.device
