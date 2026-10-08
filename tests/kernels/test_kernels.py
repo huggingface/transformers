@@ -52,7 +52,6 @@ from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    import kernels
     from kernels import Device, LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
@@ -291,10 +290,6 @@ class TestHubKernels(MemoryCleanupTestCase):
         del model
 
     def test_kernelize_without_compatible_build(self):
-        # TODO: remove once kernels>=0.18 is the minimum version
-        if not hasattr(kernels, "KernelizeFallback"):
-            self.skipTest("Falling back when a kernel cannot be loaded requires kernels>=0.18")
-
         model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map=torch_device)
         # This repo only has torch 2.4 builds, so no build variant is compatible with this system
         repo = LayerRepository(repo_id="kernels-test/only-torch-2.4", layer_name="Silu", revision="main")

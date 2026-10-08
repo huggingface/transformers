@@ -81,10 +81,10 @@ _PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
 
 
 if is_kernels_available():
-    import kernels
     from kernels import (
         CUDAProperties,
         Device,
+        KernelizeFallback,
         LayerRepository,
         LocalLayerRepository,
         Mode,
@@ -954,8 +954,8 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
 
     mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
     device = Device(type=get_device_type(model.device))
-    # `KernelizeFallback` was introduced in kernels 0.18, remove the `hasattr` check once it is the minimum version
-    use_fallback = kernels.KernelizeFallback.ALL if hasattr(kernels, "KernelizeFallback") else True
+    # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
+    use_fallback = KernelizeFallback.ALL
 
     if model.kernel_config is not None:
         inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
