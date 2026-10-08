@@ -1355,9 +1355,7 @@ class Gemma4TextModel(Gemma3TextModel):
                     [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )
 
-    def get_per_layer_inputs(
-        self, input_ids: torch.Tensor | None, inputs_embeds: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def get_per_layer_inputs(self, input_ids: torch.Tensor | None, inputs_embeds: torch.Tensor | None) -> torch.Tensor:
         """Compute the token-identity component of Per-Layer Embeddings (PLE).
 
         Looks up `input_ids` in `embed_tokens_per_layer` (a scaled embedding that multiplies
@@ -1368,9 +1366,6 @@ class Gemma4TextModel(Gemma3TextModel):
         If only `inputs_embeds` is provided (no `input_ids`), reverses the main embedding
         to recover `input_ids` for the PLE lookup.
         """
-        if input_ids is None and inputs_embeds is None:
-            raise ValueError("You must provide at least one of `input_ids` or `inputs_embeds`.")
-
         if not self.hidden_size_per_layer_input:
             raise RuntimeError(
                 "Attempting to call get_per_layer_inputs() from a model initialized with a config that does not support"

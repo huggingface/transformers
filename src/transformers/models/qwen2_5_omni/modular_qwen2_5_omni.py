@@ -30,12 +30,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -1072,21 +1067,14 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             mrope_position_deltas = torch.tensor(mrope_position_deltas).unsqueeze(1).to(device=input_ids.device)
 
             return position_ids, mrope_position_deltas
-        elif attention_mask is not None:
+        else:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
             max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
             mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-        else:
-            position_ids = (
-                torch.arange(input_ids.shape[1], device=input_ids.device)
-                .view(1, 1, -1)
-                .expand(3, input_ids.shape[0], -1)
-            )
-            mrope_position_deltas = torch.zeros((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device)
 
-        return position_ids, mrope_position_deltas
+            return position_ids, mrope_position_deltas
 
 
 ############################
@@ -1356,7 +1344,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         # Post-process: stride-2 average pooling using precomputed indices, then project
         hidden_states = (hidden_states[pool_indices] + hidden_states[pool_indices + 1]) / 2
         hidden_states = self.proj(self.ln_post(hidden_states))
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -1626,10 +1614,10 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
+class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
-    _keys_to_ignore_on_load_unexpected = [r"^talker", r"^token2wav"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
     _can_compile_fullgraph = True
 
@@ -1639,13 +1627,10 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         self.visual = Qwen2_5OmniVisionEncoder._from_config(config.vision_config)
         self.vocab_size = config.text_config.vocab_size
         self.model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.rope_deltas = None
-        self._init_lm_head(config)
         self.post_init()
-
-    def _init_lm_head(self, config: Qwen2_5OmniThinkerConfig):
-        """Build the head. `post_init()` ties weights, so a subclass cannot add it later."""
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
@@ -1834,12 +1819,13 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         use_audio_in_video: bool | None = None,
         video_second_per_grid: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -1958,11 +1944,22 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
+        hidden_states = outputs[0]
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
+            )
+
+        return Qwen2_5OmniThinkerCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
@@ -2007,88 +2004,6 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         position_ids = torch.cat([text_positions, vision_positions], dim=0)
 
         return position_ids
-
-
-class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniThinkerModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-
-    def _init_lm_head(self, config: Qwen2_5OmniThinkerConfig):
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        feature_attention_mask: torch.Tensor | None = None,
-        audio_feature_lengths: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        use_audio_in_video: bool | None = None,
-        video_second_per_grid: torch.LongTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
-        r"""
-        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-            The length of feature shape of each audio in LLM.
-        use_audio_in_video (`bool`, *optional*):
-            Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
-        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
-            Number of seconds per grid for each video, used for temporal feature mapping.
-        """
-        outputs: BaseModelOutputWithPast = super().forward(
-            input_ids=input_ids,
-            input_features=input_features,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-            feature_attention_mask=feature_attention_mask,
-            audio_feature_lengths=audio_feature_lengths,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            use_audio_in_video=use_audio_in_video,
-            video_second_per_grid=video_second_per_grid,
-            mm_encoder_outputs=mm_encoder_outputs,
-            return_dict=True,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
-            )
-
-        return Qwen2_5OmniThinkerCausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
 
 
 ############################
@@ -3917,7 +3832,6 @@ __all__ = [
     "Qwen2_5OmniVisionEncoderConfig",
     "Qwen2_5OmniForConditionalGeneration",
     "Qwen2_5OmniThinkerTextModel",
-    "Qwen2_5OmniThinkerModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen2_5OmniTalkerModel",
     "Qwen2_5OmniTalkerForConditionalGeneration",

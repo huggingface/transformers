@@ -65,7 +65,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniPreTrainedModel,
     Qwen2_5OmniPreTrainedModelForConditionalGeneration,
     Qwen2_5OmniSnakeBeta,
-    Qwen2_5OmniThinkerModel,
+    Qwen2_5OmniThinkerForConditionalGeneration,
 )
 from ..qwen2_5_omni.processing_qwen2_5_omni import (
     Qwen2_5OmniProcessor,
@@ -929,29 +929,19 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
 
                 llm_positions = torch.cat([item.float() for item in llm_pos_ids_list], dim=1).reshape(3, -1)
 
-                if attention_mask is not None:
-                    position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-                else:
-                    position_ids[..., i, :] = llm_positions.to(position_ids.device)
+                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(input_ids))
             mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
 
             return position_ids, mrope_position_deltas
-        elif attention_mask is not None:
+        else:
             position_ids = attention_mask.float().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
             max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
             mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-        else:
-            position_ids = (
-                torch.arange(input_ids.shape[1], dtype=torch.float, device=input_ids.device)
-                .view(1, 1, -1)
-                .expand(3, input_ids.shape[0], -1)
-            )
-            mrope_position_deltas = torch.zeros((input_ids.shape[0], 1), dtype=torch.float, device=input_ids.device)
 
-        return position_ids, mrope_position_deltas
+            return position_ids, mrope_position_deltas
 
 
 class Qwen3OmniMoeAudioAttention(Qwen2_5OmniAudioAttention):
@@ -1039,7 +1029,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         hidden_states = self.proj1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class Qwen3OmniMoeVisionAttention(Qwen3VLMoeVisionAttention):
@@ -1168,8 +1158,7 @@ class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
-class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
-    _keys_to_ignore_on_load_unexpected = [r"^talker", r"^code2wav"]
+class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
     _no_split_modules = [
         "Qwen3OmniMoeAudioEncoder",
         "Qwen3OmniMoeVisionEncoder",
@@ -1260,13 +1249,18 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
+        labels=None,
         use_cache=None,
         output_router_logits: bool | None = None,
         use_audio_in_video=None,
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -1372,84 +1366,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             **kwargs,
         )
 
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            past_key_values=outputs.past_key_values,
-            router_logits=outputs.router_logits,
-        )
-
-
-class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen3OmniMoeThinkerModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-
-    def _init_lm_head(self, config: Qwen3OmniMoeThinkerConfig):
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids=None,
-        input_features=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        attention_mask=None,
-        feature_attention_mask=None,
-        audio_feature_lengths=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_router_logits: bool | None = None,
-        use_audio_in_video=None,
-        video_second_per_grid=None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **kwargs,
-    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
-        r"""
-        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-            The length of feature shape of each audio in LLM.
-        use_audio_in_video (`bool`, *optional*):
-            Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
-        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
-            Number of seconds per grid for each video, used for temporal feature mapping.
-        """
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
-        )
-        outputs: MoeModelOutputWithPast = super().forward(
-            input_ids=input_ids,
-            input_features=input_features,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-            feature_attention_mask=feature_attention_mask,
-            audio_feature_lengths=audio_feature_lengths,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            use_audio_in_video=use_audio_in_video,
-            video_second_per_grid=video_second_per_grid,
-            mm_encoder_outputs=mm_encoder_outputs,
-            output_router_logits=output_router_logits,
-            return_dict=True,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
+        hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
 
         loss = None
@@ -2967,7 +2884,6 @@ __all__ = [
     "Qwen3OmniMoeVisionEncoderConfig",
     "Qwen3OmniMoeForConditionalGeneration",
     "Qwen3OmniMoeThinkerTextModel",
-    "Qwen3OmniMoeThinkerModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration",
     "Qwen3OmniMoeTalkerForConditionalGeneration",
     "Qwen3OmniMoePreTrainedModel",
