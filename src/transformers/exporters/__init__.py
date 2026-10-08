@@ -18,7 +18,6 @@ from .configs import (
     DynamoConfig,
     ExecutorchConfig,
     ExecutorchQnnConfig,
-    ExecutorchQnnLlmConfig,
     ExportConfigMixin,
     ExportFormat,
     OnnxConfig,

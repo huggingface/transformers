@@ -262,15 +262,5 @@ class ExecutorchQnnConfig(ExecutorchConfig):
 
     backend: str = "qnn"
     backend_hardware: str = "htp"
-    model_id: str = "llama3_2-1b"
+    model_id: str = "NousResearch/Llama-3.2-1B"
     soc_model: str = "SM8750"
-    use_fp16: bool = False
-
-
-@dataclass
-class ExecutorchQnnLlmConfig(ExecutorchQnnConfig):
-    """
-    Configuration for the QNN LLM export path.
-    """
-
-    max_seq_len: int = 128
