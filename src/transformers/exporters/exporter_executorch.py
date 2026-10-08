@@ -46,7 +46,7 @@ from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExecutorchQnnConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
@@ -105,7 +105,6 @@ if is_executorch_available():
 
 logger = logging.get_logger(__name__)
 
-
 class ExecutorchExporter(DynamoExporter):
     """Exporter that converts a [`PreTrainedModel`] to an ExecuTorch `ExecutorchProgramManager`.
 
@@ -132,19 +131,24 @@ class ExecutorchExporter(DynamoExporter):
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
         if isinstance(config, dict):
             config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
+        elif not isinstance(config, ExecutorchConfig):
             raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
 
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs, config)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
+            
+            if config.backend == "qnn":
+                from executorch.backends.qualcomm.hf_transformers.api import lower_for_qnn
+                return lower_for_qnn(exported_program=exported_program, hf_config=config, sample_inputs=sample_inputs)
+            
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=partitioner,
@@ -156,6 +160,18 @@ class ExecutorchExporter(DynamoExporter):
             )
 
         return executorch_programs_manager
+
+    def _quantize(
+        self,
+        exported_program: ExportedProgram,
+        config: ExecutorchConfig,
+        sample_inputs: Any,
+        dynamic_shapes: Any,
+    ) -> ExportedProgram:
+        if config.backend == "qnn":
+            from executorch.backends.qualcomm.hf_transformers.api import quantize_for_qnn
+            return quantize_for_qnn(exported_program, config, sample_inputs)
+        return super()._quantize(self, exported_program, config, sample_inputs, dynamic_shapes)
 
 
 def _get_transform_passes(backend: str):
@@ -214,7 +230,6 @@ def _get_backend_config(config):
         )
     )
 
-
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
 # Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
 # and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
@@ -236,7 +251,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -254,7 +269,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -273,7 +288,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
     for value in sample_inputs.values():
         caches = [value]
@@ -296,10 +311,21 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
+def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchQnnConfig):
+    from executorch.backends.qualcomm.hf_transformers.api import prepare_for_qnn as _prepare_for_qnn
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    model = model.eval()
+    qnn_decoder_model = _prepare_for_qnn(model, config)
+    return qnn_decoder_model, _make_contiguous(qnn_decoder_model.get_example_inputs()), None
+
+
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
     "mlx": prepare_for_mlx,
+    "qnn": prepare_for_qnn
 }
 
 
@@ -738,10 +764,14 @@ def _patch_dim_order_from_stride(_original):
     deep inside ``spec_prop_pass``. Use ``guard_or_true`` / ``guard_or_false``
     so the sort still produces *a* dim order when the comparison is unbacked —
     the exact order on unbacked dims doesn't affect correctness, just memory layout.
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
 
-    def patch(stride):
+    Also accepts the optional ``sizes`` argument added upstream (some call
+    sites, e.g. ``build_quant_io``, now pass it) and reproduces the
+    channels-last correction it enables for 4D/5D tensors.
+    """
+    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true, statically_known_true
+
+    def patch(stride, sizes=None):
         for s in stride:
             if guard_or_false(s == 0):
                 raise ValueError("0 in strides is not supported for ExecuTorch.")
@@ -756,6 +786,15 @@ def _patch_dim_order_from_stride(_original):
                 return guard_or_true(self.stride < other.stride)
 
         sorted_dims = [i[0] for i in sorted(enumerate(stride), key=lambda x: K(x[1]), reverse=True)]
+
+        ndim = len(stride)
+        if sizes is not None and len(sizes) == ndim and ndim in (4, 5) and sorted_dims != list(range(ndim)):
+            from torch._prims_common import make_channels_last_strides_for
+
+            expected = make_channels_last_strides_for(sizes)
+            if all(statically_known_true(s == e) for s, e in zip(stride, expected)):
+                sorted_dims = [0, *range(2, ndim), 1]
+
         return tuple(sorted_dims)
 
     return patch
