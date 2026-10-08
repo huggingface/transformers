@@ -12,21 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_clvp import ClvpAudioProcessorMixin
 
 
 class ClvpAudioProcessorNumpy(ClvpAudioProcessorMixin, NumpyAudioBackend):
-    def _log_compress(self, features, *, spectrogram_config, mel_norms, **kwargs):
-        # Compute log and mel_norms division in float64 before casting to float32
-        # to match the legacy feature extractor's precision
-        mel_floor = spectrogram_config.mel_floor
-        features = np.log(np.maximum(mel_floor, features))
-        if mel_norms is not None:
-            features = features / np.array(mel_norms)[:, None]
-        return features.astype(np.float32)
+    pass
 
 
 __all__ = ["ClvpAudioProcessorNumpy"]

@@ -15,7 +15,6 @@
 from typing import Annotated
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import _clamp_min
 from ...processing_utils import AudioKwargs
 from ...utils.type_validators import strictly_positive
 
@@ -111,7 +110,7 @@ class UnivNetAudioProcessorMixin:
         )
 
     def _log_compress(self, features, *, spectrogram_config, compression_factor, compression_clip_val, **kwargs):
-        features = _clamp_min(features, compression_clip_val) * compression_factor
+        features = self.ops.clamp_min(features, compression_clip_val) * compression_factor
         return super()._log_compress(features, spectrogram_config=spectrogram_config, **kwargs)
 
     def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:

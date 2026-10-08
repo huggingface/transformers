@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
+import numpy as np
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
@@ -79,19 +79,18 @@ class ClvpAudioProcessorMixin:
     mel_norms = None
     valid_kwargs = ClvpAudioProcessorKwargs
 
+    def _log_compress(self, features, *, spectrogram_config, mel_norms, **kwargs):
+        # log and the mel_norms division in the features' dtype (float64 here), rounded once at the end,
+        # as the legacy extractor did
+        features = self.ops.log(self.ops.clamp_min(features, spectrogram_config.mel_floor))
+        if mel_norms is not None:
+            norms = self.ops.asarray(np.asarray(mel_norms, dtype=np.float64), like=features)
+            features = features / self.ops.astype(norms, self.ops.dtype_name(features))[:, None]
+        return self.ops.astype(features, "float32")
+
 
 class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):
-    def _log_compress(self, features, *, spectrogram_config, mel_norms, **kwargs):
-        # Compute log and mel_norms division in float64 before casting to float32
-        # to match the legacy feature extractor's precision (same recipe as the numpy sibling).
-        mel_floor = spectrogram_config.mel_floor
-        features = torch.log(
-            torch.maximum(self._host_to_device(mel_floor, features.device, dtype=features.dtype), features)
-        )
-        if mel_norms is not None:
-            mel_norms = self._host_to_device(mel_norms, features.device, dtype=features.dtype)[:, None]
-            features = features / mel_norms
-        return features.to(torch.float32)
+    pass
 
 
 __all__ = ["ClvpAudioProcessor"]

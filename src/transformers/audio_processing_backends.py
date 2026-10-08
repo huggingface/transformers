@@ -40,13 +40,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def backend(self) -> str:
         return "numpy"
 
-    # ── Backend array-API primitives ─────────────────────────────────────
-
-    def _amax_over_features(self, x):
-        if x.ndim > 2:
-            return x.max(axis=tuple(range(1, x.ndim)), keepdims=True)
-        return x.max()
-
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
@@ -149,9 +142,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         mask = positions >= width - lengths[:, None] if padding_side == "left" else positions < lengths[:, None]
         batch = torch.full((len(audio), width), padding_value, dtype=audio[0].dtype, device=device)
         return list(batch.masked_scatter_(mask, torch.cat(audio)))
-
-    def _amax_over_features(self, x):
-        return x.amax(dim=(-2, -1), keepdim=True)
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 

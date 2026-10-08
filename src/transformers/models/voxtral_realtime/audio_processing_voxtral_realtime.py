@@ -14,7 +14,6 @@
 
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import _clamp_min
 from ...processing_utils import AudioKwargs
 
 
@@ -53,10 +52,13 @@ class VoxtralRealtimeAudioProcessorMixin:
 
     def _shape_log_features(self, features, spectrogram_config, *, global_log_mel_max, **kwargs):
         # Voxtral bounds from above with a *fixed* `global_log_mel_max` rather than the per-utterance
-        # amax the base `floor_below_peak` field uses, so the rescale is written out here.
+        # peak the base `floor_below_peak` field uses, so the rescale is written out here.
         features = super()._shape_log_features(features, spectrogram_config)
-        spec_max = global_log_mel_max if global_log_mel_max is not None else self._amax_over_features(features)
-        features = _clamp_min(features, spec_max - 8.0)
+        if global_log_mel_max is not None:
+            features = self.ops.clamp_min(features, global_log_mel_max - 8.0)
+        else:
+            peak = self.ops.amax(features, (-2, -1), keepdims=True)
+            features = self.ops.maximum(features, peak - 8.0)
         return (features + 4.0) / 4.0
 
 

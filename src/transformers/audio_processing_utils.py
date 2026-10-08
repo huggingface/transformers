@@ -1081,17 +1081,17 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _log_compress(self, features, *, spectrogram_config, reference=1.0, min_value=1e-10, db_range=None, **kwargs):
         log_mel = spectrogram_config.log_mode
         if log_mel is None:
-            result = self._astype(features, "float32")
+            result = self.ops.astype(features, "float32")
         else:
             if spectrogram_config.pre_log_offset is not None:
                 result = features + spectrogram_config.pre_log_offset
             else:
-                result = self._clamp_min(features, spectrogram_config.mel_floor)
+                result = self.ops.clamp_min(features, spectrogram_config.mel_floor)
 
             if log_mel == "log":
-                result = self._astype(self._log(result), "float32")
+                result = self.ops.astype(self.ops.log(result), "float32")
             elif log_mel == "log10":
-                result = self._astype(self._log10(result), "float32")
+                result = self.ops.astype(self.ops.log10(result), "float32")
             elif log_mel == "dB":
                 power = spectrogram_config.stft_config.power
                 if power == 2.0:
@@ -1100,7 +1100,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
                     result = self._to_db(result, 20.0, reference, min_value, db_range)
                 else:
                     raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
-                result = self._astype(result, "float32")
+                result = self.ops.astype(result, "float32")
             else:
                 raise ValueError(f"Unknown log_mel option: {log_mel}")
 
@@ -1108,7 +1108,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             result = result[..., :-1]
         result = self._shape_log_features(result, spectrogram_config, **kwargs)
         if spectrogram_config.transpose_features:
-            result = result.swapaxes(-2, -1)
+            result = self.ops.swapaxes(result, -2, -1)
         return result
 
     def _to_db(self, spectrogram, multiplier, reference, min_value, db_range):
@@ -1121,21 +1121,22 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if min_value <= 0.0:
             raise ValueError("min_value must be greater than zero")
         reference = max(min_value, reference)
-        spectrogram = self._clamp_min(spectrogram, min_value)
-        spectrogram = multiplier * (self._log10(spectrogram) - math.log10(reference))
+        spectrogram = self.ops.clamp_min(spectrogram, min_value)
+        spectrogram = multiplier * (self.ops.log10(spectrogram) - math.log10(reference))
         if db_range is not None:
             if db_range <= 0.0:
                 raise ValueError("db_range must be greater than zero")
-            spectrogram = self._clamp_min(spectrogram, spectrogram.max() - db_range)
+            peak = self.ops.amax(spectrogram, (-2, -1), keepdims=True)  # per spectrogram, like floor_below_peak
+            spectrogram = self.ops.maximum(spectrogram, peak - db_range)
         return spectrogram
 
     def _shape_log_features(self, result, spectrogram_config, **kwargs):
         """Hook: rescale the log-domain features. Runs after the log and before any transpose."""
         if spectrogram_config.subtract_mean:
-            result = result - result.mean(axis=-1, keepdims=True)
+            result = result - self.ops.mean(result, -1, keepdims=True)
         if spectrogram_config.floor_below_peak is not None:
-            max_vals = self._amax_over_features(result)
-            result = self._maximum(result, max_vals - spectrogram_config.floor_below_peak)
+            peak = self.ops.amax(result, (-2, -1), keepdims=True)  # per spectrogram
+            result = self.ops.maximum(result, peak - spectrogram_config.floor_below_peak)
         if spectrogram_config.log_shift is not None:
             result = result + spectrogram_config.log_shift
         if spectrogram_config.log_scale is not None:
@@ -1147,9 +1148,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _astype(self, x, dtype_name):
         return self.ops.astype(x, dtype_name)
-
-    def _amax_over_features(self, x):
-        raise NotImplementedError
 
     def _zeros_int32(self, shape, *, like=None):
         return self.ops.zeros(shape, dtype="int32", like=like)
