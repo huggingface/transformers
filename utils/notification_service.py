@@ -1244,9 +1244,9 @@ if __name__ == "__main__":
                 step_artifact_name = f"{gpu_label}_{artifact_key}"
                 if step_artifact_name in artifact_name_to_job_map:
                     gpu = gpu_label.split("-")[0]  # "single" or "multi"
-                    matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[
-                        step_artifact_name
-                    ]["html_url"]
+                    matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[step_artifact_name][
+                        "html_url"
+                    ]
             if not matrix_job_results[matrix_name]["job_link"] and matrix_name in matrix_name_to_github_jobs:
                 for gpu, job in matrix_name_to_github_jobs[matrix_name].items():
                     matrix_job_results[matrix_name]["job_link"][gpu] = job["html_url"]
@@ -1347,9 +1347,13 @@ if __name__ == "__main__":
             matrix_job_results[matrix_name]["error_type"][gpu] = "crashed"
             step_artifact_name = f"{gpu}-gpu_{artifact_key}"
             if step_artifact_name in artifact_name_to_job_map:
-                matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[step_artifact_name]["html_url"]
+                matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[step_artifact_name][
+                    "html_url"
+                ]
             elif gpu in matrix_name_to_github_jobs.get(matrix_name, {}):
-                matrix_job_results[matrix_name]["job_link"][gpu] = matrix_name_to_github_jobs[matrix_name][gpu]["html_url"]
+                matrix_job_results[matrix_name]["job_link"][gpu] = matrix_name_to_github_jobs[matrix_name][gpu][
+                    "html_url"
+                ]
 
     # Additional runs
     additional_files = {
