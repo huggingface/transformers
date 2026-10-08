@@ -90,9 +90,9 @@ jobs:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
             REF=main
-            CUDA=cu126
-            PYTORCH=2.8.0
-            TORCHCODEC=0.7.0
+            CUDA=cu130
+            PYTORCH=2.14.0
+            TORCHCODEC=0.16.0
             FLASH_ATTN=yes
           push: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:flash-attn
