@@ -15,7 +15,7 @@ import warnings
 from unittest.mock import patch
 
 import torch
-import torch.distributed as dist
+from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
@@ -34,11 +34,31 @@ from ..test_tensor_parallel_mixin import _init_distributed
 
 
 # Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
-def _dispatch_hands_the_experts_the_received_rows(rank):
+class _RecordingExperts(torch.nn.Module):
+    """Experts that record the type of the rows they receive and return them weighted."""
+
+    def __init__(self, quantized):
+        super().__init__()
+        self.num_experts = 2
+        if quantized:
+            self._hf_quantized_needs_local_tp = True
+
+    def forward(self, tokens, expert_ids, weights):
+        self.received_type = type(tokens)
+        return tokens * weights
+
+
+def _dispatch_waits_only_for_quantized_experts(rank):
+    mesh = init_device_mesh("cpu", (2,))
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
     top_k_index = torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]])
-    tokens, *_ = EpDispatchExpertsParallel()._dispatch_tokens(hidden_states, top_k_index, 2, dist.group.WORLD, 2)
-    assert type(tokens) is torch.Tensor, type(tokens)
+    top_k_weights = torch.ones(4, 2)
+    # torch experts wait at their first op's entry; quantized experts read raw pointers
+    for quantized in (False, True):
+        experts = _RecordingExperts(quantized)
+        EpDispatchExpertsParallel().install_forward(experts, mesh)
+        experts(hidden_states, top_k_index, top_k_weights)
+        assert (experts.received_type is torch.Tensor) == quantized, quantized
 
 
 @is_tensor_parallel_test
@@ -378,7 +398,8 @@ class TestTensorParallelLayer(TestCasePlus):
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
 
-    def test_dispatch_hands_the_experts_the_received_rows(self):
+    def test_dispatch_waits_only_for_quantized_experts(self):
         """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
-        it, which a kernel launched straight from Python never does: the experts get the received rows."""
-        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_the_experts_the_received_rows)()
+        it. Torch experts get it as is and wait at that op's entry; quantized experts read raw pointers and get the
+        received rows."""
+        _init_distributed(tp=2, backend="gloo")(_dispatch_waits_only_for_quantized_experts)()
