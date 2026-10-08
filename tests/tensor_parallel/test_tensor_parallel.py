@@ -17,7 +17,6 @@ from unittest.mock import patch
 import torch
 import torch.distributed as dist
 
-from tests.test_tensor_parallel_mixin import _init_distributed
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
@@ -31,7 +30,10 @@ from transformers.distributed.tensor_parallel import (
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
+from ..test_tensor_parallel_mixin import _init_distributed
 
+
+# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
 def _dispatch_hands_the_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
     top_k_index = torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]])
