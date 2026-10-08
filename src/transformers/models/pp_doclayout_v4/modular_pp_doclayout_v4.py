@@ -530,12 +530,6 @@ class PPDocLayoutV4ModelOutput(PPDocLayoutV3ModelOutput):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
         Stacked intermediate reference points (refined quads of each layer of the decoder).
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
-        Classification logits of the last decoder layer.
-    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise relative reading order logits, after the optional S2R fusion.
-    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise direct successor (ROOR) logits.
     init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
         Initial quad reference points sent through the Transformer decoder.
     enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
@@ -548,6 +542,12 @@ class PPDocLayoutV4ModelOutput(PPDocLayoutV3ModelOutput):
         Quad logits of every encoder proposal.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+        Classification logits of the last decoder layer.
+    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise relative reading order logits, after the optional S2R fusion.
+    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise direct successor (ROOR) logits.
     """
 
     logits: torch.FloatTensor | None = None
@@ -815,12 +815,6 @@ class PPDocLayoutV4ForObjectDetectionOutput(PPDocLayoutV3ForObjectDetectionOutpu
         offsets are shifted by `+0.5`. Use
         [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] to retrieve the unnormalized corners and their
         enclosing boxes.
-    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise relative reading order logits, after the optional S2R fusion. A positive `relative_order_logits[i, j]`
-        means query `i` is read before query `j`.
-    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
-        Pairwise direct successor (ROOR) logits. A positive `successor_order_logits[i, j]` means query `j` directly
-        follows query `i`.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -839,6 +833,12 @@ class PPDocLayoutV4ForObjectDetectionOutput(PPDocLayoutV3ForObjectDetectionOutpu
         Quad logits of every encoder proposal.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
+    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise relative reading order logits, after the optional S2R fusion. A positive `relative_order_logits[i, j]`
+        means query `i` is read before query `j`.
+    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+        Pairwise direct successor (ROOR) logits. A positive `successor_order_logits[i, j]` means query `j` directly
+        follows query `i`.
     """
 
     relative_order_logits: torch.FloatTensor | None = None
