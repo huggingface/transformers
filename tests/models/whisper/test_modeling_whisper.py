@@ -1841,10 +1841,65 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 "timestamp": (77.16, 78.16),
             },
         ]
+        EXPECTED_TPU = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.3799999999999955),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.3799999999999955, 11.319999999999993),
+            },
+            {
+                "text": " He tells us that at this festive season of the year,",
+                "timestamp": (11.319999999999993, 15.0),
+            },
+            {
+                "text": " With Christmas and roast beef looming before us, similes drawn from eating and its results",
+                "timestamp": (30.0, 36.75999999999999),
+            },
+            {
+                "text": " occur most readily to the mind.",
+                "timestamp": (36.75999999999999, 39.80000000000001),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and",
+                "timestamp": (39.80000000000001, 45.379999999999995),
+            },
+            {
+                "text": " can discover in it but little of rocky Ithaca.",
+                "timestamp": (45.379999999999995, 49.0),
+            },
+            {
+                "text": " Lenell's pictures are a sort of up-guards-and-atom paintings, and Mason's exquisite ittles",
+                "timestamp": (49.0, 56.27999999999997),
+            },
+            {
+                "text": " are as national as a jingo poem. Mr. Burkett fosters landscape's smile at one much in",
+                "timestamp": (56.27999999999997, 64.11999999999989),
+            },
+            {
+                "text": " the same way that Mr. Karker used to flash his teeth. And Mr. John Collier gives his",
+                "timestamp": (64.11999999999989, 70.76000000000022),
+            },
+            {
+                "text": " sitter a cheerful slap on the back before he says, like a shampoo or in a Turkish bath,",
+                "timestamp": (70.76000000000022, 77.15999999999985),
+            },
+            {
+                "text": " Next Man",
+                "timestamp": (77.16, 78.16000000000008),
+            },
+        ]
         # fmt: on
 
         expected_output = Expectations(
-            {("xpu", None): EXPECTED_XPU, ("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
+            {
+                ("xpu", None): EXPECTED_XPU,
+                ("cuda", None): EXPECTED_CUDA,
+                ("rocm", (9, 4)): EXPECTED_ROCM,
+                ("tpu", None): EXPECTED_TPU,
+            }
         ).get_expectation()
 
         transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
@@ -2452,10 +2507,20 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         rocm_expectation = [" Folks, I spend a lot of time right over there, night after night after night, actually. Carefully selecting for you the day's noosiest, most aerodynamic headlines, stress testing, and those topical anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks, I lurched a consciousness in the back of an abandoned school bus and slap myself awake."]
         # fmt: on
         expected_output = Expectations(
-            {("xpu", None): xpu_expectation, ("cuda", None): cuda_expectation, ("rocm", (9, 4)): rocm_expectation}
+            {
+                ("xpu", None): xpu_expectation,
+                ("cuda", None): cuda_expectation,
+                ("rocm", (9, 4)): rocm_expectation,
+                ("tpu", None): cuda_expectation,
+            }
         ).get_expectation()
         expected_output2 = Expectations(
-            {("xpu", None): xpu_expectation, ("cuda", None): cuda_expectation2, ("rocm", (9, 4)): rocm_expectation}
+            {
+                ("xpu", None): xpu_expectation,
+                ("cuda", None): cuda_expectation2,
+                ("rocm", (9, 4)): rocm_expectation,
+                ("tpu", None): cuda_expectation2,
+            }
         ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -2667,7 +2732,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         expected_output = Expectations(
-            {("xpu", None): EXPECTED_XPU, ("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
+            {
+                ("xpu", None): EXPECTED_XPU,
+                ("cuda", None): EXPECTED_CUDA,
+                ("rocm", (9, 4)): EXPECTED_ROCM,
+                ("tpu", None): EXPECTED_CUDA,
+            }
         ).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
