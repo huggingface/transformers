@@ -37,11 +37,9 @@ from ..test_tensor_parallel_mixin import _init_distributed
 class _RecordingExperts(torch.nn.Module):
     """Experts that record the type of the rows they receive and return them weighted."""
 
-    def __init__(self, quantized):
+    def __init__(self):
         super().__init__()
         self.num_experts = 2
-        if quantized:
-            self._hf_quantized_needs_local_tp = True
 
     def forward(self, tokens, expert_ids, weights):
         self.received_type = type(tokens)
@@ -55,7 +53,9 @@ def _dispatch_waits_only_for_quantized_experts(rank):
     top_k_weights = torch.ones(4, 2)
     # torch experts wait at their first op's entry; quantized experts read raw pointers
     for quantized in (False, True):
-        experts = _RecordingExperts(quantized)
+        experts = _RecordingExperts()
+        if quantized:
+            experts._hf_quantized_needs_local_tp = True
         EpDispatchExpertsParallel().install_forward(experts, mesh)
         experts(hidden_states, top_k_index, top_k_weights)
         assert (experts.received_type is torch.Tensor) == quantized, quantized
