@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
-from .checkpoint import save_model_checkpoint_distributed
+from ..utils.loading_report import LoadStateDictInfo
+from .checkpoint import load_model_checkpoint_distributed, save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
@@ -280,3 +281,27 @@ class DistributedMixin:
             return
         if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
             _distributed_barrier()
+
+    def _load_and_finalize_distributed_pretrained_model(self, distributed_checkpoint_dir, device_map, device_mesh):
+        # First, materialize the parameters.
+        self._move_missing_keys_from_meta_to_device(set(self.state_dict()), device_map, device_mesh, None)
+        self.tie_weights(recompute_mapping=False)
+
+        # Load the distributed checkpoint into the model.
+        load_model_checkpoint_distributed(self, distributed_checkpoint_dir)
+
+        # Everything in the state dict was loaded: only initialize what DCP cannot provide (non-persistent buffers).
+        for tensor in self.state_dict(keep_vars=True).values():
+            tensor._is_hf_initialized = True
+        self.initialize_weights()
+
+        # DCP loads strictly: a missing key raises, so there is nothing to report.
+        loading_info = LoadStateDictInfo(
+            missing_keys=set(),
+            unexpected_keys=set(),
+            mismatched_keys=set(),
+            error_msgs=[],
+            conversion_errors={},
+            skipped_pp_keys=set(),
+        )
+        return loading_info

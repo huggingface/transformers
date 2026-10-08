@@ -55,7 +55,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.checkpoint import is_sharded_checkpoint, load_model_checkpoint_distributed
+from .distributed.checkpoint import is_sharded_checkpoint
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
@@ -4375,22 +4375,8 @@ class PreTrainedModel(
             disable_mmap=disable_mmap,
         )
         if distributed_checkpoint_dir is not None:
-            # DCP loads in place, so every parameter and buffer has to be materialized first.
-            model._move_missing_keys_from_meta_to_device(set(model.state_dict()), device_map, device_mesh, None)
-            model.tie_weights(recompute_mapping=False)
-            load_model_checkpoint_distributed(model, distributed_checkpoint_dir)
-            # Everything in the state dict was loaded: only initialize what DCP cannot provide (non-persistent buffers).
-            for tensor in model.state_dict(keep_vars=True).values():
-                tensor._is_hf_initialized = True
-            model.initialize_weights()
-            # DCP loads strictly: a missing key raises, so there is nothing to report.
-            loading_info = LoadStateDictInfo(
-                missing_keys=set(),
-                unexpected_keys=set(),
-                mismatched_keys=set(),
-                error_msgs=[],
-                conversion_errors={},
-                skipped_pp_keys=set(),
+            loading_info = model._load_and_finalize_distributed_pretrained_model(
+                distributed_checkpoint_dir, device_map, device_mesh
             )
             disk_offload_index = None
         else:
