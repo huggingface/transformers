@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer, InputGradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -229,7 +229,7 @@ class SpeechT5NoLayerNormConvLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5LayerNormConvLayer(InputGradientCheckpointingLayer):
+class SpeechT5LayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -257,7 +257,7 @@ class SpeechT5LayerNormConvLayer(InputGradientCheckpointingLayer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5GroupNormConvLayer(InputGradientCheckpointingLayer):
+class SpeechT5GroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -474,13 +474,20 @@ class SpeechT5FeatureEncoder(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
+        self._requires_grad = True
 
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
+        self._requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
+
+        # make sure hidden_states require grad for gradient_checkpointing
+        if self._requires_grad and self.training:
+            hidden_states.requires_grad = True
+
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
 
