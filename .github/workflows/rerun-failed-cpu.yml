@@ -23,6 +23,10 @@ on:
         description: PR head commit the selection was made against
         required: true
         type: string
+      tested_sha:
+        description: Immutable PR merge commit tested by the source attempt
+        required: true
+        type: string
       selection:
         description: Selected tests (JSON, written by the dashboard)
         required: true
@@ -32,10 +36,9 @@ on:
         required: true
         type: string
       source_run:
-        description: Run the failures came from
-        required: false
+        description: Source workflow run and attempt (RUN_ID:ATTEMPT)
+        required: true
         type: string
-        default: ""
 
 # A new request replaces the previous rerun for this PR and lane. The dashboard
 # tracks each request independently through its correlation id.
@@ -46,6 +49,7 @@ concurrency:
 permissions:
   contents: read
   pull-requests: read
+  actions: read
 
 jobs:
   rerun:
@@ -53,6 +57,7 @@ jobs:
     with:
       pr_number: ${{ inputs.pr_number }}
       head_sha: ${{ inputs.head_sha }}
+      tested_sha: ${{ inputs.tested_sha }}
       selection: ${{ inputs.selection }}
       correlation_id: ${{ inputs.correlation_id }}
       source_run: ${{ inputs.source_run }}
