@@ -885,7 +885,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
             if kwargs or not isinstance(top_k_index, torch.Tensor):
                 raise NotImplementedError(
                     f"{type(module).__name__} routes its tokens itself, which token dispatch cannot exchange: run it "
-                    "with `ep_size == tp_size`, where its experts run on the shared batch."
+                    "with the router-masked plan (`ep_router` + `moe_tp_experts`) and `ep_size == tp_size`."
                 )
             # Read the full token count before the pre hook slices the inputs across the batch replicas.
             num_tokens = hidden_states.size(0)
@@ -917,9 +917,6 @@ class EpMaskedExpertsParallel(MoeExpertsParallel):
         (hidden_states, top_k_index, top_k_weights, *rest), kwargs = super().transform_inputs_pre_forward(
             module, args, kwargs, mesh, is_expert_parallel=True
         )
-        # experts that route themselves (MXFP4 GPT-OSS hands its own routing data) keep to this rank's experts
-        if not isinstance(top_k_index, torch.Tensor):
-            return (hidden_states, top_k_index, top_k_weights, *rest), kwargs
         # each rank backpropagates through its own experts only: the replicated weights' gradients are summed
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
