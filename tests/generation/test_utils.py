@@ -783,52 +783,15 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             for output in (output_greedy, output_assisted):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
-    @pytest.mark.generate
-    def test_assisted_decoding_with_static_cache(self):
-        """
-        Test that assisted generation works with a static cache: the rejected drafts must be rolled back by
-        `StaticLayer.crop`, so the output has to match the dynamic cache run.
-        """
-        for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-            if not model_class._can_compile_fullgraph:
-                self.skipTest(reason="This model does not support the static cache format")
-
-            set_seed(42)
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            set_config_for_less_flaky_test(config)
-            if config.is_encoder_decoder:
-                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
-            if not hasattr(config.get_text_config(), "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-
-            config.is_decoder = True
-            model = model_class._from_config(config).to(torch_device).eval()
-            set_model_for_less_flaky_test(model)
-            # The assistant is the model itself, so every draft is accepted, and a randomly initialized copy, so that
-            # every draft is rejected and `crop` actually has to roll the cache back
-            random_assistant = model_class(model.config).to(torch_device).eval()
-            set_model_for_less_flaky_test(random_assistant)
-
-            generation_kwargs = {
-                "eos_token_id": -1,  # make sure generation doesn't break early
-                "max_new_tokens": 4,  # at least two forward passes in the main model
-                "num_beams": 1,
-                "do_sample": False,
-                "use_cache": True,
-            }
-            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
-
-            for assistant_model in (model, random_assistant):
-                assistant_model.generation_config.num_assistant_tokens = 2
-                assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-                kwargs = {**generation_kwargs, **inputs_dict, **logits_processor_kwargs}
-                output_dynamic = model.generate(**kwargs, assistant_model=assistant_model)
+            # The same must hold with a static cache, where a rejected draft is rolled back by moving the write
+            # offset instead of by slicing the state tensors. `assistant_type == "random"` rejects every draft, so
+            # `crop` runs on each round. Models that cannot use a static cache at all are skipped, see
+            # `test_generate_with_static_cache`.
+            if model_class._can_compile_fullgraph and not config.is_encoder_decoder:
                 output_static = model.generate(
-                    **kwargs, assistant_model=assistant_model, cache_implementation="static"
+                    **generation_kwargs, **inputs_dict, **logits_processor_kwargs, cache_implementation="static"
                 )
-                self.assertTrue(torch.equal(output_dynamic, output_static))
+                assert_similar_generate_outputs(output_assisted, output_static, atol=atol, rtol=rtol)
 
     @pytest.mark.generate
     @is_flaky
