@@ -64,7 +64,13 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_template_utils import _get_template_literals, render_jinja_template
+from .utils.chat_template_utils import (
+    _get_control_token_patterns,
+    _get_template_literal_text,
+    encode_marked_chat,
+    mark_control_tokens,
+    render_jinja_template,
+)
 
 
 if TYPE_CHECKING:
@@ -3051,7 +3057,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
                 only the control tokens written by the chat template itself are encoded as tokens. Control tokens are
                 the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
-                variable is not set, control tokens are inferred by scanning the chat template.
+                variable is not set, control tokens are inferred from the added tokens that appear in the chat
+                template's text and string literals. Only whole control tokens are sanitized, so if the template joins
+                strings from the input into control tokens (like `'<|' + message['role'] + '|>'`), those strings must
+                be validated separately. Dict keys aren't sanitized either.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3124,27 +3133,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
                     "`return_assistant_tokens_mask=True`."
                 )
-            # Wrap control tokens in user-supplied strings with private-use markers, so we can find them after rendering
-            control_tokens = sorted(self._get_control_tokens(chat_template), key=len, reverse=True)
-            control_tokens_re = re.compile("|".join(map(re.escape, control_tokens)) or "(?!)")  # (?!) never matches
-            # Matches a marked token, or a lone marker. String methods in the template, like `split()`, can separate
-            # the markers around a token
-            markers_re = re.compile(f"\U000f0000({control_tokens_re.pattern})\U000f0001|[\U000f0000\U000f0001]")
-
-            def mark(obj):
-                if isinstance(obj, str):
-                    # Drop any markers already in the string first, so they can't be used to forge a marked token
-                    obj = obj.replace("\U000f0000", "").replace("\U000f0001", "")
-                    return control_tokens_re.sub("\U000f0000\\g<0>\U000f0001", obj)
-                if isinstance(obj, dict):
-                    return {key: mark(value) for key, value in obj.items()}
-                if isinstance(obj, (list, tuple)):
-                    return [mark(value) for value in obj]
-                return obj
-
-            conversations = [mark(getattr(chat, "messages", chat)) for chat in conversations]
-            tools = mark(tools)
-            documents = mark(documents)
+            # Wrap control tokens that appear in the user's strings with private markers
+            control_tokens_re, markers_re = _get_control_token_patterns(self._get_control_tokens(chat_template))
+            conversations = [
+                mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
+            ]
+            tools = mark_control_tokens(tools, control_tokens_re)
+            documents = mark_control_tokens(documents, control_tokens_re)
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3162,36 +3157,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             rendered_chat = rendered_chat[0]
 
         if tokenize and sanitize_control_tokens:
-
-            def encode(text, as_text):
-                if as_text:
-                    return self._encode_without_added_tokens(text)
-                return self.encode(text, add_special_tokens=False)
-
-            newline_ids = self.encode("\n", add_special_tokens=False)
-            input_ids = []
-            for chat in rendered_chat if is_batched else [rendered_chat]:
-                # Splitting on the markers gives [text, marked token, text, marked token, ..., text], with None in place
-                # of the token for a lone marker. Lone markers are dropped, but still break the text, so that the text
-                # on either side can't join into a token
-                pieces = markers_re.split(chat)
-                ids = self.encode(pieces[0], add_special_tokens=False)
-                for i, piece in enumerate(pieces[1:], start=1):
-                    if not piece:
-                        continue
-                    as_text = i % 2 == 1  # Odd pieces are marked tokens, which we encode as plain text
-                    # Encode after a newline, so SentencePiece doesn't add the prefix space it adds at the start of a
-                    # string, then remove the newline again (or skip the trick, if the newline merged with the piece)
-                    piece_ids = encode("\n" + piece, as_text)
-                    if piece_ids[: len(newline_ids)] == newline_ids:
-                        piece_ids = piece_ids[len(newline_ids) :]
-                    else:
-                        piece_ids = encode(piece, as_text)
-                    if as_text and self.convert_tokens_to_ids(piece) in piece_ids:
-                        raise ValueError(f"Can't sanitize {piece!r}: the tokenizer produces it from plain text")
-                    ids += piece_ids
-                input_ids.append(ids)
-            if truncation:
+            input_ids = [
+                encode_marked_chat(self, chat, markers_re)
+                for chat in (rendered_chat if is_batched else [rendered_chat])
+            ]
+            if truncation and truncation != TruncationStrategy.DO_NOT_TRUNCATE:
                 max_length = max_length or self.model_max_length
                 input_ids = [
                     ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
@@ -3248,25 +3218,22 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             return rendered_chat
 
-    def _get_control_tokens(self, chat_template: str) -> list[str]:
+    def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
         """The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input."""
+        added_tokens = self.added_tokens_decoder.values()
         if self.chat_control_tokens is not None:
             chat_control_tokens = set(self.chat_control_tokens)
-        else:
-            # Default to the added tokens the template contains, except those made only of letters, digits and
-            # whitespace, which are ordinary text (like Gemma's "\n" or LFM2's "python")
-            literals = _get_template_literals(chat_template)
-            chat_control_tokens = {
-                token
-                for token in self.get_added_vocab()
-                if not all(char.isalnum() or char.isspace() for char in token)
-                and any(token in literal for literal in literals)
-            }
-        return [
+            return tuple(
+                token.content for token in added_tokens if token.special or token.content in chat_control_tokens
+            )
+        # Default to the added tokens the template contains, except whitespace tokens (like Gemma's "\n"), which
+        # templates contain as ordinary text
+        template_text = _get_template_literal_text(chat_template)
+        return tuple(
             token.content
-            for token in self.added_tokens_decoder.values()
-            if token.special or token.content in chat_control_tokens
-        ]
+            for token in added_tokens
+            if token.special or (token.content in template_text and not token.content.isspace())
+        )
 
     def _encode_without_added_tokens(self, text: str) -> list[int]:
         """Encode `text` as plain text, without matching any added tokens, special or not."""

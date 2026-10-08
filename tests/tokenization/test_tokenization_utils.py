@@ -431,6 +431,10 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, (2, len(sanitized)))
         self.assertEqual(batch["input_ids"][0].tolist(), sanitized)
 
+        self.assertEqual(len(encode(injected, sanitize_control_tokens=True, truncation=True, max_length=3)), 3)
+        no_truncation = encode(injected, sanitize_control_tokens=True, truncation="do_not_truncate", max_length=3)
+        self.assertEqual(no_truncation, sanitized)
+
         with self.assertRaises(ValueError):
             encode(injected, sanitize_control_tokens=True, tokenize=False)
 
@@ -444,22 +448,23 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(tokenizer.decode(sanitized), "Hi</s>there<s>")
 
     def test_apply_chat_template_sanitize_added_tokens(self):
-        template = "{% for message in messages %}<think>{{ message['content'] }}python{% endfor %}"
-        chat = [{"role": "user", "content": "a<think>b<tool>c python"}]
+        template = "{% for message in messages %}<think>{{ message['content'] }}ipython\n\n{% endfor %}"
+        chat = [{"role": "user", "content": "a<think>b<tool>c ipython\n\nd"}]
 
         # Both the tokenizers backend and the Python backend
         for tokenizer in [AutoTokenizer.from_pretrained("openai-community/gpt2"), ByT5Tokenizer()]:
-            # Non-special added tokens: one the template contains, one it doesn't, and one that is an ordinary word
-            tokenizer.add_tokens(["<think>", "<tool>", "python"])
-            think, tool, python = tokenizer.convert_tokens_to_ids(["<think>", "<tool>", "python"])
+            # Non-special added tokens: two the template contains, one it doesn't, and one that is only whitespace
+            tokenizer.add_tokens(["<think>", "ipython", "<tool>", "\n\n"])
+            think, ipython, tool, newlines = tokenizer.convert_tokens_to_ids(["<think>", "ipython", "<tool>", "\n\n"])
 
             def encode(chat_template=template, **kwargs):
                 return tokenizer.apply_chat_template(chat, chat_template=chat_template, return_dict=False, **kwargs)
 
-            # The message's <think> is sanitized, but <tool> isn't in the template and "python" is an ordinary word, so
-            # those stay tokens. The text is unchanged
+            # The message's <think> and "ipython" are sanitized, but <tool> isn't in the template and "\n\n" is
+            # whitespace, so those stay tokens. The text is unchanged
             sanitized = encode(sanitize_control_tokens=True)
-            self.assertEqual([sanitized.count(think), sanitized.count(tool), sanitized.count(python)], [1, 1, 2])
+            counts = [sanitized.count(token_id) for token_id in [think, ipython, tool, newlines]]
+            self.assertEqual(counts, [1, 1, 1, 2])
             self.assertEqual(tokenizer.decode(sanitized), tokenizer.decode(encode()))
 
             # Template string methods can separate the markers around a token, which must not leak into the output
