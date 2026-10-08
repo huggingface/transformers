@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, packed_sequence_kwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -590,6 +590,10 @@ class OlmoHybridModel(Qwen3NextModel):
         hidden_states = inputs_embeds
         # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
+
+        # Linear-attention layers split packed sequences only on explicit boundaries: derive them once when missing
+        if "cu_seq_lens_q" not in kwargs:
+            kwargs.update(packed_sequence_kwargs(position_ids, past_key_values))
 
         for i, decoder_layer in enumerate(self.layers):
             layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None

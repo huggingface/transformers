@@ -21,7 +21,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, packed_sequence_kwargs
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
@@ -551,6 +551,10 @@ class Qwen3_5TextModel(Qwen3NextModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # Linear-attention layers split packed sequences only on explicit boundaries: derive them once when missing
+        if "cu_seq_lens_q" not in kwargs:
+            kwargs.update(packed_sequence_kwargs(text_position_ids, past_key_values))
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(

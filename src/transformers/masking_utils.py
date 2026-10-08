@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
+from .modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
@@ -1469,6 +1470,36 @@ def create_chunked_causal_mask(
         device=device,
     )
     return causal_mask
+
+
+def packed_sequence_kwargs(position_ids: torch.Tensor | None, past_key_values: Cache | None = None) -> dict:
+    """
+    Return the varlen kwargs (`cu_seq_lens_q/k`, `max_length_q/k` and `seq_idx`) of a padding-free batch, i.e. several
+    sequences packed in a single row and told apart by their `position_ids` only. Layers that do not read sequence
+    boundaries from `position_ids`, such as linear attention, need them explicitly.
+
+    Args:
+        position_ids (`torch.Tensor`, *optional*):
+            Position ids of shape `(batch_size, sequence_length)`.
+        past_key_values (`Cache`, *optional*):
+            The cache of the current forward. The kwargs describe a full (cacheless) forward only.
+
+    Returns:
+        `dict`: The varlen kwargs, or an empty dict when the batch is not packed in a single row or a cache is used.
+    """
+    if position_ids is None or position_ids.shape[0] != 1 or past_key_values is not None:
+        return {}
+    seq_idx = find_packed_sequence_indices(position_ids)
+    if seq_idx is None:
+        return {}
+    (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
+    return {
+        "cu_seq_lens_q": cu_seq_lens_q,
+        "cu_seq_lens_k": cu_seq_lens_k,
+        "max_length_q": max_length_q,
+        "max_length_k": max_length_k,
+        "seq_idx": seq_idx.to(torch.int32),
+    }
 
 
 def create_recurrent_attention_mask(

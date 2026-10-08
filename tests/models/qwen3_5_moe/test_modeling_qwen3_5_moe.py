@@ -157,9 +157,11 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
         config = self.model_tester.get_config()
         model = Qwen3_5MoeForCausalLM(config).to(torch_device).eval()
 
-        data_collator = DataCollatorWithFlattening(
-            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
-        )
+        # Sequence boundaries passed explicitly, or only through `position_ids` (the collator's default)
+        data_collators = [
+            DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True),
+            DataCollatorWithFlattening(return_tensors="pt"),
+        ]
         test_cases = [
             (
                 torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device),
@@ -173,27 +175,28 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
             ),
         ]
 
-        for padded_input_ids, attention_mask, features in test_cases:
-            position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
-            padding_free_batch = data_collator(features)
-            padding_free_batch = {
-                key: value.to(torch_device) if torch.is_tensor(value) else value
-                for key, value in padding_free_batch.items()
-            }
+        for data_collator in data_collators:
+            for padded_input_ids, attention_mask, features in test_cases:
+                position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
+                padding_free_batch = data_collator(features)
+                padding_free_batch = {
+                    key: value.to(torch_device) if torch.is_tensor(value) else value
+                    for key, value in padding_free_batch.items()
+                }
 
-            with torch.no_grad():
-                res_padded = model(
-                    input_ids=padded_input_ids,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    use_cache=False,
-                )
-                res_padfree = model(**padding_free_batch, use_cache=False)
+                with torch.no_grad():
+                    res_padded = model(
+                        input_ids=padded_input_ids,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        use_cache=False,
+                    )
+                    res_padfree = model(**padding_free_batch, use_cache=False)
 
-            logits_padded = res_padded.logits[attention_mask.bool()]
-            logits_padfree = res_padfree.logits[0]
+                logits_padded = res_padded.logits[attention_mask.bool()]
+                logits_padfree = res_padfree.logits[0]
 
-            torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
+                torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
 
 
 class Qwen3_5MoeVisionText2TextModelTester:
