@@ -48,7 +48,10 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | rule | mechanism | layout |
 | :--- | :--- | :--- |
 | `"moe_tp_experts"` with `"ep_router"` on the router | masking and all-reduce: every rank runs its local experts on the whole batch, the router masks the others, and an all-reduce combines the outputs | `ep_size=tp_size` |
-| `"ep_dispatch_experts"` | [token dispatch](#token-dispatch): each rank keeps its own tokens and only exchanges the routed (token, expert) pairs with two all-to-all collectives | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
+| `"ep_dispatch_experts"` | [token dispatch](#token-dispatch): each rank keeps its own tokens and only exchanges the routed (token, expert) pairs with two all-to-all collectives. With `ep_size=tp_size`, every rank of an expert group already holds the same batch, so it masks and all-reduces instead, which is faster and captures in a CUDA graph | `ep_size` a multiple of `tp_size` that divides `fsdp_size * tp_size` |
+
+> [!TIP]
+> Pass `ep_strategy="dispatch"` to [`DistributedConfig`] to force token dispatch, or `ep_strategy="masked"` to force masking, which requires `ep_size=tp_size`. By default, masking is picked whenever the expert group shares one batch. Other dispatch backends register an `EpDispatchExpertsParallel` style named `ep_<name>_experts` in `ALL_PARALLEL_STYLES` and are selected with `ep_strategy="<name>"`.
 
 > [!TIP]
 > `enable_expert_parallel=True` is a deprecated alias for `ep_size=tp_size`, used only when `ep_size` is omitted, and emits a `FutureWarning`.
@@ -74,20 +77,7 @@ distributed_config = DistributedConfig(
 
 Providing a plan does not infer parallel sizes: set `tp_size` and `ep_size` explicitly.
 
-Most MoE models default to `"ep_dispatch_experts"`. To use masking and all-reduce instead, set `ep_size=tp_size` and override both the router and the expert forward rules (the router module name depends on the model, e.g. `mlp.router` on gpt-oss):
-
-```py
-distributed_config = DistributedConfig(
-    tp_size=4,
-    ep_size=4,
-    ep_plan={
-        "model.layers.*.mlp.gate": "ep_router",
-        "model.layers.*.mlp.experts": "moe_tp_experts",
-    },
-)
-```
-
-Conversely, override the expert forward rule of a model whose plan uses masking with `"ep_dispatch_experts"` to use token dispatch. The router rule is then ignored, since dispatch needs the global expert ids to find each expert's owner.
+Most MoE models default to `"ep_dispatch_experts"`, which already masks and all-reduces when `ep_size=tp_size`. Models whose plan still uses router masking (`"ep_router"` on the router and `"moe_tp_experts"` on the experts) also require `ep_size=tp_size`. To give one of them token dispatch, override its expert forward rule with `"ep_dispatch_experts"` and remove its router rule: dispatch needs the global expert ids to find each expert's owner.
 
 ## Token dispatch
 
