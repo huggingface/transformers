@@ -221,28 +221,21 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
     def test_added_token_does_not_get_metaspace_prefix(self):
         # #28218: a non-special add_tokens call on a SentencePiece-style fast tokenizer
         # must not leave a spurious "▁" prefix on the chunk after the added token.
-        vocab = [
-            ("<unk>", 0.0),
-            ("▁", -10.0),
-            ("gym", 0.0),
-            ("▁gym", 0.0),
-            ("▁Hi", 0.0),
-            ("▁world", 0.0),
-        ]
-        backend = Tokenizer(Unigram(vocab=vocab, unk_id=0))
-        backend.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-        fast = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="<unk>")
-        self.assertEqual(fast._tokenizer.pre_tokenizer.prepend_scheme, "always")
-
-        fast.add_tokens(["abcd"])
-
-        self.assertEqual(fast._tokenizer.pre_tokenizer.prepend_scheme, "first")
-        self.assertEqual(fast.tokenize("abcdgym"), ["abcd", "gym"])
-        self.assertEqual(fast.tokenize("abcd gym"), ["abcd", "▁gym"])
-        self.assertEqual(
-            fast.tokenize("Hi abcdgym world"),
-            ["▁Hi", "▁", "abcd", "gym", "▁world"],
+        tokenizer = AutoTokenizer.from_pretrained(
+            "facebook/nllb-200-distilled-600M", revision="f8d333a098d19b4fd9a8b18f94170487ad3f821d"
         )
+        self.assertEqual(tokenizer._tokenizer.pre_tokenizer.prepend_scheme, "always")
+
+        tokenizer.add_tokens(["abcd"])
+
+        self.assertEqual(tokenizer._tokenizer.pre_tokenizer.prepend_scheme, "first")
+        self.assertEqual(tokenizer.tokenize("abcdgym"), ["abcd", "gym"])
+        self.assertEqual(tokenizer.tokenize("abcd gym"), ["abcd", "▁gym"])
+        self.assertEqual(
+            tokenizer.tokenize("I like to walk abcdgym along the beach"),
+            ["▁I", "▁like", "▁to", "▁walk", "▁", "abcd", "gym", "▁along", "▁the", "▁beach"],
+        )
+        self.assertEqual(tokenizer.decode(tokenizer.encode("abcdgym", add_special_tokens=False)), "abcdgym")
 
     def test_checkpoint_restore_keeps_metaspace_prepend_scheme(self):
         # #28218 follow-up: restoring a checkpoint that legitimately baked prepend_scheme="always"
