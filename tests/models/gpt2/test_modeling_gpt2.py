@@ -406,6 +406,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_gpt2(self):
+        assert 1 == 2  # Intentional failure for CI failure-surfacing test
         self._test_lm_generate_gpt2_helper()
 
     @slow
