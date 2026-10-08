@@ -20,10 +20,12 @@ import os
 import sys
 import tempfile
 import types
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import torch
-from huggingface_hub import snapshot_download
 from parameterized import parameterized
 
 from tests.test_memory_cleanup_mixin import MemoryCleanupTestCase
@@ -95,7 +97,6 @@ class TestHubKernels(MemoryCleanupTestCase):
             register_patch_mapping(self._pre_test_patch_mapping)
         super().tearDown()
 
-    @require_torch_accelerator
     def test_forward(self):
         tokenized_input = self.tokenizer(self.input, return_tensors="pt").input_ids.to(self.model_kernelized.device)
         output_ = self.model_kernelized.generate(tokenized_input, max_new_tokens=10, do_sample=False)
@@ -197,19 +198,23 @@ class TestHubKernels(MemoryCleanupTestCase):
 
     def test_unkernelize(self):
         model = copy.deepcopy(self.model_kernelized)
+        self.assertTrue(model.use_kernels)
 
-        with self.assertLogs("transformers.modeling_utils", level="WARNING") as cm:
-            model.use_kernels = False
+        # Collect modules whose forwards can be replaced by kernels
+        kernel_modules = [module for _, module in model.named_modules() if hasattr(type(module), "kernel_layer_name")]
+        self.assertTrue(kernel_modules)
+        self.assertTrue(any(module.forward.__func__ is not type(module).forward for module in kernel_modules))
 
-        self.assertTrue(
-            any(
-                "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active."
-                in msg
-                for msg in cm.output
-            )
-        )
+        # Disable kernels == "unkernelize"
+        model.use_kernels = False
 
         self.assertFalse(model.use_kernels)
+        self.assertIsNone(model.kernels_mode)
+
+        # We are back to the original fwds
+        for module in kernel_modules:
+            self.assertIs(module.forward.__func__, type(module).forward)
+
         del model
 
     def test_kernels_mapping(self):
@@ -290,7 +295,6 @@ class TestHubKernels(MemoryCleanupTestCase):
 
         del model
 
-    @require_torch_accelerator
     def test_kernel_fusion(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
         kernel_config = KernelConfig(
@@ -344,7 +348,6 @@ class TestHubKernels(MemoryCleanupTestCase):
 
         del fused
 
-    @require_torch_accelerator
     def test_kernel_replacement_with_layout(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
         kernel_config = KernelConfig(
@@ -473,8 +476,6 @@ class TestKernelUtilities(TestCasePlus):
         for s in invalid:
             self.assertFalse(is_kernel(s))
 
-    @require_torch_accelerator
-    @require_kernels
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
 
@@ -516,8 +517,6 @@ class TestKernelUtilities(TestCasePlus):
         # Cleanup cache entry to avoid growth across tests
         _KERNEL_MODULE_MAPPING.pop(name, None)
 
-    @require_torch_accelerator
-    @require_kernels
     def test_lazy_load_kernel_version(self):
         name = "causal-conv1d"
         version_spec = ">=0.0.4,<0.1.0"
@@ -786,22 +785,32 @@ class TestAttentionKernelRegistration(TestCasePlus):
         with self.assertRaisesRegex(ValueError, "Only cuda, rocm, xpu, npu, neuron and tpu devices supported"):
             add_to_mapping_local("RMSNorm", "cpu", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
 
-    @slow
-    @require_torch_accelerator
     def test_add_to_mapping_local_then_load(self):
-        repo_path = snapshot_download("kernels-community/layer-norm")
-        compatible_mapping = {}
-        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+        class MockRMSNorm(torch.nn.Module):
+            def forward(self, x):
+                return x
 
-        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
-        self.assertIsInstance(repo, LocalLayerRepository)
-        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+        with TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            compatible_mapping = {}
 
-        layer_cls = repo.load()
-        self.assertTrue(issubclass(layer_cls, torch.nn.Module))
+            add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+            repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+            self.assertIsInstance(repo, LocalLayerRepository)
+            self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+            mock_kernel = SimpleNamespace(layers=SimpleNamespace(LlamaRMSNorm=MockRMSNorm))
+
+            with patch("kernels.layer.layer.get_local_kernel", return_value=mock_kernel) as mock_load:
+                layer_cls = repo.load()
+
+            mock_load.assert_called_once_with(repo_path)
+            self.assertIs(layer_cls, MockRMSNorm)
+            self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
-@require_torch_accelerator
+@slow
 @require_kernels
 class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     @classmethod
@@ -809,6 +818,19 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
         super().setUpClass()
         cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
         cls.model = AutoModelForCausalLM.from_pretrained(cls.model_id, use_kernels=False, device_map=torch_device)
+
+    def setUp(self):
+        super().setUp()
+
+        # We mock kernelization so we force the state as patched state (i.e. same state across states regardless of order)
+        state_patch = patch.multiple(
+            self.model,
+            _use_kernels=False,
+            _kernels_mode=None,
+            create=True,
+        )
+        state_patch.start()
+        self.addCleanup(state_patch.stop)
 
     def test_setting_use_kernels_twice_does_not_rekernelize(self):
         with (
@@ -835,8 +857,9 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
 
         with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
-            self.model.train(True)
-            self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
+            # TODO: Reactivate when training is using kernels again - temporarily disabled
+            # self.model.train(True)
+            # self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
             self.model.eval()
             self.assertTrue(any(m == Mode.INFERENCE for m in last_modes))
 

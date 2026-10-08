@@ -136,48 +136,50 @@ if is_kernels_available():
     def _build_kernel_mapping() -> dict:
         # NOTE: Every entry here has to be compatible with torch compile otherwise it is not added to the list
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
-            # TODO: not checked -> potentially to remove for now
-            # "MultiScaleDeformableAttention": {
-            #     "cuda": LayerRepository(
-            #         repo_id="kernels-community/deformable-detr",
-            #         layer_name="MultiScaleDeformableAttention",
-            #         version=1,
-            #     )
-            # },
+            # TODO: not checked -> potentially to remove for now"""
+            """
+            "MultiScaleDeformableAttention": {
+                "cuda": LayerRepository(
+                    repo_id="kernels-community/deformable-detr",
+                    layer_name="MultiScaleDeformableAttention",
+                    version=1,
+                )
+            },
             # GB10/SM121 GDN fast path (no fla/causal_conv1d build there); dense and MoE share it.
-            # "Qwen3_5GatedDeltaNet": {
-            #     Device(
-            #         type="cuda",
-            #         properties=CUDAProperties(min_capability=121, max_capability=121),
-            #     ): LayerRepository(
-            #         repo_id="Atlas-Inference/gdn",
-            #         layer_name="Qwen3_5GatedDeltaNet",
-            #        revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
-            #         # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
-            #         trust_remote_code=True,
-            #     ),
-            # AMD Strix Halo (gfx1151, capability 11.5), ROCm build of the same layer
-            #     Device(
-            #         type="rocm",
-            #         properties=ROCMProperties(min_capability=115, max_capability=115),
-            #     ): LayerRepository(
-            #         repo_id="Atlas-Inference/gdn",
-            #        layer_name="Qwen3_5GatedDeltaNet",
-            #         revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
-            #         # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
-            #         trust_remote_code=True,
-            #     ),
-            # },
-            # "EsmFold2TriangleMultiplication": {
-            #    "cuda": {
-            #        Mode.INFERENCE: LayerRepository(
-            #            repo_id="biohub/esmfold2-trimul",
-            #            layer_name="ESMFold2TriangleMultiplication",
-            #            revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
-            #            trust_remote_code=True,
-            #        ),
-            #    },
-            # },
+            "Qwen3_5GatedDeltaNet": {
+                Device(
+                    type="cuda",
+                    properties=CUDAProperties(min_capability=121, max_capability=121),
+                ): LayerRepository(
+                    repo_id="Atlas-Inference/gdn",
+                    layer_name="Qwen3_5GatedDeltaNet",
+                    revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
+                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                    trust_remote_code=True,
+                ),
+                # AMD Strix Halo (gfx1151, capability 11.5), ROCm build of the same layer
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): LayerRepository(
+                    repo_id="Atlas-Inference/gdn",
+                    layer_name="Qwen3_5GatedDeltaNet",
+                    revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
+                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                    trust_remote_code=True,
+                ),
+            },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="biohub/esmfold2-trimul",
+                        layer_name="EsmFold2TriangleMultiplication",
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
+                        trust_remote_code=True,
+                    ),
+                },
+            },
+            """
             # TODO: add torch compile flag then
             # TODO: not checked FLA
             "chunk_gated_delta_rule": {
@@ -617,7 +619,7 @@ if is_kernels_available():
         register_kernel_mapping(mapping)
 
 else:
-    # Stub to make decorators int transformers work when `kernels`
+    # Stub to make decorators in transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
         def decorator(cls):
