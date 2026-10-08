@@ -172,60 +172,63 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         # Register input scale upper bound
         self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, top_k_index, top_k_weights):
         """
         Args:
-            hidden_states (torch.Tensor): (batch_size * token_num, hidden_size)
+            hidden_states (torch.Tensor): (num_tokens, hidden_size)
+            top_k_index (torch.Tensor): (num_tokens, top_k) expert ids, `num_experts` for the slots to skip
+            top_k_weights (torch.Tensor): (num_tokens, top_k)
         Returns:
-            torch.Tensor: (batch_size * token_num, hidden_size)
+            torch.Tensor: (num_tokens, hidden_size)
         """
-        # Reshape hidden states for expert computation
-        hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         num_tokens = None
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        # Pre-allocate tensor for all expert outputs with same shape as hidden_states
-        next_states = torch.empty_like(hidden_states)
-
-        for i in range(self.num_experts):
-            # Extract expert's hidden states
-            expert_hidden = hidden_states[i]
-            expert_hidden_reshaped = expert_hidden.reshape(-1, self.hidden_size)
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
             # Quantize for this expert
-            with on_device(expert_hidden_reshaped):
-                expert_quantized, expert_scale = quantize_fp8_per_row(
-                    expert_hidden_reshaped, num_tokens, self.input_scale_ub
-                )
+            with on_device(current_state):
+                expert_quantized, expert_scale = quantize_fp8_per_row(current_state, num_tokens, self.input_scale_ub)
             sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
             gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
+            gate_up_scale = gate_up_proj_scale_float32[expert_idx][0]
             if _is_torch_xpu_available:
                 gate = torch._scaled_mm(
                     expert_quantized,
-                    self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous().t(),
+                    self.gate_up_proj[expert_idx].transpose(0, 1)[:sharded_expert_dim].contiguous().t(),
                     scale_a=expert_scale.unsqueeze(-1),
-                    scale_b=gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous().t(),
+                    scale_b=gate_up_scale[:sharded_expert_dim].view(-1, 1).contiguous().t(),
                     out_dtype=hidden_states.dtype,
                 )
                 up = torch._scaled_mm(
                     expert_quantized,
-                    self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous().t(),
+                    self.gate_up_proj[expert_idx].transpose(0, 1)[sharded_expert_dim:].contiguous().t(),
                     scale_a=expert_scale.unsqueeze(-1),
-                    scale_b=gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous().t(),
+                    scale_b=gate_up_scale[sharded_expert_dim:].view(-1, 1).contiguous().t(),
                     out_dtype=hidden_states.dtype,
                 )
             else:
                 gate = torch.ops.fbgemm.f8f8bf16_rowwise(
                     expert_quantized,
-                    self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous(),
+                    self.gate_up_proj[expert_idx].transpose(0, 1)[:sharded_expert_dim].contiguous(),
                     expert_scale,
-                    gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(),
+                    gate_up_scale[:sharded_expert_dim].view(-1, 1).contiguous(),
                     use_fast_accum=True,
                 )
 
                 up = torch.ops.fbgemm.f8f8bf16_rowwise(
                     expert_quantized,
-                    self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous(),
+                    self.gate_up_proj[expert_idx].transpose(0, 1)[sharded_expert_dim:].contiguous(),
                     expert_scale,
-                    gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(),
+                    gate_up_scale[sharded_expert_dim:].view(-1, 1).contiguous(),
                     use_fast_accum=True,
                 )
 
@@ -238,23 +241,24 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             if _is_torch_xpu_available:
                 expert_output = torch._scaled_mm(
                     activated_quantized,
-                    self.down_proj[i].transpose(0, 1).contiguous(),
+                    self.down_proj[expert_idx].transpose(0, 1).contiguous(),
                     scale_a=activated_scale.unsqueeze(-1),
-                    scale_b=down_proj_scale_float32[i].view(-1, 1).contiguous().t(),
+                    scale_b=down_proj_scale_float32[expert_idx].view(-1, 1).contiguous().t(),
                     out_dtype=hidden_states.dtype,
                 )
             else:
                 expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
                     activated_quantized,
-                    self.down_proj[i].transpose(0, 1).contiguous(),
+                    self.down_proj[expert_idx].transpose(0, 1).contiguous(),
                     activated_scale,
-                    down_proj_scale_float32[i].view(-1, 1).contiguous(),
+                    down_proj_scale_float32[expert_idx].view(-1, 1).contiguous(),
                     use_fast_accum=True,
                 )
 
-            next_states[i] = expert_output
-        next_states = next_states.to(hidden_states.device)
-        return next_states.view(-1, self.hidden_size)
+            current_hidden_states = expert_output * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
 
 @lru_cache(maxsize=1)
