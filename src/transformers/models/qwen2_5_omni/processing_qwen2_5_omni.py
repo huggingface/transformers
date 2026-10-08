@@ -22,7 +22,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
@@ -180,8 +180,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
+        images_replacements, videos_replacements, audio_replacements = [], [], []
         if images is not None or videos is not None or audio is not None:
-            text = self.replace_multimodal_special_tokens(
+            images_replacements, videos_replacements, audio_replacements = self.replace_multimodal_special_tokens(
                 text,
                 audio_lengths,
                 image_grid_thw,
@@ -192,11 +193,22 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 seconds_per_chunk=seconds_per_chunk,
             )
 
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
+        text, text_replacement_offsets = self.get_text_with_replacements(
+            list(text),
+            images_replacements=images_replacements,
+            videos_replacements=videos_replacements,
+            audio_replacements=audio_replacements,
+        )
+
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        if return_text_replacement_offsets:
+            texts_inputs["text_replacement_offsets"] = text_replacement_offsets
 
         return BatchFeature(
             data={**texts_inputs, **images_inputs, **videos_inputs, **audio_inputs},
             tensor_type=kwargs.get("return_tensors"),
+            skip_tensor_conversion=self.skip_tensor_conversion,
         )
 
     def replace_multimodal_special_tokens(
@@ -214,7 +226,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         merge_length_image = self.image_processor.merge_size**2
         merge_length_video = self.video_processor.merge_size**2
 
-        processed_text = []
+        images_replacements, videos_replacements, audio_replacements = [], [], []
         for sample in text:
             positions = []
             special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
@@ -224,14 +236,14 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
             for _, special_token in positions:
                 if special_token == self.audio_token:
-                    sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
+                    audio_replacements.append(self.audio_token * next(audio_lengths))
                 elif special_token == self.image_token:
                     image_seq_length = next(image_grid_thw).prod() // merge_length_image
-                    sample = sample.replace(self.image_token, "<|image_placeholder|>" * image_seq_length, 1)
+                    images_replacements.append(self.image_token * image_seq_length)
                 elif special_token == self.video_token:
                     if not use_audio_in_video:
                         video_seq_length = next(video_grid_thw).prod() // merge_length_video
-                        sample = sample.replace(self.video_token, "<|video_placeholder|>" * video_seq_length, 1)
+                        videos_replacements.append(self.video_token * video_seq_length)
                     else:
                         audio_token_indices = np.arange(next(audio_lengths))
                         curr_video_grid_thw = next(video_grid_thw)
@@ -249,26 +261,18 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                         video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
                         audio_chunk_indexes = self.get_chunked_index(audio_token_indices, tokens_per_chunk)
 
-                        placeholder_string = self.vision_bos_token + self.audio_bos_token
+                        placeholder_string = self.audio_bos_token
                         for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
                             if j < len(video_chunk_indexes):
                                 video_seq_length = video_chunk_indexes[j][1] - video_chunk_indexes[j][0]
-                                placeholder_string += "<|video_placeholder|>" * video_seq_length
+                                placeholder_string += self.video_token * video_seq_length
                             if j < len(audio_chunk_indexes):
                                 audio_seq_length = audio_chunk_indexes[j][1] - audio_chunk_indexes[j][0]
-                                placeholder_string += "<|audio_placeholder|>" * audio_seq_length
-                        placeholder_string += self.audio_eos_token + self.vision_eos_token
-                        sample = sample.replace(
-                            self.vision_bos_token + self.video_token + self.vision_eos_token,
-                            placeholder_string,
-                            1,
-                        )
+                                placeholder_string += self.audio_token * audio_seq_length
+                        placeholder_string += self.audio_eos_token
+                        videos_replacements.append(placeholder_string)
 
-            sample = sample.replace("<|audio_placeholder|>", self.audio_token)
-            sample = sample.replace("<|image_placeholder|>", self.image_token)
-            sample = sample.replace("<|video_placeholder|>", self.video_token)
-            processed_text.append(sample)
-        return processed_text
+        return images_replacements, videos_replacements, audio_replacements
 
     def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
         """
@@ -361,6 +365,60 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             raise ValueError(
                 f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only `text` and `audio"
             )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (`list[int]`, *optional*):
+                The lengths of audio inputs in number of samples. Used to dynamically
+                compute per-audio token counts.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Qwen2_5OmniProcessorKwargs._defaults.get("images_kwargs", {}).copy()
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Qwen2_5OmniProcessorKwargs._defaults.get("videos_kwargs", {}).copy()
+            videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            num_video_patches = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        if audio_lengths is not None:
+            vision_data["num_audio_tokens"] = [
+                self._get_num_audio_tokens(length, **kwargs) for length in audio_lengths
+            ]
+
+        return MultiModalData(**vision_data)
+
+    def _get_num_audio_tokens(self, audio_length: int, **kwargs) -> int:
+        """
+        Computes the output length of the convolutional layers and the output length of the audio encoder
+        """
+        input_lengths = audio_length // self.feature_extractor.hop_length
+        input_lengths = (input_lengths - 1) // 2 + 1
+        return (input_lengths - 2) // 2 + 1
 
     @property
     def model_input_names(self):

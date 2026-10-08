@@ -228,7 +228,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        images_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("images_kwargs", {})
+        images_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("images_kwargs", {}).copy()
         images_kwargs.update(kwargs)
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
@@ -257,7 +257,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("videos_kwargs", {}).copy()
             videos_kwargs.update(kwargs)
             patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
             pooling_kernel_size = (

@@ -157,6 +157,8 @@ IGNORE_NON_TESTED = (
     + [
         # models to ignore for not tested
         "RecurrentGemmaModel",  # Building part of bigger (tested) model.
+        "Qwen2_5OmniThinkerModel",  # Building part of bigger (tested) model.
+        "Qwen3OmniMoeThinkerModel",  # Building part of bigger (tested) model.
         "FuyuForCausalLM",  # Not tested fort now
         "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
         "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
