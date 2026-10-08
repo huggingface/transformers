@@ -445,13 +445,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         built_pre_tokenizer = ""
 
         if _json_decoder_type is not None and self._tokenizer.decoder is not None:
-            decoder_repr = str(self._tokenizer.decoder)
+            try:
+                decoder_repr = str(self._tokenizer.decoder)
+            except Exception:
+                decoder_repr = ""
             built_decoder = decoder_repr.split("(")[0]
             if _json_decoder_type == "ByteLevel" and "ByteLevel" not in decoder_repr:
                 mismatch_decoder = True
 
         if _json_pre_tokenizer_type is not None and self._tokenizer.pre_tokenizer is not None:
-            pre_tokenizer_repr = str(self._tokenizer.pre_tokenizer)
+            try:
+                pre_tokenizer_repr = str(self._tokenizer.pre_tokenizer)
+            except Exception:
+                pre_tokenizer_repr = ""
             built_pre_tokenizer = pre_tokenizer_repr.split("(")[0]
             if _json_pre_tokenizer_type == "ByteLevel" and "ByteLevel" not in pre_tokenizer_repr:
                 mismatch_pre_tokenizer = True
