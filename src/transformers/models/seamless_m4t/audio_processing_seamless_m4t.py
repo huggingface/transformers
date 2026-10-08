@@ -74,13 +74,13 @@ class SeamlessM4tAudioProcessorMixin:
             self._normalize_utterances(features, frame_counts), frame_counts, padding_value=padding_value
         )
         if features.shape[1] % stride:
-            features = self._pad_axis(features, 0, -features.shape[1] % stride, axis=1, value=padding_value)
+            features = self.ops.pad(features, 0, -features.shape[1] % stride, axis=1, value=padding_value)
         return features, frame_counts
 
     def _normalize_utterances(self, features, frame_counts):
         """Zero-mean, unit-variance each clip over its own frames (unbiased variance, `1e-7` inside the root)."""
         features, mean, variance = self._frame_moments(features, frame_counts, ddof=1)
-        return self._astype((features - mean) / self._sqrt(variance + 1e-7), "float32")
+        return self.ops.astype((features - mean) / self.ops.sqrt(variance + 1e-7), "float32")
 
     def _padded_frame_count(self, padded_length, spectrogram_config, *, stride, **kwargs) -> int:
         count = super()._padded_frame_count(padded_length, spectrogram_config, **kwargs)
@@ -95,7 +95,9 @@ class SeamlessM4tAudioProcessorMixin:
             features = features[:, : num_frames - remainder, :]
             num_frames = num_frames - remainder
 
-        output["audio_features"] = features.reshape(batch_size, num_frames // stride, num_channels * stride)
+        output["audio_features"] = self.ops.reshape(
+            features, (batch_size, num_frames // stride, num_channels * stride)
+        )
 
         if "audio_features_mask" in output:
             mask = output["audio_features_mask"]

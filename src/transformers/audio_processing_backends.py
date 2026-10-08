@@ -52,25 +52,6 @@ class TorchAudioBackend(BaseAudioProcessor):
     def backend(self) -> str:
         return "torch"
 
-    # ── Backend array-API primitives ─────────────────────────────────────
-
-    @staticmethod
-    def _host_to_device(values, device, dtype=None):
-        """Copy host data (lengths, ranges, filter banks) to `device` without blocking the host.
-
-        A copy from pageable memory waits for every kernel already queued on the stream, so each one
-        stalled the Python thread until the GPU drained -- including a model forward still running
-        from the previous batch, which kept preprocessing from overlapping with inference. Staging
-        through pinned memory makes the copy asynchronous.
-        """
-        tensor = torch.as_tensor(values, dtype=dtype)
-        device = torch.device(device)
-        if tensor.device == device:
-            return tensor
-        if device.type != "cuda" or tensor.device.type != "cpu":
-            return tensor.to(device)
-        return tensor.pin_memory().to(device, non_blocking=True)
-
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # Op-table backends (docs/superpowers/specs/2026-10-06-audio-backend-ops-design.md).
@@ -138,8 +119,9 @@ class AudioOps:
         raise NotImplementedError
 
     def to_device_many(self, seq, device):
-        """``[to_device(x, device) for x in seq]`` as a list. A backend may batch the transfer (torch stages
-        CPU→CUDA copies through pinned chunks); the values are those of per-item `to_device`."""
+        """``[to_device(x, device) for x in seq]`` as a list; an empty `seq` gives ``[]``. A backend may batch
+        the transfer (torch stages CPU→CUDA copies through pinned chunks); the values are those of per-item
+        `to_device`, and the items may share storage (torch returns views of one device buffer)."""
         raise NotImplementedError
 
     def astype(self, x, dtype):
@@ -181,9 +163,9 @@ class AudioOps:
 
     def pad_many(self, seq, length, *, side="right", value=0.0):
         """Each array of `seq` constant-padded on its last axis to `length` samples on `side` (``"left"`` or
-        ``"right"``) with `value`, as a list in input order; an array already `length` or longer is returned
-        unchanged. A backend may assemble the batch in one allocation (torch on CUDA); the values are those of
-        per-item `pad`."""
+        ``"right"``) with `value`, as a list in input order; an empty `seq` gives ``[]``. An array already
+        `length` or longer is returned with its values unchanged (not necessarily the same object). A backend
+        may assemble the batch in one allocation (torch on CUDA); the values are those of per-item `pad`."""
         raise NotImplementedError
 
     def reshape(self, x, shape):
@@ -192,8 +174,8 @@ class AudioOps:
 
     def take_along_axis(self, x, indices, axis):
         """numpy's `take_along_axis`: ``out[..., i, ...] = x[..., indices[..., i, ...], ...]`` along the int
-        `axis`. `indices` is an int64 array with `x`'s ndim; its other axes broadcast against `x`'s. A copy of
-        the selected values, exact."""
+        `axis`. `indices` is an int64 array with `x`'s ndim; its axes other than `axis` are 1 or equal to `x`'s
+        (`indices` broadcasts up to `x`, never `x` up to `indices`). A copy of the selected values, exact."""
         raise NotImplementedError
 
     def masked_fill(self, x, mask, value):
@@ -415,8 +397,8 @@ _NUMPY_PAD_MODES = {"constant": "constant", "reflect": "reflect", "replicate": "
 
 
 def _check_axis(axis):
-    """Shared by the three reductions of every backend: `axis=()` reduces nothing in numpy but
-    everything in torch; neither is what a caller means, so every backend rejects it."""
+    """Shared by the reductions of every backend (`sum`, `mean`, `amax`, `amin`): `axis=()` reduces
+    nothing in numpy but everything in torch; neither is what a caller means, so every backend rejects it."""
     if axis == ():
         raise ValueError("axis=() is not allowed; pass an int, a tuple of ints or None.")
 

@@ -15,7 +15,6 @@
 from typing import Annotated, Literal
 
 import numpy as np
-import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
@@ -152,7 +151,7 @@ class ClapAudioProcessorMixin:
             # HTSAT's fusion path expects at least one selected clip even in an all-short batch.
             is_longer[np.random.randint(0, len(is_longer))] = True
         return BatchFeature(
-            {"audio_features": self._stack(features), "is_longer": [[longer] for longer in is_longer]},
+            {"audio_features": self.ops.stack(features), "is_longer": [[longer] for longer in is_longer]},
             tensor_type=return_tensors,
         )
 
@@ -167,25 +166,21 @@ class ClapAudioProcessorMixin:
             return waveform
         if padding_mode in ("repeat", "repeatpad"):
             repeats = max_length // length + (padding_mode == "repeat")
-            waveform = self._concat_last([waveform] * repeats)[..., :max_length]
-        return self._pad_axis(waveform, 0, max_length - waveform.shape[-1], axis=-1, value=0.0)
+            waveform = self.ops.concat([waveform] * repeats, -1)[..., :max_length]
+        return self.ops.pad(waveform, 0, max_length - waveform.shape[-1], axis=-1, value=0.0)
 
     def _fusion_views(self, mel, chunk_frames):
         """Four `chunk_frames` views of a whole-clip mel, and whether the crops are real."""
         # An overlong clip can still fit in `chunk_frames`; it is then shown four times, unfused.
         if mel.shape[0] <= chunk_frames:
-            return self._stack([mel] * 4), False
+            return self.ops.stack([mel] * 4), False
         ranges = np.array_split(list(range(0, mel.shape[0] - chunk_frames + 1)), 3)
         starts = [np.random.choice(r if len(r) else [0]) for r in ranges]
         crops = [mel[start : start + chunk_frames] for start in starts]
-        return self._stack([self._bilinear_shrink(mel, chunk_frames)] + crops), True
+        return self.ops.stack([self._bilinear_shrink(mel, chunk_frames)] + crops), True
 
     def _bilinear_shrink(self, mel, chunk_frames):
-        mel_tensor = torch.as_tensor(mel)[None, None]
-        shrunk = torch.nn.functional.interpolate(
-            mel_tensor, size=[chunk_frames, mel.shape[-1]], mode="bilinear", align_corners=False
-        )
-        return self._as_backend_array(shrunk[0, 0])
+        return self.ops.bilinear_resize(mel, (chunk_frames, mel.shape[-1]))
 
 
 class ClapAudioProcessor(ClapAudioProcessorMixin, TorchAudioBackend):

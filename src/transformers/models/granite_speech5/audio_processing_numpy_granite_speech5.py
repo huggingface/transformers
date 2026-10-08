@@ -12,26 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_granite_speech5 import GraniteSpeech5AudioProcessorMixin
 
 
 class GraniteSpeech5AudioProcessorNumpy(GraniteSpeech5AudioProcessorMixin, NumpyAudioBackend):
-    def _compute_deltas(self, features, *, delta_win_length):
-        """See the torch sibling: torchaudio's delta filter, implemented natively."""
-        n = (delta_win_length - 1) // 2
-        denominator = n * (n + 1) * (2 * n + 1) / 3
-        padded = np.pad(features, ((0, 0), (0, 0), (n, n)), mode="edge")
-        kernel = np.arange(-n, n + 1, dtype=features.dtype)
-        # Correlate along time for each mel bin; `kernel` is applied in index order, matching
-        # conv1d with a pre-reversed kernel in the torch path.
-        windows = np.lib.stride_tricks.sliding_window_view(padded, kernel.size, axis=-1)
-        return (windows * kernel).sum(-1) / denominator
-
-    def _stacked_mask(self, lengths, width, like):
-        return (np.arange(width)[None, :] < np.asarray(lengths)[:, None]).astype(np.int64)
+    pass
 
 
 __all__ = ["GraniteSpeech5AudioProcessorNumpy"]

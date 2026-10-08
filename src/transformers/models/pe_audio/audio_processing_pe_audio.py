@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -40,8 +42,11 @@ class PeAudioAudioProcessorMixin:
         if pad == 0:
             return audio_el
         edge = length - 1
-        positions = (self._arange(pad, like=audio_el) + length) % max(2 * edge, 1)
-        return self._concat_last([audio_el, audio_el[..., edge - abs(positions - edge)]])
+        # numpy's "reflect", repeated when the pad is longer than the clip; the indices are host-side
+        positions = (np.arange(pad) + length) % max(2 * edge, 1)
+        indices = (edge - np.abs(positions - edge)).reshape((1,) * (audio_el.ndim - 1) + (pad,))
+        indices = self.ops.asarray(indices.astype(np.int64), like=audio_el)
+        return self.ops.concat([audio_el, self.ops.take_along_axis(audio_el, indices, -1)], -1)
 
 
 class PeAudioAudioProcessor(PeAudioAudioProcessorMixin, TorchAudioBackend):

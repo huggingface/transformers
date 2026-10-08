@@ -14,7 +14,7 @@
 
 import math
 
-import torch
+import numpy as np
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
@@ -88,12 +88,16 @@ class GraniteSpeechAudioProcessorMixin:
             padding_side=padding_side,
             padding_value=padding_value,
         )
-        logmel = self.spectrogram(
-            self._stack(padded), spectrogram_config=spectrogram_config, audio_ranges=ranges, **kwargs
-        ).swapaxes(-1, -2)
+        logmel = self.ops.swapaxes(
+            self.spectrogram(
+                self.ops.stack(padded), spectrogram_config=spectrogram_config, audio_ranges=ranges, **kwargs
+            ),
+            -1,
+            -2,
+        )
         if logmel.shape[1] % 2 == 1:
             logmel = logmel[:, :-1]
-        features = logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
+        features = self.ops.reshape(logmel, (logmel.shape[0], -1, 2 * logmel.shape[-1]))
         hop_length = spectrogram_config.stft_config.hop_length
         effective_window_size = projector_window_size // projector_downsample_rate
         sizes = []
@@ -102,14 +106,22 @@ class GraniteSpeechAudioProcessorMixin:
             nblocks = math.ceil((mel_length // 2) / projector_window_size)
             sizes.append(nblocks * effective_window_size)
         return BatchFeature(
-            {"audio_features": features, "audio_embed_sizes": sizes, "audio_features_mask": self._embed_mask(sizes)},
+            {
+                "audio_features": features,
+                "audio_embed_sizes": sizes,
+                "audio_features_mask": self._embed_mask(sizes, features),
+            },
             tensor_type=return_tensors,
         )
 
+    def _embed_mask(self, sizes, like):
+        """Boolean `(batch, max(sizes))` mask of each clip's projector outputs, on `like`'s device."""
+        lengths = self.ops.asarray(np.asarray(sizes, dtype=np.int64), like=like)
+        return self.ops.arange(max(sizes), like=like)[None, :] < lengths[:, None]
+
 
 class GraniteSpeechAudioProcessor(GraniteSpeechAudioProcessorMixin, TorchAudioBackend):
-    def _embed_mask(self, sizes):
-        return torch.arange(max(sizes)).view(1, -1) < torch.tensor(sizes).view(-1, 1)
+    pass
 
 
 __all__ = ["GraniteSpeechAudioProcessor"]

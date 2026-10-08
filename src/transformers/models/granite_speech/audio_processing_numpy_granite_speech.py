@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_granite_speech import GraniteSpeechAudioProcessorMixin
 
 
 class GraniteSpeechAudioProcessorNumpy(GraniteSpeechAudioProcessorMixin, NumpyAudioBackend):
-    def _embed_mask(self, sizes):
-        return np.arange(max(sizes)).reshape(1, -1) < np.array(sizes).reshape(-1, 1)
+    pass
 
 
 __all__ = ["GraniteSpeechAudioProcessorNumpy"]

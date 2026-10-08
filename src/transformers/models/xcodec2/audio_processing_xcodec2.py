@@ -17,7 +17,6 @@ from typing import Annotated
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
-from ...audio_utils import _array_namespace
 from ...processing_utils import AudioKwargs
 from ...utils.type_validators import strictly_positive
 
@@ -85,15 +84,15 @@ class Xcodec2AudioProcessorMixin:
 
     def _prepare_waveform(self, audio_el, **kwargs):
         # the legacy FE appends one zero sample to every waveform before padding
-        return self._pad_axis(audio_el, 0, 1, axis=-1)
+        return self.ops.pad(audio_el, 0, 1, axis=-1)
 
     def _pad_semantic_waveform(self, waveform, *, hop_length):
         # half a codec hop of zeros on both sides, so the fbank frames line up with the codec frames
         half_hop = hop_length // 2
-        return self._pad_axis(waveform, half_hop, half_hop, axis=-1)
+        return self.ops.pad(waveform, half_hop, half_hop, axis=-1)
 
     def _pad_feature_single(self, feature, max_length, *, feature_padding_value, **kwargs):
-        return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=feature_padding_value)
+        return self.ops.pad(feature, 0, max_length - feature.shape[0], axis=0, value=feature_padding_value)
 
     def _select_semantic_waveform(self, original, acoustic, start, end, *, hop_length):
         """XCodec2's semantic encoder sees the acoustic-truncated clip rounded to codec hops."""
@@ -157,7 +156,7 @@ class Xcodec2AudioProcessorMixin:
         )
         frame_counts = self._valid_frame_counts(self._lengths_from_ranges(semantic_ranges), spectrogram_config)
         batch, mean, variance = self._frame_moments(batch, frame_counts, ddof=1)
-        batch = self._astype((batch - mean) / self._sqrt(variance + 1e-7), "float32")
+        batch = self.ops.astype((batch - mean) / self.ops.sqrt(variance + 1e-7), "float32")
         features = [batch[i, : int(count)] for i, count in enumerate(frame_counts)]
 
         features, frame_ranges = self._pad_features(
@@ -170,13 +169,13 @@ class Xcodec2AudioProcessorMixin:
             feature_padding_value=feature_padding_value,
             **kwargs,
         )
-        batch = self._stack(features)
+        batch = self.ops.stack(features)
         mask = self._get_mask(frame_ranges, batch.shape[1])
 
         batch_size, num_frames, num_mel_bins = batch.shape
-        output["audio_features"] = batch.reshape(batch_size, num_frames // stride, num_mel_bins * stride)
-        stride_groups = mask.reshape(batch_size, num_frames // stride, stride)
-        output["audio_features_mask"] = _array_namespace(mask).amin(stride_groups, -1)
+        output["audio_features"] = self.ops.reshape(batch, (batch_size, num_frames // stride, num_mel_bins * stride))
+        stride_groups = self.ops.reshape(mask, (batch_size, num_frames // stride, stride))
+        output["audio_features_mask"] = self.ops.amin(stride_groups, -1)
         return BatchFeature(output, tensor_type=return_tensors)
 
 

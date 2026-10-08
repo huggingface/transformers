@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
+import numpy as np
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
-from ...audio_utils import _array_namespace
 from ...processing_utils import AudioKwargs
 
 
@@ -110,21 +109,18 @@ class GraniteSpeech5AudioProcessorMixin:
             padding_value=padding_value,
         )
         logmel = self.spectrogram(
-            self._stack(padded), spectrogram_config=spectrogram_config, audio_ranges=ranges, **kwargs
+            self.ops.stack(padded), spectrogram_config=spectrogram_config, audio_ranges=ranges, **kwargs
         )
         stacking = frame_stacking
         # Preserve the legacy centered-STFT frame adjustment before computing deltas.
         num_frames = stacking * -(-(logmel.shape[-1] - 1) // stacking)
         if logmel.shape[-1] < num_frames:
-            logmel = self._pad_axis(logmel, 0, num_frames - logmel.shape[-1], axis=-1)
+            logmel = self.ops.pad(logmel, 0, num_frames - logmel.shape[-1], axis=-1)
         else:
             logmel = logmel[..., :num_frames]
-        logmel = (
-            _array_namespace(logmel)
-            .concatenate((logmel, self._compute_deltas(logmel, delta_win_length=delta_win_length)), axis=-2)
-            .swapaxes(-1, -2)
-        )
-        features = logmel.reshape(logmel.shape[0], -1, stacking * logmel.shape[-1])
+        deltas = self._compute_deltas(logmel, delta_win_length=delta_win_length)
+        logmel = self.ops.swapaxes(self.ops.concat([logmel, deltas], -2), -1, -2)
+        features = self.ops.reshape(logmel, (logmel.shape[0], -1, stacking * logmel.shape[-1]))
         hop = spectrogram_config.stft_config.hop_length
         lengths = [-(-((end - start) // hop) // stacking) for start, end in ranges]
         return BatchFeature(
@@ -135,25 +131,30 @@ class GraniteSpeech5AudioProcessorMixin:
             tensor_type=return_tensors,
         )
 
-
-class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudioBackend):
     def _compute_deltas(self, features, *, delta_win_length):
         """First-difference filter over time, matching ``torchaudio.functional.compute_deltas``.
 
         For a window of ``2n + 1`` the filter is ``sum(k * x[t+k]) / (n(n+1)(2n+1)/3)`` over
-        ``k`` in ``[-n, n]``, with the signal replicate-padded at both ends. Implemented here
-        rather than called from torchaudio, which the backends deliberately do not depend on.
+        ``k`` in ``[-n, n]``, with the signal replicate-padded at both ends. Summed in index order, as the
+        convolution reads its kernel; implemented here rather than called from torchaudio, which the
+        backends deliberately do not depend on.
         """
         n = (delta_win_length - 1) // 2
         denominator = n * (n + 1) * (2 * n + 1) / 3
-        padded = torch.nn.functional.pad(features, (n, n), mode="replicate")
-        kernel = torch.arange(-n, n + 1, dtype=features.dtype, device=features.device)
-        kernel = kernel.expand(features.shape[-2], 1, -1)
-        return torch.nn.functional.conv1d(padded, kernel, groups=features.shape[-2]) / denominator
+        padded = self.ops.pad(features, n, n, mode="replicate")
+        frames = features.shape[-1]
+        total = float(-n) * padded[..., 0:frames]
+        for k in range(-n + 1, n + 1):
+            total = total + float(k) * padded[..., n + k : n + k + frames]
+        return total / denominator
 
     def _stacked_mask(self, lengths, width, like):
-        lengths = self._host_to_device(lengths, like.device)
-        return (torch.arange(width, device=like.device)[None, :] < lengths[:, None]).long()
+        lengths = self.ops.asarray(np.asarray(lengths, dtype=np.int64), like=like)
+        return self.ops.astype(self.ops.arange(width, like=like)[None, :] < lengths[:, None], "int64")
+
+
+class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["GraniteSpeech5AudioProcessor"]

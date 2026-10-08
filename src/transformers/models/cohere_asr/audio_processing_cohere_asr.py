@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import _array_namespace
 from ...processing_utils import AudioKwargs
 
 
@@ -90,17 +87,22 @@ class CohereAsrAudioProcessorMixin:
     feature_normalization = "per_feature_standardize"
 
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):
+        """Each clip's valid samples get noise from a private stream seeded with their count, so a clip's dither
+        does not depend on the batch it is in (the legacy extractor's rule); samples past the clip get none.
+        Each backend draws from its own generator: torch reproduces the legacy `torch.Generator` stream bit for
+        bit, numpy and MLX draw their own deterministic streams (D7)."""
         if dither <= 0 or audio_ranges is None:
             return audio
-        noise = _array_namespace(audio).zeros_like(audio)
-        for i, (start, end) in enumerate(audio_ranges):
-            valid_samples = min(end - start, audio.shape[1])
-            if valid_samples > 0:
-                noise[i, :valid_samples] = self._seeded_noise(valid_samples, valid_samples, audio)
-        return audio + dither * noise
-
-    def _seeded_noise(self, length, seed, like):
-        raise NotImplementedError
+        width = audio.shape[1]
+        dtype = self.ops.dtype_name(audio)
+        rows = []
+        for start, end in audio_ranges:
+            valid = max(0, min(end - start, width))
+            parts = [self.ops.randn((valid,), seed=valid, like=audio)] if valid else []
+            if valid < width:
+                parts.append(self.ops.zeros((width - valid,), dtype=dtype, like=audio))
+            rows.append(self.ops.concat(parts, -1))
+        return audio + dither * self.ops.stack(rows)
 
     def _preprocess(self, audio, *args, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples, **kwargs):
         """Split prepared waveforms, run the default feature workflow, and attach chunk ownership."""
@@ -165,16 +167,14 @@ class CohereAsrAudioProcessorMixin:
         size = min_energy_window_samples
         if segment.shape[0] <= size:
             return (start_idx + end_idx) // 2
-        xp = _array_namespace(segment)
-        offsets = xp.arange(0, segment.shape[0] - size, size)
-        windows = segment[offsets[:, None] + xp.arange(size)]
-        return int(start_idx + offsets[int((windows * windows).mean(-1).argmin())])
+        count = len(range(0, segment.shape[0] - size, size))  # window starts strictly before `len - size`
+        windows = self.ops.frame(segment, size, size)[:count]  # non-overlapping windows
+        quietest = self.ops.to_numpy(self.ops.argmin(self.ops.mean(windows * windows, -1), -1))
+        return int(start_idx + size * int(quietest))
 
 
 class CohereAsrAudioProcessor(CohereAsrAudioProcessorMixin, TorchAudioBackend):
-    def _seeded_noise(self, length, seed, like):
-        generator = torch.Generator(device=like.device).manual_seed(seed)
-        return torch.randn(length, dtype=like.dtype, device=like.device, generator=generator)
+    pass
 
 
 __all__ = ["CohereAsrAudioProcessor"]

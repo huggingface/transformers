@@ -65,7 +65,7 @@ class Gemma4AudioProcessorMixin:
         mask = output.get("audio_features_mask")
         if mask is not None and "audio_features" in output:
             features = output["audio_features"]
-            output["audio_features"] = features * self._astype(mask, self.ops.dtype_name(features))[..., None]
+            output["audio_features"] = features * self.ops.astype(mask, self.ops.dtype_name(features))[..., None]
         return output
 
 

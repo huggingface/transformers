@@ -98,8 +98,8 @@ class SpeechToTextAudioProcessorMixin:
         if normalize_means:
             features = features - mean
         if normalize_vars:
-            features = features / self._sqrt(variance)
-        return self._astype(features, "float32")
+            features = features / self.ops.sqrt(variance)
+        return self.ops.astype(features, "float32")
 
 
 class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBackend):

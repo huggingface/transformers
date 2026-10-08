@@ -111,13 +111,14 @@ class FunAsrNanoAudioProcessorMixin:
         """
         batch_size, num_frames, num_mels = features.shape
         num_output_frames = -(-num_frames // stride_lfr)
-        counts = self._as_backend_array(frame_counts, like=features)
-        windows = self._arange(num_output_frames, like=features)[None, :, None] * stride_lfr
-        windows = windows + self._arange(num_frames_lfr, like=features)[None, None, :] - (num_frames_lfr - 1) // 2
+        counts = self.ops.asarray(frame_counts, like=features)
+        windows = self.ops.arange(num_output_frames, like=features)[None, :, None] * stride_lfr
+        windows = windows + self.ops.arange(num_frames_lfr, like=features)[None, None, :] - (num_frames_lfr - 1) // 2
         # clamp each source frame to the clip's own `[0, count - 1]`
-        sources = -self._maximum(-self._clamp_min(windows, 0), 1 - counts[:, None, None])
-        stacked = features[self._arange(batch_size, like=features)[:, None, None], sources]
-        stacked = stacked.reshape(batch_size, num_output_frames, num_frames_lfr * num_mels)
+        sources = -self.ops.maximum(-self.ops.clamp_min(windows, 0), 1 - counts[:, None, None])
+        sources = self.ops.reshape(sources, (batch_size, num_output_frames * num_frames_lfr, 1))
+        stacked = self.ops.take_along_axis(features, sources, 1)  # (batch, frames * lfr, mels)
+        stacked = self.ops.reshape(stacked, (batch_size, num_output_frames, num_frames_lfr * num_mels))
         lfr_counts = -(-frame_counts // stride_lfr)
         return self._mask_padded_frames(stacked, lfr_counts, padding_value=padding_value), lfr_counts
 
@@ -126,7 +127,7 @@ class FunAsrNanoAudioProcessorMixin:
 
     def _finalize_output(self, output, **kwargs):
         if "audio_features_mask" in output:
-            output["audio_features_mask"] = self._astype(output["audio_features_mask"], "int64")
+            output["audio_features_mask"] = self.ops.astype(output["audio_features_mask"], "int64")
         return output
 
 

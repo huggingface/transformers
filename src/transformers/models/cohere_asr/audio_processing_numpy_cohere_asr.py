@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_cohere_asr import CohereAsrAudioProcessorMixin
 
 
 class CohereAsrAudioProcessorNumpy(CohereAsrAudioProcessorMixin, NumpyAudioBackend):
-    def _seeded_noise(self, length, seed, like):
-        return np.random.RandomState(seed).standard_normal(length).astype(like.dtype)
+    pass
 
 
 __all__ = ["CohereAsrAudioProcessorNumpy"]

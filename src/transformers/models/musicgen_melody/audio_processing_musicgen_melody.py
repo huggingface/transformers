@@ -14,6 +14,8 @@
 
 from typing import Annotated
 
+import numpy as np
+
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
 from ...audio_utils import SpectrogramConfig, StftConfig
@@ -84,7 +86,7 @@ class MusicgenMelodyAudioProcessorMixin:
             ),
         )
         filters = librosa.filters.chroma(sr=self.sampling_rate, n_fft=n_fft, tuning=0, n_chroma=n_chroma)
-        return config, self._astype(self._as_backend_array(filters), "float32")
+        return config, filters.astype(np.float32)
 
     def _preprocess(
         self,
@@ -120,7 +122,7 @@ class MusicgenMelodyAudioProcessorMixin:
         else:
             config, filters = self._make_chroma_recipe(n_fft, hop_length, n_chroma)
         features = self._compute_chroma(
-            self._stack(padded),
+            self.ops.stack(padded),
             n_fft=n_fft,
             hop_length=hop_length,
             power_spectrogram_config=config,
@@ -132,56 +134,25 @@ class MusicgenMelodyAudioProcessorMixin:
         if waveform.shape[-1] >= n_fft:
             return waveform
         pad = n_fft - waveform.shape[-1]
-        return self._pad_axis(waveform, pad // 2, pad // 2 + pad % 2, axis=-1)
+        return self.ops.pad(waveform, pad // 2, pad // 2 + pad % 2, axis=-1)
+
+    def _compute_chroma(self, audio, *, n_fft, hop_length, chroma_filters, power_spectrogram_config):
+        """One-hot chroma: a normalized power spectrogram (`torchaudio.transforms.Spectrogram(normalized=True)`)
+        projected on the host chroma filters, L-inf normalized over the chroma axis as
+        `F.normalize(p=inf, dim=-2, eps=1e-6)` does, then the argmax of each frame (the first on ties)."""
+        waveform = self._pad_for_fft(audio, n_fft=n_fft)
+        spec = self._waveform_to_spectrum(waveform, spectrogram_config=power_spectrogram_config, dither=0.0)
+        filters = self.ops.astype(self.ops.asarray(chroma_filters, like=spec), self.ops.dtype_name(spec))
+        raw_chroma = self.ops.matmul(filters, spec)
+        denom = self.ops.clamp_min(self.ops.amax(self.ops.abs(raw_chroma), -2, keepdims=True), 1e-6)
+        norm_chroma = self.ops.swapaxes(raw_chroma / denom, 1, 2)
+        idx = self.ops.argmax(norm_chroma, -1)
+        one_hot = self.ops.arange(norm_chroma.shape[-1], like=norm_chroma)[None, None, :] == idx[..., None]
+        return self.ops.astype(one_hot, self.ops.dtype_name(norm_chroma))
 
 
 class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudioBackend):
-    def _compute_chroma(self, audio, *, n_fft, hop_length, chroma_filters, power_spectrogram_config):
-        import torch
-        import torchaudio
-
-        waveform = audio  # Already a batched tensor from _stack_waveforms
-        device = waveform.device
-
-        # Pad if too short for FFT
-        if waveform.shape[-1] < n_fft:
-            pad = n_fft - waveform.shape[-1]
-            rest = 0 if pad % 2 == 0 else 1
-            waveform = torch.nn.functional.pad(waveform, (pad // 2, pad // 2 + rest), "constant", 0)
-
-        # Add channel dim for spectrogram: (batch, 1, length)
-        waveform = waveform.unsqueeze(1)
-
-        # Power spectrogram (normalized)
-        spec_transform = torchaudio.transforms.Spectrogram(
-            n_fft=n_fft,
-            win_length=n_fft,
-            hop_length=hop_length,
-            power=2,
-            center=True,
-            pad=0,
-            normalized=True,
-        )
-        # The module's only state is its window; copy it without blocking the host.
-        spec_transform.window = self._host_to_device(spec_transform.window, device)
-        spec = spec_transform(waveform).squeeze(1)
-
-        # Chroma features
-        chroma_filters = self._host_to_device(chroma_filters, device)
-        raw_chroma = torch.einsum("cf, ...ft->...ct", chroma_filters, spec)
-
-        # Normalize with inf norm
-        norm_chroma = torch.nn.functional.normalize(raw_chroma, p=float("inf"), dim=-2, eps=1e-6)
-
-        # Transpose: (batch, chroma, frames) -> (batch, frames, chroma)
-        norm_chroma = norm_chroma.transpose(1, 2)
-
-        # One-hot encoding: argmax along chroma dim
-        idx = norm_chroma.argmax(-1, keepdim=True)
-        norm_chroma[:] = 0
-        norm_chroma.scatter_(dim=-1, index=idx, value=1)
-
-        return norm_chroma
+    pass
 
 
 __all__ = ["MusicgenMelodyAudioProcessor"]

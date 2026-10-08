@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -73,6 +75,7 @@ class Phi4MultimodalAudioProcessorMixin:
     frozen_options = ("do_extract_spectrogram",)
 
     def _compute_audio_embed_size(self, audio_frames, *, audio_compression_rate, audio_downsample_rate):
+        """Encoder tokens per clip from its feature frames: two ceil-divisions, on host integers."""
         integer = audio_frames // audio_compression_rate
         result = integer + (audio_frames % audio_compression_rate > 0)
 
@@ -93,12 +96,12 @@ class Phi4MultimodalAudioProcessorMixin:
     ):
         """Add `audio_embed_sizes`: how many encoder tokens each clip's valid frames become."""
         frame_counts = self._valid_frame_counts(self._lengths_from_ranges(audio_ranges), spectrogram_config)
-        feature_lengths = self._as_backend_array(frame_counts, like=output["audio_features"]) * audio_feat_stride
-        output["audio_embed_sizes"] = self._compute_audio_embed_size(
-            feature_lengths,
+        embed_sizes = self._compute_audio_embed_size(
+            np.asarray(frame_counts, dtype=np.int64) * audio_feat_stride,
             audio_compression_rate=audio_compression_rate,
             audio_downsample_rate=audio_downsample_rate,
         )
+        output["audio_embed_sizes"] = self.ops.asarray(embed_sizes, like=output["audio_features"])
         return output
 
 

@@ -87,7 +87,7 @@ class InklingAudioProcessorMixin:
         stft_cfg = spectrogram_config.stft_config
         hop, n_fft = stft_cfg.hop_length, stft_cfg.n_fft
         right_pad = math.ceil(audio.shape[-1] / hop) * hop - audio.shape[-1]
-        audio = self._pad_axis(audio, max(n_fft - hop, 0), right_pad, axis=-1)
+        audio = self.ops.pad(audio, max(n_fft - hop, 0), right_pad, axis=-1)
         return super()._waveform_to_spectrum(
             audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs
         )
@@ -113,8 +113,7 @@ class InklingAudioProcessorMixin:
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)
         if mask is not None:
-            # the mask is 0/1, so the numpy int-promotion round-trip is exact
-            features = self._astype(features * mask[..., None], "float32")
+            features = features * self.ops.astype(mask, self.ops.dtype_name(features))[..., None]
             output["audio_features_mask"] = mask
         output["audio_features"] = features
         return output

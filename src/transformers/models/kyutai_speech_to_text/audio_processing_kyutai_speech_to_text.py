@@ -44,7 +44,7 @@ class KyutaiSpeechToTextAudioProcessorMixin:
         if pad_left > 0 or pad_right > 0:
             for key in ("audio_values", "audio_values_mask"):
                 if key in output:
-                    output[key] = self._pad_axis(output[key], pad_left, pad_right, axis=-1, value=0)
+                    output[key] = self.ops.pad(output[key], pad_left, pad_right, axis=-1, value=0)
         return output
 
 

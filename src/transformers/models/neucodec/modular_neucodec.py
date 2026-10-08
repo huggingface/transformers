@@ -298,7 +298,7 @@ class NeuCodecAudioProcessorMixin(Xcodec2AudioProcessorMixin):
     def _select_semantic_waveform(self, original, acoustic, start, end, *, hop_length):
         """NeuCodec's semantic encoder remains independent of acoustic truncation."""
         valid_length = (original.shape[-1] + hop_length - 1) // hop_length * hop_length
-        return self._pad_axis(original, 0, valid_length - original.shape[-1], axis=-1)
+        return self.ops.pad(original, 0, valid_length - original.shape[-1], axis=-1)
 
     def _pad_semantic_waveform(self, waveform, *, hop_length):
         # NeuCodec's reference feeds the hop-rounded clip straight to the fbank, without XCodec2's

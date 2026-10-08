@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -33,13 +31,16 @@ class Wav2Vec2AudioProcessorMixin:
     do_normalize = True
     valid_kwargs = Wav2Vec2AudioProcessorKwargs
 
-
-class Wav2Vec2AudioProcessor(Wav2Vec2AudioProcessorMixin, TorchAudioBackend):
     def _prepare_waveform(self, audio_el, *, do_normalize, **kwargs):
         if do_normalize:
-            audio_el = (audio_el - audio_el.mean()) / torch.sqrt(audio_el.var(correction=0) + 1e-7)
-
+            # numpy's population variance: the mean of the squared deviations from the mean
+            centered = audio_el - self.ops.mean(audio_el, -1, keepdims=True)
+            audio_el = centered / self.ops.sqrt(self.ops.mean(centered * centered, -1, keepdims=True) + 1e-7)
         return audio_el
+
+
+class Wav2Vec2AudioProcessor(Wav2Vec2AudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["Wav2Vec2AudioProcessor"]

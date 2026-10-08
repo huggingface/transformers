@@ -79,8 +79,8 @@ class Gemma4UnifiedAudioProcessorMixin:
     def _chunk_waveform(self, waveform, *, audio_samples_per_token):
         pad_len = (-waveform.shape[-1]) % audio_samples_per_token
         if pad_len:
-            waveform = self._pad_axis(waveform, 0, pad_len, axis=-1)
-        return self._astype(waveform.reshape(-1, audio_samples_per_token), "float32")
+            waveform = self.ops.pad(waveform, 0, pad_len, axis=-1)
+        return self.ops.astype(self.ops.reshape(waveform, (-1, audio_samples_per_token)), "float32")
 
 
 class Gemma4UnifiedAudioProcessor(Gemma4UnifiedAudioProcessorMixin, TorchAudioBackend):

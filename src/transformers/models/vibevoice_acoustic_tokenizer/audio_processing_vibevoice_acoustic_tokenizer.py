@@ -48,12 +48,11 @@ class VibevoiceAcousticTokenizerAudioProcessorMixin:
     def _prepare_waveform(self, audio_el, *, normalize_audio, target_dB_FS, eps, **kwargs):
         if not normalize_audio:
             return audio_el
-        rms = (audio_el**2).mean() ** 0.5
+        rms = self.ops.pow(self.ops.mean(self.ops.pow(audio_el, 2), -1, keepdims=True), 0.5)
         audio_el = audio_el * (10 ** (target_dB_FS / 20) / (rms + eps))
-        max_val = abs(audio_el).max()
-        if max_val > 1.0:
-            audio_el = audio_el / (max_val + eps)
-        return audio_el
+        max_val = self.ops.amax(self.ops.abs(audio_el), -1, keepdims=True)
+        # `where` evaluates both branches: no host sync on the peak
+        return self.ops.where(max_val > 1.0, audio_el / (max_val + eps), audio_el)
 
 
 class VibevoiceAcousticTokenizerAudioProcessor(VibevoiceAcousticTokenizerAudioProcessorMixin, TorchAudioBackend):

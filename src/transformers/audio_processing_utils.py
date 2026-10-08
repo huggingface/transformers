@@ -672,7 +672,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _pad_feature_single(self, feature, max_length, *, padding_value, **kwargs):
         """Right-pad one feature array/tensor along its first (time) axis with `padding_value`."""
-        return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=padding_value)
+        return self.ops.pad(feature, 0, max_length - feature.shape[0], axis=0, value=padding_value)
 
     def _downmix_to_mono(self, audio_el):
         """Average any channel axis away. To change the waveform itself, override `_prepare_waveform`.
@@ -681,12 +681,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
         `(samples, channels)` as soundfile does. The longer axis is time; a square array is read as
         channels-first.
         """
-        audio_el = self._as_backend_array(audio_el)
+        audio_el = self.ops.asarray(audio_el)
         if audio_el.ndim == 2 and audio_el.shape[0] > audio_el.shape[1]:
             audio_el = self.ops.swapaxes(audio_el, 0, 1)
         if audio_el.ndim > 1:
             # Multi-channel input is always averaged down to mono.
-            audio_el = self._squeeze_axis0(audio_el) if audio_el.shape[0] == 1 else self._mean_axis0(audio_el)
+            audio_el = audio_el[0] if audio_el.shape[0] == 1 else self.ops.mean(audio_el, 0)
         return audio_el
 
     def _prepare_waveform(self, audio_el, **kwargs):
@@ -707,26 +707,23 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _stack_waveforms(self, audio, *, padding=None):
         self._validate_stackable(audio, padding=padding, item_name="waveforms")
-        return self._stack(audio)
+        return self.ops.stack(audio)
 
     def _pad_waveform(
         self, audio, max_length: int, *, padding_side: str, padding_value: float, **kwargs
     ) -> AudioInput:
+        # Imported here: `audio_processing_backends` imports this module.
+        from .audio_processing_backends import _side_widths
+
         current_length = audio.shape[-1]
         if current_length >= max_length:
             return audio
-        pad = max_length - current_length
-        if padding_side == "right":
-            left, right = 0, pad
-        elif padding_side == "left":
-            left, right = pad, 0
-        else:
-            raise ValueError(f"Invalid padding side: {padding_side}")
-        return self._pad_axis(audio, left, right, axis=-1, value=padding_value)
+        left, right = _side_widths(padding_side, max_length - current_length)
+        return self.ops.pad(audio, left, right, axis=-1, value=padding_value)
 
     def _stack_features(self, features, *, padding=None):
         self._validate_stackable(features, padding=padding, item_name="features")
-        return self._stack(features)
+        return self.ops.stack(features)
 
     def _validate_stackable(self, items, *, padding, item_name):
         shapes = [tuple(item.shape) for item in items]
@@ -823,7 +820,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         stft_cfg = spectrogram_config.stft_config
         if spectrogram_config.computation_dtype and stft_cfg.fft_dtype != "float64":
             # with `fft_dtype="float64"` the cast happens at the FFT boundary instead
-            audio = self._astype(audio, spectrogram_config.computation_dtype)
+            audio = self.ops.astype(audio, spectrogram_config.computation_dtype)
         if dither > 0:
             audio = self._dither_waveform(audio, audio_ranges, dither=dither)
         if spectrogram_config.waveform_scale is not None:
@@ -987,18 +984,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 # HTK flavor: first sample scaled by (1 - p) instead of replicate-padded
                 first = frames[..., :1] * (1.0 - preemphasis)
                 rest = frames[..., 1:-1] - preemphasis * frames[..., :-2]
-                return self._concat_last([first, rest])
+                return self.ops.concat([first, rest], -1)
             if spectrogram_config.preemphasis_mode == "per_frame":
                 return frames[..., 1:] - preemphasis * frames[..., :-1]
             return frames[..., :-1]  # "waveform" mode: already applied upstream
         if spectrogram_config.remove_dc_offset:
-            frames = frames - self._mean_last(frames)
+            frames = frames - self.ops.mean(frames, -1, keepdims=True)
         preemphasis = spectrogram_config.preemphasis
         if preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame":
             # Replicate-pad first sample (x0 - p*x0, not x0*(1-p)): bit-exact with kaldi.
             first = frames[..., :1] - preemphasis * frames[..., :1]
             rest = frames[..., 1:] - preemphasis * frames[..., :-1]
-            frames = self._concat_last([first, rest])
+            frames = self.ops.concat([first, rest], -1)
         return frames
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
@@ -1154,52 +1151,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
             result = result * spectrogram_config.log_scale
         return result
 
-    # ── Backend array-API primitives ─────────────────────────────────────
-    # Thin names the base workflow and the model files still call; step 3 replaces the call sites with
-    # `self.ops.*`.
-
-    def _astype(self, x, dtype_name):
-        return self.ops.astype(x, dtype_name)
-
-    def _as_backend_array(self, x, *, like=None):
-        return self.ops.asarray(x, like=like)
-
-    def _arange(self, stop, *, like=None):
-        return self.ops.arange(stop, like=like)
-
-    def _mean_axis0(self, x):
-        return self.ops.mean(x, 0)
-
-    def _squeeze_axis0(self, x):
-        # The caller guards `shape[0] == 1`.
-        return x[0]
-
-    def _pad_axis(self, x, left, right, axis, value=0.0):
-        return self.ops.pad(x, left, right, axis=axis, value=value)
-
-    def _stack(self, seq):
-        return self.ops.stack(seq)
-
-    def _mean_last(self, x):
-        return self.ops.mean(x, -1, keepdims=True)
-
-    def _concat_last(self, parts):
-        return self.ops.concat(parts, -1)
+    # ── Host helpers ─────────────────────────────────────────────────────
 
     def _lengths_from_ranges(self, ranges):
         """Host-side integer array of `end - start` per `(start, end)` range."""
         return np.asarray([end - start for start, end in ranges], dtype=np.int64)
-
-    def _sqrt(self, x):
-        return self.ops.sqrt(x)
-
-    def _maximum(self, x, y):
-        """Element-wise maximum of two arrays."""
-        return self.ops.maximum(x, y)
-
-    def _clamp_min(self, x, min_value):
-        """Element-wise `max(x, min_value)` for a scalar or 0-d array `min_value`."""
-        return self.ops.clamp_min(x, min_value)
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         """Build the mel filter bank described by ``spectrogram_config.mel_scale_config`` as a host numpy

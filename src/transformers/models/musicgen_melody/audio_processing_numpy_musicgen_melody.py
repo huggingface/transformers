@@ -12,27 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_musicgen_melody import MusicgenMelodyAudioProcessorMixin
 
 
 class MusicgenMelodyAudioProcessorNumpy(MusicgenMelodyAudioProcessorMixin, NumpyAudioBackend):
-    def _compute_chroma(self, audio, *, n_fft, hop_length, chroma_filters, power_spectrogram_config):
-        waveform = self._pad_for_fft(audio, n_fft=n_fft)
-        # normalized power spectrogram, matching `torchaudio.transforms.Spectrogram(normalized=True)`
-        spec = self._waveform_to_spectrum(waveform, spectrogram_config=power_spectrogram_config, dither=0.0)
-
-        raw_chroma = np.matmul(chroma_filters, spec)
-        # inf-norm over the chroma axis, as `F.normalize(p=inf, dim=-2, eps=1e-6)` does
-        denom = np.maximum(np.abs(raw_chroma).max(axis=-2, keepdims=True), 1e-6)
-        norm_chroma = np.swapaxes(raw_chroma / denom, 1, 2)
-
-        idx = norm_chroma.argmax(-1)
-        one_hot = np.zeros_like(norm_chroma)
-        np.put_along_axis(one_hot, idx[..., None], 1.0, axis=-1)
-        return one_hot
+    pass
 
 
 __all__ = ["MusicgenMelodyAudioProcessorNumpy"]

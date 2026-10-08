@@ -900,7 +900,7 @@ class NemotronAsrStreamingAudioProcessorMixin(ParakeetAudioProcessorMixin):
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)
         if mask is not None:
-            features = features * self._astype(mask[..., None], str(features.dtype).removeprefix("torch."))
+            features = features * self.ops.astype(mask[..., None], self.ops.dtype_name(features))
             output["audio_features_mask"] = mask
         output["audio_features"] = features
         return output

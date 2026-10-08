@@ -93,7 +93,7 @@ class AudioSpectrogramTransformerAudioProcessorMixin:
         )
         features = features[:, :max_length_frames]
         if features.shape[1] < max_length_frames:
-            features = self._pad_axis(features, 0, max_length_frames - features.shape[1], axis=1, value=padding_value)
+            features = self.ops.pad(features, 0, max_length_frames - features.shape[1], axis=1, value=padding_value)
         frame_counts = frame_counts.clip(max=max_length_frames)
         return self._mask_padded_frames(features, frame_counts, padding_value=padding_value), frame_counts
 
