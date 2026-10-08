@@ -87,9 +87,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             "Wav2Vec2FeatureExtractor",
             "SeamlessM4TFeatureExtractor",
             "Wav2Vec2AudioProcessor",
-            "Wav2Vec2AudioProcessorNumpy",
             "SeamlessM4tAudioProcessor",
-            "SeamlessM4tAudioProcessorNumpy",
         ]:
             raise ValueError(
                 f"`audio_processor` must be a Wav2Vec2 or SeamlessM4T audio processor, but is {type(audio_processor)}"

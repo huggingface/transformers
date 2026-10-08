@@ -16,8 +16,8 @@ from typing import Annotated
 
 import numpy as np
 
-from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
+from ...audio_processing_utils import BaseAudioProcessor
 from ...audio_utils import SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 from ...utils.import_utils import requires
@@ -42,7 +42,7 @@ class MusicgenMelodyAudioProcessorKwargs(AudioKwargs, total=False):
     chunk_length: Annotated[int, strictly_positive]
 
 
-class MusicgenMelodyAudioProcessorMixin:
+class MusicgenMelodyAudioProcessor(BaseAudioProcessor):
     sampling_rate = 32000
     model_input_names = ["audio_features"]
     # `chroma_filters` is an array and `power_spectrogram_config` is derived, so neither may
@@ -150,10 +150,6 @@ class MusicgenMelodyAudioProcessorMixin:
         idx = self.ops.argmax(norm_chroma, -1)
         one_hot = self.ops.arange(norm_chroma.shape[-1], like=norm_chroma)[None, None, :] == idx[..., None]
         return self.ops.astype(one_hot, self.ops.dtype_name(norm_chroma))
-
-
-class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["MusicgenMelodyAudioProcessor"]

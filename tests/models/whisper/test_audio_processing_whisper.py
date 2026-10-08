@@ -5,7 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Tests for `WhisperAudioProcessor` and `WhisperAudioProcessorNumpy`."""
+"""Tests for `WhisperAudioProcessor` on the numpy and torch backends."""
 
 from __future__ import annotations
 
@@ -34,26 +34,35 @@ class WhisperAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
     def test_nested_config_defaults_and_legacy_loading(self):
         from transformers.audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
-        for processor_class in self.audio_processing_classes.values():
-            with self.subTest(processor_class=processor_class):
-                self.assertIsInstance(processor_class.spectrogram_config, dict)
-                processor = processor_class()
+        for backend in self.audio_backends:
+            with self.subTest(backend=backend):
+                self.assertIsInstance(self.audio_processing_class.spectrogram_config, dict)
+                processor = self.audio_processing_class(backend=backend)
                 config = processor.spectrogram_config
                 self.assertIsInstance(config, SpectrogramConfig)
                 self.assertIsInstance(config.stft_config, StftConfig)
                 self.assertIsInstance(config.mel_scale_config, MelScaleConfig)
-                loaded = processor_class.from_dict({"hop_length": 200, "feature_size": 64})
+                loaded = self.audio_processing_class.from_dict(
+                    {"hop_length": 200, "feature_size": 64}, backend=backend
+                )
                 self.assertEqual(loaded.spectrogram_config.stft_config.hop_length, 200)
                 self.assertEqual(loaded.spectrogram_config.mel_scale_config.n_mels, 64)
                 self.assertEqual(loaded.spectrogram_config.mel_scale_config.norm, "slaney")
                 self.assertEqual(loaded.spectrogram_config.log_scale, 0.25)
-                self.assertEqual(processor_class().spectrogram_config, config)
-                self.assertEqual(processor_class.from_dict(processor.to_dict()).spectrogram_config, config)
+                self.assertEqual(self.audio_processing_class(backend=backend).spectrogram_config, config)
+                self.assertEqual(
+                    self.audio_processing_class.from_dict(processor.to_dict(), backend=backend).spectrogram_config,
+                    config,
+                )
 
-                partial = processor_class.from_dict({"spectrogram_config": {"stft_config": {"hop_length": 200}}})
+                partial = self.audio_processing_class.from_dict(
+                    {"spectrogram_config": {"stft_config": {"hop_length": 200}}}, backend=backend
+                )
                 self.assertEqual(
                     partial.spectrogram_config,
                     loaded.spectrogram_config | {"mel_scale_config": config.mel_scale_config},
                 )
-                no_mel = processor_class.from_dict({"spectrogram_config": {"mel_scale_config": None}})
+                no_mel = self.audio_processing_class.from_dict(
+                    {"spectrogram_config": {"mel_scale_config": None}}, backend=backend
+                )
                 self.assertIsNone(no_mel.spectrogram_config.mel_scale_config)

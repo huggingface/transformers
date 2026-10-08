@@ -36,8 +36,7 @@ from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
-from ..parakeet.audio_processing_numpy_parakeet import ParakeetAudioProcessorNumpy
-from ..parakeet.audio_processing_parakeet import ParakeetAudioProcessor, ParakeetAudioProcessorMixin
+from ..parakeet.audio_processing_parakeet import ParakeetAudioProcessor
 from ..parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetRNNTConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
@@ -889,7 +888,7 @@ class NemotronAsrStreamingForRNNT(
         )
 
 
-class NemotronAsrStreamingAudioProcessorMixin(ParakeetAudioProcessorMixin):
+class NemotronAsrStreamingAudioProcessor(ParakeetAudioProcessor):
     # Unlike Parakeet, Nemotron consumes log-mel features without per-feature
     # standardization. Override the inherited recipe explicitly.
     feature_normalization = None
@@ -906,17 +905,8 @@ class NemotronAsrStreamingAudioProcessorMixin(ParakeetAudioProcessorMixin):
         return output
 
 
-class NemotronAsrStreamingAudioProcessor(NemotronAsrStreamingAudioProcessorMixin, ParakeetAudioProcessor):
-    pass
-
-
-class NemotronAsrStreamingAudioProcessorNumpy(NemotronAsrStreamingAudioProcessorMixin, ParakeetAudioProcessorNumpy):
-    pass
-
-
 __all__ = [
     "NemotronAsrStreamingAudioProcessor",
-    "NemotronAsrStreamingAudioProcessorNumpy",
     "NemotronAsrStreamingConfig",
     "NemotronAsrStreamingEncoderConfig",
     "NemotronAsrStreamingEncoderModelOutput",

@@ -20,8 +20,8 @@
 
 from typing import Annotated
 
-from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 from ...utils.type_validators import strictly_positive
 
@@ -41,7 +41,7 @@ class NeuCodecAudioProcessorKwargs(AudioKwargs, total=False):
     feature_padding_value: float | int
 
 
-class NeuCodecAudioProcessorMixin:
+class NeuCodecAudioProcessor(BaseAudioProcessor):
     """Same dual-encoder geometry as XCodec2: raw padded audio for the acoustic encoder, kaldi
     povey fbank features for the semantic one."""
 
@@ -185,10 +185,6 @@ class NeuCodecAudioProcessorMixin:
         stride_groups = self.ops.reshape(mask, (batch_size, num_frames // stride, stride))
         output["audio_features_mask"] = self.ops.amin(stride_groups, -1)
         return BatchFeature(output, tensor_type=return_tensors)
-
-
-class NeuCodecAudioProcessor(NeuCodecAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["NeuCodecAudioProcessor"]

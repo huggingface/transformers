@@ -8,18 +8,18 @@
 """Common tests for `XxxAudioProcessor` classes.
 
 Mirrors `test_image_processing_common.ImageProcessingTestMixin`. Auto-discovers a model's
-sibling backend classes (`torch` and optionally `numpy`) from
-`FEATURE_EXTRACTOR_MAPPING_NAMES` keyed by model directory name. Per-model test files set
-``self.audio_processor_tester`` in their `setUp` and inherit from this mixin.
+audio-processor class from `FEATURE_EXTRACTOR_MAPPING_NAMES` keyed by model directory name and
+builds it on every available backend (`numpy`, and `torch` when installed) with `backend=`.
+Per-model test files set ``self.audio_processor_tester`` in their `setUp` and inherit from this mixin.
 """
 
 from __future__ import annotations
 
 import pathlib
 import sys
+import tempfile
 import unittest
 import warnings
-from dataclasses import replace
 from functools import partial
 from unittest.mock import patch
 
@@ -29,7 +29,7 @@ from transformers.models.auto.feature_extraction_auto import (
     FEATURE_EXTRACTOR_MAPPING_NAMES,
     feature_extractor_class_from_name,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
 from .test_preprocessing_common import PreprocessingTesterMixin
@@ -57,7 +57,7 @@ def prepare_audio_inputs(
 
 
 class AudioProcessingTestMixin(PreprocessingTesterMixin):
-    """Shared tests for every `XxxAudioProcessor` (and its sibling `XxxAudioProcessorNumpy`).
+    """Shared tests for every `XxxAudioProcessor`, built on each available backend.
 
     Subclasses must set ``self.audio_processor_tester`` in their `setUp`. The tester is
     expected to expose:
@@ -67,7 +67,6 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
     """
 
     audio_processor_tester = None
-    test_classes_to_skip: set[str] = set()
     # Per-model override of the cross-backend parity bar (ADR 0001). Default is the float32
     # noise floor; models with longer numerical chains (custom STFT, unfold + preemphasis,
     # float32/64 mixed ops) can relax to 1e-3 / 1e-4 if needed.
@@ -79,19 +78,15 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
         model_name = test_file_path.parent.name
         try:
-            class_names_by_backend = FEATURE_EXTRACTOR_MAPPING_NAMES[model_name]
+            class_name = FEATURE_EXTRACTOR_MAPPING_NAMES[model_name]
         except KeyError as e:
             raise ValueError(
                 f"No entry for model_name={model_name!r} in FEATURE_EXTRACTOR_MAPPING_NAMES. "
-                f"Override `setUp` in your test class to provide the backend mapping."
+                f"Override `setUp` in your test class to provide the class."
             ) from e
 
-        self.audio_processing_classes = {
-            backend: feature_extractor_class_from_name(class_name)
-            for backend, class_name in class_names_by_backend.items()
-            if class_name not in self.test_classes_to_skip
-        }
-        self.audio_processing_classes = {b: c for b, c in self.audio_processing_classes.items() if c is not None}
+        self.audio_processing_class = feature_extractor_class_from_name(class_name)
+        self.audio_backends = ["numpy"] + (["torch"] if is_torch_available() else [])
 
     # ── Cross-backend parity ──────────────────────────────────────────────
 
@@ -99,7 +94,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
 
     @property
     def processing_classes(self) -> dict:
-        return self.audio_processing_classes
+        # One class; keyed by the default backend so `_load_with_auto(tmp, name)` passes a real backend.
+        return {self.audio_backends[-1]: self.audio_processing_class}
 
     @property
     def processor_dict(self) -> dict:
@@ -114,6 +110,24 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
     def _prepare_inputs(self):
         return prepare_audio_inputs(batch_size=1, seed=0)[0]
 
+    def test_save_load_backends(self):
+        """`backend` is a load-time choice: a config saved from one backend loads on every backend, unchanged."""
+        for saved_on in self.audio_backends:
+            first = self.audio_processing_class(backend=saved_on, **self.processor_dict)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                first.save_pretrained(tmpdirname)
+                for loaded_on in self.audio_backends:
+                    for second in (
+                        self.audio_processing_class.from_pretrained(tmpdirname, backend=loaded_on),
+                        self.auto_class.from_pretrained(tmpdirname, backend=loaded_on),
+                    ):
+                        with self.subTest(saved_on=saved_on, loaded_on=loaded_on):
+                            self.assertEqual(second.ops.name, loaded_on)
+                            self.assertEqual(second.to_dict(), first.to_dict())
+
+    def test_save_load_backends_auto(self):
+        self.skipTest("covered by test_save_load_backends")
+
     def _to_torch(self, x):
         if isinstance(x, np.ndarray):
             return torch.from_numpy(x)
@@ -124,7 +138,7 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
     def _metadata_keys(self):
         """Output keys the processors declare as non-array metadata via `skip_tensor_conversion`
         (e.g. Cohere-ASR's `audio_chunk_index`), compared verbatim instead of as tensors."""
-        return {key for cls in self.audio_processing_classes.values() for key in cls.skip_tensor_conversion}
+        return set(self.audio_processing_class.skip_tensor_conversion)
 
     def _assert_outputs_bit_exact(self, output_a, output_b, *, atol=1e-5, rtol=1e-5):
         """Per ADR 0001, sibling backends must agree within the float32 noise floor —
@@ -156,8 +170,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
 
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.audio_processing_classes) < 2:
-            self.skipTest("Only one backend registered; cross-backend parity test skipped.")
+        if len(self.audio_backends) < 2:
+            self.skipTest("Only one backend available; cross-backend parity test skipped.")
         if self.audio_processor_tester is None:
             self.skipTest("audio_processor_tester not set; cannot generate fixtures.")
 
@@ -165,8 +179,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         waveform = prepare_audio_inputs(batch_size=1, seed=0)[0]
 
         outputs = {}
-        for backend, cls in self.audio_processing_classes.items():
-            ap = cls(**init_dict)
+        for backend in self.audio_backends:
+            ap = self.audio_processing_class(backend=backend, **init_dict)
             outputs[backend] = ap(waveform, sampling_rate=ap.sampling_rate, return_tensors="pt")
 
         reference_backend, reference_output = next(iter(outputs.items()))
@@ -190,8 +204,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
             # a list states "one multi-channel clip", which a lone 2-D array would warn about
             "stereo": ([stereo], {"channels_last": [np.ascontiguousarray(stereo.T)]}),
         }
-        for backend, cls in self.audio_processing_classes.items():
-            ap = cls(**init_dict)
+        for backend in self.audio_backends:
+            ap = self.audio_processing_class(backend=backend, **init_dict)
 
             def call(audio):
                 np.random.seed(0)
@@ -223,8 +237,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
         waveform = np.asarray(prepare_audio_inputs(batch_size=1, seed=0)[0], dtype=np.float32)
         stereo = np.stack([waveform, waveform])
-        for backend, cls in self.audio_processing_classes.items():
-            ap = cls(**init_dict)
+        for backend in self.audio_backends:
+            ap = self.audio_processing_class(backend=backend, **init_dict)
             for audio, should_warn in (
                 (stereo, True),
                 (np.ascontiguousarray(stereo.T), True),
@@ -242,8 +256,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
 
     @require_torch
     def test_backends_equivalence_batched(self):
-        if len(self.audio_processing_classes) < 2:
-            self.skipTest("Only one backend registered; cross-backend parity test skipped.")
+        if len(self.audio_backends) < 2:
+            self.skipTest("Only one backend available; cross-backend parity test skipped.")
         if self.audio_processor_tester is None:
             self.skipTest("audio_processor_tester not set; cannot generate fixtures.")
 
@@ -251,8 +265,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         waveforms = prepare_audio_inputs(batch_size=3, equal_length=False, seed=0)
 
         outputs = {}
-        for backend, cls in self.audio_processing_classes.items():
-            ap = cls(**init_dict)
+        for backend in self.audio_backends:
+            ap = self.audio_processing_class(backend=backend, **init_dict)
             outputs[backend] = ap(waveforms, sampling_rate=ap.sampling_rate, return_tensors="pt")
 
         reference_backend, reference_output = next(iter(outputs.items()))
@@ -322,9 +336,9 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         from_list/from_array axis becomes the backend loop, since `pad` requires `.shape`.
         """
         init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        for backend, cls in self.audio_processing_classes.items():
+        for backend in self.audio_backends:
             with self.subTest(backend=backend):
-                processor = cls(**init_dict)
+                processor = self.audio_processing_class(backend=backend, **init_dict)
                 pad = partial(
                     processor.pad, padding_side=processor.padding_side, padding_value=processor.padding_value
                 )
@@ -382,9 +396,9 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         it there is nothing to truncate to.
         """
         init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        for backend, cls in self.audio_processing_classes.items():
+        for backend in self.audio_backends:
             with self.subTest(backend=backend):
-                processor = cls(**init_dict)
+                processor = self.audio_processing_class(backend=backend, **init_dict)
                 pad = partial(
                     processor.pad, padding_side=processor.padding_side, padding_value=processor.padding_value
                 )
@@ -428,9 +442,9 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         without hardcoding any model's framing arithmetic.
         """
         init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        for backend, cls in self.audio_processing_classes.items():
+        for backend in self.audio_backends:
             with self.subTest(backend=backend):
-                processor = cls(**init_dict)
+                processor = self.audio_processing_class(backend=backend, **init_dict)
                 _, lengths = self._padding_fixture(backend)
                 rng = np.random.RandomState(0)
                 waveforms = [rng.uniform(-1.0, 1.0, size=length).astype(np.float32) for length in lengths]
@@ -463,23 +477,23 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
 @require_torch
 class AudioWorkflowContractTest(unittest.TestCase):
     def test_custom_waveform_workflow_inherits_common_options(self):
-        from transformers.audio_processing_backends import NumpyAudioBackend, TorchAudioBackend
         from transformers.audio_processing_base import BatchFeature
+        from transformers.audio_processing_utils import BaseAudioProcessor
         from transformers.processing_utils import AudioKwargs
 
-        for backend in (NumpyAudioBackend, TorchAudioBackend):
+        class CustomAudioProcessor(BaseAudioProcessor):
+            sampling_rate = 16000
+            valid_kwargs = AudioKwargs
+            model_input_names = ["audio_values"]
 
-            class CustomAudioProcessor(backend):
-                sampling_rate = 16000
-                valid_kwargs = AudioKwargs
-                model_input_names = ["audio_values"]
+            def _preprocess(self, audio, *, return_tensors, **kwargs):
+                return BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
 
-                def _preprocess(self, audio, *, return_tensors, **kwargs):
-                    return BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
-
+        for backend in ("numpy", "torch"):
             with self.subTest(backend=backend):
-                processor = CustomAudioProcessor()
-                restored = CustomAudioProcessor.from_dict(processor.to_dict())
+                processor = CustomAudioProcessor(backend=backend)
+                restored = CustomAudioProcessor.from_dict(processor.to_dict(), backend=backend)
+                self.assertEqual(restored.ops.name, backend)
                 waveform = np.arange(10, dtype=np.float32)
                 np.testing.assert_array_equal(restored(waveform, return_tensors="np")["audio_values"], waveform[None])
                 self.assertNotIn("spectrogram_config", processor.to_dict())
@@ -489,18 +503,19 @@ class AudioWorkflowContractTest(unittest.TestCase):
 @require_torch
 class AudioBackendOptimizationTest(unittest.TestCase):
     def _make_torch_processor(self, mel_floor):
-        from transformers.audio_processing_backends import TorchAudioBackend
+        from transformers.audio_processing_utils import BaseAudioProcessor
         from transformers.audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
-        class Processor(TorchAudioBackend):
+        class Processor(BaseAudioProcessor):
             sampling_rate = 16_000
 
         return Processor(
+            backend="torch",
             spectrogram_config=SpectrogramConfig(
                 stft_config=StftConfig(n_fft=8),
                 mel_scale_config=MelScaleConfig(n_mels=2),
                 mel_floor=mel_floor,
-            )
+            ),
         )
 
     def test_zero_mel_floor_does_not_dispatch_clamp(self):
@@ -531,71 +546,3 @@ class AudioBackendOptimizationTest(unittest.TestCase):
             mask,
             torch.tensor([[1, 1, 1, 0, 0, 0], [0, 0, 1, 1, 1, 0]], dtype=torch.int32),
         )
-
-    def test_cpu_native_stft_retains_optimized_torch_stft_path(self):
-        processor = self._make_torch_processor(mel_floor=0.0)
-        config = processor.spectrogram_config.stft_config
-        audio = torch.randn(2, 32)
-        window = torch.hann_window(config.n_fft)
-
-        with patch("torch.stft", wraps=torch.stft) as stft:
-            processor._stft_native(audio, window, config.n_fft, config)
-
-        stft.assert_called_once()
-
-    def test_native_stft_caches_fft_sized_window(self):
-        from transformers.audio_processing_backends import TorchAudioBackend
-        from transformers.audio_utils import SpectrogramConfig, StftConfig
-
-        class Processor(TorchAudioBackend):
-            sampling_rate = 16_000
-
-        processor = Processor(
-            spectrogram_config=SpectrogramConfig(stft_config=StftConfig(n_fft=16, win_length=10, hop_length=4))
-        )
-        audio = torch.randn(1, 64)
-
-        with (
-            patch.object(processor, "_create_stft_window", wraps=processor._create_stft_window) as create_window,
-            patch.object(processor, "_stft_native", wraps=processor._stft_native) as native_stft,
-        ):
-            for _ in range(2):
-                processor.spectrogram(
-                    audio,
-                    spectrogram_config=processor.spectrogram_config,
-                    dither=0.0,
-                )
-
-        create_window.assert_called_once()
-        self.assertEqual(len(native_stft.call_args_list), 2)
-        for call in native_stft.call_args_list:
-            _, window, frame_length, stft_config = call.args
-            self.assertEqual(window.shape, (16,))
-            self.assertEqual(frame_length, stft_config.n_fft)
-
-    @require_torch_gpu
-    def test_cuda_native_stft_dispatches_directly_to_fft_primitive(self):
-        processor = self._make_torch_processor(mel_floor=0.0)
-        config = replace(processor.spectrogram_config.stft_config, win_length=6)
-        audio = torch.randn(2, 32, device=torch_device)
-        window = torch.hann_window(config.n_fft, device=torch_device)
-
-        with (
-            patch("torch.stft", side_effect=AssertionError("torch.stft adds avoidable dispatch overhead")),
-            patch("torch.fft.rfft", wraps=torch.fft.rfft) as rfft,
-        ):
-            processor._stft_native(audio, window, config.n_fft, config)
-
-        rfft.assert_called_once()
-
-    @require_torch_gpu
-    def test_cuda_full_window_native_stft_retains_torch_stft_path(self):
-        processor = self._make_torch_processor(mel_floor=0.0)
-        config = processor.spectrogram_config.stft_config
-        audio = torch.randn(2, 32, device=torch_device)
-        window = torch.hann_window(config.n_fft, device=torch_device)
-
-        with patch("torch.stft", wraps=torch.stft) as stft:
-            processor._stft_native(audio, window, config.n_fft, config)
-
-        stft.assert_called_once()

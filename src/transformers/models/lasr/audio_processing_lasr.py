@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
-class LasrAudioProcessorMixin:
+class LasrAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {
@@ -41,10 +41,6 @@ class LasrAudioProcessorMixin:
         "mel_floor": 1e-5,
         "computation_dtype": "float64",
     }
-
-
-class LasrAudioProcessor(LasrAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["LasrAudioProcessor"]

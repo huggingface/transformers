@@ -18,7 +18,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .audio_processing_numpy_seamless_m4t import *
     from .audio_processing_seamless_m4t import *
     from .configuration_seamless_m4t import *
     from .feature_extraction_seamless_m4t import *

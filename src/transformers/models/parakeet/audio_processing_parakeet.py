@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
-class ParakeetAudioProcessorMixin:
+class ParakeetAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {
@@ -45,10 +45,6 @@ class ParakeetAudioProcessorMixin:
         "transpose_features": True,
     }
     feature_normalization = "per_feature_standardize"
-
-
-class ParakeetAudioProcessor(ParakeetAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["ParakeetAudioProcessor"]

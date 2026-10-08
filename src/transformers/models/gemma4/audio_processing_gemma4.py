@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ..gemma3n.audio_processing_gemma3n import LEGACY_GEMMA_AUDIO_FIELDS
 
 
-class Gemma4AudioProcessorMixin:
+class Gemma4AudioProcessor(BaseAudioProcessor):
     legacy_field_mapping = {
         **LEGACY_GEMMA_AUDIO_FIELDS,
         "mel_floor": "spectrogram_config.pre_log_offset",
@@ -67,10 +67,6 @@ class Gemma4AudioProcessorMixin:
             features = output["audio_features"]
             output["audio_features"] = features * self.ops.astype(mask, self.ops.dtype_name(features))[..., None]
         return output
-
-
-class Gemma4AudioProcessor(Gemma4AudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["Gemma4AudioProcessor"]

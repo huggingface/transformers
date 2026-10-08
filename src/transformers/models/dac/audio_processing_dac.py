@@ -12,15 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
-class DacAudioProcessorMixin:
+class DacAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
-
-
-class DacAudioProcessor(DacAudioProcessorMixin, NumpyAudioBackend):
-    pass
 
 
 __all__ = ["DacAudioProcessor"]

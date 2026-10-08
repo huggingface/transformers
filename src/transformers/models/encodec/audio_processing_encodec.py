@@ -12,15 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
-class EncodecAudioProcessorMixin:
+class EncodecAudioProcessor(BaseAudioProcessor):
     sampling_rate = 24000
-
-
-class EncodecAudioProcessor(EncodecAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["EncodecAudioProcessor"]

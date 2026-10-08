@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -25,7 +25,7 @@ class Wav2Vec2AudioProcessorKwargs(AudioKwargs, total=False):
     do_normalize: bool | None
 
 
-class Wav2Vec2AudioProcessorMixin:
+class Wav2Vec2AudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
 
     do_normalize = True
@@ -37,10 +37,6 @@ class Wav2Vec2AudioProcessorMixin:
             centered = audio_el - self.ops.mean(audio_el, -1, keepdims=True)
             audio_el = centered / self.ops.sqrt(self.ops.mean(centered * centered, -1, keepdims=True) + 1e-7)
         return audio_el
-
-
-class Wav2Vec2AudioProcessor(Wav2Vec2AudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["Wav2Vec2AudioProcessor"]

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -28,7 +28,7 @@ class KyutaiSpeechToTextAudioProcessorKwargs(AudioKwargs, total=False):
     audio_delay_seconds: float
 
 
-class KyutaiSpeechToTextAudioProcessorMixin:
+class KyutaiSpeechToTextAudioProcessor(BaseAudioProcessor):
     sampling_rate = 24000
 
     audio_silence_prefix_seconds = 1.0
@@ -46,10 +46,6 @@ class KyutaiSpeechToTextAudioProcessorMixin:
                 if key in output:
                     output[key] = self.ops.pad(output[key], pad_left, pad_right, axis=-1, value=0)
         return output
-
-
-class KyutaiSpeechToTextAudioProcessor(KyutaiSpeechToTextAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["KyutaiSpeechToTextAudioProcessor"]

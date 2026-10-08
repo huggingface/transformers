@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
 def _stft_frame_from_window_size(value, config_dict):
@@ -26,7 +26,7 @@ def _stft_frame_from_window_size(value, config_dict):
 _stft_frame_from_window_size.legacy_target = "spectrogram_config.stft_config.n_fft"
 
 
-class Pop2PianoAudioProcessorMixin:
+class Pop2PianoAudioProcessor(BaseAudioProcessor):
     # Tokenizer and model-head parameters that share this processor's config file. The legacy
     # extractor takes only (sampling_rate, padding_value, window_size, hop_length, min_frequency,
     # feature_size, num_bars), so none of these reach feature extraction on either side.
@@ -56,10 +56,6 @@ class Pop2PianoAudioProcessorMixin:
         },
         "log_mode": "log10",
     }
-
-
-class Pop2PianoAudioProcessor(Pop2PianoAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["Pop2PianoAudioProcessor"]

@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .audio_processing_encodec import *
-    from .audio_processing_numpy_encodec import *
     from .configuration_encodec import *
     from .feature_extraction_encodec import *
     from .modeling_encodec import *

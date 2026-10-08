@@ -18,7 +18,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .audio_processing_numpy_pe_audio import *
     from .audio_processing_pe_audio import *
     from .configuration_pe_audio import *
     from .feature_extraction_pe_audio import *

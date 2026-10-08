@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -30,7 +30,7 @@ class Qwen3ASRAudioProcessorKwargs(AudioKwargs, total=False):
     n_window: int | None
 
 
-class Qwen3ASRAudioProcessorMixin:
+class Qwen3ASRAudioProcessor(BaseAudioProcessor):
     max_length = 480000
     padding = "max_length"
     sampling_rate = 16000
@@ -90,10 +90,6 @@ class Qwen3ASRAudioProcessorMixin:
         if min_length and audio_el.shape[-1] < min_length:
             audio_el = self._pad_waveform(audio_el, min_length, padding_side=padding_side, padding_value=padding_value)
         return audio_el
-
-
-class Qwen3ASRAudioProcessor(Qwen3ASRAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["Qwen3ASRAudioProcessor"]

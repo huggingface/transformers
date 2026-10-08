@@ -61,6 +61,14 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "audio_processing_backends": [
+        "AudioOps",
+        "NumpyAudioBackend",
+        "get_audio_backend",
+        "register_audio_backend",
+        "register_audio_op",
+    ],
+    "audio_processing_utils": ["BaseAudioProcessor"],
     "audio_utils": [],
     "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
@@ -364,12 +372,7 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
-    _import_structure["audio_processing_backends"] = [
-        "NumpyAudioBackend",
-        "NumpyBackend",
-        "TorchAudioBackend",
-        "TorchBackend",
-    ]
+    _import_structure["audio_processing_backends"].append("TorchAudioBackend")
     _import_structure["activations"] = []
     _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["cache_utils"] = [
@@ -498,10 +501,13 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     # Models
+    from .audio_processing_backends import AudioOps as AudioOps
     from .audio_processing_backends import NumpyAudioBackend as NumpyAudioBackend
-    from .audio_processing_backends import NumpyBackend as NumpyBackend
     from .audio_processing_backends import TorchAudioBackend as TorchAudioBackend
-    from .audio_processing_backends import TorchBackend as TorchBackend
+    from .audio_processing_backends import get_audio_backend as get_audio_backend
+    from .audio_processing_backends import register_audio_backend as register_audio_backend
+    from .audio_processing_backends import register_audio_op as register_audio_op
+    from .audio_processing_utils import BaseAudioProcessor as BaseAudioProcessor
     from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
     from .cache_utils import DynamicCache as DynamicCache

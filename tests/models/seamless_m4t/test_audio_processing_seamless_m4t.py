@@ -5,7 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Tests for `SeamlessM4tAudioProcessor` and `SeamlessM4tAudioProcessorNumpy`."""
+"""Tests for `SeamlessM4tAudioProcessor` on the numpy and torch backends."""
 
 from __future__ import annotations
 
@@ -42,9 +42,9 @@ class SeamlessM4tAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase
 
     def test_spectrogram_preserves_batch_dimension(self):
         audio = np.zeros((2, 1_600), dtype=np.float32)
-        for backend, processor_class in self.audio_processing_classes.items():
+        for backend in self.audio_backends:
             with self.subTest(backend=backend):
-                processor = processor_class()
+                processor = self.audio_processing_class(backend=backend)
                 backend_audio = self._to_torch(audio) if processor.backend == "torch" else audio
                 features = processor.spectrogram(
                     backend_audio,

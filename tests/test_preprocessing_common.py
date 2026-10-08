@@ -198,8 +198,8 @@ class PreprocessingTesterMixin:
 
     def _assert_cross_backend_configs_match(self, first, second, name_a, name_b):
         dict_a, dict_b = first.to_dict(), second.to_dict()
-        # `_type_key` names the concrete class (`WhisperAudioProcessor` vs
-        # `WhisperAudioProcessorNumpy`), so it differs between sibling backends by construction.
+        # `_type_key` names the concrete class (e.g. an image processor's torchvision and PIL
+        # siblings), so it differs between sibling backends by construction.
         for d in (dict_a, dict_b):
             d.pop(getattr(first, "_type_key", None), None)
         difference = {key: dict_a.get(key, dict_b.get(key)) for key in set(dict_a) ^ set(dict_b)}

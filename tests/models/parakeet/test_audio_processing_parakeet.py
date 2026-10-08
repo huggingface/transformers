@@ -5,7 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Tests for `ParakeetAudioProcessor` and `ParakeetAudioProcessorNumpy`."""
+"""Tests for `ParakeetAudioProcessor` on the numpy and torch backends."""
 
 from __future__ import annotations
 
@@ -46,17 +46,14 @@ class ParakeetAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
         # rather than `parakeet` (the test directory name), so the mixin's auto-discovery
         # cannot match. We override the lookup directly.
         self.audio_processor_tester = ParakeetAudioProcessingTester()
-        class_names_by_backend = FEATURE_EXTRACTOR_MAPPING_NAMES["parakeet_ctc"]
-        self.audio_processing_classes = {
-            backend: feature_extractor_class_from_name(class_name)
-            for backend, class_name in class_names_by_backend.items()
-            if class_name not in self.test_classes_to_skip
-        }
-        self.audio_processing_classes = {b: c for b, c in self.audio_processing_classes.items() if c is not None}
+        self.audio_processing_class = feature_extractor_class_from_name(
+            FEATURE_EXTRACTOR_MAPPING_NAMES["parakeet_ctc"]
+        )
+        self.audio_backends = ["numpy", "torch"]
 
     @require_torch_gpu
     def test_ragged_batch_on_cuda_stays_on_cuda(self):
-        processor = self.audio_processing_classes["torch"]()
+        processor = self.audio_processing_class(backend="torch")
         audio = [
             torch.randn(16_000, device=torch_device),
             torch.randn(12_000, device=torch_device),

@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .audio_processing_kyutai_speech_to_text import *
-    from .audio_processing_numpy_kyutai_speech_to_text import *
     from .configuration_kyutai_speech_to_text import *
     from .feature_extraction_kyutai_speech_to_text import *
     from .modeling_kyutai_speech_to_text import *

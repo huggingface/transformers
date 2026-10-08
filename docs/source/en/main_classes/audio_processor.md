@@ -38,12 +38,21 @@ resolution.
 
 ## Backends
 
-Each audio processor has a torch and a numpy implementation. They share one configuration and produce
-bit-identical output for the same input.
+An audio processor computes with one backend, chosen when it is built: `WhisperAudioProcessor(backend="numpy")`,
+`AutoAudioProcessor.from_pretrained(repo, backend="mlx")`. The default is torch when it is installed, numpy
+otherwise; the choice is never saved with the processor. A backend is an op table: [`AudioOps`] states the
+contract, the two shipped backends implement it, and an outside package registers its own with
+[`register_audio_backend`]. A model needing an op beyond the core table declares it in `required_ops`.
+
+[[autodoc]] audio_processing_backends.AudioOps
+
+[[autodoc]] audio_processing_backends.NumpyAudioBackend
 
 [[autodoc]] audio_processing_backends.TorchAudioBackend
 
-[[autodoc]] audio_processing_backends.NumpyAudioBackend
+[[autodoc]] audio_processing_backends.register_audio_backend
+
+[[autodoc]] audio_processing_backends.register_audio_op
 
 ## Spectrogram configuration
 

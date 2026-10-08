@@ -14,7 +14,7 @@
 
 from typing import Annotated
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 from ...utils.type_validators import strictly_positive
 
@@ -28,7 +28,7 @@ class SeamlessM4tAudioProcessorKwargs(AudioKwargs, total=False):
     stride: Annotated[int, strictly_positive]
 
 
-class SeamlessM4tAudioProcessorMixin:
+class SeamlessM4tAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {
@@ -106,10 +106,6 @@ class SeamlessM4tAudioProcessorMixin:
             output["audio_features_mask"] = mask[:, stride - 1 :: stride]
 
         return output
-
-
-class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["SeamlessM4tAudioProcessor"]

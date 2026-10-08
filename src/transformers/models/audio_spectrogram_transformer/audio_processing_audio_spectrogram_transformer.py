@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -34,7 +34,7 @@ class AudioSpectrogramTransformerAudioProcessorKwargs(AudioKwargs, total=False):
     max_length_frames: int
 
 
-class AudioSpectrogramTransformerAudioProcessorMixin:
+class AudioSpectrogramTransformerAudioProcessor(BaseAudioProcessor):
     # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
     # `num_mel_bins`, so `feature_size` opts out of the base mapping rather than overwriting it.
     # `mean`/`std` are the dataset normalisation statistics; without the mapping a checkpoint's
@@ -106,10 +106,6 @@ class AudioSpectrogramTransformerAudioProcessorMixin:
             features = (features - ast_mean) / (ast_std * 2)
         output["audio_values"] = features
         return output
-
-
-class AudioSpectrogramTransformerAudioProcessor(AudioSpectrogramTransformerAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["AudioSpectrogramTransformerAudioProcessor"]

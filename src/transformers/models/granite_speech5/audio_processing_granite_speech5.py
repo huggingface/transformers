@@ -14,8 +14,8 @@
 
 import numpy as np
 
-from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -32,7 +32,7 @@ class GraniteSpeech5AudioProcessorKwargs(AudioKwargs, total=False):
     frame_stacking: int
 
 
-class GraniteSpeech5AudioProcessorMixin:
+class GraniteSpeech5AudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     # The workflow always returns a mask over the frame-stacked length.
     return_padding_mask = False
@@ -151,10 +151,6 @@ class GraniteSpeech5AudioProcessorMixin:
     def _stacked_mask(self, lengths, width, like):
         lengths = self.ops.asarray(np.asarray(lengths, dtype=np.int64), like=like)
         return self.ops.astype(self.ops.arange(width, like=like)[None, :] < lengths[:, None], "int64")
-
-
-class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["GraniteSpeech5AudioProcessor"]

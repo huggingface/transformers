@@ -27,9 +27,9 @@ logger = logging.get_logger(__name__)
 
 class SequenceFeatureExtractor(BaseAudioProcessor):
     """
-    Deprecated base class for speech feature extractors. Subclass [`BaseAudioProcessor`] (through
-    `NumpyAudioBackend` or `TorchAudioBackend`) instead; every in-library `XxxFeatureExtractor` is
-    now a deprecated alias of the corresponding `XxxAudioProcessor`.
+    Deprecated base class for speech feature extractors. Subclass [`BaseAudioProcessor`] instead and choose
+    the op table with `backend=` at construction (`"torch"` or `"numpy"`); every in-library
+    `XxxFeatureExtractor` is now a deprecated alias of the corresponding `XxxAudioProcessor`.
 
     Padding, truncation, masking and audio fetching all come from [`BaseAudioProcessor`]. Note that
     the inherited `pad` operates on raw audio (as used by the audio-processor pipeline) rather than

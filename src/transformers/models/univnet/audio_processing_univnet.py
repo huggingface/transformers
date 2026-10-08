@@ -14,7 +14,7 @@
 
 from typing import Annotated
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 from ...utils.type_validators import strictly_positive
 
@@ -48,7 +48,7 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
     max_length_s: Annotated[int, strictly_positive]
 
 
-class UnivNetAudioProcessorMixin:
+class UnivNetAudioProcessor(BaseAudioProcessor):
     sampling_rate = 24000
     # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
     # `num_mel_bins`, so the base mapping of `feature_size` must not apply here.
@@ -151,10 +151,6 @@ class UnivNetAudioProcessorMixin:
         if do_normalize:
             features = 2.0 * ((features - normalize_min) / (normalize_max - normalize_min)) - 1.0
         return features
-
-
-class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["UnivNetAudioProcessor"]

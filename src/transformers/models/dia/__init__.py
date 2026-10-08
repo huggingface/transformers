@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .audio_processing_dia import *
-    from .audio_processing_numpy_dia import *
     from .configuration_dia import *
     from .feature_extraction_dia import *
     from .generation_dia import *

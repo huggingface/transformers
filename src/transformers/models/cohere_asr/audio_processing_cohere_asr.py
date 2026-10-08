@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -32,7 +32,7 @@ class CohereAsrAudioProcessorKwargs(AudioKwargs, total=False):
     min_energy_window_samples: int
 
 
-class CohereAsrAudioProcessorMixin:
+class CohereAsrAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     padding = "longest"
     dither: float = 1e-5
@@ -173,10 +173,6 @@ class CohereAsrAudioProcessorMixin:
         windows = self.ops.frame(segment, size, size)[:count]  # non-overlapping windows
         quietest = self.ops.to_numpy(self.ops.argmin(self.ops.mean(windows * windows, -1), -1))
         return int(start_idx + size * int(quietest))
-
-
-class CohereAsrAudioProcessor(CohereAsrAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["CohereAsrAudioProcessor"]

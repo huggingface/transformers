@@ -14,7 +14,7 @@
 
 import numpy as np
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -33,7 +33,7 @@ class Phi4MultimodalAudioProcessorKwargs(AudioKwargs, total=False):
     audio_feat_stride: int
 
 
-class Phi4MultimodalAudioProcessorMixin:
+class Phi4MultimodalAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     extra_model_input_names = ["audio_embed_sizes"]
     # Kaldi-style fbank on int16-scaled samples: per-frame preemphasis, Hamming window, power
@@ -103,10 +103,6 @@ class Phi4MultimodalAudioProcessorMixin:
         )
         output["audio_embed_sizes"] = self.ops.asarray(embed_sizes, like=output["audio_features"])
         return output
-
-
-class Phi4MultimodalAudioProcessor(Phi4MultimodalAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["Phi4MultimodalAudioProcessor"]

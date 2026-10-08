@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -37,7 +37,7 @@ def _ms_to_samples(target):
     """
 
     def apply(value, config_dict):
-        sampling_rate = config_dict.get("sampling_rate") or FunAsrNanoAudioProcessorMixin.sampling_rate
+        sampling_rate = config_dict.get("sampling_rate") or FunAsrNanoAudioProcessor.sampling_rate
         stft_config = config_dict.setdefault("spectrogram_config", {}).setdefault("stft_config", {})
         stft_config[target] = int(value * sampling_rate / 1000)
 
@@ -45,7 +45,7 @@ def _ms_to_samples(target):
     return apply
 
 
-class FunAsrNanoAudioProcessorMixin:
+class FunAsrNanoAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     legacy_field_mapping = {
         "frame_length": _ms_to_samples("win_length"),
@@ -129,10 +129,6 @@ class FunAsrNanoAudioProcessorMixin:
         if "audio_features_mask" in output:
             output["audio_features_mask"] = self.ops.astype(output["audio_features_mask"], "int64")
         return output
-
-
-class FunAsrNanoAudioProcessor(FunAsrNanoAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["FunAsrNanoAudioProcessor"]

@@ -28,10 +28,8 @@ from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
     Wav2Vec2AudioProcessor,
-    Wav2Vec2AudioProcessorNumpy,
     Wav2Vec2Config,
     WhisperAudioProcessor,
-    WhisperAudioProcessorNumpy,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, get_tests_dir
 
@@ -111,32 +109,22 @@ class AutoAudioProcessorTest(unittest.TestCase):
 
     # ── Backend selection ──────────────────────────────────────────────────────────
 
-    def test_backend_kwarg_torch(self):
+    def test_backend_kwarg_selects_the_op_table(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
-            _write_processor_config(tmpdirname, {"audio_processor_type": "WhisperAudioProcessor"})
-            audio_processor = AutoAudioProcessor.from_pretrained(tmpdirname, backend="torch")
-            self.assertIsInstance(audio_processor, WhisperAudioProcessor)
+            WhisperAudioProcessor().save_pretrained(tmpdirname)
+            for backend in ("torch", "numpy"):
+                audio_processor = AutoAudioProcessor.from_pretrained(tmpdirname, backend=backend)
+                self.assertIs(type(audio_processor), WhisperAudioProcessor)
+                self.assertEqual(audio_processor.ops.name, backend)
 
-    def test_backend_kwarg_numpy(self):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            _write_processor_config(tmpdirname, {"audio_processor_type": "WhisperAudioProcessor"})
-            audio_processor = AutoAudioProcessor.from_pretrained(tmpdirname, backend="numpy")
-            self.assertIsInstance(audio_processor, WhisperAudioProcessorNumpy)
-
-    def test_backend_kwarg_numpy_from_legacy_name(self):
+    def test_backend_kwarg_from_legacy_name(self):
         # Backend selection composes with legacy-name translation
         audio_processor = AutoAudioProcessor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR, backend="numpy")
-        self.assertIsInstance(audio_processor, Wav2Vec2AudioProcessorNumpy)
-
-    def test_backend_fallback_warns_when_sibling_missing(self):
-        # phi4_multimodal has no numpy sibling: requesting numpy falls back to torch
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            _write_processor_config(tmpdirname, {"audio_processor_type": "Phi4MultimodalAudioProcessor"})
-            audio_processor = AutoAudioProcessor.from_pretrained(tmpdirname, backend="numpy")
-            self.assertEqual(type(audio_processor).__name__, "Phi4MultimodalAudioProcessor")
+        self.assertIs(type(audio_processor), Wav2Vec2AudioProcessor)
+        self.assertEqual(audio_processor.backend, "numpy")
 
     def test_invalid_backend_raises(self):
-        with self.assertRaisesRegex(ValueError, "Unknown audio-processor backend"):
+        with self.assertRaisesRegex(ValueError, "Unknown audio backend 'jax'"):
             AutoAudioProcessor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR, backend="jax")
 
     # ── Error paths ────────────────────────────────────────────────────────────────
@@ -189,17 +177,17 @@ class AutoAudioProcessorTest(unittest.TestCase):
             if CustomConfig in FEATURE_EXTRACTOR_MAPPING._extra_content:
                 del FEATURE_EXTRACTOR_MAPPING._extra_content[CustomConfig]
 
-    def test_register_with_backend_dict(self):
+    def test_register_takes_one_class(self):
         try:
             AutoConfig.register("custom", CustomConfig)
-            AutoAudioProcessor.register(CustomConfig, {"torch": CustomFeatureExtractor})
+            AutoAudioProcessor.register(CustomConfig, CustomFeatureExtractor)
 
             audio_processor = CustomFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 audio_processor.save_pretrained(tmp_dir)
-                # numpy backend has no sibling registered: falls back to the torch entry
                 new_audio_processor = AutoAudioProcessor.from_pretrained(tmp_dir, backend="numpy")
                 self.assertIsInstance(new_audio_processor, CustomFeatureExtractor)
+                self.assertEqual(new_audio_processor.ops.name, "numpy")
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["custom"]
@@ -300,7 +288,8 @@ class AutoFeatureExtractorBackwardCompatTest(unittest.TestCase):
             audio_processor = AutoFeatureExtractor.from_pretrained(
                 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR, backend="numpy"
             )
-        self.assertIsInstance(audio_processor, Wav2Vec2AudioProcessorNumpy)
+        self.assertIs(type(audio_processor), Wav2Vec2AudioProcessor)
+        self.assertEqual(audio_processor.backend, "numpy")
 
     def test_register_warns_and_registers(self):
         try:

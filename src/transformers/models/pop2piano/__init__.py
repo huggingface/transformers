@@ -18,7 +18,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .audio_processing_numpy_pop2piano import *
     from .audio_processing_pop2piano import *
     from .configuration_pop2piano import *
     from .feature_extraction_pop2piano import *

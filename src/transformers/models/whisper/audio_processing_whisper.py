@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -29,7 +29,7 @@ class WhisperAudioProcessorKwargs(AudioKwargs, total=False):
     chunk_length: int
 
 
-class WhisperAudioProcessorMixin:
+class WhisperAudioProcessor(BaseAudioProcessor):
     max_length = 480000
     return_padding_mask = False
     sampling_rate = 16000
@@ -56,10 +56,6 @@ class WhisperAudioProcessorMixin:
 
     chunk_length = 30
     valid_kwargs = WhisperAudioProcessorKwargs
-
-
-class WhisperAudioProcessor(WhisperAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["WhisperAudioProcessor"]

@@ -18,7 +18,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .audio_processing_numpy_xcodec2 import *
     from .audio_processing_xcodec2 import *
     from .configuration_xcodec2 import *
     from .feature_extraction_xcodec2 import *

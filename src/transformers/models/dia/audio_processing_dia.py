@@ -12,16 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
-class DiaAudioProcessorMixin:
+class DiaAudioProcessor(BaseAudioProcessor):
     pad_to_multiple_of = 512
     sampling_rate = 44100
-
-
-class DiaAudioProcessor(DiaAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["DiaAudioProcessor"]

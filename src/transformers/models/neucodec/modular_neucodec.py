@@ -25,8 +25,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..xcodec2.audio_processing_numpy_xcodec2 import Xcodec2AudioProcessorNumpy
-from ..xcodec2.audio_processing_xcodec2 import Xcodec2AudioProcessor, Xcodec2AudioProcessorMixin
+from ..xcodec2.audio_processing_xcodec2 import Xcodec2AudioProcessor
 from ..xcodec2.configuration_xcodec2 import Xcodec2Config
 from ..xcodec2.modeling_xcodec2 import (
     Xcodec2DecoderOutput,
@@ -291,7 +290,7 @@ class NeuCodecModel(Xcodec2Model):
         )
 
 
-class NeuCodecAudioProcessorMixin(Xcodec2AudioProcessorMixin):
+class NeuCodecAudioProcessor(Xcodec2AudioProcessor):
     """Same dual-encoder geometry as XCodec2: raw padded audio for the acoustic encoder, kaldi
     povey fbank features for the semantic one."""
 
@@ -306,18 +305,9 @@ class NeuCodecAudioProcessorMixin(Xcodec2AudioProcessorMixin):
         return waveform
 
 
-class NeuCodecAudioProcessor(NeuCodecAudioProcessorMixin, Xcodec2AudioProcessor):
-    pass
-
-
-class NeuCodecAudioProcessorNumpy(NeuCodecAudioProcessorMixin, Xcodec2AudioProcessorNumpy):
-    pass
-
-
 __all__ = [
     "NeuCodecConfig",
     "NeuCodecModel",
     "NeuCodecPreTrainedModel",
     "NeuCodecAudioProcessor",
-    "NeuCodecAudioProcessorNumpy",
 ]

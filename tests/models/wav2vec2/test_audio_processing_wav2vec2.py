@@ -5,7 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Tests for `Wav2Vec2AudioProcessor` and `Wav2Vec2AudioProcessorNumpy`."""
+"""Tests for `Wav2Vec2AudioProcessor` on the numpy and torch backends."""
 
 from __future__ import annotations
 
@@ -36,9 +36,9 @@ class Wav2Vec2AudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
     def test_array_sampling_rate_warning(self):
         waveform = np.zeros(160, dtype=np.float32)
 
-        for backend, processor_class in self.audio_processing_classes.items():
+        for backend in self.audio_backends:
             with self.subTest(backend=backend):
-                processor = processor_class()
+                processor = self.audio_processing_class(backend=backend)
                 with patch.object(audio_processing_logger, "warning_once") as warning_once:
                     processor(waveform, return_tensors="np")
                 warning_once.assert_called_once()
@@ -51,9 +51,9 @@ class Wav2Vec2AudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
     def test_unpadded_unequal_batch_has_clear_error(self):
         waveforms = [np.zeros(160, dtype=np.float32), np.zeros(80, dtype=np.float32)]
 
-        for backend, processor_class in self.audio_processing_classes.items():
+        for backend in self.audio_backends:
             for padding in (False, "do_not_pad"):
                 with self.subTest(backend=backend, padding=padding):
-                    processor = processor_class()
+                    processor = self.audio_processing_class(backend=backend)
                     with self.assertRaisesRegex(ValueError, "different shapes.*padding is disabled"):
                         processor(waveforms, sampling_rate=processor.sampling_rate, padding=padding)

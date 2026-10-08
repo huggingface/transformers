@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Unpack
 import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
 
+from .audio_processing_backends import _side_widths, get_audio_backend
 from .audio_processing_base import AudioProcessingMixin, BatchFeature
 from .audio_utils import (
     AudioInput,
@@ -194,6 +195,23 @@ def _standard_banks(ops, n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, m
 
 
 class BaseAudioProcessor(AudioProcessingMixin):
+    """Base class of every audio processor: the whole pipeline (validation, resampling, padding, spectrogram,
+    normalization, output), written once against an op table. A model subclasses it and overrides hooks.
+
+    Args:
+        sampling_rate (`int`, *optional*):
+            The sampling rate the processor expects; required unless the subclass sets it as a class attribute.
+        backend (`str`, *optional*):
+            Which op table the processor computes with: `"torch"`, `"numpy"`, or a backend registered with
+            [`register_audio_backend`] (e.g. `"mlx"` after `import mlx_audio.transformers_backend`). Defaults to
+            `"torch"` when torch is importable, else `"numpy"`. A load-time choice, like `device`: it is passed to
+            the constructor (or to `from_pretrained` / `from_dict`), kept as `self.backend` with the op table in
+            `self.ops`, and never serialized, so a saved processor loads on any backend. A model that calls ops
+            beyond the core table lists them in `required_ops`; a backend lacking one is refused here.
+        **kwargs ([`AudioKwargs`]):
+            Values for the processor's options, validated once the attributes are set.
+    """
+
     valid_kwargs = AudioKwargs
     padding = True
     padding_side = "right"
@@ -242,9 +260,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
             backend = "torch" if is_torch_available() else "numpy"
         if not isinstance(backend, str):
             raise TypeError(f"`backend` must be a string, got {type(backend).__name__}.")
-        # Imported here until the inheritance-era classes leave `audio_processing_backends` (it imports this module).
-        from .audio_processing_backends import get_audio_backend
-
         self.backend = backend
         self.ops = get_audio_backend(backend)()
         for op in self.required_ops:
@@ -728,9 +743,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _pad_waveform(
         self, audio, max_length: int, *, padding_side: str, padding_value: float, **kwargs
     ) -> AudioInput:
-        # Imported here: `audio_processing_backends` imports this module.
-        from .audio_processing_backends import _side_widths
-
         current_length = audio.shape[-1]
         if current_length >= max_length:
             return audio

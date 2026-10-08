@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .audio_processing_clvp import *
-    from .audio_processing_numpy_clvp import *
     from .configuration_clvp import *
     from .feature_extraction_clvp import *
     from .modeling_clvp import *

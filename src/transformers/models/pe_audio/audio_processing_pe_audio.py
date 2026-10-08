@@ -14,7 +14,7 @@
 
 import numpy as np
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -28,7 +28,7 @@ class PeAudioAudioProcessorKwargs(AudioKwargs, total=False):
     reflect_pad_to_multiple_of: int
 
 
-class PeAudioAudioProcessorMixin:
+class PeAudioAudioProcessor(BaseAudioProcessor):
     sampling_rate = 48000
     # The legacy FE calls it `hop_length`, misleading name
     legacy_field_mapping = {"hop_length": "reflect_pad_to_multiple_of"}
@@ -47,10 +47,6 @@ class PeAudioAudioProcessorMixin:
         indices = (edge - np.abs(positions - edge)).reshape((1,) * (audio_el.ndim - 1) + (pad,))
         indices = self.ops.asarray(indices.astype(np.int64), like=audio_el)
         return self.ops.concat([audio_el, self.ops.take_along_axis(audio_el, indices, -1)], -1)
-
-
-class PeAudioAudioProcessor(PeAudioAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["PeAudioAudioProcessor"]

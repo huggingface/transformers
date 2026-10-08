@@ -14,7 +14,7 @@
 
 import math
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
 def _hop_length_from_token_duration(value, config_dict):
@@ -22,7 +22,7 @@ def _hop_length_from_token_duration(value, config_dict):
     `hop_length = audio_token_duration_s * sampling_rate`. Written with `setdefault` so a config
     carrying the sample-valued `hop_length` as well keeps the stored one."""
     config_dict["audio_token_duration_s"] = value
-    sampling_rate = config_dict.get("sampling_rate") or InklingAudioProcessorMixin.sampling_rate
+    sampling_rate = config_dict.get("sampling_rate") or InklingAudioProcessor.sampling_rate
     stft_config = config_dict.setdefault("spectrogram_config", {}).setdefault("stft_config", {})
     stft_config.setdefault("hop_length", round(value * sampling_rate))
 
@@ -32,7 +32,7 @@ def _win_length_from_multiplier(value, config_dict):
     `window_size = audio_token_duration_s * window_size_multiplier * sampling_rate`."""
     config_dict["window_size_multiplier"] = value
     duration = config_dict.get("audio_token_duration_s")
-    sampling_rate = config_dict.get("sampling_rate") or InklingAudioProcessorMixin.sampling_rate
+    sampling_rate = config_dict.get("sampling_rate") or InklingAudioProcessor.sampling_rate
     if duration is not None:
         stft_config = config_dict.setdefault("spectrogram_config", {}).setdefault("stft_config", {})
         stft_config.setdefault("win_length", round(duration * value * sampling_rate))
@@ -42,7 +42,7 @@ _hop_length_from_token_duration.legacy_target = "spectrogram_config.stft_config.
 _win_length_from_multiplier.legacy_target = "spectrogram_config.stft_config.win_length"
 
 
-class InklingAudioProcessorMixin:
+class InklingAudioProcessor(BaseAudioProcessor):
     # The legacy extractor derives its window from `audio_token_duration_s *
     # window_size_multiplier * sampling_rate` and takes no `window_size`; a config carrying one is
     # stating a derived value, and honouring it could contradict the three it is derived from.
@@ -117,10 +117,6 @@ class InklingAudioProcessorMixin:
             output["audio_features_mask"] = mask
         output["audio_features"] = features
         return output
-
-
-class InklingAudioProcessor(InklingAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["InklingAudioProcessor"]

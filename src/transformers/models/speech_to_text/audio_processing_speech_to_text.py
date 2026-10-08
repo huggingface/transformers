@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -33,7 +33,7 @@ class SpeechToTextAudioProcessorKwargs(AudioKwargs, total=False):
     do_ceptral_normalize: bool
 
 
-class SpeechToTextAudioProcessorMixin:
+class SpeechToTextAudioProcessor(BaseAudioProcessor):
     do_ceptral_normalize = True
     sampling_rate = 16000
     spectrogram_config = {
@@ -100,10 +100,6 @@ class SpeechToTextAudioProcessorMixin:
         if normalize_vars:
             features = features / self.ops.sqrt(variance)
         return self.ops.astype(features, "float32")
-
-
-class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["SpeechToTextAudioProcessor"]

@@ -5,7 +5,7 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Tests for `Pop2PianoAudioProcessor` and `Pop2PianoAudioProcessorNumpy`."""
+"""Tests for `Pop2PianoAudioProcessor` on the numpy and torch backends."""
 
 from __future__ import annotations
 

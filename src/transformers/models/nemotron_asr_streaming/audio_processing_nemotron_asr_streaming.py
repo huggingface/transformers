@@ -18,10 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
-class NemotronAsrStreamingAudioProcessorMixin:
+class NemotronAsrStreamingAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {
@@ -64,10 +64,6 @@ class NemotronAsrStreamingAudioProcessorMixin:
             output["audio_features_mask"] = mask
         output["audio_features"] = features
         return output
-
-
-class NemotronAsrStreamingAudioProcessor(NemotronAsrStreamingAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["NemotronAsrStreamingAudioProcessor"]

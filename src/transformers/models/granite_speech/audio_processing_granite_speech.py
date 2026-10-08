@@ -16,8 +16,8 @@ import math
 
 import numpy as np
 
-from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -33,7 +33,7 @@ class GraniteSpeechAudioProcessorKwargs(AudioKwargs, total=False):
     projector_downsample_rate: int
 
 
-class GraniteSpeechAudioProcessorMixin:
+class GraniteSpeechAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     # The workflow builds a mandatory projector mask rather than the default frame mask.
     extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]
@@ -118,10 +118,6 @@ class GraniteSpeechAudioProcessorMixin:
         """Boolean `(batch, max(sizes))` mask of each clip's projector outputs, on `like`'s device."""
         lengths = self.ops.asarray(np.asarray(sizes, dtype=np.int64), like=like)
         return self.ops.arange(max(sizes), like=like)[None, :] < lengths[:, None]
-
-
-class GraniteSpeechAudioProcessor(GraniteSpeechAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["GraniteSpeechAudioProcessor"]

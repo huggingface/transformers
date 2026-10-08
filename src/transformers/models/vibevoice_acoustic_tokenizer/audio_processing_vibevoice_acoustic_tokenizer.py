@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -32,7 +32,7 @@ class VibevoiceAcousticTokenizerAudioProcessorKwargs(AudioKwargs, total=False):
     normalize_audio: bool
 
 
-class VibevoiceAcousticTokenizerAudioProcessorMixin:
+class VibevoiceAcousticTokenizerAudioProcessor(BaseAudioProcessor):
     sampling_rate = 24000
 
     target_dB_FS = -25
@@ -53,10 +53,6 @@ class VibevoiceAcousticTokenizerAudioProcessorMixin:
         max_val = self.ops.amax(self.ops.abs(audio_el), -1, keepdims=True)
         # `where` evaluates both branches: no host sync on the peak
         return self.ops.where(max_val > 1.0, audio_el / (max_val + eps), audio_el)
-
-
-class VibevoiceAcousticTokenizerAudioProcessor(VibevoiceAcousticTokenizerAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["VibevoiceAcousticTokenizerAudioProcessor"]

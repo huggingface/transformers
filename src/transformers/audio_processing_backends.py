@@ -13,45 +13,14 @@
 # limitations under the License.
 
 import math
-from typing import Unpack
 
 import numpy as np
 
-from .audio_processing_utils import BaseAudioProcessor
-from .processing_utils import AudioKwargs
-from .utils import is_torch_available, logging, requires_backends
-
-
-logger = logging.get_logger(__name__)
+from .utils import is_torch_available, requires_backends
 
 
 if is_torch_available():
     import torch
-
-
-class NumpyAudioBackend(BaseAudioProcessor):
-    """Transitional (step 3): a model's numpy sibling, i.e. the model on `backend="numpy"`. Deleted in Task 4."""
-
-    def __init__(self, *args, **kwargs: Unpack[AudioKwargs]):
-        kwargs.setdefault("backend", "numpy")
-        super().__init__(*args, **kwargs)
-
-
-class TorchAudioBackend(BaseAudioProcessor):
-    """Transitional (step 3): the model on `backend="torch"`. Deleted in Task 4."""
-
-    def __init__(self, *args, **kwargs: Unpack[AudioKwargs]):
-        kwargs.setdefault("backend", "torch")
-        super().__init__(*args, **kwargs)
-
-
-# ──────────────────────────────────────────────────────────────────────────────────────────────
-# Op-table backends (docs/superpowers/specs/2026-10-06-audio-backend-ops-design.md).
-#
-# The classes above are the inheritance-era backends and still serve every model file; they are
-# deleted in step 3 of the migration, when `NumpyOps` / `TorchOps` take their names. Until then the
-# two generations coexist here so that each intermediate commit passes `./validate`.
-# ──────────────────────────────────────────────────────────────────────────────────────────────
 
 
 class AudioOps:
@@ -60,7 +29,7 @@ class AudioOps:
     Every numerical stage of the pipeline lives in `BaseAudioProcessor`, written against these
     ops. A backend is a subclass implementing each *core* op below (every method of this class);
     it may also implement the names in `OPTIONAL_OPS`, which individual models require. It holds no
-    model state. `NumpyOps` is the reference implementation: when this docstring and that code
+    model state. `NumpyAudioBackend` is the reference implementation: when this docstring and that code
     disagree, the code wins.
 
     Conventions:
@@ -405,7 +374,7 @@ def _side_widths(side, missing):
     raise ValueError(f"Invalid padding side: {side!r}; expected 'left' or 'right'.")
 
 
-class NumpyOps(AudioOps):
+class NumpyAudioBackend(AudioOps):
     """The reference backend: every op, in numpy. No devices; `like` only matters for dtype."""
 
     name = "numpy"
@@ -418,16 +387,22 @@ class NumpyOps(AudioOps):
     def to_numpy(self, x):
         return np.asarray(x)
 
-    def to_device(self, x, device):
-        if device is not None and str(device) != "cpu":
+    @staticmethod
+    def _check_host(device):
+        # Every host spelling is accepted: "cpu", "cpu:0", torch.device("cpu").
+        if device is not None and str(device).split(":")[0] != "cpu":
             raise ValueError(
                 f"The numpy audio backend has no devices; got device={device!r}. Use backend='torch' to place "
                 "the arrays on an accelerator."
             )
+
+    def to_device(self, x, device):
+        self._check_host(device)
         return x
 
     def to_device_many(self, seq, device):
-        return [self.to_device(x, device) for x in seq]
+        self._check_host(device)  # before the loop: an empty batch still refuses a device
+        return list(seq)
 
     def astype(self, x, dtype):
         return x.astype(np.dtype(dtype), copy=False)
@@ -636,12 +611,12 @@ class NumpyOps(AudioOps):
         return top * (1 - wr)[:, None] + bottom * wr[:, None]
 
 
-register_audio_backend("numpy", NumpyOps)
+register_audio_backend("numpy", NumpyAudioBackend)
 
 
 if is_torch_available():
 
-    class TorchOps(AudioOps):
+    class TorchAudioBackend(AudioOps):
         """Every op in torch. Tensors live wherever `like` / the input lives; `"float64"` resolves
         to float32 on MPS, the library's convention (`torch.float64 if device.type != "mps" else
         torch.float32`, as in ViT-MAE, RT-DETR and Whisper generation), applied once, here."""
@@ -662,7 +637,7 @@ if is_torch_available():
         @staticmethod
         def _resolve_dtype(dtype: str, device_type: str) -> str:
             if device_type == "mps":
-                return TorchOps._WIDEST_ON_MPS.get(dtype, dtype)
+                return TorchAudioBackend._WIDEST_ON_MPS.get(dtype, dtype)
             return dtype
 
         @classmethod
@@ -952,4 +927,4 @@ if is_torch_available():
             )
             return resized[0, 0]
 
-    register_audio_backend("torch", TorchOps)
+    register_audio_backend("torch", TorchAudioBackend)

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 
 
 def _preemphasis_mode_from_htk_flavor(value, config_dict):
@@ -36,7 +36,7 @@ LEGACY_GEMMA_AUDIO_FIELDS = {
 }
 
 
-class Gemma3nAudioProcessorMixin:
+class Gemma3nAudioProcessor(BaseAudioProcessor):
     legacy_field_mapping = LEGACY_GEMMA_AUDIO_FIELDS
     max_length = 480000
     pad_to_multiple_of = 128
@@ -70,10 +70,6 @@ class Gemma3nAudioProcessorMixin:
         "computation_dtype": "float64",
     }
     truncation = True
-
-
-class Gemma3nAudioProcessor(Gemma3nAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["Gemma3nAudioProcessor"]

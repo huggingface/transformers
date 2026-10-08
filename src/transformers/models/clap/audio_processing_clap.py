@@ -16,8 +16,8 @@ from typing import Annotated, Literal
 
 import numpy as np
 
-from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 from ...utils import PaddingStrategy
 
@@ -71,9 +71,7 @@ class ClapAudioProcessorKwargs(AudioKwargs, total=False):
     padding: Annotated[bool | str | PaddingStrategy | None, clap_padding_validator]
 
 
-class ClapAudioProcessorMixin:
-    # The fusion path shrinks the full mel with `bilinear_resize`, an optional op.
-    required_ops = ("bilinear_resize",)
+class ClapAudioProcessor(BaseAudioProcessor):
     """CLAP's HTSAT encoder consumes a fixed 1001 x 64 log-mel image: 10 s at 48 kHz, hop 480.
 
     `_preprocess` makes one from any clip. A short clip is filled to the clip length (tiled, then
@@ -81,6 +79,9 @@ class ClapAudioProcessorMixin:
     window, `fusion` mels the whole clip and returns four views of it (a bilinear shrink plus three
     random crops). `is_longer` flags the clips whose fusion crops are real.
     """
+
+    # The fusion path shrinks the full mel with `bilinear_resize`, an optional op.
+    required_ops = ("bilinear_resize",)
 
     sampling_rate = 48000
     max_length = 480000
@@ -183,10 +184,6 @@ class ClapAudioProcessorMixin:
 
     def _bilinear_shrink(self, mel, chunk_frames):
         return self.ops.bilinear_resize(mel, (chunk_frames, mel.shape[-1]))
-
-
-class ClapAudioProcessor(ClapAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["ClapAudioProcessor"]

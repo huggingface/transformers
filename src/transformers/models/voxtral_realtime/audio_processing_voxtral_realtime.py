@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -27,7 +27,7 @@ class VoxtralRealtimeAudioProcessorKwargs(AudioKwargs, total=False):
     global_log_mel_max: float
 
 
-class VoxtralRealtimeAudioProcessorMixin:
+class VoxtralRealtimeAudioProcessor(BaseAudioProcessor):
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {
@@ -62,10 +62,6 @@ class VoxtralRealtimeAudioProcessorMixin:
             peak = self.ops.amax(features, (-2, -1), keepdims=True)
             features = self.ops.maximum(features, peak - 8.0)
         return (features + 4.0) / 4.0
-
-
-class VoxtralRealtimeAudioProcessor(VoxtralRealtimeAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["VoxtralRealtimeAudioProcessor"]

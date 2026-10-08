@@ -14,8 +14,8 @@
 
 from typing import Annotated
 
-from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import BatchFeature
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 from ...utils.type_validators import positive_int
 
@@ -37,7 +37,7 @@ class Gemma4UnifiedAudioProcessorKwargs(AudioKwargs, total=False):
     audio_samples_per_token: Annotated[int, positive_int]
 
 
-class Gemma4UnifiedAudioProcessorMixin:
+class Gemma4UnifiedAudioProcessor(BaseAudioProcessor):
     model_input_names = ["audio_features", "audio_features_mask"]
     legacy_field_mapping = {
         "feature_size": _gemma4_unified_feature_size_to_samples_per_token,
@@ -81,10 +81,6 @@ class Gemma4UnifiedAudioProcessorMixin:
         if pad_len:
             waveform = self.ops.pad(waveform, 0, pad_len, axis=-1)
         return self.ops.astype(self.ops.reshape(waveform, (-1, audio_samples_per_token)), "float32")
-
-
-class Gemma4UnifiedAudioProcessor(Gemma4UnifiedAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["Gemma4UnifiedAudioProcessor"]

@@ -14,7 +14,7 @@
 
 import numpy as np
 
-from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -35,14 +35,14 @@ def _max_length_from_default_audio_length(value, config_dict):
     and then never reads it — so the base mapping's `n_samples`/`chunk_length` route sends CLVP's
     padding to 30 s where the extractor uses 6 s. Both are neutralised below.
     """
-    sampling_rate = config_dict.get("sampling_rate") or ClvpAudioProcessorMixin.sampling_rate
+    sampling_rate = config_dict.get("sampling_rate") or ClvpAudioProcessor.sampling_rate
     config_dict.setdefault("max_length", value * sampling_rate)
 
 
 _max_length_from_default_audio_length.legacy_target = "max_length"
 
 
-class ClvpAudioProcessorMixin:
+class ClvpAudioProcessor(BaseAudioProcessor):
     legacy_field_mapping = {
         "default_audio_length": _max_length_from_default_audio_length,
         "n_samples": None,
@@ -89,10 +89,6 @@ class ClvpAudioProcessorMixin:
             norms = self.ops.astype(norms, self.ops.dtype_name(features))
             features = features / norms[:, None]
         return self.ops.astype(features, "float32")
-
-
-class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):
-    pass
 
 
 __all__ = ["ClvpAudioProcessor"]

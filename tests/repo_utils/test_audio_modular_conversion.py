@@ -30,27 +30,30 @@ class AudioModularConversionTest(unittest.TestCase):
         for model, parent in (("neucodec", "xcodec2"), ("nemotron_asr_streaming", "parakeet")):
             model_dir = ROOT / "src/transformers/models" / model
             files = convert_and_run_ruff(str(model_dir / f"modular_{model}.py"))
-            self.assertEqual(set(files), {"configuration", "modeling", "audio_processing", "audio_processing_numpy"})
+            self.assertEqual(set(files), {"configuration", "modeling", "audio_processing"})
             for kind, code in files.items():
                 with self.subTest(model=model, kind=kind):
                     self.assertEqual(code, (model_dir / f"{kind}_{model}.py").read_text())
                     if kind.startswith("audio_processing"):
                         self.assertNotIn(f"from ..{parent}", code)
 
-    def test_numpy_processor_runs_without_torch(self):
+    def test_processor_runs_without_torch(self):
+        # No `backend=`: with torch blocked, the default resolves to numpy.
         code = """
 import sys
 sys.modules['torch'] = None
 import numpy as np
-from transformers.models.neucodec.audio_processing_numpy_neucodec import NeuCodecAudioProcessorNumpy
-output = NeuCodecAudioProcessorNumpy()(
+from transformers.models.neucodec.audio_processing_neucodec import NeuCodecAudioProcessor
+assert NeuCodecAudioProcessor().backend == "numpy"
+output = NeuCodecAudioProcessor()(
     np.random.RandomState(0).randn(1600).astype(np.float32), return_tensors='np'
 )
 assert output['audio_values'].shape == (1, 1920)
 assert output['audio_features'].shape == (1, 5, 160)
 assert output['audio_features_mask'].shape == (1, 5)
-from transformers.models.nemotron_asr_streaming.audio_processing_numpy_nemotron_asr_streaming import NemotronAsrStreamingAudioProcessorNumpy
-streaming = NemotronAsrStreamingAudioProcessorNumpy()(np.zeros(1600, dtype=np.float32), return_tensors='np')
+from transformers.models.nemotron_asr_streaming.audio_processing_nemotron_asr_streaming import NemotronAsrStreamingAudioProcessor
+assert NemotronAsrStreamingAudioProcessor().backend == "numpy"
+streaming = NemotronAsrStreamingAudioProcessor()(np.zeros(1600, dtype=np.float32), return_tensors='np')
 assert streaming['audio_features'].shape[:2] == streaming['audio_features_mask'].shape
 assert sys.modules['torch'] is None
 """

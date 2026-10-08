@@ -19,6 +19,7 @@ import warnings
 from collections import OrderedDict
 
 from ...audio_processing_base import AudioProcessingMixin
+from ...audio_processing_utils import BaseAudioProcessor
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
@@ -33,134 +34,82 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-# Each entry maps a `model_type` to a dict of backend → audio-processor class name. The torch
-# entry is the default returned by `AutoAudioProcessor.from_pretrained`; the numpy entry, when
-# present, is the bit-exact CPU-only sibling (see docs/adr/0001-bit-exact-backend-parity.md).
-# Non-audio feature extractors (e.g. MarkupLM) keep a single-key dict for back-compat.
+# Each entry maps a `model_type` to its audio-processor class. The backend is not part of the mapping: it is
+# chosen at construction (`backend=`, torch if importable else numpy), see `BaseAudioProcessor`.
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
-        # The backend label reflects the actual base class of the registered processor. When a
-        # model has only one sibling today the other backend's lookup falls back via
-        # `_load_class_with_fallback` with a warning. Whisper is the first model with both.
-        (
-            "audio-spectrogram-transformer",
-            {
-                "torch": "AudioSpectrogramTransformerAudioProcessor",
-                "numpy": "AudioSpectrogramTransformerAudioProcessorNumpy",
-            },
-        ),
-        ("audioflamingo3", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
-        ("canary", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
-        ("clap", {"torch": "ClapAudioProcessor", "numpy": "ClapAudioProcessorNumpy"}),
-        ("clvp", {"torch": "ClvpAudioProcessor", "numpy": "ClvpAudioProcessorNumpy"}),
-        ("cohere_asr", {"torch": "CohereAsrAudioProcessor", "numpy": "CohereAsrAudioProcessorNumpy"}),
-        ("csm", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
-        ("dac", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
-        ("data2vec-audio", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("dia", {"torch": "DiaAudioProcessor", "numpy": "DiaAudioProcessorNumpy"}),
-        ("encodec", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
-        ("fun_asr_nano", {"torch": "FunAsrNanoAudioProcessor", "numpy": "FunAsrNanoAudioProcessorNumpy"}),
-        (
-            "fun_asr_nano_encoder",
-            {"torch": "FunAsrNanoAudioProcessor", "numpy": "FunAsrNanoAudioProcessorNumpy"},
-        ),
-        ("gemma3n", {"torch": "Gemma3nAudioProcessor", "numpy": "Gemma3nAudioProcessorNumpy"}),
-        ("gemma4", {"torch": "Gemma4AudioProcessor", "numpy": "Gemma4AudioProcessorNumpy"}),
-        (
-            "gemma4_unified",
-            {"torch": "Gemma4UnifiedAudioProcessor", "numpy": "Gemma4UnifiedAudioProcessorNumpy"},
-        ),
-        ("glmasr", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
-        ("granite_speech", {"torch": "GraniteSpeechAudioProcessor", "numpy": "GraniteSpeechAudioProcessorNumpy"}),
-        (
-            "granite_speech5_ctc",
-            {"torch": "GraniteSpeech5AudioProcessor", "numpy": "GraniteSpeech5AudioProcessorNumpy"},
-        ),
-        (
-            "granite_speech5_encoder",
-            {"torch": "GraniteSpeech5AudioProcessor", "numpy": "GraniteSpeech5AudioProcessorNumpy"},
-        ),
-        ("granite_speech_plus", {"torch": "GraniteSpeechAudioProcessor", "numpy": "GraniteSpeechAudioProcessorNumpy"}),
-        ("higgs_audio_v2_tokenizer", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
-        ("hubert", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("inkling_mm_model", {"torch": "InklingAudioProcessor", "numpy": "InklingAudioProcessorNumpy"}),
-        (
-            "kyutai_speech_to_text",
-            {"torch": "KyutaiSpeechToTextAudioProcessor", "numpy": "KyutaiSpeechToTextAudioProcessorNumpy"},
-        ),
-        ("lasr_ctc", {"torch": "LasrAudioProcessor", "numpy": "LasrAudioProcessorNumpy"}),
-        ("lasr_encoder", {"torch": "LasrAudioProcessor", "numpy": "LasrAudioProcessorNumpy"}),
-        ("markuplm", {"torch": "MarkupLMFeatureExtractor"}),
-        ("mimi", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
-        ("moonshine", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("moshi", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
-        ("musicgen", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
-        ("musicgen_melody", {"torch": "MusicgenMelodyAudioProcessor", "numpy": "MusicgenMelodyAudioProcessorNumpy"}),
-        (
-            "nemotron3_5_asr",
-            {"torch": "NemotronAsrStreamingAudioProcessor", "numpy": "NemotronAsrStreamingAudioProcessorNumpy"},
-        ),
-        (
-            "nemotron_asr_streaming_encoder",
-            {"torch": "NemotronAsrStreamingAudioProcessor", "numpy": "NemotronAsrStreamingAudioProcessorNumpy"},
-        ),
-        ("parakeet_ctc", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
-        ("parakeet_encoder", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
-        ("neucodec", {"torch": "NeuCodecAudioProcessor", "numpy": "NeuCodecAudioProcessorNumpy"}),
-        ("parakeet_rnnt", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
-        ("parakeet_tdt", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
-        ("pe_audio", {"torch": "PeAudioAudioProcessor", "numpy": "PeAudioAudioProcessorNumpy"}),
-        ("pe_audio_video", {"torch": "PeAudioAudioProcessor", "numpy": "PeAudioAudioProcessorNumpy"}),
-        ("phi4_multimodal", {"torch": "Phi4MultimodalAudioProcessor", "numpy": "Phi4MultimodalAudioProcessorNumpy"}),
-        ("pop2piano", {"torch": "Pop2PianoAudioProcessor", "numpy": "Pop2PianoAudioProcessorNumpy"}),
-        ("qwen2_5_omni", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
-        ("qwen2_audio", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
-        ("qwen3_asr", {"torch": "Qwen3ASRAudioProcessor", "numpy": "Qwen3ASRAudioProcessorNumpy"}),
-        ("qwen3_omni_moe", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
-        ("seamless_m4t", {"torch": "SeamlessM4tAudioProcessor", "numpy": "SeamlessM4tAudioProcessorNumpy"}),
-        ("seamless_m4t_v2", {"torch": "SeamlessM4tAudioProcessor", "numpy": "SeamlessM4tAudioProcessorNumpy"}),
-        ("sew", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("sew-d", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("speech_to_text", {"torch": "SpeechToTextAudioProcessor", "numpy": "SpeechToTextAudioProcessorNumpy"}),
-        ("speecht5", {"torch": "SpeechT5AudioProcessor", "numpy": "SpeechT5AudioProcessorNumpy"}),
-        ("unispeech", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("unispeech-sat", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("univnet", {"torch": "UnivNetAudioProcessor", "numpy": "UnivNetAudioProcessorNumpy"}),
-        (
-            "vibevoice",
-            {
-                "torch": "VibevoiceAcousticTokenizerAudioProcessor",
-                "numpy": "VibevoiceAcousticTokenizerAudioProcessorNumpy",
-            },
-        ),
-        (
-            "vibevoice_acoustic_tokenizer",
-            {
-                "torch": "VibevoiceAcousticTokenizerAudioProcessor",
-                "numpy": "VibevoiceAcousticTokenizerAudioProcessorNumpy",
-            },
-        ),
-        (
-            "vibevoice_asr",
-            {
-                "torch": "VibevoiceAcousticTokenizerAudioProcessor",
-                "numpy": "VibevoiceAcousticTokenizerAudioProcessorNumpy",
-            },
-        ),
-        ("voxtral", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
-        (
-            "voxtral_realtime",
-            {"torch": "VoxtralRealtimeAudioProcessor", "numpy": "VoxtralRealtimeAudioProcessorNumpy"},
-        ),
-        ("wav2vec2", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("wav2vec2-bert", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("wav2vec2-conformer", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("wavlm", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
-        ("whisper", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
-        ("xcodec", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
-        ("xcodec2", {"torch": "Xcodec2AudioProcessor", "numpy": "Xcodec2AudioProcessorNumpy"}),
+        ("audio-spectrogram-transformer", "AudioSpectrogramTransformerAudioProcessor"),
+        ("audioflamingo3", "WhisperAudioProcessor"),
+        ("canary", "ParakeetAudioProcessor"),
+        ("clap", "ClapAudioProcessor"),
+        ("clvp", "ClvpAudioProcessor"),
+        ("cohere_asr", "CohereAsrAudioProcessor"),
+        ("csm", "EncodecAudioProcessor"),
+        ("dac", "DacAudioProcessor"),
+        ("data2vec-audio", "Wav2Vec2AudioProcessor"),
+        ("dia", "DiaAudioProcessor"),
+        ("encodec", "EncodecAudioProcessor"),
+        ("fun_asr_nano", "FunAsrNanoAudioProcessor"),
+        ("fun_asr_nano_encoder", "FunAsrNanoAudioProcessor"),
+        ("gemma3n", "Gemma3nAudioProcessor"),
+        ("gemma4", "Gemma4AudioProcessor"),
+        ("gemma4_unified", "Gemma4UnifiedAudioProcessor"),
+        ("glmasr", "WhisperAudioProcessor"),
+        ("granite_speech", "GraniteSpeechAudioProcessor"),
+        ("granite_speech5_ctc", "GraniteSpeech5AudioProcessor"),
+        ("granite_speech5_encoder", "GraniteSpeech5AudioProcessor"),
+        ("granite_speech_plus", "GraniteSpeechAudioProcessor"),
+        ("higgs_audio_v2_tokenizer", "DacAudioProcessor"),
+        ("hubert", "Wav2Vec2AudioProcessor"),
+        ("inkling_mm_model", "InklingAudioProcessor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextAudioProcessor"),
+        ("lasr_ctc", "LasrAudioProcessor"),
+        ("lasr_encoder", "LasrAudioProcessor"),
+        ("markuplm", "MarkupLMFeatureExtractor"),
+        ("mimi", "EncodecAudioProcessor"),
+        ("moonshine", "Wav2Vec2AudioProcessor"),
+        ("moshi", "EncodecAudioProcessor"),
+        ("musicgen", "EncodecAudioProcessor"),
+        ("musicgen_melody", "MusicgenMelodyAudioProcessor"),
+        ("nemotron3_5_asr", "NemotronAsrStreamingAudioProcessor"),
+        ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingAudioProcessor"),
+        ("parakeet_ctc", "ParakeetAudioProcessor"),
+        ("parakeet_encoder", "ParakeetAudioProcessor"),
+        ("neucodec", "NeuCodecAudioProcessor"),
+        ("parakeet_rnnt", "ParakeetAudioProcessor"),
+        ("parakeet_tdt", "ParakeetAudioProcessor"),
+        ("pe_audio", "PeAudioAudioProcessor"),
+        ("pe_audio_video", "PeAudioAudioProcessor"),
+        ("phi4_multimodal", "Phi4MultimodalAudioProcessor"),
+        ("pop2piano", "Pop2PianoAudioProcessor"),
+        ("qwen2_5_omni", "WhisperAudioProcessor"),
+        ("qwen2_audio", "WhisperAudioProcessor"),
+        ("qwen3_asr", "Qwen3ASRAudioProcessor"),
+        ("qwen3_omni_moe", "WhisperAudioProcessor"),
+        ("seamless_m4t", "SeamlessM4tAudioProcessor"),
+        ("seamless_m4t_v2", "SeamlessM4tAudioProcessor"),
+        ("sew", "Wav2Vec2AudioProcessor"),
+        ("sew-d", "Wav2Vec2AudioProcessor"),
+        ("speech_to_text", "SpeechToTextAudioProcessor"),
+        ("speecht5", "SpeechT5AudioProcessor"),
+        ("unispeech", "Wav2Vec2AudioProcessor"),
+        ("unispeech-sat", "Wav2Vec2AudioProcessor"),
+        ("univnet", "UnivNetAudioProcessor"),
+        ("vibevoice", "VibevoiceAcousticTokenizerAudioProcessor"),
+        ("vibevoice_acoustic_tokenizer", "VibevoiceAcousticTokenizerAudioProcessor"),
+        ("vibevoice_asr", "VibevoiceAcousticTokenizerAudioProcessor"),
+        ("voxtral", "WhisperAudioProcessor"),
+        ("voxtral_realtime", "VoxtralRealtimeAudioProcessor"),
+        ("wav2vec2", "Wav2Vec2AudioProcessor"),
+        ("wav2vec2-bert", "Wav2Vec2AudioProcessor"),
+        ("wav2vec2-conformer", "Wav2Vec2AudioProcessor"),
+        ("wavlm", "Wav2Vec2AudioProcessor"),
+        ("whisper", "WhisperAudioProcessor"),
+        ("xcodec", "DacAudioProcessor"),
+        ("xcodec2", "Xcodec2AudioProcessor"),
     ]
 )
+
 
 # Irregular legacy `XxxFeatureExtractor` names that do not derive from the new
 # `XxxAudioProcessor` by simple suffix substitution. Used by
@@ -204,26 +153,21 @@ def _legacy_name_candidates(class_name: str) -> list[str]:
 def feature_extractor_class_from_name(class_name: str):
     """Resolve an audio-processor or legacy feature-extractor name to its class object.
 
-    Handles both modern names (`WhisperAudioProcessor`, `WhisperAudioProcessorNumpy`) and the
-    legacy `XxxFeatureExtractor` names still found in hub `preprocessor_config.json` files.
+    Handles both modern names (`WhisperAudioProcessor`) and the legacy `XxxFeatureExtractor` names still
+    found in hub `preprocessor_config.json` files.
     """
     for candidate in _legacy_name_candidates(class_name):
-        for model_type, extractors_dict in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
-            if candidate in extractors_dict.values():
-                module_name = model_type_to_module_name(model_type)
-                module = importlib.import_module(f".{module_name}", "transformers.models")
+        for model_type, extractor in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
+            if extractor == candidate:
+                module = importlib.import_module(f".{model_type_to_module_name(model_type)}", "transformers.models")
                 try:
                     return getattr(module, candidate)
                 except AttributeError:
                     continue
 
-    for mapping in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
-        if isinstance(mapping, dict):
-            for cls in mapping.values():
-                if getattr(cls, "__name__", None) == class_name:
-                    return cls
-        elif getattr(mapping, "__name__", None) == class_name:
-            return mapping
+    for extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
+        if getattr(extractor, "__name__", None) == class_name:
+            return extractor
 
     # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
@@ -234,92 +178,18 @@ def feature_extractor_class_from_name(class_name: str):
     return None
 
 
-def _resolve_audio_backend(backend: str | None) -> str:
-    """Resolve raw backend input to a backend name.
-
-    Default is `'torch'`; `'numpy'` is the bit-exact CPU-only sibling. Any other name is a backend
-    registered through `AutoAudioProcessor.register(..., audio_processor_classes={name: cls})`. If a
-    model has no sibling for the requested backend, `_load_class_with_fallback` warns and falls back
-    to the available one.
-    """
+def _backend_kwargs(audio_processor_class, backend):
+    """The `backend` kwarg for `audio_processor_class.from_pretrained`: forwarded only when given (`None` lets the
+    class default decide). `backend=` selects an op table; only a `BaseAudioProcessor` has one, so it is refused
+    rather than dropped for any other class."""
     if backend is None:
-        return "torch"
-    if not isinstance(backend, str):
-        raise TypeError(f"`backend` must be a string, got {type(backend).__name__}.")
-    return backend
-
-
-def _load_class_with_fallback(mapping, backend):
-    """Load an audio-processor class from a backend→class mapping, with fallback.
-
-    Tries the requested backend first; if the model has no sibling for it, falls back to any
-    other available backend and warns. Returns `None` if the mapping is empty.
-    """
-    backends_to_try = [backend] + [b for b in mapping if b != backend]
-
-    for b in backends_to_try:
-        value = mapping.get(b)
-        if value is None:
-            continue
-
-        if isinstance(value, type):
-            processor_class = value
-        else:
-            processor_class = feature_extractor_class_from_name(value)
-
-        if processor_class is None or getattr(processor_class, "is_dummy", False):
-            continue
-
-        if b != backend:
-            logger.warning_once(
-                f"Requested audio-processor backend {backend!r} is not available for this model. "
-                f"Falling back to {b!r} backend."
-            )
-        return processor_class
-
-    return None
-
-
-def _find_mapping_for_audio_processor(base_class_name: str) -> dict | None:
-    """Find the backend→class mapping that contains `base_class_name` in its values."""
-
-    def _value_matches(val, name: str) -> bool:
-        if val is None:
-            return False
-        if isinstance(val, str):
-            return val == name
-        if isinstance(val, type):
-            return getattr(val, "__name__", None) == name
-        return False
-
-    # Registered mappings first, so a backend registered on a native config is found.
-    for content in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
-        if isinstance(content, dict) and any(_value_matches(v, base_class_name) for v in content.values()):
-            return content
-
-    for mapping_dict in FEATURE_EXTRACTOR_MAPPING_NAMES.values():
-        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
-            return mapping_dict
-
-    return None
-
-
-def _load_backend_class(base_class_name: str, backend: str):
-    """Load an audio-processor class for the requested backend, with fallback."""
-    mapping = _find_mapping_for_audio_processor(base_class_name)
-    if mapping is None:
-        # Unknown class name (e.g. remote code, custom registration): default to the literal name
-        mapping = {"torch": base_class_name}
-    return _load_class_with_fallback(mapping, backend)
-
-
-def _resolve_auto_map_class_ref(auto_map, backend: str) -> str:
-    """Extract the class reference string from an `auto_map` entry based on backend preference."""
-    if isinstance(auto_map, dict):
-        return auto_map.get(backend) or next(iter(auto_map.values()))
-    if isinstance(auto_map, (list, tuple)):
-        return auto_map[0]
-    return auto_map
+        return {}
+    if not (isinstance(audio_processor_class, type) and issubclass(audio_processor_class, BaseAudioProcessor)):
+        raise ValueError(
+            f"`backend={backend!r}` selects an audio backend, but {audio_processor_class.__name__} is not a "
+            "`BaseAudioProcessor`."
+        )
+    return {"backend": backend}
 
 
 def get_feature_extractor_config(
@@ -413,12 +283,14 @@ def get_feature_extractor_config(
     return feature_extractor_dict or {}
 
 
-def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, backend: str, **kwargs):
+def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, **kwargs):
     """Shared resolution logic used by `AutoAudioProcessor` and the deprecated `AutoFeatureExtractor`.
 
-    Reads the hub config, identifies the class via the new `audio_processor_type` key, falling
-    back to the legacy `feature_extractor_type` key, then picks the right backend sibling.
+    Reads the hub config and identifies the class via the new `audio_processor_type` key, falling
+    back to the legacy `feature_extractor_type` key. A given `backend` is passed to the class's
+    `from_pretrained` only (not to the config or remote-code lookups).
     """
+    backend = kwargs.pop("backend", None)
     config = kwargs.pop("config", None)
     trust_remote_code = kwargs.pop("trust_remote_code", None)
     kwargs["_from_auto"] = True
@@ -444,17 +316,17 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
 
     audio_processor_class = None
     if class_name_in_config is not None:
-        # Try the modern (translated) name first so the backend mapping applies, then the
-        # literal name (covers registered custom classes that keep a legacy-style name).
+        # Try the modern (translated) name first, then the literal name (covers registered custom
+        # classes that keep a legacy-style name).
         for candidate in reversed(_legacy_name_candidates(class_name_in_config)):
-            audio_processor_class = _load_backend_class(candidate, backend)
+            audio_processor_class = feature_extractor_class_from_name(candidate)
             if audio_processor_class is not None:
                 break
 
     has_remote_code = audio_processor_auto_map is not None
     has_local_code = audio_processor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
     if has_local_code and audio_processor_class is None:
-        audio_processor_class = _load_class_with_fallback(FEATURE_EXTRACTOR_MAPPING[type(config)], backend)
+        audio_processor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
     explicit_local_code = (
         has_local_code
         and audio_processor_class is not None
@@ -462,7 +334,11 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
     )
 
     if has_remote_code:
-        class_ref = _resolve_auto_map_class_ref(audio_processor_auto_map, backend)
+        class_ref = (
+            audio_processor_auto_map[0]
+            if isinstance(audio_processor_auto_map, (list, tuple))
+            else audio_processor_auto_map
+        )
         upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
@@ -472,10 +348,14 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
         audio_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
         _ = kwargs.pop("code_revision", None)
         audio_processor_class.register_for_auto_class()
-        return audio_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        return audio_processor_class.from_pretrained(
+            pretrained_model_name_or_path, **kwargs, **_backend_kwargs(audio_processor_class, backend)
+        )
 
     if audio_processor_class is not None:
-        return audio_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        return audio_processor_class.from_pretrained(
+            pretrained_model_name_or_path, **kwargs, **_backend_kwargs(audio_processor_class, backend)
+        )
 
     raise ValueError(
         f"Unrecognized audio processor in {pretrained_model_name_or_path}. Should have an "
@@ -488,7 +368,7 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
 class AutoAudioProcessor:
     r"""
     This is a generic audio processor class that will be instantiated as one of the
-    backend-specific [`~audio_processing_base.AudioProcessingMixin`] subclasses when created with the
+    [`~audio_processing_base.AudioProcessingMixin`] subclasses when created with the
     [`AutoAudioProcessor.from_pretrained`] class method.
 
     This class cannot be instantiated directly using `__init__()` (throws an error).
@@ -507,75 +387,32 @@ class AutoAudioProcessor:
         Instantiate one of the audio processor classes of the library from a pretrained model.
 
         The class to instantiate is selected by reading the `audio_processor_type`
-        (or legacy `feature_extractor_type`) entry in the hub `preprocessor_config.json`, then
-        picking the right backend sibling (`backend="torch"` by default; `"numpy"` for the
-        bit-exact CPU-only variant — see [`~docs/adr/0001-bit-exact-backend-parity`]).
+        (or legacy `feature_extractor_type`) entry in the hub `preprocessor_config.json`.
 
         Params:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 A model identifier on huggingface.co, a path to a saved model directory, or a path to
                 a saved audio-processor JSON file.
-            backend (`str`, *optional*, defaults to `"torch"`):
-                Which backend sibling to load. `"torch"` returns the `XxxAudioProcessor` class;
-                `"numpy"` returns `XxxAudioProcessorNumpy` when it exists; any other name selects a
-                backend registered with [`AutoAudioProcessor.register`]. If the requested
-                backend has no sibling for the resolved model, falls back to the available one
-                with a warning.
+            backend (`str`, *optional*):
+                Which op table the processor computes with (`"torch"`, `"numpy"`, or a backend registered with
+                `register_audio_backend`, e.g. `"mlx"` after `import mlx_audio.transformers_backend`). Defaults to
+                torch when installed, else numpy. Not saved with the processor.
 
         List options
         """
-        backend = _resolve_audio_backend(kwargs.pop("backend", None))
-        return _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, backend=backend, **kwargs)
+        return _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
     @staticmethod
-    def register(
-        config_class,
-        audio_processor_class: type | dict[str, type] | None = None,
-        audio_processor_classes: dict[str, type] | None = None,
-        exist_ok: bool = False,
-    ):
-        """
-        Register a new audio processor for this class.
-
-        Args:
-            config_class ([`PreTrainedConfig`]):
-                The configuration corresponding to the model to register.
-            audio_processor_class ([`AudioProcessingMixin`], *optional*):
-                A single class, registered as the torch backend. A backend→class dict is also accepted here
-                for backward compatibility; prefer `audio_processor_classes`.
-            audio_processor_classes (`dict[str, type]`, *optional*):
-                Dictionary mapping backend names to audio processor classes. Allows registering custom backends,
-                loaded with `AutoAudioProcessor.from_pretrained(..., backend=name)`.
-                Example: `{"torch": MyTorchProcessor, "numpy": MyNumpyProcessor, "mlx": MyMlxProcessor}`
-            exist_ok (`bool`, *optional*, defaults to `False`):
-                If `True`, allow registering on a config that already has audio processors, including a
-                Transformers config. Backends not named in `audio_processor_classes` are kept.
-        """
-        if audio_processor_classes is None:
-            if isinstance(audio_processor_class, dict):
-                audio_processor_classes = audio_processor_class
-            elif audio_processor_class is not None:
-                audio_processor_classes = {"torch": audio_processor_class}
-        if not audio_processor_classes:
-            raise ValueError(
-                "You need to specify at least one audio processor class. "
-                "Use `audio_processor_classes={'backend_name': ProcessorClass}`."
-            )
-
-        # Avoid resetting existing processors if we are passing partial updates
-        if config_class in FEATURE_EXTRACTOR_MAPPING:
-            existing_mapping = FEATURE_EXTRACTOR_MAPPING[config_class]
-            if isinstance(existing_mapping, dict):
-                audio_processor_classes = {**existing_mapping, **audio_processor_classes}
-
-        FEATURE_EXTRACTOR_MAPPING.register(config_class, audio_processor_classes, exist_ok=exist_ok)
+    def register(config_class, audio_processor_class, exist_ok=False):
+        """Register `audio_processor_class` for `config_class`. The backend is chosen when it is built."""
+        FEATURE_EXTRACTOR_MAPPING.register(config_class, audio_processor_class, exist_ok=exist_ok)
 
 
 class AutoFeatureExtractor:
     r"""
     Deprecated alias for [`AutoAudioProcessor`].
 
-    Returns the same class as `AutoAudioProcessor.from_pretrained` (torch backend by default).
+    Returns the same class as `AutoAudioProcessor.from_pretrained`.
     Removal target: transformers v5.15. See [ADR 0002](docs/adr/0002-legacy-field-mapping.md).
     """
 
@@ -594,8 +431,7 @@ class AutoFeatureExtractor:
             FutureWarning,
             stacklevel=2,
         )
-        backend = _resolve_audio_backend(kwargs.pop("backend", None))
-        return _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, backend=backend, **kwargs)
+        return _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
     @staticmethod
     def register(config_class, feature_extractor_class, exist_ok=False):
