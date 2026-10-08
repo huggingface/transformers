@@ -231,12 +231,8 @@ class TextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
@@ -564,7 +560,7 @@ class ViltModel(ViltPreTrainedModel):
         ```python
         >>> from transformers import ViltProcessor, ViltModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # prepare image and text
@@ -713,16 +709,12 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
-        labels (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in *[-100, 0, ...,
-            config.vocab_size]* (see *input_ids* docstring) Tokens with indices set to *-100* are ignored (masked), the
-            loss is only computed for the tokens with labels in *[0, ..., config.vocab_size]*
 
         Examples:
 
         ```python
         >>> from transformers import ViltProcessor, ViltForMaskedLM
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import re
@@ -892,7 +884,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForQuestionAnswering
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -997,7 +989,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForImageAndTextRetrieval
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -1103,7 +1095,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForImagesAndTextClassification
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 

@@ -181,6 +181,10 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip("Uses rope for backbone vision features which are fixed shape, no support for rope scaling")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)

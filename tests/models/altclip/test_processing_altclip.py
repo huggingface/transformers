@@ -24,4 +24,5 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class AltClipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AltCLIPProcessor
-    model_id = "BAAI/AltCLIP"
+    # Tiny processor created with make_tiny_processor.py from "BAAI/AltCLIP"
+    tiny_model_id = "hf-internal-testing/tiny-processor-altclip"

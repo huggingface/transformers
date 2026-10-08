@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2026-05-05.*
@@ -27,13 +27,13 @@ Gemma 4 Assistant is a small, text-only model that enables speculative decoding 
 Multi-Token Prediction (MTP) method and associated candidate generator. Pre-trained models are provided for the IT
 variants of the Gemma 4 E2B, E4B, 31B and 26B-A4B (MoE) models.
 
-Architecturally, the Gemma 4 Assistant shares the same [`Gemma4TextModel` backbone](gemma4#transformers.Gemma4TextModel)
+Architecturally, the Gemma 4 Assistant shares the same [`Gemma4TextModel`] backbone
 as other Gemma 4 models, but differs in a few key ways:
 
 *   **The entire model uses KV sharing**. This technique, originally introduced with [Gemma 3n](./gemma3n), allows the
     model to reuse the KV cache populated by the target model the assistant supports, allowing the assistant to skip
     the pre-fille phase entirely, and considerably reducing attention compute during the forward pass.
-*   **The `position_ids` value are constant**. Since the KV cache is shared and the assistant does not have a mean of
+*   **The `position_ids` value are constant**. Since the KV cache is shared and the assistant does not have a way of
     updating the cache, the assistant predicts all tokens from the same position ID.
 *   **Inputs are the concatenation of embeddings and hidden states**. To adapt for the static KV cache and
     `position_ids`, the model takes its inputs as the concatenation of the `embedding` and `hidden_states` for the last

@@ -491,6 +491,12 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(
+        reason="Wav2Vec2Conformer uses relative position embeddings that produce a dense attention bias incompatible with Flash Attention"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @unittest.skip(reason="Wav2Vec2Conformer has input_values instead of input_ids")
     def test_forward_signature(self):
         pass

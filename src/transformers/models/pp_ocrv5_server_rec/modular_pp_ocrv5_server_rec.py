@@ -21,8 +21,8 @@ import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -65,7 +65,24 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
     """
 
     model_type = "pp_ocrv5_server_rec"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+                "stage_downsample": [True, True, True, True],
+                "stem_strides": [2, 1, 1, 1, 1],
+                "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
+            },
+        ),
+    }
 
     hidden_act: str = "silu"
     backbone_config: dict | PreTrainedConfig | None = None
@@ -82,23 +99,6 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.conv_kernel_size is None:
             self.conv_kernel_size = [1, 3]
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={
-                "arch": "L",
-                "return_idx": [0, 1, 2, 3],
-                "freeze_stem_only": True,
-                "freeze_at": 0,
-                "freeze_norm": True,
-                "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-                "stage_downsample": [True, True, True, True],
-                "stem_strides": [2, 1, 1, 1, 1],
-                "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
-            },
-            **kwargs,
-        )
         super().__post_init__(**kwargs)
 
 
@@ -154,27 +154,27 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
 
         # [Key Change] Use get_target_size to calculate target_size for resizing.
-        shape_list = list(grouped_images.keys())
+        shape_list = [image.shape[-2:] for image in images]
         target_size = self.get_target_size(shape_list)
 
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images.float(), size=target_size, resample=resample)
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad and target_size.width < pad_size.width:

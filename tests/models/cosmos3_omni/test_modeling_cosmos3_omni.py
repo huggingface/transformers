@@ -20,7 +20,6 @@ from Qwen3-VL. The `test_mismatching_num_image_tokens` override and gradient-che
 xfails are kept because the base `VLMModelTest` versions do not hold for this architecture.
 """
 
-import copy
 import unittest
 
 import pytest
@@ -35,6 +34,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -73,7 +73,7 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("depth", 2)
         kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
         kwargs.setdefault("num_heads", 4)
@@ -85,7 +85,7 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
             "rope_parameters",
             {
                 "rope_type": "default",
-                "mrope_section": [16, 8, 8],
+                "mrope_section": [2, 3, 3],
                 "mrope_interleaved": True,
                 "rope_theta": 10000,
             },
@@ -97,12 +97,14 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
         self.vision_hidden_size = self.hidden_size
         self.vision_intermediate_size = self.hidden_size
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # Cosmos3 Reasoner (like Qwen3-VL) expects flattened patches:
         # (total_patches, channels * patch_size^2 * temporal_patch_size)
         return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                batch_size * (self.image_size**2) // (self.patch_size**2),
                 self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
@@ -120,11 +122,12 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
         input_ids[:, 0] = self.vision_start_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -166,54 +169,6 @@ class Cosmos3OmniModelTest(VLMModelTest, unittest.TestCase):
         # base `Cosmos3OmniModel` (whose keys lack the prefix). Skip the base-model check.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    def test_mismatching_num_image_tokens(self):
-        # Override the base test because we need to slice image_grid_thw too
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            _ = model(**input_dict)  # successful forward with no modifications
-            curr_input_dict = copy.deepcopy(input_dict)
-
-            # remove one image but leave the image token in text
-            patch_size = config.vision_config.patch_size
-            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            model.base_model.rope_deltas = None
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-                )
-
-            model.base_model.rope_deltas = None
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            mm_token_type_ids = torch.cat(
-                [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
-            )
-            _ = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                mm_token_type_ids=mm_token_type_ids,
-            )
-
 
 @require_torch
 @slow
@@ -228,7 +183,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
                         ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
@@ -241,7 +196,9 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"),
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "What do you see in this image?"},
                 ],
@@ -251,6 +208,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_small_model_integration(self):
         # Let's make sure we test the preprocessing to replace what is used
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
@@ -265,7 +223,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
         expected_decoded_texts = Expectations({
-            ("cuda", None): 'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
+            (None, None): "user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom",
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
@@ -275,6 +233,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_batched(self):
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
             "nvidia/Cosmos3-Nano", dtype="bfloat16", device_map=torch_device
@@ -294,12 +253,10 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("cuda", None): [
-                    "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and",
-                    "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink couch. The cats appear to be of the same breed, with brown and black striped fur. They're both lying down in a relaxed position",
-                ],
+                (None, None): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom", 'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'],
             }
-        )
+        )  # fmt: skip
+
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         decoded_output = self.processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)

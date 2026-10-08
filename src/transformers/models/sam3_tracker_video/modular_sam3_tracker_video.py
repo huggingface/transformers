@@ -16,10 +16,10 @@
 import torch
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..auto import AutoConfig, AutoModel
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
     Sam2VideoAttention,
@@ -50,6 +50,9 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoVisionRotaryEmbedding,
 )
 from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/sam3")
@@ -126,8 +129,6 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[72, 72]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
@@ -193,10 +194,15 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam3_tracker_video"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "prompt_encoder_config": Sam3TrackerVideoPromptEncoderConfig,
-        "mask_decoder_config": Sam3TrackerVideoMaskDecoderConfig,
+    default_rope_type = "axial"
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="sam3_vision_model",
+            init_kwargs={"backbone_feature_sizes": [[288, 288], [144, 144], [72, 72]]},
+        ),
+        "prompt_encoder_config": SubConfigSpec(config_class=Sam3TrackerVideoPromptEncoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=Sam3TrackerVideoMaskDecoderConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -221,11 +227,12 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     memory_attention_feed_forward_hidden_size: int = 2048
     memory_attention_feed_forward_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: int = 10000
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
     memory_encoder_hidden_size: int = 256
     memory_encoder_output_channels: int = 64
+    rope_parameters: dict | None = None
+
     mask_downsampler_embed_dim: int = 256
     mask_downsampler_kernel_size: int = 3
     mask_downsampler_stride: int = 2
@@ -241,30 +248,27 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     memory_fuser_hidden_act: str = "gelu"
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         self.memory_attention_rope_feat_sizes = (
             [72, 72] if self.memory_attention_rope_feat_sizes is None else self.memory_attention_rope_feat_sizes
         )
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam3_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam3_vision_model"](
-                backbone_feature_sizes=[[288, 288], [144, 144], [72, 72]]
-            )
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = Sam3TrackerVideoPromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = Sam3TrackerVideoPromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = Sam3TrackerVideoMaskDecoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = Sam3TrackerVideoMaskDecoderConfig()
-
         self.image_size = kwargs.pop("image_size", 1008)
-        super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
     @property
     def image_size(self):
@@ -333,7 +337,8 @@ class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    pass
+    def __init__(self, config: Sam3TrackerVideoConfig, device=None):
+        super().__init__(config, device=device)
 
 
 class Sam3TrackerVideoRoPEAttention(Sam2VideoRoPEAttention):

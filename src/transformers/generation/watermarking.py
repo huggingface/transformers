@@ -157,10 +157,13 @@ class WatermarkDetector:
         num_tokens_scored_batch = np.zeros(batch_size)
         green_token_count_batch = np.zeros(batch_size)
         for batch_idx in range(ngram_tensors.shape[0]):
-            frequencies_table = collections.Counter(ngram_tensors[batch_idx])
+            # Tensor keys are hashed by identity, so equal token windows need integer tuple keys.
+            # Scoring still needs tensors with the input dtype and device.
+            frequencies_table = collections.Counter(tuple(ngram) for ngram in ngram_tensors[batch_idx].tolist())
             ngram_to_watermark_lookup = {}
             for ngram_example in frequencies_table:
-                prefix = ngram_example if selfhash else ngram_example[:-1]
+                ngram_tensor = input_ids.new_tensor(ngram_example)
+                prefix = ngram_tensor if selfhash else ngram_tensor[:-1]
                 target = ngram_example[-1]
                 ngram_to_watermark_lookup[ngram_example] = self._get_ngram_score_cached(prefix, target)
 
@@ -172,8 +175,7 @@ class WatermarkDetector:
             else:
                 num_tokens_scored_batch[batch_idx] = sum(frequencies_table.values())
                 green_token_count_batch[batch_idx] = sum(
-                    freq * outcome
-                    for freq, outcome in zip(frequencies_table.values(), ngram_to_watermark_lookup.values())
+                    freq * ngram_to_watermark_lookup[ngram] for ngram, freq in frequencies_table.items()
                 )
         return num_tokens_scored_batch, green_token_count_batch
 
@@ -251,7 +253,7 @@ class BayesianDetectorConfig(PreTrainedConfig):
     Args:
         watermarking_depth (`int`, *optional*):
             The number of tournament layers.
-        base_rate (`float1`, *optional*, defaults to 0.5):
+        base_rate (`float`, *optional*, defaults to 0.5):
             Prior probability P(w) that a text is watermarked.
     """
 
@@ -385,6 +387,8 @@ class BayesianDetectorModel(PreTrainedModel):
             watermarking_depth=self.watermarking_depth
         )
         self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
+
+        self.post_init()
 
     @torch.no_grad()
     def _init_weights(self, module):

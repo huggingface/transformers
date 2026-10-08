@@ -503,7 +503,7 @@ def prepare_groceries_image():
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -635,19 +635,15 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(
             scores2,
-            torch.tensor([0.7675, 0.7505, 0.5348]).to(torch_device),
+            torch.tensor([0.9252, 0.6841, 0.0445]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             masks_logits2,
-            torch.tensor(
-                [
-                    [-10.3051, -9.9056, -10.5699],
-                    [-8.8009, -11.1684, -10.7158],
-                    [-9.6653, -10.9755, -10.3231],
-                ]
-            ).to(torch_device),
+            torch.tensor([[-3.5653, -3.431, -3.9831], [-1.5004, -1.3701, -2.0716], [-1.9597, -0.6249, -0.8506]]).to(
+                torch_device
+            ),
             atol=1e-4,
             rtol=1e-4,
         )

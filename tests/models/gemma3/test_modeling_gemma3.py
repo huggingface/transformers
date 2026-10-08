@@ -47,6 +47,7 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -62,6 +63,7 @@ if is_torch_available():
         Gemma3TextForSequenceClassification,
         Gemma3TextModel,
     )
+    from transformers.cache_utils import StaticCache
     from transformers.models.gemma3.modeling_gemma3 import create_masks_for_vision_model
     from transformers.pytorch_utils import is_torch_greater_or_equal
 
@@ -78,6 +80,8 @@ class Gemma3TextModelTester(CausalLMModelTester):
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
         self.attention_probs_dropout_prob = 0.0
+        # test on both layer types
+        self.layer_types = ["full_attention", "sliding_attention"]
 
 
 @require_torch
@@ -106,11 +110,15 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip(
-        "Gemma3 has no base model prefix which causes issues when loading base model from saved task model checkpoint"
-    )
-    def test_load_with_mismatched_shapes(self):
-        pass
+    def test_bidirectional_sliding_window_survives_save_and_reload(self):
+        config = Gemma3TextConfig(sliding_window=512, use_bidirectional_attention=True)
+        self.assertEqual(config.sliding_window, 257)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = Gemma3TextConfig.from_pretrained(tmpdirname)
+
+        self.assertEqual(reloaded.sliding_window, config.sliding_window)
 
     def test_generation_beyond_sliding_window_tiny_model(self):
         """Test generation with a tiny randomly initialised model whose input length is larger than the `sliding_window`.
@@ -162,102 +170,6 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
         EXPECTED_OUTPUT = torch.tensor([[90109, 90109, 90109, 83191, 83191], [246901, 69832, 69832, 69832, 62288]])
         torch.testing.assert_close(generated_sequences, EXPECTED_OUTPUT)
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("TODO (joao): check why this is failing")
-    def test_model_rope_scaling_from_config(self):
-        pass
-
-    def test_model_rope_scaling_frequencies(self):
-        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.layer_types = ["full_attention", "sliding_attention"]
-
-        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
-        # named location of the RoPE layer class.
-        base_model = self.model_tester.base_model_class(config)
-        possible_rope_attributes = [
-            "pos_emb",
-            "rotary_emb",  # most common case
-            "global_rotary_emb",
-            "local_rotary_emb",
-        ]
-        for name, module in base_model.named_modules():
-            if any(potential_name in name for potential_name in possible_rope_attributes):
-                rope_class = type(module)
-                break
-
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        rope_params = {"rope_type": "default", "rope_theta": 10_000.0}
-        config.rope_parameters = {"full_attention": rope_params, "sliding_attention": rope_params}
-        original_rope = rope_class(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="sliding_attention")
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        rope_params = {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"full_attention": rope_params, "sliding_attention": rope_params}
-        linear_scaling_rope = rope_class(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
-        for new_position in range(0, long_input_length, scaling_factor):
-            original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        rope_params = {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"full_attention": rope_params, "sliding_attention": rope_params}
-        ntk_scaling_rope = rope_class(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(ntk_cos_short, original_cos_short)
-        torch.testing.assert_close(ntk_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue(
-            (ntk_scaling_rope.sliding_attention_inv_freq <= original_rope.sliding_attention_inv_freq).all()
-        )
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        rope_params = {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"full_attention": rope_params, "sliding_attention": rope_params}
-        yarn_scaling_rope = rope_class(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
 
 class Gemma3Vision2TextModelTester(VLMModelTester):
     base_model_class = Gemma3Model
@@ -275,6 +187,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("patch_size", 5)
         kwargs.setdefault("num_key_value_heads", 1)
         kwargs.setdefault("image_token_index", 4)
+        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)
 
@@ -282,7 +195,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         # Gemma3 uses padding mask for bidirectional attention on image tokens
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_id] = 1
@@ -304,6 +217,53 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+
+    @parameterized.expand([(2, False), (3, False), (2, True), (3, True)])
+    def test_generate_preserves_multi_image_groups(self, expand_size, do_sample):
+        """Compare expanded preencoded image groups with independently expanded raw-image inputs."""
+        set_seed(42)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        with torch.no_grad():
+            # Gemma3 initializes this projector to zero, so all images would have identical features.
+            # Nonzero weights are needed to detect incorrect image ordering, not just shape mismatches.
+            model.model.multi_modal_projector.mm_input_projection_weight.normal_(
+                std=config.text_config.initializer_range
+            )
+
+        # Create input with two images per sample from inputs where each sample has only one image
+        inputs = {
+            key: inputs_dict[key][:2].reshape(1, -1) for key in ["input_ids", "attention_mask", "token_type_ids"]
+        }
+        inputs["pixel_values"] = inputs_dict["pixel_values"][:2]
+        reference_inputs = {
+            key: inputs[key].repeat_interleave(expand_size, dim=0)
+            for key in ["input_ids", "attention_mask", "token_type_ids"]
+        }
+        reference_inputs["pixel_values"] = inputs["pixel_values"].repeat(expand_size, 1, 1, 1)
+        generation_kwargs = {
+            "max_new_tokens": 1,
+            "eos_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        with torch.no_grad():
+            reference = model.generate(**reference_inputs, do_sample=False, **generation_kwargs)
+            image_outputs = model.get_image_features(pixel_values=inputs.pop("pixel_values"), return_dict=True)
+            self.assertFalse(torch.equal(image_outputs.pooler_output[0], image_outputs.pooler_output[1]))
+
+            expected_image_features = image_outputs.pooler_output.repeat(expand_size, 1, 1)
+            inputs["mm_encoder_outputs"] = {"image": image_outputs}
+            outputs = model.generate(
+                **inputs,
+                num_beams=1 if do_sample else expand_size,
+                num_return_sequences=expand_size,
+                do_sample=do_sample,
+                **generation_kwargs,
+            )
+        # Image ouptut are expanded in-place as we passed it to generation with beam-search
+        torch.testing.assert_close(image_outputs.pooler_output, expected_image_features, rtol=0, atol=0)
+        torch.testing.assert_close(outputs.logits[0], reference.logits[0], rtol=1e-4, atol=1e-5)
 
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
@@ -391,10 +351,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
-    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
-    def test_load_with_mismatched_shapes(self):
-        pass
-
     def test_automodelforcausallm(self):
         """
         Regression test for #36741/#36917 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
@@ -472,6 +428,33 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
         self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
 
+    @parameterized.expand([(["sliding_attention", "full_attention"],), (["full_attention", "sliding_attention"],)])
+    def test_vision_mask_with_cache_beyond_sliding_window(self, layer_types: list[str]):
+        """Regression test for a crash observed on real vision checkpoints such as ShieldGemma-2.
+
+        Once the cache is longer than the sliding window, sliding and full attention layers report
+        different `kv_length`s. The vision mask has to be built for a sliding layer, otherwise the
+        sliding mask ends up sized against a full attention layer and the forward pass crashes.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        config.text_config.sliding_window = 4
+        config.text_config.layer_types = layer_types
+        config.text_config.num_hidden_layers = len(layer_types)
+
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        batch_size, prompt_length = inputs_dict["input_ids"].shape
+        past_key_values = StaticCache(
+            config=config.get_text_config(),
+            max_batch_size=batch_size,
+            max_cache_len=prompt_length + 8,  # longer than the sliding window
+            device=torch_device,
+            dtype=model.dtype,
+        )
+
+        with torch.no_grad():
+            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+
 
 @slow
 @require_torch_accelerator
@@ -537,11 +520,15 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+                        ),
                     },
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
@@ -624,7 +611,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
                 ("cuda", (8, 0)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a blue sky with some white clouds in the background"],
-                ("cuda", (8, 6)): ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There’s a bright blue sky with some white clouds in the'],
+                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
                 ("cuda", (9, 0)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
                 ("rocm", (9, 4)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
                 ("rocm", (9, 5)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a blue sky with some white clouds in the background"]
@@ -655,11 +642,15 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+                        ),
                     },
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
@@ -720,7 +711,9 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                     {"type": "text", "text": "What do you see here?"},
                 ],
@@ -765,7 +758,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
-                ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("rocm", 9): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
             }
         )  # fmt: skip
@@ -908,7 +901,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         )
         self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
 
-        # If we manually specify the cache implementation = "hybrid", it will use the static sliding window cache
+        # Even if we manually specify cache_implementation="hybrid", it will still use the dynamic sliding window cache
         generate_outputs = model.generate(
             **model_inputs,
             max_new_tokens=2,
@@ -916,4 +909,4 @@ class Gemma3IntegrationTest(unittest.TestCase):
             return_dict_in_generate=True,
             cache_implementation="hybrid",
         )
-        self.assertNotIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))

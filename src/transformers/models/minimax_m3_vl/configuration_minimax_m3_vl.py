@@ -19,13 +19,12 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLTextConfig(PreTrainedConfig):
     r"""
@@ -70,11 +69,11 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
+
     attribute_map = {
         "num_experts": "num_local_experts",
     }
@@ -153,7 +152,8 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+# NOTE: can copy from qwen vision config!
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     r"""
@@ -163,6 +163,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 
     model_type = "minimax_m3_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     default_theta = 10000.0
 
     hidden_size: int = 1280
@@ -181,11 +182,15 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MiniMaxM3VLTextConfig),
+        "vision_config": SubConfigSpec(config_class=MiniMaxM3VLVisionConfig),
+    }
+
     attribute_map = {
         "image_token_id": "image_token_index",
         "video_token_id": "video_token_index",
@@ -199,26 +204,13 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config.pop("model_type", None)
-            self.vision_config = MiniMaxM3VLVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MiniMaxM3VLVisionConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config.pop("model_type", None)
-            self.text_config = MiniMaxM3VLTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = MiniMaxM3VLTextConfig()
-
+        super().__post_init__(**kwargs)
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         # Channel dim after grouping `spatial_merge_size**2` projected patches, consumed by the
         # patch-merge MLP inside `MiniMaxM3VLMultiModalProjector`.
         self.merged_hidden_size = self.text_config.hidden_size * (self.vision_config.spatial_merge_size**2)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["MiniMaxM3VLConfig", "MiniMaxM3VLTextConfig", "MiniMaxM3VLVisionConfig"]

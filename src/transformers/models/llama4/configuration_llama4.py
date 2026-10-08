@@ -16,7 +16,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -119,6 +119,7 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
         "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "colwise",  # col because not linear
+        "layers.*.feed_forward.experts": "moe_tp_experts",
         "layers.*.feed_forward.gate_proj": "colwise",
         "layers.*.feed_forward.up_proj": "colwise",
         "layers.*.feed_forward.down_proj": "rowwise",
@@ -231,9 +232,13 @@ class Llama4Config(PreTrainedConfig):
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
-    sub_configs = {"text_config": Llama4TextConfig, "vision_config": Llama4VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Llama4TextConfig),
+        "vision_config": SubConfigSpec(config_class=Llama4VisionConfig),
+    }
+
     base_model_tp_plan = {
-        "multi_modal_projector.linear_1": "colwise_rep",
+        "multi_modal_projector.linear_1": "colwise_gather_output",
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -242,20 +247,6 @@ class Llama4Config(PreTrainedConfig):
     eoi_token_index: int = 200081
     image_token_index: int = 200092
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = Llama4VisionConfig()
-            logger.info("vision_config is None, using default llama4 vision config")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Llama4VisionConfig(**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = Llama4TextConfig()
-            logger.info("text_config is None, using default llama4 text config")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Llama4TextConfig(**self.text_config)
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]

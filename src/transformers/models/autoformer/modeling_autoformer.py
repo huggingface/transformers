@@ -780,7 +780,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     supports_gradient_checkpointing = True
     _can_record_outputs = {
-        "hidden_states": (AutoformerEncoderLayer, AutoformerDecoderLayer),
+        "hidden_states": [AutoformerEncoderLayer, AutoformerDecoderLayer],
         "attentions": AutoformerAttention,
     }
 

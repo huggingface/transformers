@@ -16,7 +16,14 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, is_torch_available
-from transformers.testing_utils import Expectations, cleanup, require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_gpu,
+    slow,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester, torch_device
 
@@ -201,6 +208,11 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
                     [-0.2138671875, 0.69140625, -1.390625],
                     [0.86328125, -0.32421875, -1.78125],
                 ],
+                ("xpu", None): [
+                    [0.03759765625, -1.3515625, -0.3046875],
+                    [-0.1923828125, 0.78125, -1.3046875],
+                    [1.0625, -0.306640625, -1.84375],
+                ],
             }
         )
         expected_left_unpadded = torch.tensor(EXPECTED_LOGITS_LEFT_UNPADDED.get_expectation(), device=torch_device)
@@ -216,6 +228,11 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
                     [0.1474609375, 0.46484375, -1.6953125],
                     [-0.46875, 0.87890625, -2.25],
                     [-0.0537109375, 0.734375, -1.359375],
+                ],
+                ("xpu", None): [
+                    [0.1533203125, 0.2333984375, -1.7109375],
+                    [-0.4921875, 0.86328125, -2.265625],
+                    [-0.02978515625, 0.72265625, -1.3671875],
                 ],
             }
         )
@@ -238,11 +255,13 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
         )
 
     # the dummy model is untrained so gibberish output is expected
+    @require_torch_gpu
     def test_small_model_generation(self):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): "Tell me about the french revolution._LOAD商机擔 Copp reducers werd boldly황\tlib czł.sess.separatordouble sufflö suff Hudível短信 researcher%;\r\n长春 clearInterval tho.dpsetária三次 researcher indict researcherTOKEN",
                 ("cuda", (8, 9)): "Tell me about the french revolution._LOAD商机擔 Copp reducers槐角 undue껜/$',.hy resetsトル diesem USS注入תוכ DRM tomato prejudplug主要_nhconsinMed题材-purpleányMy-eastangentrips",
+                ("xpu", None): "Tell me about the french revolution._LOAD商机擔 Copp reducers槐角 undue껜/$',.hy resetsトル diesem USS注入תוכ DRM tomato prejudplug主要_nhconsinMed题材-purpleányMy-eastangentrips",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()

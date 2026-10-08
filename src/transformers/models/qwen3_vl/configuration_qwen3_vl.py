@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -38,6 +38,8 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -52,6 +54,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -122,7 +125,10 @@ class Qwen3VLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl"
-    sub_configs = {"vision_config": Qwen3VLVisionConfig, "text_config": Qwen3VLTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Qwen3VLVisionConfig),
+        "text_config": SubConfigSpec(config_class=Qwen3VLTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -134,19 +140,9 @@ class Qwen3VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_vl":
             # old ckpt with incorrect model type -> override manually
-            if self.vision_config.get("model_type") == "qwen3_vl":
-                self.vision_config["model_type"] = "qwen3_vl_vision"
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+            self.vision_config["model_type"] = "qwen3_vl_vision"
         super().__post_init__(**kwargs)
 
 

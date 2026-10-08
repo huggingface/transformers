@@ -91,7 +91,7 @@ def convert_config(original_config: dict):
 
 def convert_mimo_v2_flash_model(input_dir, output_dir):
     # Load and convert config
-    with open(os.path.join(input_dir, "config.json")) as f:
+    with open(os.path.join(input_dir, "config.json"), encoding="utf-8") as f:
         original_config = json.load(f)
     config = convert_config(original_config)
     config.save_pretrained(output_dir)

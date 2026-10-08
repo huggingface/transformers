@@ -81,7 +81,7 @@ class ImageTextToTextPipeline(Pipeline):
     >>>         "content": [
     >>>             {
     >>>                 "type": "image",
-    >>>                 "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+    >>>                 "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
     >>>             },
     >>>             {"type": "text", "text": "Describe this image."},
     >>>         ],
@@ -96,7 +96,7 @@ class ImageTextToTextPipeline(Pipeline):
     >>> pipe(text=messages, max_new_tokens=20, return_full_text=False)
     [{'input_text': [{'role': 'user',
         'content': [{'type': 'image',
-        'url': 'https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg'},
+        'url': 'https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg'},
         {'type': 'text', 'text': 'Describe this image.'}]},
     {'role': 'assistant',
         'content': [{'type': 'text', 'text': 'There is a dog and'}]}],
@@ -160,13 +160,12 @@ class ImageTextToTextPipeline(Pipeline):
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
-            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                logger.warning_once(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    " the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+            if generate_kwargs is None:
+                generate_kwargs = {}
+            if isinstance(stop_sequence, str):
+                stop_sequence = [stop_sequence]
+            generate_kwargs["stop_strings"] = stop_sequence
+            generate_kwargs["tokenizer"] = self.processor.tokenizer
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
@@ -250,8 +249,9 @@ class ImageTextToTextPipeline(Pipeline):
             return_full_text (`bool`, *optional*, defaults to `True`):
                 If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
                 specified at the same time as `return_text`.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the potential extra spaces in the text output.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the potential extra spaces in the text output. Defaults to the tokenizer's
+                `clean_up_tokenization_spaces` setting.
             continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
                 last message in the input chat rather than starting a new one, allowing you to "prefill" its response.
                 By default this is `True` when the final message in the input chat has the `assistant` role and
@@ -369,7 +369,9 @@ class ImageTextToTextPipeline(Pipeline):
             inputs_text = inputs["text"]
 
         # if batched text inputs, we set padding to True unless specified otherwise
-        processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or processing_kwargs
+        processor_kwargs = processing_kwargs.pop("processor_kwargs", None)
+        if processor_kwargs is None:
+            processor_kwargs = processing_kwargs
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processor_kwargs.setdefault("padding", True)
         model_inputs = self.processor(images=images, text=text, return_tensors="pt", **processor_kwargs).to(
@@ -387,10 +389,7 @@ class ImageTextToTextPipeline(Pipeline):
             model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
         )  # for decoder-only models
 
-        # User-defined `generation_config` passed to the pipeline call take precedence
-        if "generation_config" not in generate_kwargs:
-            generate_kwargs["generation_config"] = self.generation_config
-        generate_kwargs["return_dict_in_generate"] = False
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs, return_dict_in_generate=False)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
 
@@ -416,7 +415,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
+        if getattr(self.tokenizer, "response_template", None):
             skip_special_tokens = False
         generated_texts = self.processor.post_process_image_text_to_text(
             generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
@@ -467,9 +466,6 @@ class ImageTextToTextPipeline(Pipeline):
                             # templates often pre-write part of the assistant message (e.g. an
                             # opening <think> tag), which affects parsing.
                             assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
-                        elif getattr(self.tokenizer, "response_schema", None) is not None:
-                            # Legacy schemas parse the generated text alone and don't support `prefix`
-                            assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
                         generated_text = list(prompt_text.messages) + [assistant_message]

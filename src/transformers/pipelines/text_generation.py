@@ -191,8 +191,10 @@ class TextGenerationPipeline(Pipeline):
 
         # forward kwargs
         if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            generate_kwargs["eos_token_id"] = stop_sequence_ids
+            if isinstance(stop_sequence, str):
+                stop_sequence = [stop_sequence]
+            generate_kwargs["stop_strings"] = stop_sequence
+            generate_kwargs["tokenizer"] = self.tokenizer
         forward_params = generate_kwargs
         if self.assistant_model is not None:
             forward_params["assistant_model"] = self.assistant_model
@@ -264,14 +266,17 @@ class TextGenerationPipeline(Pipeline):
             return_full_text (`bool`, *optional*, defaults to `True`):
                 If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
                 specified at the same time as `return_text`.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the potential extra spaces in the text output.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the potential extra spaces in the text output. Defaults to the tokenizer's
+                `clean_up_tokenization_spaces` setting.
             continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
                 last message in the input chat rather than starting a new one, allowing you to "prefill" its response.
                 By default this is `True` when the final message in the input chat has the `assistant` role and
                 `False` otherwise, but you can manually override that behaviour by setting this flag.
             prefix (`str`, *optional*):
                 Prefix added to prompt.
+            stop_sequence (`str` or `list[str]`, *optional*):
+                One or more strings that stop generation once generated. The stop string is included in the output.
             handle_long_generation (`str`, *optional*):
                 By default, this pipelines does not handle long generation (ones that exceed in one form or the other
                 the model maximum length). There is no perfect way to address this (more info
@@ -346,10 +351,10 @@ class TextGenerationPipeline(Pipeline):
 
         if handle_long_generation == "hole":
             cur_len = inputs["input_ids"].shape[-1]
-            if "max_new_tokens" in generate_kwargs:
-                new_tokens = generate_kwargs["max_new_tokens"]
-            else:
-                new_tokens = generate_kwargs.get("max_length", self.generation_config.max_length) - cur_len
+            generation_params = self._get_set_generation_params(self._prepare_generate_kwargs(generate_kwargs))
+            new_tokens = generation_params.get("max_new_tokens")
+            if new_tokens is None:
+                new_tokens = generation_params["max_length"] - cur_len
                 if new_tokens < 0:
                     raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
@@ -378,27 +383,13 @@ class TextGenerationPipeline(Pipeline):
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
 
-        # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
-        # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
         prefix_length = generate_kwargs.pop("prefix_length", 0)
-        if prefix_length > 0:
-            has_max_new_tokens = "max_new_tokens" in generate_kwargs or (
-                "generation_config" in generate_kwargs
-                and generate_kwargs["generation_config"].max_new_tokens is not None
-            )
-            if not has_max_new_tokens:
-                generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.generation_config.max_length
-                generate_kwargs["max_length"] += prefix_length
-            has_min_new_tokens = "min_new_tokens" in generate_kwargs or (
-                "generation_config" in generate_kwargs
-                and generate_kwargs["generation_config"].min_new_tokens is not None
-            )
-            if not has_min_new_tokens and "min_length" in generate_kwargs:
-                generate_kwargs["min_length"] += prefix_length
-
-        # User-defined `generation_config` passed to the pipeline call take precedence
-        if "generation_config" not in generate_kwargs:
-            generate_kwargs["generation_config"] = self.generation_config
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
+        if prefix_length:  # a total length (as opposed to a number of new tokens) has to include the prefix
+            generation_params = self._get_set_generation_params(generate_kwargs)
+            for length, new_tokens in (("max_length", "max_new_tokens"), ("min_length", "min_new_tokens")):
+                if length in generation_params and new_tokens not in generation_params:
+                    generate_kwargs[length] = generation_params[length] + prefix_length
 
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
 
@@ -433,7 +424,7 @@ class TextGenerationPipeline(Pipeline):
         self,
         model_outputs,
         return_type=ReturnType.FULL_TEXT,
-        clean_up_tokenization_spaces=True,
+        clean_up_tokenization_spaces=None,
         continue_final_message=None,
         skip_special_tokens=None,
     ):
@@ -450,7 +441,7 @@ class TextGenerationPipeline(Pipeline):
                     split_keys[k] = v.numpy().tolist()
 
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
+        if getattr(self.tokenizer, "response_template", None):
             skip_special_tokens = False
         for idx, sequence in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
@@ -495,11 +486,8 @@ class TextGenerationPipeline(Pipeline):
                                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                                 )
                                 assistant_message = self.tokenizer.parse_response(all_text, prefix=prompt_prefix)
-                            elif getattr(self.tokenizer, "response_schema", None) is not None:
-                                # Legacy schemas parse the generated text alone and don't support `prefix`
-                                assistant_message = self.tokenizer.parse_response(all_text)
                             else:
-                                # If there's no schema, then we have to assume it's all content
+                                # If there's no template, then we have to assume it's all content
                                 assistant_message = {"role": "assistant", "content": all_text}
                             all_text = list(prompt_text.messages) + [assistant_message]
                 record = {"generated_text": all_text}

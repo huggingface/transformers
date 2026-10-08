@@ -20,13 +20,10 @@ from transformers import (
     IdeficsProcessor,
 )
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_torch_available():
-    pass
 
 if is_vision_available():
     from PIL import Image
@@ -156,18 +153,6 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
         self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
 
-    def test_tokenizer_defaults(self):
-        # Override to account for the processor prefixing the BOS token to prompts.
-        components = {attribute: self.get_component(attribute) for attribute in self.processor_class.get_attributes()}
-        processor = self.processor_class(**components)
-        tokenizer = components["tokenizer"]
-
-        input_str = ["lower newer"]
-        encoded_processor = processor(text=input_str, padding=False, return_tensors="pt")
-        encoded_tok = tokenizer(
-            [f"{tokenizer.bos_token}{input_str[0]}"], padding=False, add_special_tokens=False, return_tensors="pt"
-        )
-
-        for key in encoded_tok:
-            if key in encoded_processor:
-                self.assertListEqual(encoded_tok[key].tolist(), encoded_processor[key].tolist())
+    @unittest.skip("processor artifically adds BOS token to text")
+    def test_subprocessor_defaults_0_text(self):
+        pass

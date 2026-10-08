@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Visual Question Answering
+# Visual question answering
 
 [[open-in-colab]]
 

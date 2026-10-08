@@ -23,8 +23,7 @@ from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
@@ -43,7 +42,8 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ...utils.generic import TensorType, can_return_tuple
+from ...utils.generic import TensorType, can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..resnet.modeling_resnet import ResNetConvLayer
 from ..rt_detr.modeling_rt_detr import (
@@ -152,7 +152,21 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     ```"""
 
     model_type = "pp_doclayout_v3"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
 
     layer_types = ("basic", "bottleneck")
     attribute_map = {
@@ -207,21 +221,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     gp_dropout_value: float | int = 0.1
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={
-                "arch": "L",
-                "return_idx": [0, 1, 2, 3],
-                "freeze_stem_only": True,
-                "freeze_at": 0,
-                "freeze_norm": True,
-                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
         self.encoder_in_channels = list(self.encoder_in_channels)
         self.feat_strides = list(self.feat_strides)
         self.encode_proj_layers = list(self.encode_proj_layers)
@@ -578,23 +577,14 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords = x_coords.to(dtype)
     y_coords = y_coords.to(dtype)
 
+    finfo_max = torch.full((), torch.finfo(dtype).max, dtype=dtype, device=mask.device)
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    x_min = torch.where(mask, x_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    y_min = torch.where(mask, y_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     unnormalized_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
 
@@ -866,6 +856,9 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
 
         self.num_queries = config.num_queries
 
+    @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
@@ -883,23 +876,35 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of the feature maps.
+        spatial_shapes_list (`list[tuple[int, int]]`, *optional*):
+            Spatial shapes of the feature maps as a list, kept alongside `spatial_shapes` so that the deformable
+            attention can index them without a device synchronization.
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        order_head (`nn.ModuleList`, *optional*):
+            Per-layer projections feeding the relative order global pointer.
+        global_pointer (`PPDocLayoutV3GlobalPointer`, *optional*):
+            Antisymmetric pairwise scorer producing the relative reading order logits.
+        mask_query_head (`PPDocLayoutV3MLPPredictionHead`, *optional*):
+            Prediction head mapping the decoder hidden states to mask queries for the per-layer mask generation.
+        norm (`nn.LayerNorm`, *optional*):
+            Layer norm applied to the decoder hidden states before the mask, classification and order heads.
+        mask_feat (`torch.FloatTensor` of shape `(batch_size, num_prototypes, mask_height, mask_width)`, *optional*):
+            Mask feature map from the encoder, dot-producted with the mask queries to produce the per-layer masks.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1032,7 +1037,7 @@ class PPDocLayoutV3Model(RTDetrModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1336,22 +1341,16 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 

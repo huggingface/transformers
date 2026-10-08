@@ -14,7 +14,7 @@ limitations under the License.
 -->
 
 
-# Kernels
+# Kernels for training
 
 Custom kernels target specific ops like matrix multiplications, attention, and normalization to run them faster. Fusing multiple ops into a single kernel reduces memory bandwidth usage by reading and writing GPU memory fewer times, and cuts per-op launch overhead.
 
@@ -27,7 +27,7 @@ from transformers import AutoModelForCausalLM, KernelConfig
 
 kernel_config = KernelConfig(
     kernel_mapping={
-        "RMSNorm": "kernels-community/rmsnorm",
+        "RMSNorm": "kernels-community/liger-kernels:LigerRMSNorm",
     }
 )
 model = AutoModelForCausalLM.from_pretrained(

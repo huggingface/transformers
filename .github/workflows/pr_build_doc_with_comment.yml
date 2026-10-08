@@ -8,13 +8,14 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'build-doc') }}
   cancel-in-progress: true
-permissions: {}
+permissions:
+  contents: read
 
 
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "itazap", "tarekziade"]'), github.actor) && (startsWith(github.event.comment.body, 'build-doc')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association) && (startsWith(github.event.comment.body, 'build-doc')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -25,11 +26,12 @@ jobs:
     with:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
-  verity_pr_commit:
-    name: Verity PR commit corresponds to a specific event by comparing timestamps
+  verify_pr_commit:
+    permissions: {}
+    name: Verify PR commit corresponds to a specific event by comparing timestamps
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     runs-on: ubuntu-22.04
-    needs: get-pr-info
+    needs: [get-pr-number, get-pr-info]
     env:
       COMMENT_DATE: ${{ github.event.comment.created_at }}
       PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
@@ -95,7 +97,7 @@ jobs:
     name: Build doc
     needs: [get-pr-number, get-pr-info]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@bcff59fca682130d2e7271ca8589911b7ac0b8bf # main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3 # main
     with:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}

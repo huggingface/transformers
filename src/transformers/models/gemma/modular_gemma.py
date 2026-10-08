@@ -101,6 +101,17 @@ class GemmaConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     use_bidirectional_attention: bool | None = None
 
+    def __post_init__(self, **kwargs):
+        # #35235 dropped this conversion (which is needed per #29402) which we now handle here instead
+        if self.hidden_act == "gelu":
+            logger.warning_once(
+                'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
+                'releases but it is meant to target the tanh approximation. Setting `hidden_act="gelu_pytorch_tanh"` instead.'
+            )
+            self.hidden_act = "gelu_pytorch_tanh"
+
+        super().__post_init__(**kwargs)
+
 
 class GemmaTextScaledWordEmbedding(nn.Embedding):
     """
@@ -110,7 +121,7 @@ class GemmaTextScaledWordEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)

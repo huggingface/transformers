@@ -21,7 +21,6 @@ from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -63,17 +63,7 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 @slow
-class LlamaIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
-
+class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_llama_3_1_hard(self):
         """
         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
@@ -82,6 +72,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("rocm", (9, 5)): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the rise of the middle class.\n',
+                ("cuda", 8): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 to 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the establishment of the First French Republic, and the Reign of Terror.\nThe French Revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshrined the',
                 ("cuda", None): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshr',
             }
         )  # fmt: skip
@@ -331,12 +322,9 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class Mask4DTestHard(unittest.TestCase):
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self.model_dtype = torch.float32
         self.tokenizer = LlamaTokenizer.from_pretrained(model_name)

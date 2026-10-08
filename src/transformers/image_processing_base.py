@@ -31,7 +31,7 @@ from .utils import (
     logging,
     safe_load_json_file,
 )
-from .utils.hub import cached_file, hf_api
+from .utils.hub import cached_file, hf_api, resolve_revision
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -171,7 +171,14 @@ class ImageProcessingMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so that all the files of this load come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token
@@ -257,6 +264,15 @@ class ImageProcessingMixin(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", "")
         image_processor_filename = kwargs.pop("image_processor_filename", IMAGE_PROCESSOR_NAME)
 
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
+
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
 
@@ -320,7 +336,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
         # We are downloading both configs because almost all models have a `processor_config.json` but
-        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
         image_processor_dict = None
         if resolved_processor_file is not None:
             processor_dict = safe_load_json_file(resolved_processor_file)

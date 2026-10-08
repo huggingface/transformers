@@ -1,6 +1,6 @@
 # Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao,
 # Michael Mahoney, Kurt Keutzer - UC Berkeley) and The HuggingFace Inc. team.
-# Copyright (c) 20121, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,8 +64,8 @@ class QuantEmbedding(nn.Module):
         self.sparse = sparse
 
         self.weight = nn.Parameter(torch.zeros([num_embeddings, embedding_dim]))
-        self.register_buffer("weight_scaling_factor", torch.zeros(1))
-        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
+        self.weight_scaling_factor = nn.Buffer(torch.zeros(1))
+        self.weight_integer = nn.Buffer(torch.zeros_like(self.weight))
 
         self.weight_bit = weight_bit
         self.momentum = momentum
@@ -138,9 +138,9 @@ class QuantAct(nn.Module):
         self.act_function = SymmetricQuantFunction.apply
 
         if not self.per_channel:
-            self.register_buffer("x_min", torch.zeros(1))
-            self.register_buffer("x_max", torch.zeros(1))
-            self.register_buffer("act_scaling_factor", torch.zeros(1))
+            self.x_min = nn.Buffer(torch.zeros(1))
+            self.x_max = nn.Buffer(torch.zeros(1))
+            self.act_scaling_factor = nn.Buffer(torch.zeros(1))
             self.x_min -= 1e-5
             self.x_max += 1e-5
         else:
@@ -239,11 +239,11 @@ class QuantLinear(nn.Module):
         self.out_features = out_features
 
         self.weight = nn.Parameter(torch.zeros([out_features, in_features]))
-        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
-        self.register_buffer("fc_scaling_factor", torch.zeros(self.out_features))
+        self.weight_integer = nn.Buffer(torch.zeros_like(self.weight))
+        self.fc_scaling_factor = nn.Buffer(torch.zeros(self.out_features))
         if bias:
             self.bias = nn.Parameter(torch.zeros(out_features))
-            self.register_buffer("bias_integer", torch.zeros_like(self.bias))
+            self.bias_integer = nn.Buffer(torch.zeros_like(self.bias))
 
         self.weight_bit = weight_bit
         self.quant_mode = quant_mode
@@ -450,7 +450,7 @@ class IntLayerNorm(nn.Module):
             logger.info("Force dequantize layernorm")
             self.quant_mode = False
 
-        self.register_buffer("shift", torch.zeros(1))
+        self.shift = nn.Buffer(torch.zeros(1))
         self.output_bit = output_bit
         self.max_bit = 32
         self.dim_sqrt = None
@@ -570,7 +570,7 @@ def linear_quantize(input, scale, zero_point, inplace=False):
             Single-precision input tensor to be quantized.
         scale (`torch.Tensor`):
             Scaling factor for quantization.
-        zero_pint (`torch.Tensor`):
+        zero_point (`torch.Tensor`):
             Shift for quantization.
         inplace (`bool`, *optional*, defaults to `False`):
             Whether to compute inplace or not.

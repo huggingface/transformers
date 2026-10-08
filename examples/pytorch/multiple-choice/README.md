@@ -59,7 +59,7 @@ pip install git+https://github.com/huggingface/accelerate
 then
 
 ```bash
-export DATASET_NAME=swag
+export DATASET_NAME=allenai/swag
 
 python run_swag_no_trainer.py \
   --model_name_or_path google-bert/bert-base-cased \
@@ -86,7 +86,7 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-export DATASET_NAME=swag
+export DATASET_NAME=allenai/swag
 
 accelerate launch run_swag_no_trainer.py \
   --model_name_or_path google-bert/bert-base-cased \

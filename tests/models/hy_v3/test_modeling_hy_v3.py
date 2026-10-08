@@ -18,12 +18,13 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -67,16 +68,10 @@ class HYV3ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class HYV3IntegrationTest(unittest.TestCase):
+class HYV3IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """Integration tests for HYV3 with a small randomized model."""
 
     model_id = "hf-internal-testing/HYV3-tiny-random"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @require_torch_accelerator
     def test_small_model_logits_batched(self):
@@ -87,7 +82,7 @@ class HYV3IntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[0.0608, -0.0933, 0.1348], [-0.0688, -0.1099, 0.1396], [0.0199, -0.0913, 0.1641]],
+                ("cuda", (8, 6)): [[0.0588, -0.0928, 0.1357], [-0.0718, -0.1040, 0.1387], [0.0215, -0.0908, 0.1650]],
                 ("cuda", 9): [[0.063, -0.0938, 0.1348], [-0.0693, -0.1128, 0.1357], [0.0209, -0.0923, 0.1611]],
                 ("xpu", 3): [[0.0623, -0.0923, 0.1348], [-0.0684, -0.1108, 0.1338], [0.0201, -0.0938, 0.1611]],
             }
@@ -96,7 +91,7 @@ class HYV3IntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[-0.0396, -0.1084, 0.0588], [-0.0100, -0.0903, 0.0747], [0.0645, -0.1172, 0.0508]],
+                ("cuda", (8, 6)): [[-0.0378, -0.1104, 0.0591], [-0.0079, -0.0898, 0.0776], [0.0645, -0.1162, 0.0505]],
                 ("cuda", 9): [[-0.0378, -0.1089, 0.0581], [-0.0088, -0.0908, 0.0752], [0.064, -0.1167, 0.0483]],
                 ("xpu", 3): [[-0.0376, -0.1084, 0.0586], [-0.0087, -0.0903, 0.0767], [0.0674, -0.1172, 0.0481]],
             }

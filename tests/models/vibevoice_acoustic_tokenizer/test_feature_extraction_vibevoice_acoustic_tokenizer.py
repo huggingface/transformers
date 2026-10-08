@@ -127,7 +127,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(normalize_audio=True, target_dB_FS=-25)
 
         # Test with very low amplitude audio (should increase amplitude)
-        low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01
+        low_amplitude_audio = np.random.randn(feature_extractor.pad_to_multiple_of).astype(np.float32) * 0.01
         result = feature_extractor([low_amplitude_audio])
         normalized_audio = result.input_values.squeeze()
         self.assertGreater(
@@ -156,7 +156,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         """Test that padding masks are generated correctly."""
         feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor()
         audio1 = np.random.randn(100).astype(np.float32)
-        audio2 = np.random.randn(200).astype(np.float32)
+        audio2 = np.random.randn(feature_extractor.pad_to_multiple_of).astype(np.float32)
 
         result = feature_extractor([audio1, audio2], padding=True, return_attention_mask=True)
         self.assertIn("padding_mask", result)

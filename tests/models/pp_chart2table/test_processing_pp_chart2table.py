@@ -15,6 +15,7 @@
 import unittest
 
 from transformers import PPChart2TableProcessor
+from transformers.models.pp_chart2table import PPChart2TableImageProcessor
 from transformers.testing_utils import require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -23,16 +24,17 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PPChart2TableProcessor
+    # Tiny processor created with make_tiny_processor.py from "PaddlePaddle/PP-Chart2Table_safetensors"
+    tiny_model_id = "hf-internal-testing/tiny-processor-pp_chart2table"
 
     @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
-        return tokenizer
+    def _setup_image_processor(cls):
+        # Default image processor has model_input_names=['pixel_values'] (no original_image_size)
+        return PPChart2TableImageProcessor()
 
     def test_ocr_queries(self):
         processor = self.get_processor()
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         conversation = [{"role": "user", "content": []}]
         inputs = processor.apply_chat_template(
             conversation,
@@ -40,7 +42,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
         )
         inputs = processor(images=image_input, text=inputs, return_tensors="pt")
-        self.assertEqual(inputs["input_ids"].shape, (1, 286))
+        self.assertEqual(inputs["input_ids"].shape, (1, 324))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 1024))
 
     def test_unstructured_kwargs_batched(self):
@@ -49,10 +51,9 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -60,7 +61,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_rescale=True,
             rescale_factor=-1.0,
             padding="longest",
-            max_length=self.image_unstructured_max_length,
+            max_length=self.images_unstructured_max_length,
         )
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)

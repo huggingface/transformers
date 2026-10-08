@@ -20,22 +20,18 @@ import re
 from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 
+from .distributed.utils import _get_torch_distributed_rank
 from .utils import logging
-from .utils.import_utils import is_torch_available, requires
+from .utils.import_utils import is_torch_available, is_torch_distributed_available, requires
 
 
 if is_torch_available():
     import torch
     from safetensors.torch import save_file
 
-    _torch_distributed_available = False
     # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-    if torch.distributed.is_available():
-        import torch.distributed.tensor
-
-        _torch_distributed_available = True
-else:
-    _torch_distributed_available = False
+    if is_torch_distributed_available():
+        import torch.distributed.tensor  # noqa: F401  # imported for its submodule-loading side effect
 
 
 logger = logging.get_logger(__name__)
@@ -43,9 +39,7 @@ logger = logging.get_logger(__name__)
 
 def _is_rank_zero():
     """Return True if rank=0 or we aren't running distributed."""
-    if not (_torch_distributed_available and torch.distributed.is_initialized()):
-        return True
-    return torch.distributed.get_rank() == 0
+    return _get_torch_distributed_rank() == 0
 
 
 MEMORY_ADDRESS_REGEX = re.compile(r"object at 0x[0-9A-Fa-f]+")
@@ -76,7 +70,7 @@ def _serialize_tensor_like_io(
         value: Any Python object, often including torch Tensors, lists, dicts, etc.
         debug_path (`str`, *optional*, defaults to `None`): Directory to dump debug JSON and SafeTensors files.
         use_repr (bool, *optional*, defaults to `True`): Whether to save a `repr()`-ized version of the tensor as the
-            `value` property in the asscoiated FULL_TENSORS.json file, or to store the full tensors in separate
+            `value` property in the associated FULL_TENSORS.json file, or to store the full tensors in separate
             SafeTensors file and store the relative path to that file in the `value` property in the dictionary.
         path_to_value (`str`, *optional*, defaults to `None`): The file name for the SafeTensors file holding the full
             tensor value if `use_repr=False`.
@@ -127,7 +121,7 @@ def _serialize_io(value, debug_path: str | None = None, use_repr: bool = True, p
         value: Any Python object, often including torch Tensors, lists, dicts, etc.
         debug_path (`str`, *optional*, defaults to `None`): Directory to dump debug JSON and SafeTensors files.
         use_repr (bool, *optional*, defaults to `True`): Whether to save a `repr()`-ized version of the tensors as the
-            `value` property in the asscoiated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
+            `value` property in the associated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
             files and store the relative path to that file in the `value` property.
         path_to_value (`str`, *optional*, defaults to `None`): The file name for the SafeTensors file holding the full
             tensor value if `use_repr=False`.
@@ -240,7 +234,7 @@ def log_model_debug_trace(debug_path: str | None, model):
 
     prune_outputs_if_children(model._call_tree)
 
-    with open(full_path, "w") as f:
+    with open(full_path, "w", encoding="utf-8") as f:
         json.dump(model._call_tree, f, indent=2)
 
     # summary-only version for readability - traversing the tree again #TODO optimize?
@@ -263,7 +257,7 @@ def log_model_debug_trace(debug_path: str | None, model):
     tree_copy = json.loads(json.dumps(model._call_tree))  # deep copy
     strip_values(tree_copy)
 
-    with open(summary_path, "w") as f:
+    with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(tree_copy, f, indent=2)
 
 
