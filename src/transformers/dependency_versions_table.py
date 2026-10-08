@@ -49,7 +49,7 @@ deps = {
     "pytest-env": "pytest-env",
     "pytest-xdist": "pytest-xdist",
     "pytest-order": "pytest-order",
-    "python": "python>=3.10.0",
+    "python": "python>=3.11.0",
     "regex": "regex>=2025.10.22",
     "rhoknp": "rhoknp>=1.1.0,<1.3.1",
     "rjieba": "rjieba",

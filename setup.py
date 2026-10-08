@@ -48,7 +48,7 @@ from setuptools import Command, find_packages, setup
 
 
 # Supported Python version range (min, max)
-SUPPORTED_PYTHON_VERSIONS = (10, 14)  # 3.10 to 3.14
+SUPPORTED_PYTHON_VERSIONS = (11, 14)  # 3.11 to 3.14
 
 PYTHON_MINOR_VERSION = sys.version_info.minor
 
@@ -117,7 +117,7 @@ _deps = [
     "pytest-env",
     "pytest-xdist",
     "pytest-order",
-    "python>=3.10.0",
+    "python>=3.11.0",
     "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
