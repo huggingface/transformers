@@ -48,8 +48,8 @@ class GPTNeoXConfig(PreTrainedConfig):
     base_model_tp_plan = {
         "layers.*.attention.query_key_value": "colwise",
         "layers.*.attention.dense": "rowwise",
-        "layers.*.mlp.dense_h_to_4h": "colwise",
-        "layers.*.mlp.dense_4h_to_h": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
     }
     base_model_pp_plan = {
         "embed_in": (["input_ids"], ["inputs_embeds"]),

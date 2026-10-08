@@ -177,7 +177,7 @@ class ASTAttention(nn.Module):
 
 
 class ASTMLP(nn.Module):
-    def __init__(self, config: ASTConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
@@ -188,7 +188,6 @@ class ASTMLP(nn.Module):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
-
         return hidden_states
 
 

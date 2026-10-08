@@ -31,11 +31,11 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
     ViTAttention,
     ViTLayer,
-    ViTMLP,
     ViTPreTrainedModel,
     eager_attention_forward,
 )
@@ -465,7 +465,7 @@ class SwinAttention(ViTAttention):
         return attn_output, attn_weights
 
 
-class SwinMLP(ViTMLP):
+class SwinMLP(CLIPMLP):
     def __init__(self, config: SwinConfig, dim: int):
         nn.Module.__init__(self)
         self.activation_fn = ACT2FN[config.hidden_act]

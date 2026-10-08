@@ -23,6 +23,7 @@ from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto.modeling_auto import AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..voxtral_realtime.modeling_voxtral_realtime import VoxtralRealtimeConv1dPaddingCache
 from .configuration_vibevoice_acoustic_tokenizer import (
@@ -84,15 +85,12 @@ class VibeVoiceAcousticTokenizerRMSNorm(LlamaRMSNorm):
     pass
 
 
-class VibeVoiceAcousticTokenizerFeedForward(nn.Module):
+class VibeVoiceAcousticTokenizerFeedForward(CLIPMLP):
     def __init__(self, config, hidden_size):
-        super().__init__()
-        self.linear1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
-        self.activation = ACT2FN[config.hidden_act]
-        self.linear2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
-
-    def forward(self, hidden_states):
-        return self.linear2(self.activation(self.linear1(hidden_states)))
+        nn.Module.__init__(self)
+        self.fc1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
 
 
 class VibeVoiceAcousticTokenizerConv1dPaddingCache(VoxtralRealtimeConv1dPaddingCache):
