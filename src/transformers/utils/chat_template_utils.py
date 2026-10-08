@@ -499,6 +499,8 @@ def _encode_chat_piece(tokenizer, piece: str, as_text: bool, newline_ids: list[i
         encode = partial(tokenizer.encode, add_special_tokens=False)
     # Encode after a newline, so SentencePiece doesn't add the prefix space it adds at the start of a string, then
     # remove the newline again
+    # FIXME: This is a trick to avoid SentencePiece hacks, so we can remove it if we get tokenizer support
+    #        for encoding with an offset, or something similar
     piece_ids = encode("\n" + piece)
     if piece_ids[: len(newline_ids)] == newline_ids:
         return piece_ids[len(newline_ids) :]
