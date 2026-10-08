@@ -532,9 +532,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
         For models whose legacy extractor padded the *features* rather than the audio: on the padded batch,
         those frames hold features of silence instead of the padding value.
         """
-        counts = self._as_backend_array(frame_counts, like=features)[:, None]
-        valid = (self._arange(features.shape[1], like=features)[None, :] < counts)[..., None]
-        return features * valid + padding_value * ~valid
+        counts = self.ops.asarray(np.asarray(frame_counts, dtype=np.int64), like=features)[:, None]
+        valid = (self.ops.arange(features.shape[1], like=features)[None, :] < counts)[..., None]
+        return self.ops.masked_fill(features, ~valid, padding_value)
 
     def _frame_moments(self, features, frame_counts, *, ddof):
         """Float64 mean and variance of each clip over its own frames, on the time axis 1 of the padded batch.
@@ -542,11 +542,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Returns `(features, mean, variance)`, all float64, for per-clip normalization rounded once by the caller.
         Accumulating in float64 makes the result independent of the batch layout and of the reduction order.
         """
-        features = self._astype(features, "float64")
-        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float64")[:, None, None]
-        valid = self._arange(features.shape[1], like=features)[None, :, None] < counts
-        mean = (features * valid).sum(axis=1)[:, None, :] / counts
-        variance = (((features - mean) * valid) ** 2).sum(axis=1)[:, None, :] / (counts - ddof)
+        features = self.ops.astype(features, "float64")
+        counts = self.ops.asarray(np.asarray(frame_counts, dtype=np.int64), like=features)
+        valid = (self.ops.arange(features.shape[1], like=features)[None, :] < counts[:, None])[..., None]
+        counts = self.ops.astype(counts, "float64")[:, None, None]
+        mean = self.ops.sum(self.ops.masked_fill(features, ~valid, 0.0), 1, keepdims=True) / counts
+        centered = self.ops.masked_fill(features - mean, ~valid, 0.0)
+        # `x * x`: bit-identical to the former `** 2` on both libraries
+        variance = self.ops.sum(centered * centered, 1, keepdims=True) / (counts - ddof)
         return features, mean, variance
 
     def _standardize_features(self, features, frame_counts, eps):
@@ -554,12 +557,16 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         The NeMo recipe (Parakeet, Cohere-ASR): unbiased variance, `eps` added to the standard deviation.
         """
-        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float32")[:, None]
-        mask = (self._arange(features.shape[1], like=features)[None, :] < counts)[..., None]
-        masked = features * mask
-        mean = (masked.sum(axis=1) / counts)[:, None, :]
-        variance = ((masked - mean) ** 2 * mask).sum(axis=1) / (counts - 1)
-        return (features - mean) / (self._sqrt(variance)[:, None, :] + eps) * mask
+        counts = self.ops.asarray(np.asarray(frame_counts, dtype=np.int64), like=features)
+        valid = (self.ops.arange(features.shape[1], like=features)[None, :] < counts[:, None])[..., None]
+        # integer counts are exact in any float dtype, so the counts' dtype never changes a value
+        counts = self.ops.astype(counts, self.ops.dtype_name(features))[:, None, None]
+        masked = self.ops.masked_fill(features, ~valid, 0.0)
+        mean = self.ops.sum(masked, 1, keepdims=True) / counts
+        centered = self.ops.masked_fill(masked - mean, ~valid, 0.0)
+        variance = self.ops.sum(centered * centered, 1, keepdims=True) / (counts - 1)
+        standardized = (features - mean) / (self.ops.sqrt(variance) + eps)
+        return self.ops.masked_fill(standardized, ~valid, 0.0)
 
     def _resolve_padding_strategy(self, padding=False, max_length=None, *, padding_value):
         if padding is not False:
@@ -998,10 +1005,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return frames
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
-        """Waveform-level preemphasis (first sample unchanged), zeroing padded samples via
-        ``audio_ranges``. Used when ``spectrogram_config.preemphasis_mode == "waveform"``
-        (ASR models: Parakeet/Cohere/Nemotron). Implemented by backend subclasses."""
-        raise NotImplementedError
+        """Waveform-level preemphasis `x[n] - p * x[n-1]` (first sample unchanged), zeroing the samples
+        past each clip's length in ``audio_ranges``. Used when ``spectrogram_config.preemphasis_mode ==
+        "waveform"`` (ASR models: Parakeet/Cohere/Nemotron)."""
+        out = self.ops.concat([audio[..., :1], audio[..., 1:] - preemphasis * audio[..., :-1]], -1)
+        if audio_ranges is not None:
+            lengths = self.ops.asarray(self._lengths_from_ranges(audio_ranges), like=audio)
+            valid = self.ops.arange(out.shape[-1], like=audio)[None, :] < lengths[:, None]
+            out = self.ops.masked_fill(out, ~valid, 0.0)
+        return out
 
     def _stft_framed(self, frames, window, stft_cfg):
         """Window, FFT and normalise `frames`; returns the complex spectrum as ``(..., freq, frames)``.
@@ -1032,10 +1044,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return self.ops.swapaxes(spec, -1, -2)
 
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):
-        """Additive dither, applied when the merged ``dither`` is nonzero. Backend defaults add
-        unseeded Gaussian noise; deterministic implementations (Cohere-ASR) override.
-        ``audio_ranges`` is ``None`` on unbatched calls. Implemented by backend subclasses."""
-        raise NotImplementedError
+        """Additive Gaussian dither, applied when the merged ``dither`` is nonzero, drawn from the
+        library's global stream (`np.random.seed` / `torch.manual_seed` apply); deterministic models
+        override (Cohere-ASR). ``audio_ranges`` is ``None`` on unbatched calls. The noise is drawn in
+        the audio's dtype on every backend (numpy formerly drew float64 noise and cast the scaled sum).
+        """
+        return audio + dither * self.ops.randn(tuple(audio.shape), like=audio)
 
     def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
         """Magnitude (`power=1`) or power (`power=2`) spectrum of the complex STFT.

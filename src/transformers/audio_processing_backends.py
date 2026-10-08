@@ -40,20 +40,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def backend(self) -> str:
         return "numpy"
 
-    # ── STFT pipeline ─────────────────────────────────────────────────────
-
-    def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
-        out = audio.copy()
-        out[..., 1:] = audio[..., 1:] - preemphasis * audio[..., :-1]  # first sample unchanged
-        if audio_ranges is not None:
-            lengths = np.asarray([end - start for start, end in audio_ranges])
-            mask = np.arange(out.shape[-1])[None, :] < lengths[:, None]
-            out = np.where(mask, out, 0.0).astype(audio.dtype, copy=False)
-        return out
-
-    def _dither_waveform(self, audio, audio_ranges=None, *, dither):
-        return audio + (dither * np.random.randn(*audio.shape)).astype(audio.dtype)
-
 
 class TorchAudioBackend(BaseAudioProcessor):
     """Torch backend for audio processing."""
@@ -142,20 +128,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         mask = positions >= width - lengths[:, None] if padding_side == "left" else positions < lengths[:, None]
         batch = torch.full((len(audio), width), padding_value, dtype=audio[0].dtype, device=device)
         return list(batch.masked_scatter_(mask, torch.cat(audio)))
-
-    # ── STFT pipeline ─────────────────────────────────────────────────────
-
-    def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
-        audio = torch.cat([audio[..., :1], audio[..., 1:] - preemphasis * audio[..., :-1]], dim=-1)
-        if audio_ranges is not None:
-            lengths = self._host_to_device([end - start for start, end in audio_ranges], audio.device)
-            mask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < lengths.unsqueeze(1)
-            audio = audio.masked_fill(~mask, 0.0)
-        return audio
-
-    def _dither_waveform(self, audio, audio_ranges=None, *, dither):
-        noise = torch.randn(audio.shape, dtype=audio.dtype, device=audio.device)
-        return audio + dither * noise
 
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -783,7 +755,10 @@ if is_torch_available():
             return padded.reshape(*moved.shape[:-1], padded.shape[-1]).movedim(-1, axis)
 
         def masked_fill(self, x, mask, value):
-            return x.masked_fill(mask, value)
+            # keep `x`'s strides, as `np.where` does: out-of-place `masked_fill` returns a contiguous copy, and
+            # a reduction over a transposed (strided) batch then accumulates in another order (Parakeet's
+            # per-feature normalization moved by an ulp against legacy)
+            return x.clone(memory_format=torch.preserve_format).masked_fill_(mask, value)
 
         def swapaxes(self, x, axis1, axis2):
             return x.transpose(axis1, axis2)
