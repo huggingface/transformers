@@ -1158,6 +1158,30 @@ if __name__ == "__main__":
                 artifact_name_to_job_map[artifact_name] = job
                 break
 
+    # Maps runner group name → GPU slot name used in job_link / model_results.json.
+    # Mirrors the "Set machine_type" step in transformers-ci daily-ci_reusable_model_job.yml.
+    MACHINE_TYPE_TO_GPU = {
+        "aws-g5-4xlarge-cache": "single",
+        "aws-g5-12xlarge-cache": "multi",
+    }
+
+    # Fallback map for container-init failures where the "Test suite reports artifacts" step
+    # never ran (so artifact_name_to_job_map has no entry).  Built by parsing the matrix folder
+    # out of the GitHub Actions job name, e.g. "run_models_gpu (models/bert, aws-g5-4xlarge-cache, 0)".
+    matrix_name_to_github_jobs: dict = {}
+    for job in github_actions_jobs:
+        runner_group = job.get("runner_group_name", "")
+        gpu = MACHINE_TYPE_TO_GPU.get(runner_group)
+        if gpu is None:
+            continue
+        # Job name format: "... (folder, runner_group, index)" — first captured group is the folder.
+        m = re.search(r"\(([^,)]+)", job["name"])
+        if not m:
+            continue
+        folder = m.group(1).strip()
+        matrix_name = folder.replace("models/", "models_").replace("quantization/", "quantization_")
+        matrix_name_to_github_jobs.setdefault(matrix_name, {})[gpu] = job
+
     available_artifacts = retrieve_available_artifacts()
 
     test_categories = [
@@ -1192,7 +1216,6 @@ if __name__ == "__main__":
             "captured_info": {},
         }
         for matrix_name in job_matrix
-        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
     }
 
     matrix_job_results_extra = {
@@ -1200,13 +1223,33 @@ if __name__ == "__main__":
             "captured_info": {},
         }
         for matrix_name in job_matrix
-        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
     }
 
     unclassified_model_failures = []
 
     for matrix_name in matrix_job_results:
-        for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{matrix_name}_test_reports"].paths:
+        artifact_key = f"{report_name_prefix}_{matrix_name}_test_reports"
+        if artifact_key not in available_artifacts:
+            # The job produced no artifact at all (e.g. OOM-killed, silent exit, container
+            # init failure). Mark it as errored so it appears in the report.
+            matrix_job_results[matrix_name]["error"] = True
+            # Populate job_link using whichever source is available:
+            #   1. artifact_name_to_job_map: covers OOM kills where step "Test suite reports
+            #      artifacts" still appeared in the API (conclusion=failure/skipped).
+            #   2. matrix_name_to_github_jobs: fallback for container-init failures where
+            #      that step never ran at all.
+            for gpu_label in ("single-gpu", "multi-gpu"):
+                step_artifact_name = f"{gpu_label}_{artifact_key}"
+                if step_artifact_name in artifact_name_to_job_map:
+                    gpu = gpu_label.split("-")[0]  # "single" or "multi"
+                    matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[
+                        step_artifact_name
+                    ]["html_url"]
+            if not matrix_job_results[matrix_name]["job_link"] and matrix_name in matrix_name_to_github_jobs:
+                for gpu, job in matrix_name_to_github_jobs[matrix_name].items():
+                    matrix_job_results[matrix_name]["job_link"][gpu] = job["html_url"]
+            continue
+        for artifact_path_dict in available_artifacts[artifact_key].paths:
             path = artifact_path_dict["path"]
             artifact_gpu = artifact_path_dict["gpu"]
 
