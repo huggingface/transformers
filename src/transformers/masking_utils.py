@@ -20,7 +20,6 @@ import torch.nn.functional as F
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
-from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
     is_torch_flex_attn_available,
@@ -254,11 +253,18 @@ def _ignore_causal_mask_sdpa(
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
-    # Never skip when exporting: the export hard-codes `is_causal`, which is wrong for other query lengths
-    # (https://github.com/pytorch/pytorch/issues/108108). `torch.compile` can still skip unless it must read the
-    # `padding_mask` values; before torch 2.14 (pytorch#176499) dynamo reports `is_exporting()` as `True`, so older
-    # versions never skip while compiling.
+    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
+    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
+    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
+    # `ignore_causal_mask = True` if we are not tracing
+    # NOTE: under `torch.compile` we can still skip, but only if we do not have to read the values of the
+    # `padding_mask`. This requires torch>=2.14: before pytorch#176499, dynamo replaced
+    # `torch.compiler.is_exporting()` by a constant `True`, so older versions keep the previous behavior of
+    # never skipping while compiling.  # noqa: NC001, NC002
     if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
+        return False
+    # Static caches use a tensor `q_offset` to avoid graph breaks, but reading it would cause one
+    if isinstance(q_offset, torch.Tensor) and is_tracing(q_offset):
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
@@ -370,7 +376,6 @@ def _non_vmap_expansion_sdpa(
     return batch_indices, head_indices, q_indices, kv_indices
 
 
-@deprecate_kwarg("allow_torch_fix", version="5.18.0", additional_message="It has no effect anymore.")
 def sdpa_mask(
     batch_size: int,
     q_length: int,
@@ -382,7 +387,6 @@ def sdpa_mask(
     local_size: int | None = None,
     allow_is_causal_skip: bool = True,
     allow_is_bidirectional_skip: bool = False,
-    allow_torch_fix: bool = True,
     use_vmap: bool = False,
     device: torch.device | str = "cpu",
     **kwargs,

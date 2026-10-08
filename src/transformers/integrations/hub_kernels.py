@@ -87,6 +87,7 @@ if is_kernels_available():
         LayerRepository,
         LocalLayerRepository,
         Mode,
+        ROCMProperties,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_mapping,
@@ -166,6 +167,17 @@ if is_kernels_available():
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
                     revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
+                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                    trust_remote_code=True,
+                ),
+                # AMD Strix Halo (gfx1151, capability 11.5), ROCm build of the same layer
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): LayerRepository(
+                    repo_id="Atlas-Inference/gdn",
+                    layer_name="Qwen3_5GatedDeltaNet",
+                    revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -939,7 +951,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
-    mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+    mode = (Mode.INFERENCE if not model.training else Mode.TRAINING) if mode is None else mode
     device = Device(type=get_device_type(model.device))
 
     if model.kernel_config is not None:
