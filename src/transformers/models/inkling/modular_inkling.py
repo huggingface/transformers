@@ -24,13 +24,13 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -41,7 +41,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
     Gemma3ForCausalLM,
@@ -292,10 +292,10 @@ class InklingConfig(PreTrainedConfig):
     """
 
     model_type = "inkling_mm_model"
-    sub_configs = {
-        "text_config": InklingTextConfig,
-        "audio_config": InklingAudioConfig,
-        "vision_config": InklingVisionConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=InklingTextConfig),
+        "vision_config": SubConfigSpec(config_class=InklingVisionConfig),
+        "audio_config": SubConfigSpec(config_class=InklingAudioConfig),
     }
 
     text_config: InklingTextConfig | dict | None = None
@@ -314,32 +314,17 @@ class InklingConfig(PreTrainedConfig):
             self.text_config.setdefault("chain_hidden_post_norm", mtp_config.get("chain_hidden_post_norm", False))
             self.text_config.setdefault("mtp_local_layer_ids", mtp_config.get("local_layer_ids"))
 
-        if isinstance(self.audio_config, dict):
-            self.audio_config = self.sub_configs["audio_config"](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = self.sub_configs["audio_config"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+        super().__post_init__(**kwargs)
         self.vision_config.text_hidden_size = self.text_config.hidden_size
         self.audio_config.text_hidden_size = self.text_config.hidden_size
-        super().__post_init__(**kwargs)
 
 
 class InklingModelOutputWithPast(Gemma3ModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class InklingCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class InklingRMSNorm(LlamaRMSNorm):
@@ -743,6 +728,7 @@ class InklingPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": InklingDecoderLayer,
         "attentions": InklingAttention,
+        "router_logits": OutputRecorder(InklingTopkRouter, index=0),
     }
 
     @torch.no_grad()
@@ -807,7 +793,7 @@ class InklingTextModel(InklingPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -849,7 +835,7 @@ class InklingTextModel(InklingPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -920,6 +906,7 @@ class InklingForCausalLM(Gemma3ForCausalLM):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1289,6 +1276,7 @@ class InklingModel(InklingPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1417,6 +1405,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(

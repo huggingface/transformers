@@ -425,7 +425,8 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=32)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -540,7 +541,8 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         self.config_tester = ConfigTester(self, config_class=Siglip2Config, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

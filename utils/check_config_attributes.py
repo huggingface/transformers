@@ -78,9 +78,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "mtp_layer_types",
         "mtp_mlp_layer_types",
     ],
-    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "router_aux_loss_coef"],
     "Qwen4ExpTextConfig": ["split_ngram_parts"],  # Used by Concatenate during checkpoint conversion
-    "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
@@ -103,7 +102,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_period",
         "use_mamba_kernels",
     ],
-    "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
@@ -330,6 +328,7 @@ ATTRIBUTES_TO_ALLOW = (
     "tokenizer_class",
     "is_encoder_decoder",
     "output_hidden_states",
+    "output_router_logits",  # read by `capture_outputs`, not by the modeling code
     "return_dict",
     # Inits related
     "initializer_range",
