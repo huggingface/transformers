@@ -51,13 +51,11 @@ class BailingHybridConfig(PreTrainedConfig):
         Base period of the rotary position embeddings used by MLA layers.
     no_kda_lora (`bool`, *optional*, defaults to `True`):
         Whether KDA forget and output gates use direct projections instead of low-rank projections.
-    number_of_conv_states (`int`, *optional*, defaults to 3):
-        Number of short-convolution cache states per KDA layer, one each for queries, keys, and values.
+    number_of_conv_states (`int`, *optional*, defaults to 1):
+        Number of packed QKV short-convolution cache states per KDA layer.
     num_nextn_predict_layers (`int`, *optional*, defaults to 1):
         Number of auxiliary multi-token-prediction layers stored in released training checkpoints. These layers are
         not instantiated for standard causal language modeling.
-    num_mtp_layers (`int`, *optional*, defaults to 1):
-        Legacy alias for the number of multi-token-prediction layers in a training checkpoint.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -129,7 +127,6 @@ class BailingHybridConfig(PreTrainedConfig):
     rope_interleave: bool = True
     attention_bias: bool = False
     attention_dropout: float = 0.0
-    num_mtp_layers: int = 1
     num_local_experts: int = 512
     rope_theta: float | int = 6_000_000.0
 
@@ -141,7 +138,7 @@ class BailingHybridConfig(PreTrainedConfig):
     no_kda_lora: bool = True
     gated_attention_proj_granularity_type: str | None = "head_wise"
     layer_types: list[str] | None = None
-    number_of_conv_states: int = 3
+    number_of_conv_states: int = 1
 
     num_nextn_predict_layers: int = 1
     mtp_loss_scaling_factor: float | int = 0.0
