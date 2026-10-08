@@ -202,6 +202,7 @@ class InklingTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["dense" if i < dense_mlp_idx else "sparse" for i in range(self.num_hidden_layers)]
 
         if kwargs.get("dense_intermediate_size") is not None:
+            self.moe_intermediate_size = self.intermediate_size
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
