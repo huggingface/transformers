@@ -215,7 +215,7 @@ class DistributedMixin:
         create_pr: bool = False,
     ) -> None:
         """Save an FSDP- or TP-sharded model as safetensors via DCP and optionally push to the Hub."""
-        if not _check_distributed_checkpointing_available(raise_if_not=False):
+        if not _check_distributed_checkpointing_available():
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
 
         distributed_config = getattr(model_to_save.config, "distributed_config", None)

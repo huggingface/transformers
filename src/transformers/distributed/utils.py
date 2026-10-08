@@ -39,12 +39,8 @@ if is_torch_available():
     import torch
 
 
-def _check_distributed_checkpointing_available(raise_if_not: bool = True) -> bool:
-    if not is_torch_distributed_available() or not is_torch_greater_or_equal("2.7"):
-        if raise_if_not:
-            raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
-        return False
-    return True
+def _check_distributed_checkpointing_available() -> bool:
+    return is_torch_distributed_available() and is_torch_greater_or_equal("2.7")
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -299,7 +295,8 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
-    _check_distributed_checkpointing_available()
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used

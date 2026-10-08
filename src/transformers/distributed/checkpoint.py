@@ -39,7 +39,7 @@ if is_torch_available():
     import torch
     from torch.utils._pytree import tree_map
 
-if _check_distributed_checkpointing_available(raise_if_not=False):
+if _check_distributed_checkpointing_available():
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader, HuggingFaceStorageWriter
     from torch.distributed.tensor import Shard
     from torch.distributed.tensor.placement_types import _StridedShard
@@ -90,7 +90,8 @@ def _prepare_state_dict_for_dcp(state_dict):
         `Shard` placements before saving the state dict.
 
     """
-    _check_distributed_checkpointing_available()
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
     def prepare(value):
         if is_dtensor(value) and any(isinstance(p, _StridedShard) for p in value.placements):
@@ -109,7 +110,8 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
     are written at the root. Otherwise, load the rank-local files with
     `load_distributed_checkpoint`; they are not `from_pretrained` checkpoints.
     """
-    _check_distributed_checkpointing_available()
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -208,7 +210,8 @@ def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, 
     """
     Load local safetensors weights into an initialized model, preserving its current mesh and placements.
     """
-    _check_distributed_checkpointing_available()
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
 
     safe_index_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
     safe_weights_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)

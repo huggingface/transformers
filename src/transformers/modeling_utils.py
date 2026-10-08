@@ -4250,7 +4250,7 @@ class PreTrainedModel(
                 distributed_checkpoint_dir = candidate_dir
 
         if distributed_checkpoint_dir is not None:
-            if not _check_distributed_checkpointing_available(raise_if_not=False):
+            if not _check_distributed_checkpointing_available():
                 raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
             if hf_quantizer is not None:
                 raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
