@@ -245,6 +245,7 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
 
 
+@unittest.skip(reason="Weights will be published later")
 @require_scipy
 @require_torch
 @require_vision

@@ -21,8 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -133,7 +132,22 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     ```"""
 
     model_type = "pp_doclayout_v4"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                # PP-DocLayoutV4 has no mask branch, so the stride 4 feature is never consumed and the
+                # backbone only has to emit the last three stages.
+                "return_idx": [1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+                "out_features": ["stage2", "stage3", "stage4"],
+            },
+        ),
+    }
 
     # PP-DocLayoutV3 declares `d_model` and aliases `hidden_size` onto it; PP-DocLayoutV4 does the reverse so
     # that the canonical name is the one the rest of the library expects.
@@ -161,25 +175,9 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     # `hidden_size` above and keeps `d_model` only as an `attribute_map` alias.
     d_model = AttributeError()  # trf-ignore: TRF023
     layer_types = AttributeError()
+    learn_initial_query = AttributeError()
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={
-                "arch": "L",
-                # PP-DocLayoutV4 has no mask branch, so the stride 4 feature is never consumed and the
-                # backbone only has to emit the last three stages.
-                "return_idx": [1, 2, 3],
-                "freeze_stem_only": True,
-                "freeze_at": 0,
-                "freeze_norm": True,
-                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
-                "out_features": ["stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
         PreTrainedConfig.__post_init__(self, **kwargs)
 
         # Resolved here rather than in `_init_weights` so that the effective prior is visible on the config.
@@ -191,8 +189,6 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_coords != 10:
             raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
-
-    learn_initial_query = AttributeError()
 
 
 def quad_to_rect(quad: torch.Tensor) -> torch.Tensor:
