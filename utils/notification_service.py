@@ -1167,15 +1167,16 @@ if __name__ == "__main__":
 
     # Fallback map for container-init failures where the "Test suite reports artifacts" step
     # never ran (so artifact_name_to_job_map has no entry).  Built by parsing the matrix folder
-    # out of the GitHub Actions job name, e.g. "run_models_gpu (models/bert, aws-g5-4xlarge-cache, 0)".
+    # out of the GitHub Actions job name, e.g.:
+    # "Model CI / run_models_gpu (aws-g5-12xlarge-cache, 0) / run_models_gpu (models/mistral4)"
     matrix_name_to_github_jobs: dict = {}
     for job in github_actions_jobs:
         runner_group = job.get("runner_group_name", "")
         gpu = MACHINE_TYPE_TO_GPU.get(runner_group)
         if gpu is None:
             continue
-        # Job name format: "... (folder, runner_group, index)" — first captured group is the folder.
-        m = re.search(r"\(([^,)]+)", job["name"])
+        # Job name format: "... / run_models_gpu (models/mistral4)" — folder is in the last (...).
+        m = re.search(r"\(([^)]+)\)\s*$", job["name"])
         if not m:
             continue
         folder = m.group(1).strip()
