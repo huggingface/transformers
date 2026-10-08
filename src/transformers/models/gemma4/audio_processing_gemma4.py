@@ -47,6 +47,9 @@ class Gemma4AudioProcessorMixin:
             "f_max": 8000.0,
             "mel_scale": "htk",
             "matmul_order": "features_first",
+            # the legacy extractor built its bank with `mel_filter_bank` (librosa's rounding, linspace bins)
+            "bank_rounding": "librosa",
+            "frequency_bin_mode": "linspace",
         },
         "preemphasis": 0.0,
         "preemphasis_mode": "htk_per_frame",

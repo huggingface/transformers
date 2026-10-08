@@ -18,11 +18,6 @@ from typing import Unpack
 import numpy as np
 
 from .audio_processing_utils import BaseAudioProcessor
-from .audio_utils import (
-    _create_triangular_filter_bank,
-    hertz_to_mel,
-    mel_to_hertz,
-)
 from .processing_utils import AudioKwargs
 from .utils import is_torch_available, logging, requires_backends
 
@@ -65,136 +60,6 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):
         return audio + (dither * np.random.randn(*audio.shape)).astype(audio.dtype)
-
-    # ── Mel scale & normalization ─────────────────────────────────────────
-    #
-    # The base `_mel_filter_bank` dispatcher (audio_processing_utils) resolves geometry
-    # and dtype; the three leaves below own the numerical construction. Each backend's
-    # leaves deliberately implement their own ecosystem's rounding pattern: these numpy
-    # leaves are bit-exact against librosa and the legacy numpy feature extractors, the
-    # torch leaves against torchaudio / torchaudio.compliance.kaldi. The two backends are
-    # numerically equivalent but NOT bit-identical.
-
-    @staticmethod
-    def _np_triangular_banks(fft_freqs, filter_freqs, computation_dtype):
-        """Triangular bank with the numpy ecosystem's dtype policy.
-
-        With no computation dtype, replicate librosa's per-band float32 rounding:
-        slopes computed in float64 with each band's column cast to float32 on
-        assignment (librosa assigns rows into a float32-initialized array, which
-        rounds differently than casting a float64 matrix at the end). With a dtype,
-        plain full-precision construction cast to that dtype.
-        """
-        if computation_dtype is None:
-            num_frequency_bins = fft_freqs.shape[0]
-            num_mel_filters = filter_freqs.shape[0] - 2
-            filter_diff = np.diff(filter_freqs)
-            ramps = np.subtract.outer(filter_freqs, fft_freqs)  # (num_mel_filters+2, num_frequency_bins)
-            mel_filters = np.zeros((num_frequency_bins, num_mel_filters), dtype=np.float32)
-            for i in range(num_mel_filters):
-                lower = -ramps[i] / filter_diff[i]
-                upper = ramps[i + 2] / filter_diff[i + 1]
-                mel_filters[:, i] = np.maximum(0, np.minimum(lower, upper)).astype(np.float32)
-            return mel_filters
-        return _create_triangular_filter_bank(fft_freqs, filter_freqs).astype(np.dtype(computation_dtype), copy=False)
-
-    def _kaldi_exact_mel_banks(
-        self,
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Mel-space triangularization, numpy-ecosystem semantics.
-
-        Bit-exact against the legacy numpy feature extractors (e.g. SeamlessM4T):
-        ``hertz_to_mel(mel_scale=...)`` on float64 bin frequencies and filter edges from
-        ``np.linspace`` in mel space. Deliberately NOT torchaudio's hardcoded
-        ``1127 * log`` float32 ``get_mel_banks`` arithmetic — the torch leaf owns that
-        rounding pattern; the two leaves are numerically equivalent, not bit-identical.
-        """
-        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        filter_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
-        fft_bin_width = sampling_rate / n_fft
-        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_cfg.mel_scale)
-        return self._np_triangular_banks(fft_freqs, filter_freqs, computation_dtype)
-
-    def _kaldi_mel_banks_with_zero_bands(
-        self,
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Mel-space triangularization (numpy-ecosystem semantics, see
-        `_kaldi_exact_mel_banks`) with the lowest ``bands_to_zero`` bins zeroed."""
-        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        filter_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
-        fft_bin_width = sampling_rate / n_fft
-        fft_freqs = hertz_to_mel(
-            fft_bin_width * np.arange(mel_cfg.bands_to_zero, num_frequency_bins), mel_scale=mel_cfg.mel_scale
-        )
-        mel_filters = self._np_triangular_banks(fft_freqs, filter_freqs, computation_dtype)
-        if mel_cfg.bands_to_zero > 0:
-            mel_filters = np.pad(mel_filters, ((mel_cfg.bands_to_zero, 0), (0, 0)))
-        return mel_filters
-
-    def _standard_mel_banks(
-        self,
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Standard triangular mel filter bank, numpy-ecosystem semantics.
-
-        Bit-exact against librosa's filters (and the legacy numpy feature extractors
-        built on them): FFT bin frequencies always use the float64
-        ``linspace(0, sr // 2, bins)`` form regardless of ``frequency_bin_mode``, and
-        the slaney area-norm is applied after the dtype policy (i.e. after the per-band
-        float32 cast when no computation dtype is set — librosa's rounding order).
-        The torch leaf implements torchaudio's rounding instead; the two leaves are
-        numerically equivalent, not bit-identical.
-        """
-        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
-        filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
-        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
-        mel_filters = self._np_triangular_banks(fft_freqs, filter_freqs, computation_dtype)
-        if mel_cfg.norm == "slaney":
-            # Slaney-style mel is scaled to be approx constant energy per channel
-            enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
-            mel_filters *= np.expand_dims(enorm, 0)
-        if mel_cfg.bands_to_zero > 0:
-            mel_filters = np.pad(mel_filters, ((mel_cfg.bands_to_zero, 0), (0, 0)))
-        return mel_filters
-
-    def _cast_mel_filters_to_default_float(self, mel_filters):
-        return mel_filters.astype(np.float32, copy=False)
-
-    def _project_to_mel(self, features, *, spectrogram_config, mel_filters=None, **kwargs):
-        mel_filters = self.mel_filters if mel_filters is None else mel_filters
-        mel_filters = mel_filters.astype(features.dtype, copy=False)
-        if spectrogram_config.mel_scale_config.matmul_order == "features_first":
-            mel_spec = np.matmul(features.swapaxes(-2, -1), mel_filters)
-        else:
-            mel_spec = np.matmul(mel_filters.T, features)
-        return np.maximum(spectrogram_config.mel_floor, mel_spec)
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -302,158 +167,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         noise = torch.randn(audio.shape, dtype=audio.dtype, device=audio.device)
         return audio + dither * noise
 
-    # ── Mel scale & normalization ─────────────────────────────────────────
-    #
-    # The base `_mel_filter_bank` dispatcher (audio_processing_utils) resolves geometry
-    # and dtype; the three leaves below own the numerical construction. Each backend's
-    # leaves deliberately implement their own ecosystem's rounding pattern: these torch
-    # leaves are bit-exact against torchaudio / torchaudio.compliance.kaldi, the numpy
-    # leaves against librosa and the legacy numpy feature extractors. The two backends
-    # are numerically equivalent but NOT bit-identical.
-
-    @staticmethod
-    def _kaldi_exact_mel_banks(
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Matches torchaudio.compliance.kaldi.get_mel_banks exactly.
-
-        Hardcoded ``1127 * log`` kaldi mel scale and ``get_mel_banks``'s edge arithmetic,
-        in torch's default float32 when no computation dtype is set. The numpy leaf owns
-        the legacy numpy-FE construction instead (``hertz_to_mel`` + linspace in float64);
-        the two leaves are numerically equivalent, not bit-identical.
-        """
-        dtype = getattr(torch, computation_dtype) if computation_dtype else None
-        num_fft_bins = n_fft // 2
-        fft_bin_width = sampling_rate / n_fft
-        mel_low = 1127.0 * math.log(1.0 + min_frequency / 700.0)
-        mel_high = 1127.0 * math.log(1.0 + max_frequency / 700.0)
-        mel_delta = (mel_high - mel_low) / (num_mel_filters + 1)
-
-        bin_idx = torch.arange(num_mel_filters, dtype=dtype).unsqueeze(1)
-        left_mel = mel_low + bin_idx * mel_delta
-        center_mel = mel_low + (bin_idx + 1.0) * mel_delta
-        right_mel = mel_low + (bin_idx + 2.0) * mel_delta
-
-        mel = 1127.0 * (1.0 + fft_bin_width * torch.arange(num_fft_bins, dtype=dtype) / 700.0).log()
-        mel = mel.unsqueeze(0)
-
-        up_slope = (mel - left_mel) / (center_mel - left_mel)
-        down_slope = (right_mel - mel) / (right_mel - center_mel)
-        banks = torch.max(torch.zeros(1, dtype=dtype), torch.min(up_slope, down_slope))
-        banks = torch.nn.functional.pad(banks, (0, 1), mode="constant", value=0)
-        return banks.T
-
-    @staticmethod
-    def _kaldi_mel_banks_with_zero_bands(
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Kaldi-style (triangularize in mel space) with optional zeroed low bands."""
-        dtype = getattr(torch, computation_dtype) if computation_dtype else None
-        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        filter_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=dtype)
-
-        fft_bin_width = sampling_rate / n_fft
-        hz_freqs = fft_bin_width * torch.arange(mel_cfg.bands_to_zero, num_frequency_bins, dtype=dtype)
-        fft_freqs = hertz_to_mel(hz_freqs, mel_scale=mel_cfg.mel_scale)
-
-        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
-        if mel_cfg.bands_to_zero > 0:
-            mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
-        return mel_filters
-
-    @staticmethod
-    def _standard_mel_banks(
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Standard (non-kaldi) triangular mel filter bank, torchaudio-ecosystem semantics.
-
-        Bit-exact against ``torchaudio.functional.melscale_fbanks`` in the default-dtype
-        case; the numpy leaf owns librosa's rounding pattern instead, so the two leaves are
-        numerically equivalent but not bit-identical.
-
-        ``bank_rounding="librosa"`` opts this leaf into librosa's pattern too, for models
-        whose legacy extractor built its filters with ``librosa.filters.mel`` (Parakeet,
-        Cohere-ASR): float64 ``linspace`` bins regardless of ``frequency_bin_mode``, cast to
-        float32 *before* the slaney norm, then a second float32 rounding after it — the only
-        order that reproduces those filters bit-exactly.
-        """
-        librosa_rounding = mel_cfg.bank_rounding == "librosa"
-        if librosa_rounding:
-            dtype = torch.float64
-        else:
-            dtype = getattr(torch, computation_dtype) if computation_dtype else None
-        mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=dtype)
-        filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
-
-        if mel_cfg.frequency_bin_mode == "rfft" and not librosa_rounding:
-            fft_freqs = torch.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
-        else:
-            fft_freqs = torch.linspace(0, sampling_rate // 2, num_frequency_bins)
-        if dtype is not None:
-            fft_freqs = fft_freqs.to(dtype)
-
-        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
-        if librosa_rounding:
-            mel_filters = mel_filters.to(torch.float32)
-
-        if mel_cfg.norm == "slaney":
-            enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
-            mel_filters = mel_filters * enorm[None, :]
-            if librosa_rounding:
-                mel_filters = mel_filters.to(torch.float32)
-
-        if mel_cfg.bands_to_zero > 0:
-            mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
-        return mel_filters
-
-    def _cast_mel_filters_to_default_float(self, mel_filters):
-        return mel_filters.to(torch.get_default_dtype())
-
-    def _project_to_mel(self, features, *, spectrogram_config, mel_filters=None, **kwargs):
-        # Match the filters to the feature dtype: unlike numpy, `torch.matmul` refuses mixed
-        # dtypes, so float64 filters against float32 features would raise instead of promoting.
-        mel_filters = self.mel_filters if mel_filters is None else mel_filters
-        mel_filters = self._host_to_device(mel_filters.to(features.dtype), features.device)
-        matmul_order = spectrogram_config.mel_scale_config.matmul_order
-        if matmul_order == "features_first":
-            mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)
-        elif matmul_order == "filters_first_matmul":
-            # legacy `mel_filters @ magnitudes`; differs from F.linear in the last ulp
-            mel_spec = torch.matmul(mel_filters.T, features)
-        else:
-            # F.linear matches torchaudio's MelScale implementation exactly
-            mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
-        # Power/magnitude spectra and mel filters are non-negative, so a zero floor is
-        # already guaranteed. Avoid dispatching a redundant pointwise CUDA kernel in the
-        # common raw-mel path; nonzero floors retain their explicit clamp semantics.
-        if spectrogram_config.mel_floor != 0.0:
-            mel_spec = torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
-        return mel_spec
-
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # Op-table backends (docs/superpowers/specs/2026-10-06-audio-backend-ops-design.md).
@@ -535,6 +248,11 @@ class AudioOps:
         """Integers ``0 .. n-1`` (int64), on `like`'s device."""
         raise NotImplementedError
 
+    def linspace(self, start, stop, num, *, dtype="float32", like=None):
+        """`num` evenly spaced values from `start` to `stop` inclusive, computed in `dtype` by the backend's own
+        kernel (the bits differ between libraries in `float32`), on `like`'s device."""
+        raise NotImplementedError
+
     # ── assembly ───────────────────────────────────────────────────────────────────────────────
 
     def stack(self, seq):
@@ -592,8 +310,19 @@ class AudioOps:
         """Elementwise maximum of two broadcastable arrays."""
         raise NotImplementedError
 
+    def minimum(self, x, y):
+        """Elementwise minimum of two broadcastable arrays."""
+        raise NotImplementedError
+
     def clamp_min(self, x, value):
         """Elementwise ``max(x, value)`` for a scalar `value`."""
+        raise NotImplementedError
+
+    def exp(self, x):
+        raise NotImplementedError
+
+    def where(self, cond, x, y):
+        """`x` where the boolean `cond` holds, else `y` (broadcast)."""
         raise NotImplementedError
 
     def pow(self, x, exponent):
@@ -777,6 +506,9 @@ class NumpyOps(AudioOps):
     def arange(self, n, *, like=None):
         return np.arange(n, dtype=np.int64)
 
+    def linspace(self, start, stop, num, *, dtype="float32", like=None):
+        return np.linspace(start, stop, num, dtype=np.dtype(dtype))
+
     # ── assembly ───────────────────────────────────────────────────────────────────────────────
 
     def stack(self, seq):
@@ -832,8 +564,17 @@ class NumpyOps(AudioOps):
     def maximum(self, x, y):
         return np.asarray(np.maximum(x, y))
 
+    def minimum(self, x, y):
+        return np.asarray(np.minimum(x, y))
+
     def clamp_min(self, x, value):
         return np.asarray(np.maximum(x, np.asarray(value, dtype=x.dtype)))
+
+    def exp(self, x):
+        return np.asarray(np.exp(x))
+
+    def where(self, cond, x, y):
+        return np.asarray(np.where(cond, x, y))
 
     def pow(self, x, exponent):
         # the operator, not `np.power`: numpy fast-paths a scalar 2 to `square` and 0.5 to `sqrt`, as
@@ -1024,6 +765,10 @@ if is_torch_available():
         def arange(self, n, *, like=None):
             return torch.arange(n, dtype=torch.int64, device=self._device_of(like))
 
+        def linspace(self, start, stop, num, *, dtype="float32", like=None):
+            device = self._device_of(like)
+            return torch.linspace(start, stop, num, dtype=self._torch_dtype(dtype, device.type), device=device)
+
         # ── assembly ───────────────────────────────────────────────────────────────────────────
 
         def stack(self, seq):
@@ -1078,8 +823,17 @@ if is_torch_available():
         def maximum(self, x, y):
             return torch.maximum(x, y)
 
+        def minimum(self, x, y):
+            return torch.minimum(x, y)
+
         def clamp_min(self, x, value):
             return torch.clamp(x, min=value)
+
+        def exp(self, x):
+            return torch.exp(x)
+
+        def where(self, cond, x, y):
+            return torch.where(cond, x, y)
 
         def pow(self, x, exponent):
             return torch.pow(x, exponent)

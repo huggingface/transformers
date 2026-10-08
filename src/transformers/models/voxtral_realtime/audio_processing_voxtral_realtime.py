@@ -40,8 +40,8 @@ class VoxtralRealtimeAudioProcessorMixin:
             "mel_scale": "slaney",
             "norm": "slaney",
             "computation_dtype": "float64",
-            # the legacy extractor does `mel_filters @ magnitudes`; `F.linear` (the default)
-            # differs from it in the last ulp
+            # the legacy extractor does `mel_filters @ magnitudes`; torchaudio's order (the default) differs
+            # from it in the last ulp
             "matmul_order": "filters_first_matmul",
         },
         "log_mode": "log10",

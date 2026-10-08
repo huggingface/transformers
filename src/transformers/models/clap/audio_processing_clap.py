@@ -95,6 +95,8 @@ class ClapAudioProcessorMixin:
             "f_max": 14000,
             "mel_scale": "slaney",
             "norm": "slaney",
+            # the legacy extractor built its bank with `mel_filter_bank` (librosa's rounding, linspace bins)
+            "bank_rounding": "librosa",
             "frequency_bin_mode": "linspace",
             "computation_dtype": "float64",
         },

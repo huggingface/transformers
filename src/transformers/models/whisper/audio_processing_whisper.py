@@ -44,7 +44,7 @@ class WhisperAudioProcessorMixin:
             "mel_scale": "slaney",
             "norm": "slaney",
             "computation_dtype": "float64",
-            "matmul_order": "filters_first_matmul",
+            "matmul_order": "filters_first_matmul",  # the legacy extractor does `mel_filters @ magnitudes`
         },
         "log_mode": "log10",
         "drop_last_frame": True,

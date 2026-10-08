@@ -46,7 +46,14 @@ class Pop2PianoAudioProcessorMixin:
     sampling_rate = 22050
     spectrogram_config = {
         "stft_config": {"n_fft": 4096, "hop_length": 1024, "power": 2.0},
-        "mel_scale_config": {"n_mels": 512, "f_min": 10.0, "mel_scale": "htk"},
+        "mel_scale_config": {
+            "n_mels": 512,
+            "f_min": 10.0,
+            "mel_scale": "htk",
+            # the legacy extractor built its bank with `mel_filter_bank` (librosa's rounding, linspace bins)
+            "bank_rounding": "librosa",
+            "frequency_bin_mode": "linspace",
+        },
         "log_mode": "log10",
     }
 

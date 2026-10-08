@@ -35,6 +35,7 @@ LEGACY_GEMMA_AUDIO_FIELDS = {
     "fft_overdrive": None,
 }
 
+
 class Gemma3nAudioProcessorMixin:
     legacy_field_mapping = LEGACY_GEMMA_AUDIO_FIELDS
     max_length = 480000
@@ -57,6 +58,9 @@ class Gemma3nAudioProcessorMixin:
             "f_max": 7600.0,
             "mel_scale": "htk",
             "matmul_order": "features_first",
+            # the legacy extractor built its bank with `mel_filter_bank` (librosa's rounding, linspace bins)
+            "bank_rounding": "librosa",
+            "frequency_bin_mode": "linspace",
         },
         "mel_floor": 1e-5,
         "log_mode": "log",

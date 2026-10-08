@@ -56,8 +56,9 @@ class CohereAsrAudioProcessorMixin:
             "f_min": 0.0,
             "norm": "slaney",
             "mel_scale": "slaney",
-            "matmul_order": "filters_first_matmul",
+            "matmul_order": "filters_first_matmul",  # the legacy extractor does `mel_filters @ magnitudes`
             "bank_rounding": "librosa",
+            "frequency_bin_mode": "linspace",
         },
         "preemphasis": 0.97,
         "preemphasis_mode": "waveform",

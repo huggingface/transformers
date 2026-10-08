@@ -12,16 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_univnet import UnivNetAudioProcessorMixin
 
 
 class UnivNetAudioProcessorNumpy(UnivNetAudioProcessorMixin, NumpyAudioBackend):
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        # No mel-scale clamp: UnivNet's floor is already inside the magnitude sqrt
-        return np.matmul(self.mel_filters.T, features)
+    pass
 
 
 __all__ = ["UnivNetAudioProcessorNumpy"]

@@ -126,8 +126,14 @@ class MelScaleConfig(DataclassDict):
     frequency_bin_mode: str = "rfft"
     computation_dtype: str | None = None
     bands_to_zero: int = 0
+    # Two legacy GEMM orders give different bits, so both are values. "filters_first": torchaudio's `MelScale`
+    # (and `F.linear`) order, `matmul(x^T, bank)^T`, output (..., mel, frames); "filters_first_matmul":
+    # `filters.T @ x` (the legacy numpy/torch extractors, librosa's `mel_basis @ S`), same output layout;
+    # "features_first": `matmul(x^T, bank)` left as (..., frames, mel).
     matmul_order: str = "filters_first"
-    bank_rounding: str | None = None
+    # "torchaudio": banks built as torchaudio rounds them (float32 arithmetic by default); "librosa": as librosa
+    # does (float64 geometry, per-band float32 rounding, norm after the cast)
+    bank_rounding: str = "torchaudio"
 
 
 @dataclass(frozen=True, eq=False, unsafe_hash=True)

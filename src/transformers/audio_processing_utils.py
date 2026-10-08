@@ -24,7 +24,10 @@ from .audio_processing_base import AudioProcessingMixin, BatchFeature
 from .audio_utils import (
     AudioInput,
     SpectrogramConfig,
+    _create_triangular_filter_bank,
+    hertz_to_mel,
     make_list_of_audio,
+    mel_to_hertz,
 )
 from .processing_utils import AudioKwargs
 from .tokenization_utils_base import TruncationStrategy
@@ -44,6 +47,142 @@ _WINDOW_ALIASES = {"hann_window": "hann", "hamming_window": "hamming", "blackman
 _PAD_MODES = {"constant": "constant", "reflect": "reflect", "edge": "replicate", "replicate": "replicate"}
 # The complex dtype that carries a spectrum whose magnitudes are taken in the given float dtype.
 _COMPLEX_OF = {"float32": "complex64", "float64": "complex128"}
+# `MelScaleConfig.matmul_order`: two filters-first GEMM orders (torchaudio's / `F.linear`'s, and `filters.T @ x`)
+# differ in the last ulp, so both are values; "features_first" leaves the frames axis first.
+_MATMUL_ORDERS = ("filters_first", "filters_first_matmul", "features_first")
+
+
+# ── Mel filter banks ──────────────────────────────────────────────────────────────────────────
+#
+# Banks are small and built once at init; `self.mel_filters` is a host numpy array on every backend
+# (float32 unless a computation dtype says otherwise) and the projection converts it per call.
+# `bank_rounding` names whose construction a bank reproduces: `"librosa"` is librosa's and the legacy
+# numpy extractors' (float64 geometry on the host, rounded to float32 at the end); `"torchaudio"` is
+# torchaudio's, evaluated op by op through the backend's own kernels (float32 by default) because
+# torch's float32 `log`/`exp`/`linspace` are not correctly rounded: only the same kernels give the
+# same bits, and `to_numpy` carries them to the host unchanged.
+
+
+def _hertz_to_mel_ops(ops, freq, mel_scale, *, like):
+    """`hertz_to_mel` on a backend array, torchaudio's arithmetic (`audio_utils.hertz_to_mel`'s torch branch)."""
+    if mel_scale == "htk":
+        return 2595.0 * ops.log10(1.0 + freq / 700.0)
+    if mel_scale == "kaldi":
+        return 1127.0 * ops.log(1.0 + freq / 700.0)
+    # slaney: the log step is a float32 0-d array, as torchaudio's `27.0 / torch.log(torch.tensor(6.4))`
+    linear = freq / (200.0 / 3.0)
+    logstep = 27.0 / ops.log(ops.asarray(np.asarray(6.4, dtype=np.float32), like=like))
+    log_branch = 15.0 + ops.log(ops.clamp_min(freq, 1000.0) / 1000.0) * logstep
+    return ops.where(freq >= 1000.0, log_branch, linear)
+
+
+def _mel_to_hertz_ops(ops, mels, mel_scale):
+    """`mel_to_hertz` on a backend array, torchaudio's arithmetic (`audio_utils.mel_to_hertz`'s torch branch)."""
+    if mel_scale == "htk":
+        return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
+    if mel_scale == "kaldi":
+        return 700.0 * (ops.exp(mels / 1127.0) - 1.0)
+    linear = (200.0 / 3.0) * mels
+    log_branch = 1000.0 * ops.exp((math.log(6.4) / 27.0) * (mels - 15.0))
+    return ops.where(mels >= 15.0, log_branch, linear)
+
+
+def _triangular_filter_bank_ops(ops, fft_freqs, filter_freqs):
+    """`_create_triangular_filter_bank` on backend arrays: ``(num_frequency_bins, n_mels)``."""
+    filter_diff = filter_freqs[1:] - filter_freqs[:-1]
+    slopes = filter_freqs[None, :] - fft_freqs[:, None]
+    down_slopes = -slopes[:, :-2] / filter_diff[:-1]
+    up_slopes = slopes[:, 2:] / filter_diff[1:]
+    return ops.clamp_min(ops.minimum(down_slopes, up_slopes), 0.0)
+
+
+def _triangular_banks_librosa(fft_freqs, filter_freqs, dtype):
+    """librosa's dtype policy: float64 slopes, rounded to float32 at the end (or to `dtype`). librosa
+    assigns each band's column into a float32 array; the arithmetic per element is the same as
+    `_create_triangular_filter_bank`'s, so one cast at the end reproduces it bit for bit."""
+    return _create_triangular_filter_bank(fft_freqs, filter_freqs).astype(np.dtype(dtype or "float32"), copy=False)
+
+
+def _kaldi_banks_torchaudio(ops, n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, dtype):
+    """`torchaudio.compliance.kaldi.get_mel_banks`, op by op: hard-coded ``1127 * log`` in `dtype` (float32 by
+    default), edges from `mel_low + k * mel_delta`, a padded zero Nyquist column."""
+    dtype = dtype or "float32"
+    bin_width = sampling_rate / n_fft
+    mel_low = 1127.0 * math.log(1.0 + f_min / 700.0)
+    mel_high = 1127.0 * math.log(1.0 + f_max / 700.0)
+    mel_delta = (mel_high - mel_low) / (n_mels + 1)
+    bin_idx = ops.astype(ops.arange(n_mels), dtype)[:, None]
+    left = mel_low + bin_idx * mel_delta
+    center = mel_low + (bin_idx + 1.0) * mel_delta
+    right = mel_low + (bin_idx + 2.0) * mel_delta
+    mel = 1127.0 * ops.log(1.0 + bin_width * ops.astype(ops.arange(n_fft // 2), dtype) / 700.0)
+    mel = mel[None, :]
+    up_slope = (mel - left) / (center - left)
+    down_slope = (right - mel) / (right - center)
+    banks = ops.maximum(ops.zeros((1,), dtype=dtype), ops.minimum(up_slope, down_slope))
+    return ops.swapaxes(ops.pad(banks, 0, 1), 0, 1)
+
+
+def _kaldi_banks_librosa(n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, mel_cfg, dtype):
+    """The legacy numpy extractors' construction, on the host: `hertz_to_mel` on float64 bin frequencies,
+    filter edges from `np.linspace` in mel space, one float32 rounding at the end; the lowest
+    `bands_to_zero` bins zeroed."""
+    mel_min = hertz_to_mel(f_min, mel_scale=mel_cfg.mel_scale)
+    mel_max = hertz_to_mel(f_max, mel_scale=mel_cfg.mel_scale)
+    filter_freqs = np.linspace(mel_min, mel_max, n_mels + 2)
+    hz = sampling_rate / n_fft * np.arange(mel_cfg.bands_to_zero, num_bins)
+    banks = _triangular_banks_librosa(hertz_to_mel(hz, mel_scale=mel_cfg.mel_scale), filter_freqs, dtype)
+    return np.pad(banks, ((mel_cfg.bands_to_zero, 0), (0, 0))) if mel_cfg.bands_to_zero else banks
+
+
+def _kaldi_banks_zero_bands_torchaudio(ops, n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, mel_cfg, dtype):
+    """Mel-space triangularization in `dtype` (float32 by default) with the lowest `bands_to_zero` bins
+    zeroed: `linspace` edges and bin frequencies in `dtype`, `hertz_to_mel` on them, op by op."""
+    dtype = dtype or "float32"
+    mel_min = hertz_to_mel(f_min, mel_scale=mel_cfg.mel_scale)
+    mel_max = hertz_to_mel(f_max, mel_scale=mel_cfg.mel_scale)
+    filter_freqs = ops.linspace(mel_min, mel_max, n_mels + 2, dtype=dtype)
+    hz = sampling_rate / n_fft * ops.astype(ops.arange(num_bins), dtype)[mel_cfg.bands_to_zero :]
+    fft_freqs = _hertz_to_mel_ops(ops, hz, mel_cfg.mel_scale, like=hz)
+    banks = _triangular_filter_bank_ops(ops, fft_freqs, filter_freqs)
+    return ops.pad(banks, mel_cfg.bands_to_zero, 0, axis=0) if mel_cfg.bands_to_zero else banks
+
+
+def _standard_banks(ops, n_mels, num_bins, f_min, f_max, sampling_rate, n_fft, mel_cfg, dtype):
+    """Standard triangular bank. `bank_rounding="torchaudio"`: `melscale_fbanks`' order op by op (construction
+    in `dtype`, float32 by default, slaney norm after in that dtype). `"librosa"`: `librosa.filters.mel`'s
+    order on the host (float64 geometry, rounded to float32 before the norm and again after it, without a
+    dtype). `frequency_bin_mode` is honoured by both: `"rfft"` is `rfftfreq`'s bin spacing, `"linspace"`
+    is `linspace(0, sr // 2, bins)`, the legacy numpy extractors' (and librosa's) form; the two differ
+    when `sr // 2` is not a multiple of the bin width."""
+    mel_min = hertz_to_mel(f_min, mel_scale=mel_cfg.mel_scale)
+    mel_max = hertz_to_mel(f_max, mel_scale=mel_cfg.mel_scale)
+    if mel_cfg.bank_rounding == "librosa":
+        filter_freqs = mel_to_hertz(np.linspace(mel_min, mel_max, n_mels + 2), mel_scale=mel_cfg.mel_scale)
+        if mel_cfg.frequency_bin_mode == "rfft":
+            fft_freqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
+        else:
+            fft_freqs = np.linspace(0, sampling_rate // 2, num_bins)
+        banks = _triangular_banks_librosa(fft_freqs, filter_freqs, dtype)
+        if mel_cfg.norm == "slaney":
+            enorm = 2.0 / (filter_freqs[2 : n_mels + 2] - filter_freqs[:n_mels])
+            banks = banks * enorm[None, :]
+            if dtype is None:
+                banks = banks.astype(np.float32)
+        return np.pad(banks, ((mel_cfg.bands_to_zero, 0), (0, 0))) if mel_cfg.bands_to_zero else banks
+    dtype = dtype or "float32"
+    filter_freqs = _mel_to_hertz_ops(ops, ops.linspace(mel_min, mel_max, n_mels + 2, dtype=dtype), mel_cfg.mel_scale)
+    if mel_cfg.frequency_bin_mode == "rfft":
+        # `torch.fft.rfftfreq`: the integer bins scaled by `1 / (n * d)` in float32
+        fft_freqs = ops.astype(ops.arange(num_bins), "float32") * (1.0 / (n_fft * (1.0 / sampling_rate)))
+    else:
+        fft_freqs = ops.linspace(0, sampling_rate // 2, num_bins, dtype="float32")
+    fft_freqs = ops.astype(fft_freqs, dtype)
+    banks = _triangular_filter_bank_ops(ops, fft_freqs, filter_freqs)
+    if mel_cfg.norm == "slaney":
+        enorm = 2.0 / (filter_freqs[2 : n_mels + 2] - filter_freqs[:n_mels])
+        banks = banks * enorm[None, :]
+    return ops.pad(banks, mel_cfg.bands_to_zero, 0, axis=0) if mel_cfg.bands_to_zero else banks
 
 
 class BaseAudioProcessor(AudioProcessingMixin):
@@ -914,9 +1053,25 @@ class BaseAudioProcessor(AudioProcessingMixin):
             magnitudes = self.ops.abs(stft_out)
         return self.ops.pow(magnitudes, stft_cfg.power) if stft_cfg.power != 1.0 else magnitudes
 
-    def _project_to_mel(self, *args, **kwargs):
-        """Apply mel filterbank to spectrogram features."""
-        raise NotImplementedError
+    def _project_to_mel(self, features, *, spectrogram_config, mel_filters=None, **kwargs):
+        """`features` ``(..., freq, frames)`` through the bank: ``(..., mel, frames)``, or ``(..., frames, mel)``
+        for `matmul_order="features_first"`. The two filters-first orders are two legacy GEMM orders (see
+        `MelScaleConfig`); they differ in the last ulp. The host bank is converted per call and matched to the
+        feature dtype (torch refuses mixed dtypes; numpy would promote); it is small."""
+        bank = self.mel_filters if mel_filters is None else mel_filters
+        bank = self.ops.astype(self.ops.asarray(bank, like=features), self.ops.dtype_name(features))
+        order = spectrogram_config.mel_scale_config.matmul_order
+        if order == "features_first":
+            mel = self.ops.matmul(self.ops.swapaxes(features, -2, -1), bank)
+        elif order == "filters_first_matmul":
+            mel = self.ops.matmul(self.ops.swapaxes(bank, -2, -1), features)
+        elif order == "filters_first":
+            mel = self.ops.swapaxes(self.ops.matmul(self.ops.swapaxes(features, -2, -1), bank), -2, -1)
+        else:
+            raise ValueError(f"matmul_order must be one of {_MATMUL_ORDERS}, got {order!r}.")
+        if spectrogram_config.mel_floor != 0.0:  # a zero floor on non-negative inputs is a no-op; skip the kernel
+            mel = self.ops.clamp_min(mel, spectrogram_config.mel_floor)
+        return mel
 
     def _log_compress(self, features, *, spectrogram_config, reference=1.0, min_value=1e-10, db_range=None, **kwargs):
         log_mel = spectrogram_config.log_mode
@@ -1044,23 +1199,21 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return self.ops.clamp_min(x, min_value)
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
-        """Build the mel filter bank described by ``spectrogram_config.mel_scale_config``.
+        """Build the mel filter bank described by ``spectrogram_config.mel_scale_config`` as a host numpy
+        array ``(num_frequency_bins, n_mels)``, float32 unless a computation dtype says otherwise.
 
-        Backend-agnostic dispatcher: derives the geometry (number of frequency bins, FFT
-        size, frequency range) and the computation dtype, then delegates the numerical
-        construction to one of three backend leaves:
+        Derives the geometry (number of frequency bins, FFT size, frequency range) and the dtype,
+        then builds with one of the module-level builders (the ``"torchaudio"`` ones through `self.ops`):
 
-        - ``_kaldi_exact_mel_banks``: ``triangularize_in_mel_space`` with no zeroed bands
-        - ``_kaldi_mel_banks_with_zero_bands``: ``triangularize_in_mel_space`` with ``bands_to_zero``
-        - ``_standard_mel_banks``: standard triangular (librosa/torchaudio-style) filters
+        - ``_kaldi_banks_librosa``: ``triangularize_in_mel_space`` under ``bank_rounding="librosa"``
+        - ``_kaldi_banks_torchaudio``: ``triangularize_in_mel_space`` with no zeroed bands
+        - ``_kaldi_banks_zero_bands_torchaudio``: ``triangularize_in_mel_space`` with ``bands_to_zero``
+        - ``_standard_banks``: standard triangular filters, either rounding
 
-        Dtype policy: the dtype name is resolved as ``mel_scale_config.computation_dtype``
-        falling back to the top-level ``spectrogram_config.computation_dtype`` (pipelines
-        that run in float64 for legacy-FE parity need float64 filters as well), and passed
-        to the leaves as a string (or None); each backend resolves it natively. When only
-        the mel-level dtype is set, the filters are built in that dtype and cast back to
-        the backend's default float afterwards, since the rest of the pipeline runs in
-        default precision.
+        Dtype policy: ``mel_scale_config.computation_dtype`` falling back to the top-level
+        ``spectrogram_config.computation_dtype`` (pipelines that run in float64 for legacy-FE parity
+        need float64 filters as well). When only the mel-level dtype is set, the filters are built in
+        that dtype and rounded to float32 afterwards, since the rest of the pipeline runs in float32.
         """
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
@@ -1070,96 +1223,23 @@ class BaseAudioProcessor(AudioProcessingMixin):
         max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sampling_rate / 2
         computation_dtype = mel_cfg.computation_dtype or spectrogram_config.computation_dtype
 
-        if mel_cfg.triangularize_in_mel_space and mel_cfg.bands_to_zero == 0:
-            mel_filters = self._kaldi_exact_mel_banks(
-                mel_cfg.n_mels,
-                num_frequency_bins,
-                min_frequency,
-                max_frequency,
-                self.sampling_rate,
-                n_fft,
-                mel_cfg,
-                computation_dtype,
-            )
+        rounding = mel_cfg.bank_rounding
+        if rounding not in ("torchaudio", "librosa"):
+            raise ValueError(f"bank_rounding must be 'torchaudio' or 'librosa', got {rounding!r}.")
+        if mel_cfg.matmul_order not in _MATMUL_ORDERS:
+            raise ValueError(f"matmul_order must be one of {_MATMUL_ORDERS}, got {mel_cfg.matmul_order!r}.")
+        args = (mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency, self.sampling_rate, n_fft)
+        if mel_cfg.triangularize_in_mel_space and rounding == "librosa":
+            banks = _kaldi_banks_librosa(*args, mel_cfg, computation_dtype)
+        elif mel_cfg.triangularize_in_mel_space and mel_cfg.bands_to_zero == 0:
+            banks = _kaldi_banks_torchaudio(self.ops, *args, computation_dtype)
         elif mel_cfg.triangularize_in_mel_space:
-            mel_filters = self._kaldi_mel_banks_with_zero_bands(
-                mel_cfg.n_mels,
-                num_frequency_bins,
-                min_frequency,
-                max_frequency,
-                self.sampling_rate,
-                n_fft,
-                mel_cfg,
-                computation_dtype,
-            )
+            banks = _kaldi_banks_zero_bands_torchaudio(self.ops, *args, mel_cfg, computation_dtype)
         else:
-            mel_filters = self._standard_mel_banks(
-                mel_cfg.n_mels,
-                num_frequency_bins,
-                min_frequency,
-                max_frequency,
-                self.sampling_rate,
-                n_fft,
-                mel_cfg,
-                computation_dtype,
-            )
+            banks = _standard_banks(self.ops, *args, mel_cfg, computation_dtype)
 
-        # Cast back when only the mel-level dtype requested higher precision.
+        if not isinstance(banks, np.ndarray):  # built through the ops: the backend's bits, carried to the host
+            banks = self.ops.to_numpy(banks)
         if mel_cfg.computation_dtype is not None and not spectrogram_config.computation_dtype:
-            mel_filters = self._cast_mel_filters_to_default_float(mel_filters)
-        return mel_filters
-
-    def _kaldi_exact_mel_banks(
-        self,
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Mel filter bank triangularized in mel space, without zeroed bands.
-
-        Each backend leaf owns its ecosystem's rounding pattern: the torch leaf matches
-        ``torchaudio.compliance.kaldi.get_mel_banks`` arithmetic, the numpy leaf matches
-        the legacy numpy feature extractors. Numerically equivalent, not bit-identical.
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _kaldi_mel_banks_with_zero_bands(
-        self,
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Mel filter bank triangularized in mel space with the lowest ``bands_to_zero``
-        frequency bins zeroed out. Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _standard_mel_banks(
-        self,
-        num_mel_filters,
-        num_frequency_bins,
-        min_frequency,
-        max_frequency,
-        sampling_rate,
-        n_fft,
-        mel_cfg,
-        computation_dtype,
-    ):
-        """Standard (non-kaldi) triangular mel filter bank. Each backend leaf owns its
-        ecosystem's rounding pattern (numpy: librosa/legacy numpy FEs; torch: torchaudio).
-        Implemented by backend subclasses."""
-        raise NotImplementedError
-
-    def _cast_mel_filters_to_default_float(self, mel_filters):
-        """Cast a built filter bank to the backend's default float dtype (torch:
-        ``torch.get_default_dtype()``, numpy: float32). Implemented by backend subclasses."""
-        raise NotImplementedError
+            banks = banks.astype(np.float32)  # only the bank asked for precision; the pipeline runs in float32
+        return np.ascontiguousarray(banks)

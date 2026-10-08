@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import replace
 from typing import Annotated
-
-import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import _clamp_min
@@ -84,10 +81,14 @@ class UnivNetAudioProcessorMixin:
             "f_max": 12000.0,
             "mel_scale": "slaney",
             "norm": "slaney",
+            # the legacy extractor built its bank with `mel_filter_bank` (librosa's rounding, linspace bins)
+            "bank_rounding": "librosa",
+            "frequency_bin_mode": "linspace",
         },
         "log_mode": "log",
-        # the clamp applied before `log()`; distinct from `magnitude_floor` above
-        "mel_floor": 1e-5,
+        # no clamp at the mel projection: the floor lives inside the magnitude (`magnitude_floor`) and the
+        # clamp before `log()` is `compression_clip_val`
+        "mel_floor": 0.0,
         "computation_dtype": "float64",
         "transpose_features": True,  # UnivNet consumes (frames, n_mels)
     }
@@ -111,7 +112,7 @@ class UnivNetAudioProcessorMixin:
 
     def _log_compress(self, features, *, spectrogram_config, compression_factor, compression_clip_val, **kwargs):
         features = _clamp_min(features, compression_clip_val) * compression_factor
-        return super()._log_compress(features, spectrogram_config=replace(spectrogram_config, mel_floor=0.0), **kwargs)
+        return super()._log_compress(features, spectrogram_config=spectrogram_config, **kwargs)
 
     def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:
         # UnivNet's frame count is exactly `samples // hop_length` — not the base's window
@@ -154,11 +155,7 @@ class UnivNetAudioProcessorMixin:
 
 
 class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        # No mel-scale clamp, as in the numpy sibling. Match the filters to the feature dtype:
-        # unlike numpy, `torch.matmul` refuses mixed dtypes rather than promoting.
-        mel_filters = self._host_to_device(self.mel_filters.to(features.dtype), features.device)
-        return torch.matmul(mel_filters.T, features)
+    pass
 
 
 __all__ = ["UnivNetAudioProcessor"]

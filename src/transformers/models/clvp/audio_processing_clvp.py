@@ -66,6 +66,8 @@ class ClvpAudioProcessorMixin:
             "f_max": 8000.0,
             "norm": "slaney",
             "mel_scale": "htk",
+            # the legacy extractor built its bank with `mel_filter_bank` (librosa's rounding, linspace bins)
+            "bank_rounding": "librosa",
             "frequency_bin_mode": "linspace",
         },
         "log_mode": "log",
