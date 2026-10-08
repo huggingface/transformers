@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -169,7 +169,10 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl_moe"
-    sub_configs = {"vision_config": Qwen3VLMoeVisionConfig, "text_config": Qwen3VLMoeTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Qwen3VLMoeVisionConfig),
+        "text_config": SubConfigSpec(config_class=Qwen3VLMoeTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -181,19 +184,9 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_vl_moe":
             # old ckpt with incorrect model type -> override manually
-            if self.vision_config.get("model_type") == "qwen3_vl_moe":
-                self.vision_config["model_type"] = "qwen3_vl_moe_vision"
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+            self.vision_config["model_type"] = "qwen3_vl_moe_vision"
         super().__post_init__(**kwargs)
 
 

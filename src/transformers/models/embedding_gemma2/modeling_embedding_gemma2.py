@@ -645,9 +645,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.language_model = AutoModel.from_config(config.text_config)
         self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_vision = (
             EmbeddingGemma2MultimodalEmbedder(config.vision_config, config.text_config)
