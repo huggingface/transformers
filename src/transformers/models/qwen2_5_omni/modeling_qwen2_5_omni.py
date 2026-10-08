@@ -1701,26 +1701,10 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         super().__init__(config)
         self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(config.audio_config)
         self.visual = Qwen2_5OmniVisionEncoder._from_config(config.vision_config)
-        self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
+        self.language_model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.rope_deltas = None
-        self._init_lm_head(config)
         self.post_init()
-
-    def _init_lm_head(self, config: Qwen2_5OmniThinkerConfig):
-        """Build the head. `post_init()` ties weights, so a subclass cannot add it later."""
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_decoder(self):
-        # `base_model_prefix = "thinker"` means `self.base_model` falls back to `self`, so
-        # the default `get_decoder` can't find the LLM. The text model lives on `self.model`.
-        return self.model
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -2012,7 +1996,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
                 video_second_per_grid=video_second_per_grid,
             )
 
-        outputs = self.model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -2029,55 +2013,73 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
             attentions=outputs.attentions,
         )
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # Overwritten -- requires 3D position ids
 
-        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+    config: Qwen2_5OmniThinkerConfig
+    base_model_prefix = "thinker"
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _can_compile_fullgraph = True
 
-        # Early exit in case we are continuing generation from past kv
-        past_length = 0
-        if (cache := model_kwargs.get("past_key_values")) is not None:
-            past_length = cache.get_seq_length()
-        if past_length != 0 and self.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.rope_deltas
-            return position_ids
-
-        # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
-        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
-            inputs_tensor = model_kwargs["input_ids"]
-
-        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
-        attention_mask = model_kwargs.get("attention_mask")
-        if is_input_ids and attention_mask is not None:
-            audio_feature_lengths = model_kwargs.get("audio_feature_lengths")
-            if (feature_attention_mask := model_kwargs.get("feature_attention_mask")) is not None:
-                audio_feature_lengths = feature_attention_mask.sum(dim=-1)
-            vision_positions, rope_deltas = self.get_rope_index(
-                inputs_tensor,
-                image_grid_thw=model_kwargs.get("image_grid_thw"),
-                video_grid_thw=model_kwargs.get("video_grid_thw"),
-                attention_mask=attention_mask,
-                use_audio_in_video=model_kwargs.get("use_audio_in_video") or False,
-                audio_seqlens=audio_feature_lengths,
-                second_per_grids=model_kwargs.get("video_second_per_grid"),
-            )
-            self.rope_deltas = rope_deltas
-        else:
-            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
-            self.rope_deltas = torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device)
-
-        # Concatenate "text + vision" positions into [4, bs, seq-len]
-        text_positions = text_positions[None, ...]
-        position_ids = torch.cat([text_positions, vision_positions], dim=0)
-
-        return position_ids
-
-
-class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniThinkerModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-
-    def _init_lm_head(self, config: Qwen2_5OmniThinkerConfig):
+    def __init__(self, config: Qwen2_5OmniThinkerConfig):
+        super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.model = Qwen2_5OmniThinkerModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: torch.LongTensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            The tensors corresponding to the input audios.
+        feature_attention_mask (`torch.LongTensor`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        """
+        return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -2115,7 +2117,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniThinkerModel, Genera
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
             Number of seconds per grid for each video, used for temporal feature mapping.
         """
-        outputs: BaseModelOutputWithPast = super().forward(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             input_features=input_features,
             pixel_values=pixel_values,
@@ -2151,8 +2153,53 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniThinkerModel, Genera
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=self.model.rope_deltas,
         )
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- requires 3D position ids
+
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+
+        # Early exit in case we are continuing generation from past kv
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            return position_ids
+
+        # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        attention_mask = model_kwargs.get("attention_mask")
+        if is_input_ids and attention_mask is not None:
+            audio_feature_lengths = model_kwargs.get("audio_feature_lengths")
+            if (feature_attention_mask := model_kwargs.get("feature_attention_mask")) is not None:
+                audio_feature_lengths = feature_attention_mask.sum(dim=-1)
+            vision_positions, rope_deltas = self.get_rope_index(
+                inputs_tensor,
+                image_grid_thw=model_kwargs.get("image_grid_thw"),
+                video_grid_thw=model_kwargs.get("video_grid_thw"),
+                attention_mask=attention_mask,
+                use_audio_in_video=model_kwargs.get("use_audio_in_video") or False,
+                audio_seqlens=audio_feature_lengths,
+                second_per_grids=model_kwargs.get("video_second_per_grid"),
+            )
+            self.model.rope_deltas = rope_deltas
+        else:
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
+
+        # Concatenate "text + vision" positions into [4, bs, seq-len]
+        text_positions = text_positions[None, ...]
+        position_ids = torch.cat([text_positions, vision_positions], dim=0)
+
+        return position_ids
 
 
 ############################

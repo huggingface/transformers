@@ -65,6 +65,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniPreTrainedModel,
     Qwen2_5OmniPreTrainedModelForConditionalGeneration,
     Qwen2_5OmniSnakeBeta,
+    Qwen2_5OmniThinkerForConditionalGeneration,
     Qwen2_5OmniThinkerModel,
 )
 from ..qwen2_5_omni.processing_qwen2_5_omni import (
@@ -1181,12 +1182,6 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
     }
 
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_experts = config.text_config.num_experts
-        self.num_experts_per_tok = config.text_config.num_experts_per_tok
-        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
-
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1360,7 +1355,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
                 video_second_per_grid=video_second_per_grid,
             )
 
-        outputs = self.model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1381,11 +1376,12 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         )
 
 
-class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen3OmniMoeThinkerModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-
-    def _init_lm_head(self, config: Qwen3OmniMoeThinkerConfig):
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_experts = config.text_config.num_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
     @can_return_tuple
     @auto_docstring
@@ -1427,7 +1423,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen3OmniMoeThinkerModel, Gene
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
-        outputs: MoeModelOutputWithPast = super().forward(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             input_features=input_features,
             pixel_values=pixel_values,
@@ -1476,7 +1472,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen3OmniMoeThinkerModel, Gene
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=self.model.rope_deltas,
             router_logits=outputs.router_logits,
         )
 
