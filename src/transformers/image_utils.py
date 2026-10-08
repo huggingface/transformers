@@ -27,9 +27,9 @@ from .utils import (
     is_numpy_array,
     is_torch_available,
     is_torch_tensor,
-    is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     is_torchvision_available,
-    is_torchvision_lesser_or_equal,
+    is_torchvision_greater_or_equal,
     is_vision_available,
     logging,
     requires_backends,
@@ -533,17 +533,17 @@ def load_image_as_tensor(
     """
     import torch
 
-    if is_torchvision_lesser_or_equal("0.26.0"):
-        if is_torchcodec_available():
-            # Fallback to torchcodec for decoding
-            from torchcodec.decoders import ImageReadMode, decode_image
-        else:
-            raise ImportError(
-                "Image decoding requires either `torchvision<=0.26.0` or `torchcodec` installed ."
-                "None are found in teh environment, cannot decode the image. "
-            )
+    if is_torchcodec_greater_or_equal("0.16.0"):
+        # Try with torchcodec first and warn only if torchvision is used
+        from torchcodec.decoders import ImageReadMode, decode_image
     else:
         from torchvision.io import ImageReadMode, decode_image
+
+        if is_torchvision_greater_or_equal("0.29.0"):
+            logger.warning_once(
+                "Image decoding with `torchvision` is deprecated and will be removed in future versions ."
+                "Please install `torchcodec>=0.16.0` instead. "
+            )
 
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
