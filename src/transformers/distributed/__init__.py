@@ -19,6 +19,7 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "checkpoint": [
+        "consolidate_distributed_checkpoint",
         "load_model_checkpoint_distributed",
         "save_model_checkpoint_distributed",
     ],
@@ -37,6 +38,7 @@ _import_structure = {
 
 if TYPE_CHECKING:
     from .checkpoint import (
+        consolidate_distributed_checkpoint,
         load_model_checkpoint_distributed,
         save_model_checkpoint_distributed,
     )

@@ -23,6 +23,7 @@ from ..utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     is_torch_available,
+    is_torch_greater_or_equal,
     logging,
 )
 from .sharding_utils import DtensorShardOperation, _dtensor_from_local_like
@@ -132,6 +133,29 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
 
     # All ranks wait until consolidated weights are ready for loading.
     _distributed_barrier()
+
+
+def consolidate_distributed_checkpoint(
+    checkpoint_dir: str | os.PathLike, output_dir: str | os.PathLike | None = None
+) -> None:
+    """Consolidate rank-local safetensors files. Call from a single process or rank."""
+    if not _check_distributed_checkpointing_available() or not is_torch_greater_or_equal("2.9"):
+        raise OSError(
+            "Consolidating a distributed checkpoint requires `torch>=2.9` with `torch.distributed` available."
+        )
+
+    from torch.distributed.checkpoint._consolidate_hf_safetensors import consolidate_safetensors_files
+
+    if output_dir is None:
+        output_dir = checkpoint_dir
+
+    metadata = HuggingFaceStorageReader(str(checkpoint_dir)).read_metadata()
+    os.makedirs(output_dir, exist_ok=True)
+    consolidate_safetensors_files(
+        input_dir=str(checkpoint_dir),
+        output_dir=str(output_dir),
+        fqn_to_index_mapping=dict.fromkeys(metadata.state_dict_metadata, 1),
+    )
 
 
 def is_sharded_checkpoint(checkpoint_dir: str | os.PathLike) -> bool:

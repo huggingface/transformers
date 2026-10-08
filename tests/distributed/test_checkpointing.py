@@ -31,7 +31,10 @@ if is_torch_available():
 
     from transformers import LlamaConfig, LlamaForCausalLM
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.checkpoint import load_model_checkpoint_distributed
+    from transformers.distributed.checkpoint import (
+        consolidate_distributed_checkpoint,
+        load_model_checkpoint_distributed,
+    )
 
     if is_torch_distributed_available():
         from torch.distributed.checkpoint.state_dict import (
@@ -85,6 +88,12 @@ def _test_save_and_from_pretrained(rank, directory, source_config, destination_c
         )
         full_state_dict = get_model_state_dict(restored, options=StateDictOptions(full_state_dict=True))
         torch.testing.assert_close(full_state_dict, reference.state_dict())
+
+
+def _test_save_for_consolidation(rank, directory):
+    with _distributed_context(rank, directory):
+        model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=DistributedConfig(tp_size=4))
+        model.save_pretrained(f"{directory}/checkpoint", distributed_checkpoint=True)
 
 
 def _test_load_model_checkpoint_distributed(rank, directory):
@@ -144,6 +153,19 @@ class DistributedUtilsTest(unittest.TestCase):
             torch.testing.assert_close(
                 LlamaForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
             )
+
+    def test_consolidate_distributed_checkpoint_round_trip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = LlamaForCausalLM(self.config)
+            reference.save_pretrained(f"{directory}/seed")
+            mp.spawn(_test_save_for_consolidation, args=(directory,), nprocs=4, join=True)
+
+            output_dir = os.path.join(directory, "consolidated")
+            consolidate_distributed_checkpoint(os.path.join(directory, "checkpoint"), output_dir)
+            restored = LlamaForCausalLM.from_pretrained(
+                output_dir, config=self.config, generation_config=reference.generation_config
+            )
+            torch.testing.assert_close(restored.state_dict(), reference.state_dict())
 
     def test_load_model_checkpoint_distributed(self):
         with tempfile.TemporaryDirectory() as directory:
