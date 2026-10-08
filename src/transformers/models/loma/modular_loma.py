@@ -561,6 +561,8 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        keypoints: torch.FloatTensor | None = None,
+        mask: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | LoMaKeypointMatchingOutput:
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
@@ -570,10 +572,17 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         batch_size, _, num_channels, height, width = pixel_values.shape
         pixel_values_flat = pixel_values.reshape(batch_size * 2, num_channels, height, width)
 
-        keypoint_detections = self.keypoint_detector(pixel_values_flat)
-        keypoints, _, _, mask = keypoint_detections[:4]
-        keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
-        mask = mask.reshape(batch_size, 2, -1)
+        if keypoints is None:
+            keypoint_detections = self.keypoint_detector(pixel_values_flat)
+            keypoints, _, _, mask = keypoint_detections[:4]
+            keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
+            mask = mask.reshape(batch_size, 2, -1)
+        else:
+            keypoints = keypoints.to(pixel_values)
+            if mask is None:
+                mask = torch.ones(keypoints.shape[:-1], dtype=torch.int32, device=keypoints.device)
+            else:
+                mask = mask.reshape(batch_size, 2, -1)
 
         descriptor_keypoints = keypoints.reshape(batch_size * 2, -1, 2) * 2 - 1
         descriptors = self.descriptor_network.describe_keypoints(pixel_values_flat, descriptor_keypoints)
