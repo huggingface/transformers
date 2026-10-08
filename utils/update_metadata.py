@@ -130,6 +130,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
     ("keypoint-matching", "MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES", "AutoModelForKeypointMatching"),
+    ("schema-extraction", "MODEL_FOR_SCHEMA_EXTRACTION_MAPPING_NAMES", "AutoModelForSchemaExtraction"),
 ]
 
 

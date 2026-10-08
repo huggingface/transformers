@@ -159,6 +159,7 @@ _import_structure = {
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
+        "SchemaExtractionPipeline",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
@@ -697,6 +698,7 @@ if TYPE_CHECKING:
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
+    from .pipelines import SchemaExtractionPipeline as SchemaExtractionPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline

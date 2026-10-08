@@ -224,6 +224,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm_ocr", "GlmOcrModel"),
         ("glm_ocr_text", "GlmOcrTextModel"),
         ("glm_ocr_vision", "GlmOcrVisionModel"),
+        ("gliner2", "Gliner2Model"),
         ("glmasr", "GlmAsrModel"),
         ("glmasr_encoder", "GlmAsrEncoder"),
         ("glmga", "Glm46VModel"),
@@ -1987,6 +1988,12 @@ MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_SCHEMA_EXTRACTION_MAPPING_NAMES = OrderedDict(
+    [
+        ("gliner2", "Gliner2ForSchemaExtraction"),
+    ]
+)
+
 MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     [
         ("albert", "AlbertModel"),
@@ -2186,6 +2193,10 @@ MODEL_FOR_KEYPOINT_DETECTION_MAPPING = _LazyAutoMapping(
 
 MODEL_FOR_KEYPOINT_MATCHING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES)
 
+MODEL_FOR_SCHEMA_EXTRACTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_SCHEMA_EXTRACTION_MAPPING_NAMES
+)
+
 MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
 
 MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING = _LazyAutoMapping(
@@ -2222,6 +2233,10 @@ class AutoModelForKeypointDetection(_BaseAutoModelClass):
 
 class AutoModelForKeypointMatching(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_KEYPOINT_MATCHING_MAPPING
+
+
+class AutoModelForSchemaExtraction(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SCHEMA_EXTRACTION_MAPPING
 
 
 class AutoModelForTextEncoding(_BaseAutoModelClass):
@@ -2663,6 +2678,9 @@ __all__ = [
     "AutoModelForInstanceSegmentation",
     "AutoModelForKeypointDetection",
     "AutoModelForKeypointMatching",
+    "AutoModelForSchemaExtraction",
+    "MODEL_FOR_SCHEMA_EXTRACTION_MAPPING",
+    "MODEL_FOR_SCHEMA_EXTRACTION_MAPPING_NAMES",
     "AutoModelForMaskGeneration",
     "AutoModelForTextEncoding",
     "AutoModelForMaskedImageModeling",
