@@ -21,6 +21,10 @@ The [FalconH1](https://huggingface.co/blog/tiiuae/falcon-h1) model was developed
 This model was contributed by [DhiyaEddine](https://huggingface.co/DhiyaEddine), [ybelkada](https://huggingface.co/ybelkada), [JingweiZuo](https://huggingface.co/JingweiZuo), [IlyasChahed](https://huggingface.co/IChahed), and [MaksimVelikanov](https://huggingface.co/yellowvm).
 The original code can be found [here](https://github.com/tiiuae/Falcon-H1).
 
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## FalconH1Config
 
 | Model     | Depth | Dim  | Attn Heads | KV | Mamba Heads | d_head       | d_state | Ctx Len        |

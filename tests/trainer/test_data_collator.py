@@ -791,6 +791,17 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
         batch3 = collator3(features)
         self.assertFalse(torch.all(batch1["input_ids"] == batch3["input_ids"]))
 
+    def test_mlm_seed_zero_reproducibility(self):
+        """Test that `seed=0` is not treated as "no seed"."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        for return_tensors in ("pt", "np"):
+            batch1 = DataCollatorForLanguageModeling(tokenizer, seed=0, return_tensors=return_tensors)(features)
+            batch2 = DataCollatorForLanguageModeling(tokenizer, seed=0, return_tensors=return_tensors)(features)
+            self.assertTrue((batch1["input_ids"] == batch2["input_ids"]).all())
+            self.assertTrue((batch1["labels"] == batch2["labels"]).all())
+
     def test_mlm_multiworker_dataloader(self):
         """Test seed works with multi-worker DataLoader."""
         tokenizer = BertTokenizer(self.vocab_file)
