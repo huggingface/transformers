@@ -43,14 +43,14 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
 )
@@ -60,6 +60,7 @@ from ..llava.modeling_llava import (
     LlavaModel,
     LlavaModelOutputWithPast,
 )
+from ..olmoe.modeling_olmoe import OlmoeModel
 
 
 logger = logging.get_logger(__name__)
@@ -734,6 +735,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
+        "router_logits": OutputRecorder(AriaTextTopKRouter, index=2),
     }
 
     @torch.no_grad()
@@ -759,7 +761,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
             init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
-class AriaTextModel(LlamaModel):
+class AriaTextModel(OlmoeModel):
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -769,7 +771,7 @@ class AriaTextModel(LlamaModel):
         self.post_init()
 
 
-class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
+class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
@@ -781,17 +783,13 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(self, **super_kwargs)
-
 
 class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class AriaModelOutputWithPast(LlavaModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class AriaModel(LlavaModel):
@@ -824,10 +822,10 @@ class AriaModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
+        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,
-            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )
@@ -851,19 +849,27 @@ class AriaModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | AriaModelOutputWithPast:
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # 2. Merge text and images
-        if pixel_values is not None and inputs_embeds.shape[1] != 1:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
                 return_dict=True,
-            ).pooler_output
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -884,7 +890,8 @@ class AriaModel(LlavaModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -928,6 +935,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AriaCausalLMOutputWithPast:
         r"""
@@ -1000,6 +1008,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1020,6 +1029,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

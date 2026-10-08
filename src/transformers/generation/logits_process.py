@@ -472,12 +472,17 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        score = torch.gather(scores, 1, self.encoder_input_ids)
+        encoder_input_ids = (
+            self.encoder_input_ids.repeat_interleave(scores.shape[0] // self.encoder_input_ids.shape[0], dim=0)
+            if scores.shape[0] > self.encoder_input_ids.shape[0]
+            else self.encoder_input_ids
+        )
+        score = torch.gather(scores, 1, encoder_input_ids)
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
-        scores_processed = scores.scatter(1, self.encoder_input_ids, score)
+        scores_processed = scores.scatter(1, encoder_input_ids, score)
         return scores_processed
 
 
@@ -1313,9 +1318,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         for sequence_ids, sequence_bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:  # the sequence is of length 1, already applied
                 continue
-            if len(sequence_ids) > input_ids.shape[1]:  # the sequence is longer than the context, ignore
-                continue
             prefix_length = len(sequence_ids) - 1
+            if prefix_length > input_ids.shape[1]:  # the prefix is longer than the context, ignore
+                continue
             last_token = sequence_ids[-1]
             matching_rows = torch.eq(
                 input_ids[:, -prefix_length:],
@@ -1384,7 +1389,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         def all_token_bias_pairs_are_valid(sequence):
             return (
                 isinstance(sequence[0], list)
-                and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in sequence[0])
+                and all(isinstance(token_id, (int, np.integer)) and token_id >= 0 for token_id in sequence[0])
                 and isinstance(sequence[1], float)
             )
 
@@ -1787,6 +1792,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             penalty_idx = cur_len - self.regulation_start
             # To support negative logits we compute the penalty of the absolute value and add to the original logit
             penalty = torch.abs(scores[:, self.eos_token_id]) * (pow(self.regulation_factor, penalty_idx) - 1)
+            penalty = penalty.masked_fill(~torch.isfinite(scores[:, self.eos_token_id]), 0.0)
             penalties[:, self.eos_token_id] = penalty
             scores_processed = scores + penalties
         return scores_processed

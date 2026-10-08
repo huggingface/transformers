@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     cleanup,
     get_device_properties,
     require_bitsandbytes,
+    require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -321,7 +322,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, expected_text)
 
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator
     def test_model_7b_fp16_static_cache(self):
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
             self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU (OOM).")
@@ -331,10 +332,6 @@ class GemmaIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [
-                    "Hello I am doing a project on a 1999 4.0L 4x4. I",
-                    "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
-                ],
-                ("cuda", 8): [
                     "Hello I am doing a project on a 1999 4.0L 4x4. I",
                     "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
                 ],
@@ -350,13 +347,6 @@ class GemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-        # gemma-7b + static cache sits near a numerical boundary: the suffix after "DIY"
-        # flips occasionally (e.g. "3D" vs "mini-f"). Not easy to reproduce within
-        # repeated runs on a single runner, but observable across different workflow runs
-        # or fresh SSH CI runners. Truncate to the stable prefix to avoid flakiness.
-        N = len("Hi today I am going to show you how to make a simple and easy to make a DIY")
-        output_text[1] = output_text[1][:N]
-        EXPECTED_TEXTS[1] = EXPECTED_TEXTS[1][:N]
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes

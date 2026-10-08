@@ -14,24 +14,21 @@
 
 
 import itertools
-from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.import_utils import torch_compilable_check
 from ...video_utils import VideoInput, make_batched_videos
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
-    MiniCPMV4_6ViTWindowAttentionMerger,
 )
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
 
@@ -85,48 +82,6 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     slice_end_id: int | None = None
     newline_id: int | None = None
     drop_vision_last_layer = AttributeError()
-
-
-class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        target_sizes: torch.IntTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        device = hidden_states.device
-
-        window_index, window_cu_seqlens, window_max_seqlens = self.get_window_index(target_sizes, kwargs=kwargs)
-        window_index = window_index.to(device)
-
-        hidden_states = hidden_states[:, window_index, :]
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            cu_seqlens=window_cu_seqlens.to(device),
-            max_seqlen=window_max_seqlens,
-        )
-        hidden_states = residual[:, window_index, :] + hidden_states
-
-        window_h, window_w = self.window_kernel_size
-        window_size = window_h * window_w
-        embed_dim = hidden_states.shape[-1]
-        torch_compilable_check(
-            window_cu_seqlens.numel() - 1 == hidden_states.shape[1] // window_size,
-            f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}",
-        )
-        patch = hidden_states.reshape(-1, window_size, embed_dim)
-        flat = patch.flatten(1)
-        patch_residual = patch.mean(dim=1)
-
-        hidden_state = self.pre_norm(flat)
-        hidden_state = self.linear_1(hidden_state)
-        hidden_state = self.act(hidden_state)
-        hidden_state = self.linear_2(hidden_state)
-        hidden_state = (hidden_state + patch_residual).unsqueeze(0)
-
-        return hidden_state
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
@@ -563,6 +518,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -577,32 +533,43 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            # Pixels are always `1` in first dim due to NaViT packing, and we don't
-            # want to waste compute processing the same image `num_beams` times. Hack until
-            # @raushan adds support for encoding images once same way as in enc-dec models
-            num_beams = pixel_values.shape[0]
-            vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
-            image_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if (
+            mm_encoder_outputs.get("image") is None
+            and pixel_values is not None
+            and self.config.image_token_id is not None
+        ):
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values[:1], target_sizes, downsample_mode=downsample_mode
+            )
+
+        if (
+            mm_encoder_outputs.get("video") is None
+            and pixel_values_videos is not None
+            and self.config.video_token_id is not None
+        ):
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
-        if pixel_values_videos is not None:
-            num_beams = pixel_values_videos.shape[0]
-            vision_output = self.get_video_features(
-                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
-            )
-            video_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        if mm_encoder_outputs.get("video") is not None:
+            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
@@ -647,6 +614,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -674,6 +642,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             use_cache=use_cache,
             downsample_mode=downsample_mode,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -733,37 +702,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             return torch.cat([text_positions.unsqueeze(0), mrope_positions], dim=0)
 
         return text_positions
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        target_sizes: torch.LongTensor | None = None,
-        target_sizes_videos: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Taking these as explicit arguments keeps them out of the dim-0 `repeat_interleave` that
-        # `super()` applies to every tensor left in `model_kwargs`: `target_sizes*` are indexed by
-        # crop instead of by batch item, and canvas M-RoPE position ids are `(3, batch, seq)` so they
-        # expand along dim 1. Note that `mm_token_type_ids` is deliberately *not* listed here: it is
-        # `(batch, seq)`, so the default dim-0 expansion is exactly what it needs.
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-
-        if target_sizes is not None:
-            model_kwargs["target_sizes"] = target_sizes
-        if target_sizes_videos is not None:
-            model_kwargs["target_sizes_videos"] = target_sizes_videos
-        if position_ids is not None:
-            batch_dim = 1 if position_ids.ndim == 3 else 0
-            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
-        return input_ids, model_kwargs
 
 
 # Different from MiniCPM4-6, we need `mm_token_type_ids` returned by default
