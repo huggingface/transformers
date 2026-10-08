@@ -54,7 +54,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@fix_slack_reporting_test
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-dummy"
