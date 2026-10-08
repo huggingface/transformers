@@ -160,6 +160,11 @@ class FuyuModel(FuyuPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
+        r"""
+        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
+            Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
+            hidden size of the model.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -217,7 +222,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("image_patches", version="v5.20", new_name="pixel_values")
+    @deprecate_kwarg("image_patches", version="v5.23", new_name="pixel_values")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -235,6 +240,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
+            Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
+            hidden size of the model.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored

@@ -167,10 +167,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    @deprecate_kwarg("pixel_values_images", version="v5.20", new_name="pixel_values")
+    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_images: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -297,7 +298,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("pixel_values_images", version="v5.20", new_name="pixel_values")
+    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -314,6 +315,12 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | VideoLlavaModelOutputWithPast:
+        r"""
+        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
+            [`VideoLlavaImageProcessor`] for processing images).
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -392,7 +399,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("pixel_values_images", version="v5.20", new_name="pixel_values")
+    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -401,6 +408,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
+        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
         vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
@@ -419,7 +428,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("pixel_values_images", version="v5.20", new_name="pixel_values")
+    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -439,6 +448,11 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlavaCausalLMOutputWithPast:
         r"""
+        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
+            [`VideoLlavaImageProcessor`] for processing images).
+
         Example:
 
         ```python

@@ -288,7 +288,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         if return_legacy_image_output:
             data = {"pixel_values_images": pixel_values_images}
             logger.warning_once(
-                "returning `pixel_values_images` is deprecated, and we'll be returning `pixel_values` from v5.24. "
+                "returning `pixel_values_images` is deprecated, and we'll be returning `pixel_values` from v5.23. "
                 "Please pass `return_legacy_image_output=False` to get `pixel_values` in inputs."
             )
         else:

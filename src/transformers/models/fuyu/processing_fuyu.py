@@ -430,7 +430,7 @@ class FuyuProcessor(ProcessorMixin):
         if return_legacy_image_output:
             processed_images["image_patches"] = torch.cat(batch_image_patches, dim=0)
             logger.warning_once(
-                "returning `image_patches` is deprecated, and we'll be returning `pixel_values` from v5.24. "
+                "returning `image_patches` is deprecated, and we'll be returning `pixel_values` from v5.23. "
                 "Please pass `return_legacy_image_output=False` to get `pixel_values` in inputs."
             )
         else:
