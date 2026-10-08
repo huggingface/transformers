@@ -85,11 +85,11 @@ def convert_and_run_ruff(modular_file_path: str) -> dict[str, str]:
             ".py", f"_temp_pattern__{file_name_suffix}.py"
         )
         # Write the file only temporarily
-        with open(temp_file_name, "w") as f:
+        with open(temp_file_name, "w", encoding="utf-8") as f:
             f.write(generated_modeling_content[file_type])
         # Run ruff on the new file (with similar name pattern as the original one)
         run_ruff(temp_file_name)
-        with open(temp_file_name, "r") as f:
+        with open(temp_file_name, "r", encoding="utf-8") as f:
             generated_modeling_content[file_type] = f.read()
         # delete file
         os.remove(temp_file_name)

@@ -56,6 +56,7 @@ from transformers.utils.auto_docstring import (
     ModelArgs,
     ModelOutputArgs,
     ProcessorArgs,
+    VideoProcessorArgs,
     get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
@@ -65,15 +66,7 @@ from transformers.utils.auto_docstring import (
 CHECKER_CONFIG = {
     "name": "docstrings",
     "label": "Docstring formatting",
-    # Approximate: at runtime the checker also introspects the live transformers module for
-    # @auto_docstring-decorated objects. These globs cover the files it reads via glob.glob().
-    "cache_globs": [
-        "src/transformers/models/**/modeling_*.py",
-        "src/transformers/models/**/modular_*.py",
-        "src/transformers/models/**/configuration_*.py",
-        "src/transformers/models/**/processing_*.py",
-        "src/transformers/models/**/image_processing_*_fast.py",
-    ],
+    "cache_globs": ["src/transformers/**/*.py"],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }
@@ -395,7 +388,7 @@ def _get_auto_docstring_names(file_path: str, cache: dict[str, set[str]] | None 
 
     names = set()
     try:
-        with open(file_path) as f:
+        with open(file_path, encoding="utf-8") as f:
             source = f.read()
         tree = ast.parse(source, filename=file_path)
         for node in tree.body:
@@ -864,10 +857,9 @@ def _extract_function_args(func_node: ast.FunctionDef | ast.AsyncFunctionDef) ->
     return [a.arg for a in all_args if a.arg != "self"]
 
 
-def find_matching_model_files(check_all: bool = False):
+def find_matching_docstring_files(check_all: bool = False):
     """
-    Find all model files in the transformers repo that should be checked for @auto_docstring,
-    excluding files with certain substrings.
+    Find Python source files to check for @auto_docstring, optionally restricted to the diff.
     Returns:
         List of file paths.
     """
@@ -877,38 +869,22 @@ def find_matching_model_files(check_all: bool = False):
         repo = Repo(PATH_TO_REPO)
         # Diff from index to unstaged files
         for modified_file_diff in repo.index.diff(None):
-            if modified_file_diff.a_path.startswith("src/transformers"):
+            if modified_file_diff.a_path.startswith("src/transformers/") and modified_file_diff.a_path.endswith(".py"):
                 module_diff_files.add(os.path.join(PATH_TO_REPO, modified_file_diff.a_path))
         # Diff from index to `main`
         for modified_file_diff in repo.index.diff(repo.refs.main.commit):
-            if modified_file_diff.a_path.startswith("src/transformers"):
+            if modified_file_diff.a_path.startswith("src/transformers/") and modified_file_diff.a_path.endswith(".py"):
                 module_diff_files.add(os.path.join(PATH_TO_REPO, modified_file_diff.a_path))
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return None
+        matching_files = module_diff_files
+    else:
+        matching_files = glob.iglob(os.path.join(PATH_TO_TRANSFORMERS, "**", "*.py"), recursive=True)
 
-    autodoc_files_regex = [
-        "modeling_**",
-        "image_processing_*_fast.py",
-        "image_processing_pil_*.py",
-        "video_processing_*.py",
-        "processing_*.py",
-        "configuration_*.py",
-    ]
-    potential_files = []
-    for pattern in autodoc_files_regex:
-        glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**", pattern)
-        potential_files += glob.glob(glob_pattern)
-
-    matching_files = []
-    for file_path in potential_files:
-        if os.path.isfile(file_path):
-            matching_files.append(file_path)
-    if not check_all:
-        # intersect with module_diff_files
-        matching_files = sorted([file for file in matching_files if file in module_diff_files])
-
-    return matching_files
+    return sorted(
+        file for file in matching_files if not os.path.basename(file).startswith("modular_") and os.path.isfile(file)
+    )
 
 
 def find_files_with_auto_docstring(matching_files, decorator="@auto_docstring"):
@@ -1177,7 +1153,7 @@ def generate_new_docstring_for_signature(
     arg_indent="    ",
     output_docstring_indent=8,
     custom_args_dict={},
-    source_args_doc=[ModelArgs, ImageProcessorArgs],
+    source_args_doc=[ModelArgs, ImageProcessorArgs, VideoProcessorArgs],
     is_model_output=False,
 ):
     """
@@ -1315,9 +1291,9 @@ def generate_new_docstring_for_function(
 
     # Use ProcessorArgs for processor methods
     if item.is_processor:
-        source_args_doc = [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+        source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
     else:
-        source_args_doc = [ModelArgs, ImageProcessorArgs]
+        source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs]
 
     return generate_new_docstring_for_signature(
         lines,
@@ -1349,9 +1325,9 @@ def generate_new_docstring_for_class(
         output_docstring_indent = 8
         # Add ProcessorArgs for Processor classes
         if item.is_processor:
-            source_args_doc = [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+            source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
         else:
-            source_args_doc = [ModelArgs, ImageProcessorArgs]
+            source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs]
     elif item.is_model_output:
         # ModelOutput class - extract args from dataclass attributes
         current_line_end = item.def_line - 1  # Convert to 0-based
@@ -1417,7 +1393,7 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
                 var_to_string[node.target.id] = node.value.value
     # Second pass: find all @auto_docstring decorated functions/classes
     # First, identify processor classes to track method context (only top-level classes)
-    processor_classes: set[str] = set()
+    processor_classes: set[str] = {"ProcessorMixin"}
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
@@ -1467,6 +1443,7 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
             if parent_class_name and parent_class_name in processor_classes:
                 is_processor = True
         elif isinstance(node, ast.ClassDef):
+            is_processor = node.name in processor_classes
             # For classes, look for __init__ method and check if it's a ModelOutput or Processor
             # Check if class inherits from ModelOutput, ProcessorMixin, or PreTrainedConfig
             for base in node.bases:
@@ -1576,7 +1553,9 @@ def _find_typed_dict_classes(source: str, tree: ast.Module | None = None) -> lis
     # Get standard args that are already documented in source classes
     standard_args = set()
     try:
-        standard_args.update(get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]).keys())
+        standard_args.update(
+            get_args_doc_from_source([ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]).keys()
+        )
     except Exception as e:
         logger.debug(f"Could not get standard args from source: {e}")
 
@@ -1680,7 +1659,7 @@ def _process_typed_dict_docstrings(
         return [], [], []
 
     # Get source args for comparison
-    source_args_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
+    source_args_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs])
 
     missing_warnings = []
     fill_warnings = []
@@ -1968,8 +1947,8 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
             To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
             computed results.
     """
-    # 1. Find all model files to check
-    matching_files = find_matching_model_files(check_all)
+    # 1. Find Python source files to check
+    matching_files = find_matching_docstring_files(check_all)
     if matching_files is None:
         return
     # 2. Find files that contain the @auto_docstring decorator

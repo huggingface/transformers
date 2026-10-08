@@ -313,7 +313,7 @@ class GraniteSpeech5ForCTCIntegrationTest(unittest.TestCase):
     @slow
     def test_model_integration_single(self):
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
@@ -331,7 +331,7 @@ class GraniteSpeech5ForCTCIntegrationTest(unittest.TestCase):
     @slow
     def test_model_integration_batch(self):
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]

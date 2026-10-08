@@ -24,48 +24,17 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        min_resolution=32,
-        max_resolution=64,
-        size=None,
-        do_resize=True,
-        do_normalize=True,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        patch_size=16,
-        merge_size=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.size = size if size is not None else {"shortest_edge": 32 * 32, "longest_edge": 64 * 64}
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
-        self.do_convert_rgb = do_convert_rgb
-        self.patch_size = patch_size
-        self.merge_size = merge_size
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("min_resolution", 32)
+        kwargs.setdefault("max_resolution", 64)
 
-    def prepare_image_processor_dict(self):
-        """Return the Edge resize and patch-packing configuration used by the tests."""
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "patch_size": self.patch_size,
-            "merge_size": self.merge_size,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("size", {"shortest_edge": 32 * 32, "longest_edge": 64 * 64})
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Wrap one image per sample to exercise Edge's nested multimodal input form."""
@@ -85,13 +54,7 @@ class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
 @require_torchvision
 @require_vision
 class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Cosmos3EdgeImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = Cosmos3EdgeImageProcessingTester
 
     def assert_packed_output(self, output, batch_size):
         """Check Edge's flattened patch matrix against its per-image THW grids."""
@@ -100,34 +63,6 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
         self.assertEqual(output.image_grid_thw.shape[0], batch_size)
         self.assertEqual(tuple(output.pixel_values.shape), (expected_num_patches, expected_patch_width))
-
-    def test_image_processor_properties(self):
-        """Cover the patch and merge settings added by the Edge image processor."""
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            for attribute in (
-                "do_resize",
-                "size",
-                "do_normalize",
-                "image_mean",
-                "image_std",
-                "do_convert_rgb",
-                "patch_size",
-                "merge_size",
-            ):
-                self.assertTrue(hasattr(image_processor, attribute))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        """Ensure Edge's pixel-budget size dictionary can be overridden on loading."""
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 32 * 32, "longest_edge": 64 * 64})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict,
-                size={"shortest_edge": 64 * 64, "longest_edge": 96 * 96},
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 64 * 64, "longest_edge": 96 * 96})
 
     def test_call_pil(self):
         """Adapt the shared PIL test to Edge's packed patch output layout."""

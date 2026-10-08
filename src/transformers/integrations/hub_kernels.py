@@ -24,14 +24,14 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
-from ..utils.generic import is_flash_attention_requested
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
+    get_device_type,
     is_kernels_available,
-    is_rocm_platform,
     is_torch_available,
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,
@@ -87,6 +87,7 @@ if is_kernels_available():
         LayerRepository,
         LocalLayerRepository,
         Mode,
+        ROCMProperties,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_mapping,
@@ -166,6 +167,17 @@ if is_kernels_available():
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
                     revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
+                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                    trust_remote_code=True,
+                ),
+                # AMD Strix Halo (gfx1151, capability 11.5), ROCm build of the same layer
+                Device(
+                    type="rocm",
+                    properties=ROCMProperties(min_capability=115, max_capability=115),
+                ): LayerRepository(
+                    repo_id="Atlas-Inference/gdn",
+                    layer_name="Qwen3_5GatedDeltaNet",
+                    revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -271,12 +283,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=3,
                     ),
                 },
             },
@@ -285,12 +309,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=3,
                     ),
                 },
             },
@@ -299,12 +335,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=3,
                     ),
                 },
             },
@@ -313,12 +361,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=3,
                     ),
                 },
             },
@@ -327,12 +387,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=2,
+                        version=3,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=3,
                     ),
                 },
             },
@@ -729,16 +801,6 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
 }
 
-# Flash attention version -> major version of its hub kernel repo. Flash attention flavors that are not
-# listed here, and all other attention kernels, use `_DEFAULT_ATTN_KERNEL_VERSION`.
-_FLASH_ATTN_KERNEL_VERSION_MAPPING: dict[int, int] = {
-    # v3 is the first version shipping the Torch stable ABI (CUDA/ROCm) and Torch 2.13 builds (incl. XPU)
-    2: 3,
-    # FA4 is still in beta -> only v0 has been released
-    4: 0,
-}
-_DEFAULT_ATTN_KERNEL_VERSION = 1
-
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
 
@@ -752,10 +814,7 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 def get_attn_kernel_version(repo_id: str) -> int:
     """Return the major version of the hub kernel repo `repo_id` to load, e.g. `3` for `kernels-community/flash-attn2`."""
-    for flash_attn_version, kernel_version in _FLASH_ATTN_KERNEL_VERSION_MAPPING.items():
-        if is_flash_attention_requested(requested_attention_implementation=repo_id, version=flash_attn_version):
-            return kernel_version
-    return _DEFAULT_ATTN_KERNEL_VERSION
+    return FLASH_ATTN_KERNEL_VERSIONS.get(repo_id, 1)
 
 
 def load_and_register_attn_kernel(
@@ -892,13 +951,8 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
-    def get_device(device_type):
-        if device_type == "cuda" and is_rocm_platform():
-            device_type = "rocm"
-        return Device(type=device_type)
-
-    mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
-    device = get_device(model.device.type)
+    mode = (Mode.INFERENCE if not model.training else Mode.TRAINING) if mode is None else mode
+    device = Device(type=get_device_type(model.device))
 
     if model.kernel_config is not None:
         inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
