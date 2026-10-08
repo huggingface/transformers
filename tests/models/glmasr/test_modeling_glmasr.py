@@ -51,7 +51,7 @@ class GlmAsrModelTester(ALMModelTester):
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         # Deterministic full-length mask: the base default randomizes lengths in [1, feat_seq_length],
         # and short samples collapse to 0 audio tokens after conv2 (s=2) + merge_factor=4, breaking
         # test_mismatching_num_audio_tokens (a 0-contribution sample makes "duplicate audio" a no-op).

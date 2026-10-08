@@ -824,9 +824,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         if self.legacy:
             self.cls = LegacyDebertaOnlyMLMHead(config)
         else:
-            self._tied_weights_keys = {
-                "lm_predictions.lm_head.weight": "deberta.embeddings.word_embeddings.weight",
-            }
+            self._tied_weights_keys = {}
             self.lm_predictions = DebertaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing

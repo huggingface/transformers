@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -62,7 +62,6 @@ from ..gemma3.modeling_gemma3 import (
     create_sliding_window_causal_mask,
     eager_attention_forward,
 )
-from ..siglip import SiglipVisionConfig
 from ..t5gemma.modeling_t5gemma import (
     T5GemmaClassificationHead,
     T5GemmaEncoderLayer,
@@ -104,11 +103,6 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
 @strict
 class T5Gemma2EncoderConfig(Gemma3Config):
     model_type = "t5gemma2_encoder"
-
-    sub_configs = {
-        "text_config": T5Gemma2TextConfig,
-        "vision_config": SiglipVisionConfig,
-    }
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
@@ -159,10 +153,9 @@ class T5Gemma2Config(PreTrainedConfig):
 
     model_type = "t5gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
-
-    sub_configs = {
-        "encoder": T5Gemma2EncoderConfig,
-        "decoder": T5Gemma2DecoderConfig,
+    sub_configs_defaults = {
+        "encoder": SubConfigSpec(config_class=T5Gemma2EncoderConfig),
+        "decoder": SubConfigSpec(config_class=T5Gemma2DecoderConfig),
     }
 
     attribute_map = {
@@ -182,18 +175,7 @@ class T5Gemma2Config(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder, dict):
-            self.encoder = T5Gemma2EncoderConfig(**self.encoder)
-        elif self.encoder is None:
-            self.encoder = T5Gemma2EncoderConfig()
-            logger.info("encoder is None, using default T5Gemma2EncoderConfig encoder config.")
-
-        if isinstance(self.decoder, dict):
-            self.decoder = T5Gemma2DecoderConfig(**self.decoder)
-        elif self.decoder is None:
-            self.decoder = T5Gemma2DecoderConfig()
-            logger.info("decoder is None, using default T5Gemma2DecoderConfig decoder config.")
-
+        super().__post_init__(**kwargs)
         self.encoder.text_config.dropout_rate = self.dropout_rate
         self.encoder.text_config.attention_dropout = self.attention_dropout
         self.encoder.vision_config.attention_dropout = self.attention_dropout
@@ -205,9 +187,7 @@ class T5Gemma2Config(PreTrainedConfig):
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id", "vocab_size"]:
             if special_token_key not in kwargs:
-                kwargs[special_token_key] = getattr(self.decoder, special_token_key)
-
-        super().__post_init__(**kwargs)
+                setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

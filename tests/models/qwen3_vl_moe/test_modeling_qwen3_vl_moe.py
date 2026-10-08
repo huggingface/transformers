@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3VLMoe model."""
 
-import copy
 import unittest
 
 import pytest
@@ -86,11 +85,13 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         self.vision_hidden_size = self.hidden_size
         self.vision_intermediate_size = self.hidden_size
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         """Qwen3 VL MoE expects flattened patches: (total_patches, channels * patch_size^2 * temporal_patch_size)"""
         return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                batch_size * (self.image_size**2) // (self.patch_size**2),
                 self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
@@ -107,12 +108,13 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         input_ids[:, 0] = self.vision_start_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # Qwen3VL requires image_grid_thw tensor
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -145,54 +147,6 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
-
-    def test_mismatching_num_image_tokens(self):
-        # Override the base test because we need to slice image_grid_thw too
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            _ = model(**input_dict)  # successful forward with no modifications
-            curr_input_dict = copy.deepcopy(input_dict)
-
-            # remove one image but leave the image token in text
-            patch_size = config.vision_config.patch_size
-            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(**curr_input_dict)
-
-            model.base_model.rope_deltas = None
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-                )
-
-            model.base_model.rope_deltas = None
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            mm_token_type_ids = torch.cat(
-                [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
-            )
-            _ = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                mm_token_type_ids=mm_token_type_ids,
-            )
 
     def test_image_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

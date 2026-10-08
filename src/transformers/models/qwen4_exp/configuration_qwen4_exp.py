@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -100,10 +100,9 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     }
     base_model_pp_plan = None
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 248320
@@ -304,7 +303,10 @@ class Qwen4ExpConfig(PreTrainedConfig):
     """
 
     model_type = "qwen4_exp"
-    sub_configs = {"vision_config": Qwen4ExpVisionConfig, "text_config": Qwen4ExpTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Qwen4ExpVisionConfig),
+        "text_config": SubConfigSpec(config_class=Qwen4ExpTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -318,19 +320,9 @@ class Qwen4ExpConfig(PreTrainedConfig):
     base_model_fsdp_plan = None
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen4_exp":
             # old ckpt with incorrect model type -> override manually
-            if self.vision_config.get("model_type") == "qwen4_exp":
-                self.vision_config["model_type"] = "qwen4_exp_vision"
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+            self.vision_config["model_type"] = "qwen4_exp_vision"
         super().__post_init__(**kwargs)
 
 

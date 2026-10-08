@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -27,11 +27,6 @@ logger = logging.get_logger(__name__)
 @strict
 class NougatConfig(PreTrainedConfig):
     r"""
-    encoder (`dict | PreTrainedConfig`):
-        The config object or dictionary of the encoder backbone.
-    decoder (`dict | PreTrainedConfig`):
-        The config object or dictionary of the decoder backbone.
-
     Examples:
 
     ```python
@@ -45,26 +40,14 @@ class NougatConfig(PreTrainedConfig):
     ```"""
 
     model_type = "nougat"
-    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
+    sub_configs_defaults = {
+        "encoder": SubConfigSpec(config_class=AutoConfig, model_type="donut_swin"),
+        "decoder": SubConfigSpec(config_class=AutoConfig, model_type="mbart"),
+    }
 
     encoder: dict | PreTrainedConfig | None = None
     decoder: dict | PreTrainedConfig | None = None
     is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.encoder is None or self.decoder is None:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because "
-                f"one of both `encoder` or `decoder` sub-configurations is not passed."
-            )
-
-        if isinstance(self.encoder, dict):
-            encoder_model_type = self.encoder.pop("model_type")
-            self.encoder = AutoConfig.for_model(encoder_model_type, **self.encoder)
-        if isinstance(self.decoder, dict):
-            decoder_model_type = self.decoder.pop("model_type")
-            self.decoder = AutoConfig.for_model(decoder_model_type, **self.decoder)
-        super().__post_init__(**kwargs)
 
     @classmethod
     def from_encoder_decoder_configs(
