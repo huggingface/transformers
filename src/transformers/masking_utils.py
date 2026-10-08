@@ -261,7 +261,12 @@ def _ignore_causal_mask_sdpa(
     # `padding_mask`. This requires torch>=2.14: before pytorch#176499, dynamo replaced
     # `torch.compiler.is_exporting()` by a constant `True`, so older versions keep the previous behavior of
     # never skipping while compiling.  # noqa: NC001, NC002
-    if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
+    # The same goes for `q_offset`: static caches return it as a tensor, as an int would break the graph
+    if (
+        is_torchdynamo_exporting()
+        or (padding_mask is not None and is_tracing(padding_mask))
+        or (isinstance(q_offset, torch.Tensor) and is_tracing(q_offset))
+    ):
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
@@ -275,9 +280,6 @@ def _ignore_causal_mask_sdpa(
     # Additional case to optimize prefill: if the cache is empty (`q_offset == 0`), we can use `is_causal=True` even
     # with a padding_mask, if the padding_mask only contains padding related to "future k/v tokens" of the static k/v states
     # returned by StaticCaches. This works thanks to the upper-left alignment of sdpa's `is_causal` mask
-    # Under `torch.compile`, a tensor `q_offset` cannot be read without breaking the graph
-    if isinstance(q_offset, torch.Tensor) and is_tracing(q_offset):
-        return False
     if q_offset == 0 and (
         padding_mask is None or (fast_all(padding_mask[:, :q_length]) and fast_all(~padding_mask[:, q_length:]))
     ):
