@@ -21,7 +21,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch
-from transformers.utils import is_torch_available
+from transformers.utils import is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():
@@ -33,7 +33,7 @@ if is_torch_available():
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import load_model_checkpoint_distributed
 
-    if dist.is_available():
+    if is_torch_distributed_available():
         from torch.distributed.checkpoint.state_dict import (
             StateDictOptions,
             get_model_state_dict,
