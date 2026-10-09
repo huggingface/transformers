@@ -35,6 +35,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Transpose,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -243,6 +244,35 @@ class DummyRoot(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_dtensor_sharding_follows_transposed_checkpoint_dimensions(self):
+        target = torch.arange(48).reshape(2, 6, 4).float()
+        source = target.transpose(1, 2).contiguous()
+        converter = WeightConverter("experts.weight", "experts.weight", operations=[Transpose(1, 2, check_dims=True)])
+        source_dim_mapping = converter.get_source_dim_mapping(source, target)
+
+        self.assertEqual(source_dim_mapping, {1: 2, 2: 1})
+        self.assertIsNone(converter.get_source_dim_mapping(target, target))
+        non_transpose_converter = WeightConverter("experts.weight", "experts.weight", operations=[Chunk(dim=0)])
+        self.assertIsNone(non_transpose_converter.get_source_dim_mapping(source, target))
+        for rank in range(2):
+            shard_op = _make_dtensor_shard_op(
+                FakeMesh(shape=(2,), rank=rank),
+                [Shard(1)],
+                param_shape=target.shape,
+                local_shape=(2, 3, 4),
+                source_dim_mapping=source_dim_mapping,
+            )
+            source_shard = shard_op.shard_tensor(source)
+            torch.testing.assert_close(source_shard.transpose(1, 2), target[:, rank * 3 : (rank + 1) * 3])
+
+    def test_transpose_source_dim_mapping_rejects_invalid_dimensions(self):
+        source_shape = (2, 4, 6)
+        target_shape = (2, 6, 4)
+
+        for invalid_dim in (-4, 3):
+            with self.subTest(invalid_dim=invalid_dim), self.assertRaisesRegex(IndexError, "Dimension out of range"):
+                Transpose(1, invalid_dim).get_source_dim_mapping(source_shape, target_shape)
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 
