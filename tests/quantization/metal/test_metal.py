@@ -20,7 +20,9 @@ from unittest.mock import patch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, MetalConfig, OPTForCausalLM
 from transformers.quantizers.quantizer_metal import MetalHfQuantizer
 from transformers.testing_utils import (
+    require_kernels,
     require_torch,
+    require_torch_mps,
     slow,
     torch_device,
 )
@@ -199,72 +201,89 @@ class MetalQuantizerEnvironmentTest(unittest.TestCase):
 
 @require_torch
 class AffineQuantizeDequantizeTest(unittest.TestCase):
-    """Test the low-level ``_affine_quantize_tensor`` / ``_affine_dequantize_tensor`` functions."""
+    """``affine_quantize`` / ``affine_dequantize`` on CPU, where they run the torch reference."""
 
-    def _roundtrip(self, bits, group_size, N=64, K=256, dtype=torch.float32):
-        from transformers.integrations.metal_quantization import _affine_dequantize_tensor, _affine_quantize_tensor
+    def test_roundtrip(self):
+        from transformers.integrations.metal_quantization import affine_dequantize, affine_quantize
 
-        torch.manual_seed(0)
-        weight = torch.randn(N, K, dtype=dtype)
-        w_packed, scales, biases = _affine_quantize_tensor(weight, group_size, bits)
+        N, K = 64, 256
+        for dtype in (torch.float32, torch.bfloat16):
+            for bits in (2, 4, 8):
+                for group_size in (64, 128):
+                    with self.subTest(dtype=dtype, bits=bits, group_size=group_size):
+                        torch.manual_seed(0)
+                        weight = torch.randn(N, K, dtype=dtype)
+                        w_packed, scales, biases = affine_quantize(weight, group_size, bits)
+                        self.assertEqual(w_packed.dtype, torch.uint32)
+                        self.assertEqual(w_packed.shape, (N, K // (32 // bits)))
+                        self.assertEqual(scales.shape, (N, K // group_size))
+                        self.assertEqual(biases.shape, (N, K // group_size))
+                        self.assertEqual(scales.dtype, dtype)
 
-        self.assertEqual(w_packed.dtype, torch.uint32)
-        self.assertEqual(w_packed.shape, (N, K // (32 // bits)))
-        self.assertEqual(scales.shape, (N, K // group_size))
-        self.assertEqual(biases.shape, (N, K // group_size))
+                        w_deq = affine_dequantize(w_packed, scales, biases, group_size, bits)
+                        self.assertEqual(w_deq.shape, (N, K))
+                        self.assertEqual(w_deq.dtype, dtype)
+                        # every value comes back within one quantization step, plus the output dtype's rounding
+                        error = (weight.float() - w_deq.float()).abs().max().item()
+                        rounding = torch.finfo(dtype).eps * weight.float().abs().max().item()
+                        self.assertLessEqual(error, scales.float().abs().max().item() + rounding)
 
-        w_deq = _affine_dequantize_tensor(w_packed, scales, biases, group_size, bits)
-        self.assertEqual(w_deq.shape, (N, K))
 
-        return weight.float(), w_deq.float(), scales
+@require_torch
+@require_torch_mps
+@require_kernels
+class AffineKernelVsReferenceTest(unittest.TestCase):
+    """MLX's ``quantize`` / ``dequantize`` (the kernel, used on MPS) against the torch reference."""
 
-    def test_roundtrip_4bit_gs64(self):
-        orig, deq, scales = self._roundtrip(bits=4, group_size=64)
-        # every value comes back within one quantization step of its group
-        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
+    def test_quantize_matches_reference(self):
+        from transformers.integrations.metal_quantization import _affine_quantize_tensor, _get_metal_kernel
 
-    def test_roundtrip_4bit_gs128(self):
-        orig, deq, scales = self._roundtrip(bits=4, group_size=128)
-        # every value comes back within one quantization step of its group
-        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
+        kernel = _get_metal_kernel()
+        for dtype in (torch.float32, torch.bfloat16, torch.float16):
+            for bits in (2, 4, 8):
+                for group_size in (32, 64, 128):
+                    with self.subTest(dtype=dtype, bits=bits, group_size=group_size):
+                        torch.manual_seed(0)
+                        weight = (torch.randn(64, 256) * 0.05).to(dtype).to("mps")
+                        ref_packed, ref_scales, ref_biases = _affine_quantize_tensor(weight, group_size, bits)
+                        packed, scales, biases = kernel.quantize(weight, group_size=group_size, bits=bits)
+                        self.assertTrue(torch.equal(packed.view(torch.int32), ref_packed.view(torch.int32)))
+                        self.assertTrue(torch.equal(scales, ref_scales))
+                        self.assertTrue(torch.equal(biases, ref_biases))
 
-    def test_roundtrip_8bit_gs64(self):
-        orig, deq, scales = self._roundtrip(bits=8, group_size=64)
-        # every value comes back within one quantization step of its group
-        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
+    def test_dequantize_matches_reference(self):
+        from transformers.integrations.metal_quantization import _affine_dequantize_tensor, _get_metal_kernel
 
-    def test_roundtrip_2bit_gs64(self):
-        orig, deq, scales = self._roundtrip(bits=2, group_size=64)
-        # every value comes back within one quantization step of its group
-        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
+        kernel = _get_metal_kernel()
+        for dtype in (torch.float32, torch.bfloat16, torch.float16):
+            for bits in (2, 4, 8):
+                with self.subTest(dtype=dtype, bits=bits):
+                    torch.manual_seed(0)
+                    weight = (torch.randn(64, 256) * 0.05).to(dtype).to("mps")
+                    packed, scales, biases = kernel.quantize(weight, group_size=64, bits=bits)
+                    ref = _affine_dequantize_tensor(packed, scales, biases, 64, bits)
+                    out = kernel.dequantize(packed, scales, biases, group_size=64, bits=bits)
+                    self.assertEqual(out.dtype, dtype)
+                    # the kernel fuses `scale * q + bias`: one rounding fewer than torch in float32
+                    torch.testing.assert_close(out, ref, rtol=0, atol=1e-7 if dtype == torch.float32 else 0)
 
-    def test_quantize_shapes_2bit(self):
-        from transformers.integrations.metal_quantization import _affine_quantize_tensor
+    def test_dispatch_uses_kernel_on_mps_and_reference_on_cpu(self):
+        from transformers.integrations import metal_quantization
 
-        N, K = 32, 128
-        weight = torch.randn(N, K)
-        w_packed, scales, biases = _affine_quantize_tensor(weight, group_size=64, bits=2)
-        elems_per_int = 32 // 2
-        self.assertEqual(w_packed.shape, (N, K // elems_per_int))
-        self.assertEqual(scales.shape, (N, K // 64))
-
-    def test_quantize_preserves_device(self):
-        from transformers.integrations.metal_quantization import _affine_quantize_tensor
-
-        weight = torch.randn(32, 128, device="cpu")
-        w_packed, scales, biases = _affine_quantize_tensor(weight, group_size=64, bits=4)
-        self.assertEqual(w_packed.device.type, "cpu")
-        self.assertEqual(scales.device.type, "cpu")
-        self.assertEqual(biases.device.type, "cpu")
-
-    def test_dequantize_returns_correct_dtype(self):
-        """Regression: dequantize should always return float32 (caller casts to target dtype)."""
-        from transformers.integrations.metal_quantization import _affine_dequantize_tensor, _affine_quantize_tensor
-
-        weight = torch.randn(32, 128, dtype=torch.bfloat16)
-        w_packed, scales, biases = _affine_quantize_tensor(weight, group_size=64, bits=4)
-        w_deq = _affine_dequantize_tensor(w_packed, scales, biases, group_size=64, bits=4)
-        self.assertEqual(w_deq.dtype, torch.float32)
+        weight = (torch.randn(64, 256) * 0.05).to(torch.bfloat16)
+        for device, expect_kernel in (("mps", True), ("cpu", False)):
+            with self.subTest(device=device):
+                w = weight.to(device)
+                with patch.object(
+                    metal_quantization, "_affine_quantize_tensor", wraps=metal_quantization._affine_quantize_tensor
+                ) as reference:
+                    packed, scales, biases = metal_quantization.affine_quantize(w, group_size=64, bits=4)
+                self.assertEqual(reference.called, not expect_kernel)
+                self.assertEqual(packed.device.type, device)
+                self.assertEqual(scales.dtype, torch.bfloat16)
+                deq = metal_quantization.affine_dequantize(packed, scales, biases, group_size=64, bits=4)
+                self.assertEqual(deq.dtype, torch.bfloat16)
+                self.assertEqual(deq.shape, weight.shape)
 
 
 @require_torch

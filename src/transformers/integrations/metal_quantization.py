@@ -23,6 +23,8 @@ This module provides:
     ``nn.Linear`` with ``MetalLinear``.
   - ``MetalQuantize`` / ``MetalDequantize``: weight conversion operations that
     participate in the new ``WeightConverter`` pipeline.
+  - ``affine_quantize`` / ``affine_dequantize``: MLX's ``mx.quantize`` / ``mx.dequantize`` on MPS, and a torch
+    reference (``_affine_quantize_tensor`` / ``_affine_dequantize_tensor``) elsewhere, as the GGUF integration does.
 
 Weight layout (MLX's affine layout, transposed like ``nn.Linear``):
   - ``weight``: ``[N, K_packed]`` (``uint32``) -- K is the packed dimension.
@@ -183,14 +185,28 @@ def replace_with_metal_linear(
     return model
 
 
+def affine_quantize(weight: torch.Tensor, group_size: int, bits: int):
+    """``mx.quantize`` on MPS, the torch reference elsewhere. Scales and biases come back in ``weight``'s dtype."""
+    if weight.device.type == "mps":
+        return _get_metal_kernel().quantize(weight.contiguous(), group_size=group_size, bits=bits)
+    return _affine_quantize_tensor(weight, group_size, bits)
+
+
+def affine_dequantize(w_packed: torch.Tensor, scales: torch.Tensor, biases: torch.Tensor, group_size: int, bits: int):
+    """``mx.dequantize`` on MPS, the torch reference elsewhere. Returns ``scales``' dtype."""
+    if w_packed.device.type == "mps":
+        return _get_metal_kernel().dequantize(w_packed, scales, biases, group_size=group_size, bits=bits)
+    return _affine_dequantize_tensor(w_packed, scales, biases, group_size, bits)
+
+
 def _affine_quantize_tensor(weight: torch.Tensor, group_size: int, bits: int):
     """
-    Quantize a 2-D float weight ``[N, K]`` into packed uint32 + scales + biases.
+    Torch reference for ``mx.quantize``: quantize a 2-D float weight ``[N, K]`` into packed uint32 + scales + biases.
 
     Returns ``(w_packed, scales, biases)`` with:
       - ``w_packed``: ``[N, K // (32 // bits)]`` uint32
-      - ``scales``:   ``[N, K // group_size]`` float32/float16/bfloat16
-      - ``biases``:   ``[N, K // group_size]`` float32/float16/bfloat16
+      - ``scales``:   ``[N, K // group_size]`` in ``weight``'s dtype, as ``mx.quantize`` returns them
+      - ``biases``:   ``[N, K // group_size]`` in ``weight``'s dtype
     """
     N, K = weight.shape
     elems_per_int = 32 // bits
@@ -225,16 +241,16 @@ def _affine_quantize_tensor(weight: torch.Tensor, group_size: int, bits: int):
     for i in range(elems_per_int):
         w_packed |= w_int[:, i::elems_per_int] << (bits * i)
 
-    return w_packed.to(torch.uint32), scales, biases
+    return w_packed.to(torch.uint32), scales.to(weight.dtype), biases.to(weight.dtype)
 
 
 def _affine_dequantize_tensor(
     w_packed: torch.Tensor, scales: torch.Tensor, biases: torch.Tensor, group_size: int, bits: int
 ):
     """
-    Dequantize a packed uint32 weight ``[N, K_packed]`` back to float.
+    Torch reference for ``mx.dequantize``: dequantize a packed uint32 weight ``[N, K_packed]`` back to float.
 
-    Returns a ``[N, K]`` float32 tensor.
+    Returns a ``[N, K]`` tensor in ``scales``' dtype, as ``mx.dequantize`` does.
     """
     N = w_packed.shape[0]
     elems_per_int = 32 // bits
@@ -248,7 +264,7 @@ def _affine_dequantize_tensor(
 
     w_grouped = w_flat.reshape(N, -1, group_size)
     w_deq = w_grouped * scales.float().unsqueeze(-1) + biases.float().unsqueeze(-1)
-    return w_deq.reshape(N, K)
+    return w_deq.reshape(N, K).to(scales.dtype)
 
 
 class MetalQuantize(ConversionOps):
@@ -269,18 +285,13 @@ class MetalQuantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        w_packed, scales, biases = _affine_quantize_tensor(value, group_size, bits)
+        w_packed, scales, biases = affine_quantize(value, group_size, bits)
 
         base = target_key.rsplit(".", 1)[0] if "." in target_key else ""
         scale_key = f"{base}.scales" if base else "scales"
         bias_key = f"{base}.qbiases" if base else "qbiases"
 
-        orig_dtype = value.dtype
-        return {
-            target_key: w_packed,
-            scale_key: scales.to(orig_dtype),
-            bias_key: biases.to(orig_dtype),
-        }
+        return {target_key: w_packed, scale_key: scales, bias_key: biases}
 
 
 class MetalDequantize(ConversionOps):
@@ -305,8 +316,7 @@ class MetalDequantize(ConversionOps):
         scales = input_dict["scales"][0]
         qbiases = input_dict["qbiases"][0]
 
-        w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)
-        return {full_layer_name: w_deq.to(scales.dtype)}
+        return {full_layer_name: affine_dequantize(quantized, scales, qbiases, group_size, bits)}
 
     @property
     def reverse_op(self) -> "ConversionOps":
