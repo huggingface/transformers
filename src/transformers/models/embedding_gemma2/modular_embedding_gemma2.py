@@ -846,16 +846,6 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 
 class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
     images_kwargs: Gemma4ImageProcessorKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-        },
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
 
 
 class EmbeddingGemma2Processor(Gemma4Processor):
