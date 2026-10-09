@@ -27,6 +27,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -43,6 +44,9 @@ if is_vision_available():
 
 
 class GotOcr2VisionText2TextModelTester:
+    if is_torch_available():
+        causal_lm_class = GotOcr2ForConditionalGeneration
+
     def __init__(
         self,
         parent,
@@ -136,7 +140,9 @@ class GotOcr2VisionText2TextModelTester:
 
 
 @require_torch
-class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GotOcr2ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             GotOcr2Model,

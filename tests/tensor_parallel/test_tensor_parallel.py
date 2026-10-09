@@ -211,16 +211,16 @@ class TestTensorParallelLayer(TestCasePlus):
         op._axis0_local_size = local_shape[0]
         return op
 
-    def test_colwise_gather_output_rejects_indivisible_out_features(self):
+    def test_colwise_gather_output_rejects_indivisible_embedding(self):
         model = torch.nn.Module()
-        model.lm_head = torch.nn.Linear(8, 99)
-        model.tp_plan = {"lm_head": "colwise_gather_output"}
+        model.embed_tokens = torch.nn.Embedding(8, 99)
+        model.tp_plan = {"embed_tokens": "colwise_gather_output"}
         device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
 
         with self.assertRaises(ValueError) as context:
             tensor_parallel.apply_tensor_parallelism(model, device_mesh)
 
-        self.assertIn("lm_head", str(context.exception))
+        self.assertIn("embed_tokens", str(context.exception))
         self.assertIn("divisible", str(context.exception))
 
     def test_colwise_uneven_local_shapes(self):
