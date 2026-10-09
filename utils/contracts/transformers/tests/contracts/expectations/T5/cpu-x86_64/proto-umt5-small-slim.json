@@ -1,0 +1,161 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/T5-integration",
+  "contract_revision": "f3f9d6fc9c219baae452736af8a928c091095c02",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "proto-umt5-small-slim",
+  "kind": "fixture",
+  "revision": "5c2db1c75f56bce8b4c200734810eb07f29bfcc3",
+  "environment": {
+   "python": "3.10.22",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 5.64,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "sdpa"
+  },
+  "generated_tokens": [
+   [
+    0,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767
+   ],
+   [
+    0,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767,
+    51767
+   ],
+   [
+    0,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990,
+    175990
+   ],
+   [
+    0,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310,
+    159310
+   ]
+  ],
+  "generated_text": [
+   "\u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430",
+   "\u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430 \u0441\u0435\u043b\u0430",
+   "adaug adaug adaug adaug adaug adaug adaug adaug adaug adaug adaug adaug",
+   "vintern vintern vintern vintern vintern vintern vintern vintern vintern vintern vintern vintern"
+  ],
+  "label_logprobs": [
+   [
+    -13.114484786987305,
+    -12.092288970947266,
+    -13.726057052612305,
+    -12.221920013427734,
+    -12.13329792022705,
+    -11.019335746765137,
+    0.0
+   ],
+   [
+    -12.420158386230469,
+    -12.824440956115723,
+    -13.647567749023438,
+    -13.477912902832031,
+    -12.971185684204102,
+    -9.598020553588867,
+    -12.954093933105469
+   ],
+   [
+    -12.4166898727417,
+    -14.56601619720459,
+    -14.67100715637207,
+    -12.052457809448242,
+    -13.045361518859863,
+    -12.43440055847168,
+    0.0
+   ],
+   [
+    -12.310741424560547,
+    -13.982269287109375,
+    -11.187505722045898,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  ],
+  "decoded_roundtrip": [
+   "Yes, it is.",
+   "Hello, world! How are you?"
+  ],
+  "training": {
+   "loss": 12.861258506774902,
+   "gradients": {
+    "encoder.block.0.layer.0.SelfAttention.q.weight": true,
+    "decoder.block.0.layer.1.EncDecAttention.q.weight": true
+   },
+   "updated": true
+  }
+ }
+}

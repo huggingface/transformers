@@ -1,0 +1,145 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Result record (one JSON line per target)",
+ "type": "object",
+ "required": [
+  "contract",
+  "contract_revision",
+  "framework",
+  "variant",
+  "target",
+  "kind",
+  "status"
+ ],
+ "properties": {
+  "contract": {
+   "type": "string",
+   "pattern": "^[\\w.-]+/[\\w.-]+$"
+  },
+  "contract_revision": {
+   "type": "string"
+  },
+  "framework": {
+   "type": "string"
+  },
+  "variant": {
+   "type": "string"
+  },
+  "selected_by": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "with --changed-files: why the change selects this contract, null if it does not"
+  },
+  "target": {
+   "type": "string"
+  },
+  "kind": {
+   "enum": [
+    "fixture",
+    "checkpoint"
+   ]
+  },
+  "revision": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "status": {
+   "enum": [
+    "pass",
+    "fail",
+    "error",
+    "unsupported",
+    "recorded",
+    "xfail"
+   ]
+  },
+  "skip": {
+   "enum": [
+    "declared",
+    "hardware",
+    "variant"
+   ],
+   "description": "why an unsupported target did not run: the manifest declares it unsupported, this host lacks the hardware it needs, or the variant is not defined; --require-all fails on all but declared"
+  },
+  "failures": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "platform": {
+   "type": "string"
+  },
+  "baseline": {
+   "type": "string"
+  },
+  "golden": {
+   "type": "string"
+  },
+  "max_delta": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "number"
+   }
+  },
+  "environment": {
+   "type": "object"
+  },
+  "seconds": {
+   "type": "number"
+  },
+  "known_failure": {
+   "type": "string"
+  },
+  "environment_differs": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string"
+   },
+   "description": "packages not at the version the fleet lock pins: installed (pinned)"
+  }
+ },
+ "allOf": [
+  {
+   "if": {
+    "properties": {
+     "status": {
+      "enum": [
+       "fail",
+       "error",
+       "unsupported"
+      ]
+     }
+    }
+   },
+   "then": {
+    "required": [
+     "failures"
+    ],
+    "properties": {
+     "failures": {
+      "minItems": 1
+     }
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "status": {
+      "const": "unsupported"
+     }
+    }
+   },
+   "then": {
+    "required": [
+     "skip"
+    ]
+   }
+  }
+ ]
+}

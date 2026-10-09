@@ -1,0 +1,109 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/SmolLM-integration",
+  "contract_revision": "ea5b7a6908a88f30679815d8343dde713778eb86",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "proto-SmolLM-slim",
+  "kind": "fixture",
+  "revision": "41989eed59baa8fcbc7745b168d3530c9f1cc150",
+  "environment": {
+   "python": "3.10.22",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 3.45,
+  "platform": "cpu-x86_64-bf16"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "generated_tokens": [
+   [
+    7042,
+    7042,
+    7042,
+    7042
+   ],
+   [
+    11452,
+    11452,
+    11452,
+    282
+   ],
+   [
+    7268,
+    7268,
+    4528,
+    4528
+   ],
+   [
+    4528,
+    4528,
+    4528,
+    4528
+   ]
+  ],
+  "generated_text": [
+   " Paris Paris Paris Paris",
+   " Berlin Berlin Berlin of",
+   " Rome Rome London London",
+   " London London London London"
+  ],
+  "next_token_logits": [
+   [
+    12.8125,
+    3.046875,
+    7.59375,
+    5.03125
+   ],
+   [
+    2.953125,
+    12.6875,
+    6.5625,
+    3.625
+   ],
+   [
+    8.4375,
+    7.75,
+    13.75,
+    6.0
+   ],
+   [
+    4.96875,
+    2.953125,
+    5.125,
+    12.75
+   ]
+  ],
+  "training": {
+   "loss": 0.25674524903297424,
+   "gradients": {
+    "model.layers.0.self_attn.q_proj.weight": true,
+    "model.layers.0.mlp.down_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

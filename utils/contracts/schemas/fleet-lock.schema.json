@@ -1,0 +1,134 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Fleet lock (tests/contracts/fleet.lock)",
+ "type": "object",
+ "required": [
+  "framework",
+  "contracts",
+  "environment"
+ ],
+ "properties": {
+  "comment": {
+   "type": "string"
+  },
+  "framework": {
+   "type": "string"
+  },
+  "contracts": {
+   "type": "object",
+   "minProperties": 1,
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "integration",
+     "checkpoints"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "integration": {
+      "type": "object",
+      "required": [
+       "repo",
+       "revision",
+       "path"
+      ],
+      "properties": {
+       "repo": {
+        "type": "string",
+        "pattern": "^[\\w.-]+/[\\w.-]+$"
+       },
+       "revision": {
+        "type": "string",
+        "minLength": 1,
+        "description": "commit sha of the published contract repository, or 'unpublished' for a folder only in example/hub"
+       },
+       "path": {
+        "type": "string",
+        "description": "the contract's source folder, published by publish_contracts.py (run with --local-contracts while editing)"
+       },
+       "files_sha256": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "sha256 of the contract's {path: sha256} file map (README.md excluded), sorted JSON"
+       }
+      }
+     },
+     "fixtures": {
+      "type": "object",
+      "propertyNames": {
+       "type": "string",
+       "pattern": "^[\\w.-]+/[\\w.-]+$"
+      },
+      "additionalProperties": {
+       "type": "object",
+       "required": [
+        "revision",
+        "path"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "revision": {
+         "type": "string",
+         "minLength": 1,
+         "description": "commit sha, or 'unpublished' for the folders in example/hub"
+        },
+        "path": {
+         "type": "string"
+        },
+        "files_sha256": {
+         "type": "string",
+         "pattern": "^[0-9a-f]{64}$",
+         "description": "sha256 of the fixture's build.json sha256 map, sorted JSON"
+        }
+       }
+      }
+     },
+     "checkpoints": {
+      "type": "object",
+      "propertyNames": {
+       "type": "string",
+       "pattern": "^[\\w.-]+/[\\w.-]+$"
+      },
+      "additionalProperties": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$"
+      }
+     },
+     "artifacts": {
+      "type": "object",
+      "propertyNames": {
+       "type": "string",
+       "pattern": "^[\\w.-]+/[\\w.-]+$"
+      },
+      "additionalProperties": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$"
+      }
+     }
+    }
+   }
+  },
+  "environment": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "known_failures": {
+   "type": "object",
+   "description": "<contract>/<target> -> reason with issue link; failures are reported as xfail",
+   "additionalProperties": {
+    "type": "string",
+    "minLength": 1
+   }
+  },
+  "local_patches": {
+   "type": "object",
+   "description": "patch name (example/patches.py) -> reason with issue link; applied before every contract and recorded in each result's environment",
+   "additionalProperties": {
+    "type": "string",
+    "minLength": 1
+   }
+  }
+ }
+}

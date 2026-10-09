@@ -1,0 +1,83 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Reviewed baseline (expectations/<contract>/<platform>/<target>[.<variant>].json)",
+ "type": "object",
+ "required": [
+  "recorded_with",
+  "outputs"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "recorded_with": {
+   "type": "object",
+   "required": [
+    "contract",
+    "target",
+    "variant",
+    "framework",
+    "environment"
+   ],
+   "properties": {
+    "contract": {
+     "type": "string",
+     "pattern": "^[\\w.-]+/[\\w.-]+$"
+    },
+    "contract_revision": {
+     "type": "string"
+    },
+    "target": {
+     "type": "string"
+    },
+    "kind": {
+     "enum": [
+      "fixture",
+      "checkpoint"
+     ]
+    },
+    "variant": {
+     "type": "string"
+    },
+    "framework": {
+     "type": "string"
+    },
+    "platform": {
+     "type": "string"
+    },
+    "revision": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "environment": {
+     "type": "object"
+    },
+    "seconds": {
+     "type": "number"
+    }
+   }
+  },
+  "outputs": {
+   "type": "object",
+   "required": [
+    "runtime"
+   ],
+   "properties": {
+    "runtime": {
+     "type": "object",
+     "required": [
+      "device"
+     ],
+     "properties": {
+      "device": {
+       "type": "string"
+      },
+      "dtype": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  }
+ }
+}

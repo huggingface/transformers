@@ -1,0 +1,195 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Fixture build record (build.json)",
+ "type": "object",
+ "required": [
+  "fixture",
+  "key",
+  "covers",
+  "built_from",
+  "seed",
+  "sha256"
+ ],
+ "properties": {
+  "fixture": {
+   "type": "string",
+   "pattern": "^[\\w.-]+/[\\w.-]+$"
+  },
+  "key": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "key_fields": {
+   "type": "object"
+  },
+  "covers": {
+   "type": "object",
+   "propertyNames": {
+    "type": "string",
+    "pattern": "^[\\w.-]+/[\\w.-]+$"
+   },
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "built_from": {
+   "type": "object",
+   "required": [
+    "repo",
+    "revision"
+   ],
+   "properties": {
+    "repo": {
+     "type": "string",
+     "pattern": "^[\\w.-]+/[\\w.-]+$"
+    },
+    "revision": {
+     "type": "string"
+    }
+   }
+  },
+  "seed": {
+   "type": "integer"
+  },
+  "dtype": {
+   "enum": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ]
+  },
+  "builder": {
+   "type": "string"
+  },
+  "model_class": {
+   "type": "string"
+  },
+  "parameters": {
+   "type": "integer"
+  },
+  "weights": {
+   "enum": [
+    "random",
+    "overfit"
+   ]
+  },
+  "gate": {
+   "type": "object",
+   "properties": {
+    "random": {
+     "type": "object",
+     "required": [
+      "pass",
+      "threshold",
+      "deltas"
+     ],
+     "properties": {
+      "pass": {
+       "type": "boolean"
+      },
+      "threshold": {
+       "type": "number"
+      },
+      "deltas": {
+       "type": "object",
+       "additionalProperties": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      },
+      "weakest": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "no_perturbation_defined": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "accepted_insensitive": {
+       "type": "object"
+      }
+     }
+    },
+    "overfit": {
+     "type": "object",
+     "required": [
+      "pass",
+      "threshold",
+      "deltas"
+     ],
+     "properties": {
+      "pass": {
+       "type": "boolean"
+      },
+      "threshold": {
+       "type": "number"
+      },
+      "deltas": {
+       "type": "object",
+       "additionalProperties": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      },
+      "weakest": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "no_perturbation_defined": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   }
+  },
+  "training": {
+   "type": "object"
+  },
+  "overfit_reason": {
+   "type": "string"
+  },
+  "numeric_health": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "finite"
+    ],
+    "properties": {
+     "finite": {
+      "type": "boolean"
+     }
+    }
+   }
+  },
+  "copied_unchanged": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "environment": {
+   "type": "object"
+  },
+  "sha256": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string",
+    "pattern": "^[0-9a-f]{64}$"
+   }
+  }
+ }
+}

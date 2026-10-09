@@ -1,0 +1,161 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/T5-integration",
+  "contract_revision": "f3f9d6fc9c219baae452736af8a928c091095c02",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "proto-t5-small-slim",
+  "kind": "fixture",
+  "revision": "4f4d0ca0db8f1823e53ac0cbcba28bd982b6e8f4",
+  "environment": {
+   "python": "3.10.22",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 4.17,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "sdpa"
+  },
+  "generated_tokens": [
+   [
+    0,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952
+   ],
+   [
+    0,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473,
+    18473
+   ],
+   [
+    0,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952
+   ],
+   [
+    0,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952,
+    23952
+   ]
+  ],
+  "generated_text": [
+   "recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate",
+   "celule celule celule celule celule celule celule celule celule celule celule celule",
+   "recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate",
+   "recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate recreate"
+  ],
+  "label_logprobs": [
+   [
+    -10.141916275024414,
+    -9.734258651733398,
+    -12.010519027709961,
+    -10.778444290161133,
+    -11.155023574829102,
+    -11.17411994934082,
+    0.0
+   ],
+   [
+    -10.16841983795166,
+    -11.666160583496094,
+    -11.40478801727295,
+    -9.371376037597656,
+    -11.850149154663086,
+    -11.123132705688477,
+    -11.696166038513184
+   ],
+   [
+    -10.990324020385742,
+    -10.651444435119629,
+    -11.902166366577148,
+    -11.009994506835938,
+    -10.28740119934082,
+    -10.04874038696289,
+    0.0
+   ],
+   [
+    -10.57217788696289,
+    -10.656261444091797,
+    -10.012958526611328,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  ],
+  "decoded_roundtrip": [
+   "Yes, it is.",
+   "Hello, world! How are you?"
+  ],
+  "training": {
+   "loss": 10.951407432556152,
+   "gradients": {
+    "encoder.block.0.layer.0.SelfAttention.q.weight": true,
+    "decoder.block.0.layer.1.EncDecAttention.q.weight": true
+   },
+   "updated": true
+  }
+ }
+}
