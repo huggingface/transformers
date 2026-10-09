@@ -1,0 +1,2557 @@
+# Copyright 2026 The OpenBMB Team and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import copy
+import math
+from collections.abc import Callable, Generator
+from dataclasses import dataclass
+
+import torch
+import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
+from torch import nn
+from torch.func import jvp
+
+from ... import initialization as init
+from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationConfig, GenerationMixin
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..dac.modeling_dac import Snake1d
+from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
+from ..minicpm4.modeling_minicpm4 import (
+    MiniCPM4Attention,
+    MiniCPM4DecoderLayer,
+    MiniCPM4RMSNorm,
+    MiniCPM4RotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+
+
+logger = logging.get_logger(__name__)
+
+
+@dataclass
+class VoxCPM2ModelOutput(ModelOutput):
+    r"""
+    Output type for [`VoxCPM2Model`].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Sum of the diffusion and stop-prediction losses.
+        diffusion_loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Flow-matching loss for the target audio latents.
+        stop_loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Stop-prediction loss over the sequence.
+        stop_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 2)`, *optional*):
+            Logits for the continue and stop classes.
+        latent_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, sequence_length * patch_size)`,
+            *optional*): Target audio latent features.
+        generated_latent_features (`torch.FloatTensor` of shape
+            `(batch_size, feature_dim, sequence_length * patch_size)`, *optional*):
+            Audio latent features sampled by the flow-matching decoder.
+    """
+
+    loss: torch.FloatTensor | None = None
+    diffusion_loss: torch.FloatTensor | None = None
+    stop_loss: torch.FloatTensor | None = None
+    stop_logits: torch.FloatTensor | None = None
+    latent_features: torch.FloatTensor | None = None
+    generated_latent_features: torch.FloatTensor | None = None
+
+
+@dataclass
+class VoxCPM2GenerationOutput(ModelOutput):
+    r"""
+    Output type for [`VoxCPM2Model.generate`].
+
+    Args:
+        audio (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Generated audio waveforms.
+        latent_features (`torch.FloatTensor` of shape
+            `(batch_size, feature_dim, generated_length * patch_size)`):
+            Generated AudioVAE latent features before waveform decoding.
+        audio_features (`torch.FloatTensor` of shape
+            `(batch_size, generated_length, patch_size, feature_dim)`):
+            Generated AudioVAE features grouped into autoregressive patches.
+        stop_logits (`torch.FloatTensor` of shape `(batch_size, generated_length, 2)`):
+            Continue and stop logits collected at each generated audio patch.
+        num_generated_patches (`int`):
+            Number of autoregressive audio patches generated.
+    """
+
+    audio: torch.FloatTensor | None = None
+    latent_features: torch.FloatTensor | None = None
+    audio_features: torch.FloatTensor | None = None
+    stop_logits: torch.FloatTensor | None = None
+    num_generated_patches: int | None = None
+
+
+@auto_docstring(checkpoint="openbmb/VoxCPM2")
+@strict
+class VoxCPM2TextConfig(MiniCPM4Config):
+    r"""
+    scale_emb (`int` or `float`, *optional*, defaults to 12):
+        Multiplier applied to input embeddings.
+    scale_depth (`int` or `float`, *optional*, defaults to 1.4):
+        Multiplier for residual connections.
+    dim_model_base (`int`, *optional*, defaults to 256):
+        Base model dimension used to scale hidden states before the language model head.
+    mup_denominator (`int`, *optional*):
+        Width denominator used by compatible speculative decoding heads.
+    sparse_config (`dict`, *optional*):
+        Configuration for OpenBMB's optional InfLLM-v2 sparse attention implementation.
+    use_mup (`bool`, *optional*, defaults to `False`):
+        Whether to apply the muP embedding and residual scaling used by standalone MiniCPM4 checkpoints.
+    kv_channels (`int`, *optional*, defaults to 128):
+        Dimension of each attention key and value head in the original VoxCPM2 configuration.
+    no_rope (`bool`, *optional*, defaults to `False`):
+        Whether to disable rotary position embeddings. The residual language model enables this setting.
+
+    Example:
+
+    ```python
+    >>> from transformers import VoxCPM2TextConfig
+
+    >>> configuration = VoxCPM2TextConfig()
+    >>> configuration.hidden_size
+    2048
+    ```
+    """
+
+    model_type = "voxcpm2_text"
+    base_config_key = "lm_config"
+
+    vocab_size: int = 73448
+    hidden_size: int = 2048
+    intermediate_size: int = 6144
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = 2
+    max_position_embeddings: int = 32768
+    rms_norm_eps: float = 1e-5
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    scale_emb: int | float = 12
+    scale_depth: int | float | None = 1.4
+    dim_model_base: int | None = 256
+    use_mup: bool = False
+    kv_channels: int | None = 128
+    no_rope: bool = False
+
+    def __post_init__(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.kv_channels
+        elif self.kv_channels is None:
+            self.kv_channels = self.head_dim
+        elif self.head_dim != self.kv_channels:
+            raise ValueError(
+                f"`head_dim` ({self.head_dim}) must match `kv_channels` ({self.kv_channels}) for VoxCPM2."
+            )
+        super().__post_init__(**kwargs)
+
+
+@auto_docstring(checkpoint="openbmb/VoxCPM2")
+@strict
+class VoxCPM2EncoderConfig(PreTrainedConfig):
+    r"""
+    hidden_dim (`int`, *optional*, defaults to 1024):
+        Dimension of the local audio encoder hidden states.
+    ffn_dim (`int`, *optional*, defaults to 4096):
+        Dimension of the local audio encoder feed-forward layers.
+    num_heads (`int`, *optional*, defaults to 16):
+        Number of attention heads in each local audio encoder layer.
+    num_layers (`int`, *optional*, defaults to 12):
+        Number of local audio encoder layers.
+    kv_channels (`int`, *optional*, defaults to 128):
+        Dimension of each attention key and value head.
+    """
+
+    model_type = "voxcpm2_encoder"
+    base_config_key = "encoder_config"
+    attribute_map = {
+        "hidden_size": "hidden_dim",
+        "intermediate_size": "ffn_dim",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "head_dim": "kv_channels",
+    }
+
+    hidden_dim: int = 1024
+    ffn_dim: int = 4096
+    num_heads: int = 16
+    num_layers: int = 12
+    kv_channels: int | None = 128
+
+    def __post_init__(self, **kwargs):
+        if self.kv_channels is None:
+            self.kv_channels = self.hidden_dim // self.num_heads
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.hidden_dim <= 0 or self.ffn_dim <= 0:
+            raise ValueError("`hidden_dim` and `ffn_dim` must be strictly positive.")
+        if self.num_heads <= 0 or self.num_layers <= 0:
+            raise ValueError("`num_heads` and `num_layers` must be strictly positive.")
+        if self.kv_channels is None or self.kv_channels <= 0:
+            raise ValueError("`kv_channels` must be strictly positive.")
+
+
+@auto_docstring(checkpoint="openbmb/VoxCPM2")
+@strict
+class VoxCPM2CfmConfig(PreTrainedConfig):
+    r"""
+    sigma_min (`float`, *optional*, defaults to 1e-6):
+        Minimum noise scale used by conditional flow matching.
+    solver (`str`, *optional*, defaults to `"euler"`):
+        Numerical solver used for flow-matching inference.
+    t_scheduler (`str`, *optional*, defaults to `"log-norm"`):
+        Distribution used to sample flow-matching timesteps during training.
+    training_cfg_rate (`float`, *optional*, defaults to 0.1):
+        Probability of dropping the conditioning signal during training.
+    inference_cfg_rate (`float`, *optional*, defaults to 2.0):
+        Default classifier-free guidance scale stored by the released checkpoint.
+    reg_loss_type (`str`, *optional*, defaults to `"l1"`):
+        Regression loss used for the flow-matching objective.
+    ratio_r_neq_t_range (`tuple[float, float]`, *optional*, defaults to `(0.25, 0.75)`):
+        Sampling range for the probability that the conditioning and target timesteps differ.
+    noise_cond_prob_range (`tuple[float, float]`, *optional*, defaults to `(0.0, 0.0)`):
+        Sampling range for noisy conditioning probability.
+    noise_cond_scale (`float`, *optional*, defaults to 0.0):
+        Scale of the noise added to conditioning latents.
+    """
+
+    model_type = "voxcpm2_cfm"
+    base_config_key = "cfm_config"
+
+    sigma_min: int | float = 1e-6
+    solver: str = "euler"
+    t_scheduler: str = "log-norm"
+    training_cfg_rate: int | float = 0.1
+    inference_cfg_rate: int | float = 2.0
+    reg_loss_type: str = "l1"
+    ratio_r_neq_t_range: list[int | float] | tuple[int | float, ...] = (0.25, 0.75)
+    noise_cond_prob_range: list[int | float] | tuple[int | float, ...] = (0.0, 0.0)
+    noise_cond_scale: int | float = 0.0
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.sigma_min < 0:
+            raise ValueError("`sigma_min` must be non-negative.")
+        for name in ("ratio_r_neq_t_range", "noise_cond_prob_range"):
+            value = getattr(self, name)
+            if len(value) != 2 or value[0] > value[1]:
+                raise ValueError(f"`{name}` must contain two ordered values.")
+            if name == "noise_cond_prob_range" and not 0 <= value[0] <= value[1] <= 1:
+                raise ValueError("`noise_cond_prob_range` values must be between 0 and 1.")
+
+
+@auto_docstring(checkpoint="openbmb/VoxCPM2")
+@strict
+class VoxCPM2DiTConfig(PreTrainedConfig):
+    r"""
+    hidden_dim (`int`, *optional*, defaults to 1024):
+        Dimension of the local diffusion Transformer hidden states.
+    ffn_dim (`int`, *optional*, defaults to 4096):
+        Dimension of the local diffusion Transformer feed-forward layers.
+    num_heads (`int`, *optional*, defaults to 16):
+        Number of attention heads in each local diffusion Transformer layer.
+    num_layers (`int`, *optional*, defaults to 12):
+        Number of local diffusion Transformer layers.
+    kv_channels (`int`, *optional*, defaults to 128):
+        Dimension of each attention key and value head.
+    mean_mode (`bool`, *optional*, defaults to `False`):
+        Whether the flow estimator uses the conditional mean formulation.
+    cfm_config (`VoxCPM2CfmConfig` or `dict`, *optional*):
+        Conditional flow-matching configuration.
+    """
+
+    model_type = "voxcpm2_dit"
+    base_config_key = "dit_config"
+    sub_configs = {"cfm_config": VoxCPM2CfmConfig}
+    attribute_map = {
+        "hidden_size": "hidden_dim",
+        "intermediate_size": "ffn_dim",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "head_dim": "kv_channels",
+        "dit_mean_mode": "mean_mode",
+    }
+
+    hidden_dim: int = 1024
+    ffn_dim: int = 4096
+    num_heads: int = 16
+    num_layers: int = 12
+    kv_channels: int | None = 128
+    mean_mode: bool = False
+    cfm_config: dict | VoxCPM2CfmConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.kv_channels is None:
+            self.kv_channels = self.hidden_dim // self.num_heads
+        if self.cfm_config is None:
+            self.cfm_config = VoxCPM2CfmConfig()
+        elif isinstance(self.cfm_config, dict):
+            self.cfm_config = VoxCPM2CfmConfig(**self.cfm_config)
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.hidden_dim <= 0 or self.ffn_dim <= 0:
+            raise ValueError("`hidden_dim` and `ffn_dim` must be strictly positive.")
+        if self.num_heads <= 0 or self.num_layers <= 0:
+            raise ValueError("`num_heads` and `num_layers` must be strictly positive.")
+        if self.kv_channels is None or self.kv_channels <= 0:
+            raise ValueError("`kv_channels` must be strictly positive.")
+
+
+@auto_docstring(checkpoint="openbmb/VoxCPM2")
+@strict
+class VoxCPM2AudioVAEConfig(PreTrainedConfig):
+    r"""
+    encoder_dim (`int`, *optional*, defaults to 128):
+        Initial channel dimension of the audio encoder.
+    encoder_rates (`tuple[int, ...]`, *optional*, defaults to `(2, 5, 8, 8)`):
+        Downsampling strides used by the audio encoder.
+    latent_dim (`int`, *optional*, defaults to 64):
+        Dimension of the continuous audio latents.
+    decoder_dim (`int`, *optional*, defaults to 2048):
+        Initial channel dimension of the audio decoder.
+    decoder_rates (`tuple[int, ...]`, *optional*, defaults to `(8, 6, 5, 2, 2, 2)`):
+        Upsampling strides used by the audio decoder.
+    depthwise (`bool`, *optional*, defaults to `True`):
+        Whether residual convolutions use depthwise groups.
+    sample_rate (`int`, *optional*, defaults to 16000):
+        Sampling rate expected by the audio encoder.
+    out_sample_rate (`int`, *optional*, defaults to 48000):
+        Sampling rate produced by the audio decoder.
+    use_noise_block (`bool`, *optional*, defaults to `False`):
+        Whether decoder blocks inject learned noise.
+    sr_bin_boundaries (`tuple[int, ...]`, *optional*, defaults to `(20000, 30000, 40000)`):
+        Boundaries used to bucket the requested decoder sampling rate.
+    cond_type (`str`, *optional*, defaults to `"scale_bias"`):
+        Type of sample-rate conditioning applied by the decoder.
+    cond_dim (`int`, *optional*, defaults to 128):
+        Embedding dimension used for sample-rate conditioning.
+    cond_out_layer (`bool`, *optional*, defaults to `False`):
+        Whether to condition the decoder output layer.
+    """
+
+    model_type = "voxcpm2_audio_vae"
+    base_config_key = "audio_vae_config"
+
+    encoder_dim: int = 128
+    encoder_rates: list[int] | tuple[int, ...] = (2, 5, 8, 8)
+    latent_dim: int = 64
+    decoder_dim: int = 2048
+    decoder_rates: list[int] | tuple[int, ...] = (8, 6, 5, 2, 2, 2)
+    depthwise: bool = True
+    sample_rate: int = 16000
+    out_sample_rate: int = 48000
+    use_noise_block: bool = False
+    sr_bin_boundaries: list[int] | tuple[int, ...] | None = (20000, 30000, 40000)
+    cond_type: str = "scale_bias"
+    cond_dim: int = 128
+    cond_out_layer: bool = False
+
+    @property
+    def hop_length(self) -> int:
+        return math.prod(self.encoder_rates)
+
+    @property
+    def decode_hop_length(self) -> int:
+        return math.prod(self.decoder_rates)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.encoder_dim <= 0 or self.decoder_dim <= 0 or self.latent_dim <= 0:
+            raise ValueError("AudioVAE dimensions must be strictly positive.")
+        if self.sample_rate <= 0 or self.out_sample_rate <= 0:
+            raise ValueError("AudioVAE sampling rates must be strictly positive.")
+        if not self.encoder_rates or not self.decoder_rates:
+            raise ValueError("AudioVAE encoder and decoder rates cannot be empty.")
+        if any(rate <= 0 for rate in (*self.encoder_rates, *self.decoder_rates)):
+            raise ValueError("AudioVAE encoder and decoder rates must be strictly positive.")
+
+
+@auto_docstring(checkpoint="openbmb/VoxCPM2")
+@strict
+class VoxCPM2Config(PreTrainedConfig):
+    r"""
+    lm_config (`VoxCPM2TextConfig` or `dict`, *optional*):
+        Configuration of the MiniCPM4-based text-semantic language model.
+    encoder_config (`VoxCPM2EncoderConfig` or `dict`, *optional*):
+        Configuration of the local audio encoder.
+    dit_config (`VoxCPM2DiTConfig` or `dict`, *optional*):
+        Configuration of the local diffusion Transformer and conditional flow matcher.
+    audio_vae_config (`VoxCPM2AudioVAEConfig` or `dict`, *optional*):
+        Configuration of AudioVAE V2.
+    patch_size (`int`, *optional*, defaults to 4):
+        Number of AudioVAE latent frames generated in each autoregressive step.
+    feat_dim (`int`, *optional*, defaults to 64):
+        Dimension of each AudioVAE latent frame.
+    residual_lm_num_layers (`int`, *optional*, defaults to 8):
+        Number of layers in the residual autoregressive language model.
+    residual_lm_no_rope (`bool`, *optional*, defaults to `True`):
+        Whether to disable rotary position embeddings in the residual language model.
+    scalar_quantization_latent_dim (`int`, *optional*, defaults to 512):
+        Hidden dimension of the scalar-quantization projection.
+    scalar_quantization_scale (`int`, *optional*, defaults to 9):
+        Number of scalar quantization levels on each side of zero.
+    max_cache_length (`int`, *optional*, defaults to 8192):
+        Maximum cache capacity used by the original streaming generation implementation.
+    audio_start_token_id (`int`, *optional*, defaults to 101):
+        Token marking the beginning of generated audio context.
+    audio_end_token_id (`int`, *optional*, defaults to 102):
+        Token marking the end of generated audio context.
+    reference_audio_start_token_id (`int`, *optional*, defaults to 103):
+        Token marking the beginning of reference audio context.
+    reference_audio_end_token_id (`int`, *optional*, defaults to 104):
+        Token marking the end of reference audio context.
+    sample_rate (`int`, *optional*):
+        Sampling rate of generated waveforms. Defaults to `audio_vae_config.out_sample_rate`.
+
+    Example:
+
+    ```python
+    >>> from transformers import VoxCPM2Config
+
+    >>> configuration = VoxCPM2Config()
+    >>> configuration.audio_vae_config.out_sample_rate
+    48000
+    ```
+    """
+
+    model_type = "voxcpm2"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs = {
+        "lm_config": VoxCPM2TextConfig,
+        "encoder_config": VoxCPM2EncoderConfig,
+        "dit_config": VoxCPM2DiTConfig,
+        "audio_vae_config": VoxCPM2AudioVAEConfig,
+    }
+
+    lm_config: dict | VoxCPM2TextConfig | None = None
+    encoder_config: dict | VoxCPM2EncoderConfig | None = None
+    dit_config: dict | VoxCPM2DiTConfig | None = None
+    audio_vae_config: dict | VoxCPM2AudioVAEConfig | None = None
+    patch_size: int = 4
+    feat_dim: int = 64
+    residual_lm_num_layers: int = 8
+    residual_lm_no_rope: bool = True
+    scalar_quantization_latent_dim: int = 512
+    scalar_quantization_scale: int = 9
+    max_cache_length: int = 8192
+    audio_start_token_id: int = 101
+    audio_end_token_id: int = 102
+    reference_audio_start_token_id: int = 103
+    reference_audio_end_token_id: int = 104
+    sample_rate: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.lm_config is None:
+            self.lm_config = VoxCPM2TextConfig()
+        elif isinstance(self.lm_config, dict):
+            self.lm_config = VoxCPM2TextConfig(**self.lm_config)
+
+        if self.encoder_config is None:
+            self.encoder_config = VoxCPM2EncoderConfig()
+        elif isinstance(self.encoder_config, dict):
+            self.encoder_config = VoxCPM2EncoderConfig(**self.encoder_config)
+
+        if self.dit_config is None:
+            self.dit_config = VoxCPM2DiTConfig()
+        elif isinstance(self.dit_config, dict):
+            self.dit_config = VoxCPM2DiTConfig(**self.dit_config)
+
+        if self.audio_vae_config is None:
+            self.audio_vae_config = VoxCPM2AudioVAEConfig()
+        elif isinstance(self.audio_vae_config, dict):
+            self.audio_vae_config = VoxCPM2AudioVAEConfig(**self.audio_vae_config)
+
+        if self.sample_rate is None:
+            self.sample_rate = self.audio_vae_config.out_sample_rate
+        elif self.sample_rate != self.audio_vae_config.out_sample_rate:
+            raise ValueError("`sample_rate` must match `audio_vae_config.out_sample_rate`")
+
+        if (legacy_max_length := kwargs.pop("max_length", None)) is not None:
+            self.max_cache_length = legacy_max_length
+        kwargs.pop("architecture", None)
+        kwargs.pop("device", None)
+
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.patch_size <= 0 or self.residual_lm_num_layers <= 0 or self.max_cache_length <= 0:
+            raise ValueError("Patch size, residual LM layers, and cache length must be strictly positive.")
+        audio_vae_config = self.audio_vae_config
+        if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
+            raise TypeError("`audio_vae_config` must be a `VoxCPM2AudioVAEConfig` instance")
+        if self.feat_dim != audio_vae_config.latent_dim:
+            raise ValueError(
+                f"`feat_dim` ({self.feat_dim}) must match AudioVAE `latent_dim` ({audio_vae_config.latent_dim})."
+            )
+
+    def get_text_config(self, *args, **kwargs):
+        return self.lm_config
+
+
+def _get_tslm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.lm_config, VoxCPM2TextConfig):
+        raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+    return copy.deepcopy(config.lm_config)
+
+
+def _get_ralm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    ralm_config = _get_tslm_config(config)
+    ralm_config.num_hidden_layers = config.residual_lm_num_layers
+    ralm_config.vocab_size = 0
+    ralm_config.no_rope = config.residual_lm_no_rope
+    return ralm_config
+
+
+def _get_local_encoder_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.encoder_config, VoxCPM2EncoderConfig):
+        raise TypeError("`encoder_config` must be a `VoxCPM2EncoderConfig` instance")
+    encoder_config = _get_tslm_config(config)
+    encoder_config.hidden_size = config.encoder_config.hidden_dim
+    encoder_config.intermediate_size = config.encoder_config.ffn_dim
+    encoder_config.num_attention_heads = config.encoder_config.num_heads
+    encoder_config.num_hidden_layers = config.encoder_config.num_layers
+    encoder_config.kv_channels = config.encoder_config.kv_channels
+    encoder_config.head_dim = config.encoder_config.kv_channels
+    encoder_config.vocab_size = 0
+    return encoder_config
+
+
+def _get_local_dit_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.dit_config, VoxCPM2DiTConfig):
+        raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
+    dit_config = _get_tslm_config(config)
+    dit_config.hidden_size = config.dit_config.hidden_dim
+    dit_config.intermediate_size = config.dit_config.ffn_dim
+    dit_config.num_attention_heads = config.dit_config.num_heads
+    dit_config.num_hidden_layers = config.dit_config.num_layers
+    dit_config.kv_channels = config.dit_config.kv_channels
+    dit_config.head_dim = config.dit_config.kv_channels
+    dit_config.vocab_size = 0
+    return dit_config
+
+
+@auto_docstring
+class VoxCPM2PreTrainedModel(PreTrainedModel):
+    config: VoxCPM2Config
+    base_model_prefix = "model"
+    main_input_name = "input_ids"
+    input_modalities = ("audio", "text")
+    output_modalities = ("audio",)
+    _no_split_modules = [
+        "VoxCPM2DecoderLayer",
+        "VoxCPM2CausalEncoderBlock",
+        "VoxCPM2CausalDecoderBlock",
+        "ParametrizedVoxCPM2CausalConv1d",
+        "ParametrizedVoxCPM2CausalConvTranspose1d",
+    ]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_sdpa = True
+    _supports_attention_backend = True
+    _keep_in_fp32_modules_strict = ["audio_vae"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        has_parametrized_weight = hasattr(module, "parametrizations") and hasattr(module.parametrizations, "weight")
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)) and has_parametrized_weight:
+            std = self.config.get_text_config().initializer_range or 0.02
+            weight_magnitude = module.parametrizations.weight.original0
+            weight_vector = module.parametrizations.weight.original1
+            init.normal_(weight_vector, mean=0.0, std=std)
+            norm_dimensions = tuple(range(1, weight_vector.ndim))
+            init.copy_(
+                weight_magnitude,
+                torch.linalg.vector_norm(weight_vector, dim=norm_dimensions, keepdim=True),
+            )
+            if module.bias is not None:
+                init.zeros_(module.bias)
+
+        if isinstance(module, VoxCPM2Snake1d):
+            init.ones_(module.alpha)
+        elif isinstance(module, VoxCPM2LocalEncoder):
+            init.normal_(module.special_token, mean=0.0, std=1.0)
+        elif isinstance(module, VoxCPM2SampleRateConditionLayer):
+            if module.conditioning_type == "scale_bias":
+                init.ones_(module.scale_embed.weight)
+                init.zeros_(module.bias_embed.weight)
+            elif module.conditioning_type == "scale_bias_init":
+                init.normal_(module.scale_embed.weight, mean=1.0, std=1.0)
+                init.normal_(module.bias_embed.weight, mean=0.0, std=1.0)
+            else:
+                init.normal_(module.cond_embed.weight, mean=0.0, std=1.0)
+        elif isinstance(module, VoxCPM2AudioDecoder) and module.sr_bin_boundaries is not None:
+            audio_vae_config = self.config.audio_vae_config
+            if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
+                raise TypeError("`audio_vae_config` must be a `VoxCPM2AudioVAEConfig` instance")
+            if audio_vae_config.sr_bin_boundaries is None:
+                raise ValueError("AudioVAE sample-rate boundaries are missing from the configuration")
+            boundaries = torch.tensor(
+                audio_vae_config.sr_bin_boundaries,
+                device=module.sr_bin_boundaries.device,
+                dtype=module.sr_bin_boundaries.dtype,
+            )
+            init.copy_(module.sr_bin_boundaries, boundaries)
+
+
+class VoxCPM2ScalarQuantizationLayer(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        lm_config = config.lm_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        self.in_dim = lm_config.hidden_size
+        self.out_dim = lm_config.hidden_size
+        self.latent_dim = config.scalar_quantization_latent_dim
+        self.scale = config.scalar_quantization_scale
+
+        self.in_proj = nn.Linear(self.in_dim, self.latent_dim)
+        self.out_proj = nn.Linear(self.latent_dim, self.out_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = torch.tanh(self.in_proj(hidden_states))
+        quantized_states = torch.round(hidden_states * self.scale) / self.scale
+        if self.training:
+            hidden_states = hidden_states + (quantized_states - hidden_states).detach()
+        else:
+            hidden_states = quantized_states
+        return self.out_proj(hidden_states)
+
+
+class VoxCPM2Snake1d(Snake1d):
+    pass
+
+
+class VoxCPM2CausalConv1d(nn.Conv1d):
+    def __init__(self, *args, padding: int = 0, output_padding: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.causal_padding = padding * 2 - output_padding
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
+        return super().forward(hidden_states)
+
+
+class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
+    def __init__(self, *args, padding: int = 0, output_padding: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.causal_trim = padding * 2 - output_padding
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = super().forward(hidden_states)
+        if self.causal_trim > 0:
+            hidden_states = hidden_states[..., : -self.causal_trim]
+        return hidden_states
+
+
+def _apply_voxcpm2_weight_norm(module: nn.Module) -> nn.Module:
+    weight_norm = nn.utils.weight_norm
+    if hasattr(nn.utils.parametrizations, "weight_norm"):
+        weight_norm = nn.utils.parametrizations.weight_norm
+    return weight_norm(module)
+
+
+class VoxCPM2CausalResidualUnit(nn.Module):
+    def __init__(self, hidden_dim: int = 16, dilation: int = 1, kernel_size: int = 7, groups: int = 1):
+        super().__init__()
+        padding = ((7 - 1) * dilation) // 2
+        self.block = nn.Sequential(
+            VoxCPM2Snake1d(hidden_dim),
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConv1d(
+                    hidden_dim,
+                    hidden_dim,
+                    kernel_size=kernel_size,
+                    dilation=dilation,
+                    padding=padding,
+                    groups=groups,
+                )
+            ),
+            VoxCPM2Snake1d(hidden_dim),
+            _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(hidden_dim, hidden_dim, kernel_size=1)),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states + self.block(hidden_states)
+
+
+class VoxCPM2CausalEncoderBlock(nn.Module):
+    def __init__(self, output_dim: int = 16, input_dim: int | None = None, stride: int = 1, groups: int = 1):
+        super().__init__()
+        input_dim = input_dim or output_dim // 2
+        self.block = nn.Sequential(
+            VoxCPM2CausalResidualUnit(input_dim, dilation=1, groups=groups),
+            VoxCPM2CausalResidualUnit(input_dim, dilation=3, groups=groups),
+            VoxCPM2CausalResidualUnit(input_dim, dilation=9, groups=groups),
+            VoxCPM2Snake1d(input_dim),
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConv1d(
+                    input_dim,
+                    output_dim,
+                    kernel_size=2 * stride,
+                    stride=stride,
+                    padding=math.ceil(stride / 2),
+                    output_padding=stride % 2,
+                )
+            ),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.block(hidden_states)
+
+
+class VoxCPM2AudioEncoder(nn.Module):
+    def __init__(self, config: VoxCPM2AudioVAEConfig):
+        super().__init__()
+        hidden_dim = config.encoder_dim
+        layers = [_apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(1, hidden_dim, kernel_size=7, padding=3))]
+        for stride in config.encoder_rates:
+            hidden_dim *= 2
+            groups = hidden_dim // 2 if config.depthwise else 1
+            layers.append(VoxCPM2CausalEncoderBlock(output_dim=hidden_dim, stride=stride, groups=groups))
+
+        self.fc_mu = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(hidden_dim, config.latent_dim, kernel_size=3, padding=1)
+        )
+        self.fc_logvar = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(hidden_dim, config.latent_dim, kernel_size=3, padding=1)
+        )
+        self.block = nn.Sequential(*layers)
+        self.encoder_dim = hidden_dim
+
+    def forward(self, input_values: torch.Tensor) -> dict[str, torch.Tensor]:
+        hidden_states = self.block(input_values)
+        return {
+            "hidden_state": hidden_states,
+            "mu": self.fc_mu(hidden_states),
+            "logvar": self.fc_logvar(hidden_states),
+        }
+
+
+class VoxCPM2NoiseBlock(nn.Module):
+    def __init__(self, hidden_dim: int):
+        super().__init__()
+        self.linear = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(hidden_dim, hidden_dim, kernel_size=1, bias=False)
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        noise = torch.randn(
+            (hidden_states.shape[0], 1, hidden_states.shape[2]),
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+        return hidden_states + noise * self.linear(hidden_states)
+
+
+class VoxCPM2CausalDecoderBlock(nn.Module):
+    def __init__(
+        self,
+        input_dim: int = 16,
+        output_dim: int = 8,
+        stride: int = 1,
+        groups: int = 1,
+        use_noise_block: bool = False,
+    ):
+        super().__init__()
+        layers = [
+            VoxCPM2Snake1d(input_dim),
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConvTranspose1d(
+                    input_dim,
+                    output_dim,
+                    kernel_size=2 * stride,
+                    stride=stride,
+                    padding=math.ceil(stride / 2),
+                    output_padding=stride % 2,
+                )
+            ),
+        ]
+        if use_noise_block:
+            layers.append(VoxCPM2NoiseBlock(output_dim))
+        layers.extend(
+            [
+                VoxCPM2CausalResidualUnit(output_dim, dilation=1, groups=groups),
+                VoxCPM2CausalResidualUnit(output_dim, dilation=3, groups=groups),
+                VoxCPM2CausalResidualUnit(output_dim, dilation=9, groups=groups),
+            ]
+        )
+        self.block = nn.Sequential(*layers)
+        self.input_channels = input_dim
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.block(hidden_states)
+
+
+class VoxCPM2SampleRateConditionLayer(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        num_sample_rate_buckets: int,
+        conditioning_type: str = "scale_bias",
+        conditioning_dim: int = 128,
+        use_output_layer: bool = False,
+    ):
+        super().__init__()
+        self.conditioning_type = conditioning_type
+        output_layer_input_dim = input_dim
+
+        if conditioning_type in ("scale_bias", "scale_bias_init"):
+            self.scale_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+            self.bias_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+            if conditioning_type == "scale_bias":
+                nn.init.ones_(self.scale_embed.weight)
+                nn.init.zeros_(self.bias_embed.weight)
+            else:
+                nn.init.normal_(self.scale_embed.weight, mean=1.0)
+                nn.init.normal_(self.bias_embed.weight)
+        elif conditioning_type == "add":
+            self.cond_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+            nn.init.normal_(self.cond_embed.weight)
+        elif conditioning_type == "concat":
+            if not use_output_layer:
+                raise ValueError("`use_output_layer` must be enabled for concatenated sample-rate conditioning")
+            self.cond_embed = nn.Embedding(num_sample_rate_buckets, conditioning_dim)
+            output_layer_input_dim = input_dim + conditioning_dim
+        else:
+            raise ValueError(f"Invalid sample-rate conditioning type: {conditioning_type}")
+
+        if use_output_layer:
+            self.out_layer = nn.Sequential(
+                VoxCPM2Snake1d(output_layer_input_dim),
+                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(output_layer_input_dim, input_dim, kernel_size=1)),
+            )
+        else:
+            self.out_layer = nn.Identity()
+
+    def forward(self, hidden_states: torch.Tensor, sample_rate_ids: torch.LongTensor) -> torch.Tensor:
+        if self.conditioning_type in ("scale_bias", "scale_bias_init"):
+            hidden_states = hidden_states * self.scale_embed(sample_rate_ids).unsqueeze(-1)
+            hidden_states = hidden_states + self.bias_embed(sample_rate_ids).unsqueeze(-1)
+        elif self.conditioning_type == "add":
+            hidden_states = hidden_states + self.cond_embed(sample_rate_ids).unsqueeze(-1)
+        else:
+            conditioning = self.cond_embed(sample_rate_ids).unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
+            hidden_states = torch.cat((hidden_states, conditioning), dim=1)
+        return self.out_layer(hidden_states)
+
+
+class VoxCPM2AudioDecoder(nn.Module):
+    def __init__(self, config: VoxCPM2AudioVAEConfig):
+        super().__init__()
+        if config.depthwise:
+            layers = [
+                _apply_voxcpm2_weight_norm(
+                    VoxCPM2CausalConv1d(
+                        config.latent_dim,
+                        config.latent_dim,
+                        kernel_size=7,
+                        padding=3,
+                        groups=config.latent_dim,
+                    )
+                ),
+                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(config.latent_dim, config.decoder_dim, kernel_size=1)),
+            ]
+        else:
+            layers = [
+                _apply_voxcpm2_weight_norm(
+                    VoxCPM2CausalConv1d(config.latent_dim, config.decoder_dim, kernel_size=7, padding=3)
+                )
+            ]
+
+        for stride_index, stride in enumerate(config.decoder_rates):
+            input_dim = config.decoder_dim // 2**stride_index
+            output_dim = config.decoder_dim // 2 ** (stride_index + 1)
+            groups = output_dim if config.depthwise else 1
+            layers.append(
+                VoxCPM2CausalDecoderBlock(
+                    input_dim,
+                    output_dim,
+                    stride,
+                    groups=groups,
+                    use_noise_block=config.use_noise_block,
+                )
+            )
+
+        layers.extend(
+            [
+                VoxCPM2Snake1d(output_dim),
+                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(output_dim, 1, kernel_size=7, padding=3)),
+                nn.Tanh(),
+            ]
+        )
+
+        if config.sr_bin_boundaries is None:
+            self.model = nn.Sequential(*layers)
+            self.sr_bin_boundaries = None
+        else:
+            self.model = nn.ModuleList(layers)
+            self.register_buffer(
+                "sr_bin_boundaries", torch.tensor(config.sr_bin_boundaries, dtype=torch.int32), persistent=True
+            )
+            num_sample_rate_buckets = len(config.sr_bin_boundaries) + 1
+            conditioning_layers = []
+            for layer in self.model:
+                if isinstance(layer, VoxCPM2CausalDecoderBlock):
+                    conditioning_layers.append(
+                        VoxCPM2SampleRateConditionLayer(
+                            input_dim=layer.input_channels,
+                            num_sample_rate_buckets=num_sample_rate_buckets,
+                            conditioning_type=config.cond_type,
+                            conditioning_dim=config.cond_dim,
+                            use_output_layer=config.cond_out_layer,
+                        )
+                    )
+                else:
+                    conditioning_layers.append(None)
+            self.sr_cond_model = nn.ModuleList(conditioning_layers)
+
+    def get_sample_rate_ids(self, sample_rate: torch.Tensor) -> torch.Tensor:
+        return torch.bucketize(sample_rate, self.sr_bin_boundaries)
+
+    def forward(self, hidden_states: torch.Tensor, sample_rate: torch.Tensor | None = None) -> torch.Tensor:
+        if self.sr_bin_boundaries is None:
+            return self.model(hidden_states)
+        if sample_rate is None:
+            raise ValueError("`sample_rate` must be provided when sample-rate conditioning is enabled")
+
+        sample_rate_ids = self.get_sample_rate_ids(sample_rate)
+        for layer, conditioning_layer in zip(self.model, self.sr_cond_model):
+            if conditioning_layer is not None:
+                hidden_states = conditioning_layer(hidden_states, sample_rate_ids)
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+
+class VoxCPM2AudioVAE(nn.Module):
+    def __init__(self, config: VoxCPM2AudioVAEConfig):
+        super().__init__()
+        self.config = config
+        self.encoder_dim = config.encoder_dim
+        self.encoder_rates = config.encoder_rates
+        self.decoder_dim = config.decoder_dim
+        self.decoder_rates = config.decoder_rates
+        self.depthwise = config.depthwise
+        self.use_noise_block = config.use_noise_block
+        self.latent_dim = config.latent_dim
+        self.hop_length = config.hop_length
+        self.encoder = VoxCPM2AudioEncoder(config)
+        self.decoder = VoxCPM2AudioDecoder(config)
+        self.sample_rate = config.sample_rate
+        self.out_sample_rate = config.out_sample_rate
+        self.sr_bin_boundaries = config.sr_bin_boundaries
+        self.chunk_size = config.hop_length
+        self.decode_chunk_size = config.decode_hop_length
+
+    def preprocess(self, input_values: torch.Tensor, sampling_rate: int | None = None) -> torch.Tensor:
+        sampling_rate = self.sample_rate if sampling_rate is None else sampling_rate
+        if sampling_rate != self.sample_rate:
+            raise ValueError(f"VoxCPM2 AudioVAE expects {self.sample_rate} Hz audio, but received {sampling_rate} Hz")
+        right_padding = math.ceil(input_values.shape[-1] / self.hop_length) * self.hop_length
+        right_padding -= input_values.shape[-1]
+        return F.pad(input_values, (0, right_padding))
+
+    def encode(self, input_values: torch.Tensor, sampling_rate: int | None = None) -> torch.Tensor:
+        if input_values.ndim == 2:
+            input_values = input_values.unsqueeze(1)
+        input_values = self.preprocess(input_values, sampling_rate)
+        return self.encoder(input_values)["mu"]
+
+    def decode(
+        self, latent_features: torch.Tensor, output_sampling_rate: int | torch.Tensor | None = None
+    ) -> torch.Tensor:
+        sample_rate = None
+        if self.sr_bin_boundaries is not None:
+            output_sampling_rate = self.out_sample_rate if output_sampling_rate is None else output_sampling_rate
+            sample_rate = torch.as_tensor(output_sampling_rate, device=latent_features.device, dtype=torch.int32)
+            if sample_rate.ndim == 0:
+                sample_rate = sample_rate.unsqueeze(0)
+        return self.decoder(latent_features, sample_rate)
+
+    def streaming_decode(self) -> "VoxCPM2StreamingAudioDecoder":
+        return VoxCPM2StreamingAudioDecoder(self)
+
+
+class VoxCPM2StreamingAudioDecoder:
+    def __init__(self, audio_vae: VoxCPM2AudioVAE):
+        self.audio_vae = audio_vae
+        self.states = {}
+        self.original_forwards = []
+
+    def __enter__(self):
+        self.states.clear()
+        self._install_streaming_forwards()
+        return self
+
+    def __exit__(self, *args):
+        self._restore_forwards()
+        self.states.clear()
+
+    def decode_chunk(self, latent_features: torch.Tensor) -> torch.Tensor:
+        return self.audio_vae.decode(latent_features)
+
+    def _install_streaming_forwards(self):
+        for module in self.audio_vae.decoder.modules():
+            if isinstance(module, VoxCPM2CausalConv1d) and module.causal_padding > 0:
+                self._patch_causal_convolution(module)
+            elif isinstance(module, VoxCPM2CausalConvTranspose1d):
+                context_size = (module.kernel_size[0] - 1) // module.stride[0]
+                if context_size > 0:
+                    self._patch_causal_transposed_convolution(module, context_size)
+
+    def _patch_causal_convolution(self, module: VoxCPM2CausalConv1d):
+        state_key = id(module)
+        original_forward = module.forward
+        padding = module.causal_padding
+
+        def streaming_forward(hidden_states: torch.Tensor) -> torch.Tensor:
+            if state_key in self.states:
+                padded_states = torch.cat((self.states[state_key], hidden_states), dim=-1)
+            else:
+                padded_states = F.pad(hidden_states, (padding, 0))
+
+            if hidden_states.shape[-1] >= padding:
+                self.states[state_key] = hidden_states[..., -padding:].detach()
+            else:
+                previous_states = self.states.get(
+                    state_key,
+                    torch.zeros(
+                        hidden_states.shape[0],
+                        hidden_states.shape[1],
+                        padding,
+                        device=hidden_states.device,
+                        dtype=hidden_states.dtype,
+                    ),
+                )
+                self.states[state_key] = torch.cat((previous_states, hidden_states), dim=-1)[..., -padding:].detach()
+            return nn.Conv1d.forward(module, padded_states)
+
+        module.forward = streaming_forward
+        self.original_forwards.append((module, original_forward))
+
+    def _patch_causal_transposed_convolution(self, module: VoxCPM2CausalConvTranspose1d, context_size: int):
+        state_key = id(module)
+        original_forward = module.forward
+
+        def streaming_forward(hidden_states: torch.Tensor) -> torch.Tensor:
+            if state_key in self.states:
+                padded_states = torch.cat((self.states[state_key], hidden_states), dim=-1)
+            else:
+                padded_states = F.pad(hidden_states, (context_size, 0))
+            self.states[state_key] = hidden_states[..., -context_size:].detach()
+            hidden_states = nn.ConvTranspose1d.forward(module, padded_states)
+            left_trim = context_size * module.stride[0]
+            if module.causal_trim > 0:
+                return hidden_states[..., left_trim : -module.causal_trim]
+            return hidden_states[..., left_trim:]
+
+        module.forward = streaming_forward
+        self.original_forwards.append((module, original_forward))
+
+    def _restore_forwards(self):
+        for module, original_forward in self.original_forwards:
+            module.forward = original_forward
+        self.original_forwards.clear()
+
+
+class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
+    def __init__(self, embedding_dim: int):
+        super().__init__()
+        if embedding_dim < 4 or embedding_dim % 2 != 0:
+            raise ValueError("`embedding_dim` must be an even integer greater than 2.")
+        self.embedding_dim = embedding_dim
+
+    def forward(self, timesteps: torch.Tensor, scale: float = 1000.0) -> torch.Tensor:
+        if timesteps.ndim == 0:
+            timesteps = timesteps.unsqueeze(0)
+        half_dim = self.embedding_dim // 2
+        exponent = math.log(10000) / (half_dim - 1)
+        frequencies = torch.exp(torch.arange(half_dim, dtype=timesteps.dtype, device=timesteps.device) * -exponent)
+        embeddings = scale * timesteps.unsqueeze(1) * frequencies.unsqueeze(0)
+        return torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+
+
+class VoxCPM2TimestepEmbedding(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int | None = None):
+        super().__init__()
+        output_dim = output_dim if output_dim is not None else hidden_dim
+        self.linear_1 = nn.Linear(input_dim, hidden_dim)
+        self.act = nn.SiLU()
+        self.linear_2 = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        return self.linear_2(hidden_states)
+
+
+class VoxCPM2Attention(MiniCPM4Attention):
+    def __init__(self, config: VoxCPM2TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        is_causal: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states.contiguous(),
+            key_states.contiguous(),
+            value_states.contiguous(),
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            is_causal=is_causal,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
+
+
+class VoxCPM2RMSNorm(MiniCPM4RMSNorm):
+    pass
+
+
+class VoxCPM2RotaryEmbedding(MiniCPM4RotaryEmbedding):
+    def __init__(self, config: VoxCPM2TextConfig, device=None):
+        super().__init__(config, device)
+
+
+class VoxCPM2DecoderLayer(MiniCPM4DecoderLayer):
+    def __init__(self, config: VoxCPM2TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers) if config.use_mup else 1.0
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        is_causal: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            is_causal=is_causal,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states * self.residual_scale
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        return residual + hidden_states * self.residual_scale
+
+
+class VoxCPM2BackboneModel(nn.Module):
+    def __init__(self, config: VoxCPM2TextConfig):
+        super().__init__()
+        if config.sparse_config is not None:
+            raise NotImplementedError(
+                "VoxCPM2 InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
+                "use dense attention."
+            )
+        self.config = config
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = (
+            nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+            if config.vocab_size > 0
+            else nn.Identity()
+        )
+        self.layers = nn.ModuleList(
+            [VoxCPM2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = VoxCPM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = None if config.no_rope else VoxCPM2RotaryEmbedding(config=config)
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool = False,
+        is_causal: bool = True,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if inputs_embeds is None:
+            if self.vocab_size == 0:
+                raise ValueError("`inputs_embeds` must be provided when `vocab_size` is 0")
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            ).unsqueeze(0)
+
+        if is_causal:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
+
+        hidden_states = inputs_embeds
+        position_embeddings = (
+            None if self.rotary_emb is None else self.rotary_emb(hidden_states, position_ids=position_ids)
+        )
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                is_causal=is_causal,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+        )
+
+
+class VoxCPM2LocalEncoder(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        encoder_config = _get_local_encoder_backbone_config(config)
+        self.special_token = nn.Parameter(torch.randn(1, 1, 1, encoder_config.hidden_size))
+        self.in_proj = nn.Linear(config.feat_dim, encoder_config.hidden_size)
+        self.encoder = VoxCPM2BackboneModel(encoder_config)
+
+    def forward(self, audio_features: torch.Tensor) -> torch.Tensor:
+        batch_size, num_steps, _, _ = audio_features.shape
+        hidden_states = self.in_proj(audio_features)
+        special_tokens = self.special_token.expand(batch_size, num_steps, 1, -1)
+        hidden_states = torch.cat((special_tokens, hidden_states), dim=2)
+        hidden_states = hidden_states.reshape(batch_size * num_steps, hidden_states.shape[2], hidden_states.shape[3])
+        hidden_states = self.encoder(inputs_embeds=hidden_states, is_causal=False).last_hidden_state[:, 0]
+        return hidden_states.reshape(batch_size, num_steps, -1)
+
+
+class VoxCPM2LocalDiT(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        dit_config = _get_local_dit_backbone_config(config)
+        self.in_channels = config.feat_dim
+        self.out_channels = config.feat_dim
+
+        self.in_proj = nn.Linear(self.in_channels, dit_config.hidden_size)
+        self.cond_proj = nn.Linear(self.in_channels, dit_config.hidden_size)
+        self.out_proj = nn.Linear(dit_config.hidden_size, self.out_channels)
+        self.time_embeddings = VoxCPM2SinusoidalPositionEmbedding(dit_config.hidden_size)
+        self.time_mlp = VoxCPM2TimestepEmbedding(dit_config.hidden_size, dit_config.hidden_size)
+        self.delta_time_mlp = VoxCPM2TimestepEmbedding(dit_config.hidden_size, dit_config.hidden_size)
+        self.decoder = VoxCPM2BackboneModel(dit_config)
+
+    def forward(
+        self,
+        sample: torch.Tensor,
+        mu: torch.Tensor,
+        timestep: torch.Tensor,
+        conditioning: torch.Tensor,
+        delta_timestep: torch.Tensor,
+    ) -> torch.Tensor:
+        hidden_states = self.in_proj(sample.transpose(1, 2).contiguous())
+        conditioning_hidden_states = self.cond_proj(conditioning.transpose(1, 2).contiguous())
+
+        timestep_hidden_states = self.time_embeddings(timestep).to(hidden_states.dtype)
+        timestep_hidden_states = self.time_mlp(timestep_hidden_states)
+        delta_timestep_hidden_states = self.time_embeddings(delta_timestep).to(hidden_states.dtype)
+        delta_timestep_hidden_states = self.delta_time_mlp(delta_timestep_hidden_states)
+        timestep_hidden_states = timestep_hidden_states + delta_timestep_hidden_states
+
+        mu_hidden_states = mu.reshape(hidden_states.shape[0], -1, hidden_states.shape[-1])
+        hidden_states = torch.cat(
+            (mu_hidden_states, timestep_hidden_states.unsqueeze(1), conditioning_hidden_states, hidden_states), dim=1
+        )
+        hidden_states = self.decoder(inputs_embeds=hidden_states, is_causal=False).last_hidden_state
+        prefix_length = mu_hidden_states.shape[1] + 1 + conditioning_hidden_states.shape[1]
+        hidden_states = self.out_proj(hidden_states[:, prefix_length:])
+        return hidden_states.transpose(1, 2).contiguous()
+
+
+class VoxCPM2ConditionalFlowMatching(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        if not isinstance(config.dit_config, VoxCPM2DiTConfig) or not isinstance(
+            config.dit_config.cfm_config, VoxCPM2CfmConfig
+        ):
+            raise TypeError("`dit_config.cfm_config` must be a `VoxCPM2CfmConfig` instance")
+        cfm_config = config.dit_config.cfm_config
+        self.solver = cfm_config.solver
+        self.sigma_min = cfm_config.sigma_min
+        self.t_scheduler = cfm_config.t_scheduler
+        self.training_cfg_rate = cfm_config.training_cfg_rate
+        self.inference_cfg_rate = cfm_config.inference_cfg_rate
+        self.reg_loss_type = cfm_config.reg_loss_type
+        self.ratio_r_neq_t_range = cfm_config.ratio_r_neq_t_range
+        self.noise_cond_prob_range = cfm_config.noise_cond_prob_range
+        self.noise_cond_scale = cfm_config.noise_cond_scale
+        self.in_channels = config.feat_dim
+        self.mean_mode = config.dit_config.mean_mode
+        self.estimator = VoxCPM2LocalDiT(config)
+
+    @torch.inference_mode()
+    def forward(
+        self,
+        mu: torch.Tensor,
+        num_inference_steps: int,
+        patch_size: int,
+        conditioning: torch.Tensor,
+        temperature: float = 1.0,
+        cfg_value: float = 1.0,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        generator: torch.Generator | None = None,
+    ) -> torch.Tensor:
+        if self.solver != "euler":
+            raise ValueError(f"Unsupported flow-matching solver: {self.solver}")
+        sample = (
+            torch.randn(
+                (mu.shape[0], self.in_channels, patch_size),
+                generator=generator,
+                device=mu.device,
+                dtype=mu.dtype,
+            )
+            * temperature
+        )
+        timestep_span = torch.linspace(1, 0, num_inference_steps + 1, device=mu.device, dtype=mu.dtype)
+        timestep_span = timestep_span + sway_sampling_coefficient * (
+            torch.cos(torch.pi / 2 * timestep_span) - 1 + timestep_span
+        )
+        return self.solve_euler(
+            sample=sample,
+            timestep_span=timestep_span,
+            mu=mu,
+            conditioning=conditioning,
+            cfg_value=cfg_value,
+            use_cfg_zero_star=use_cfg_zero_star,
+        )
+
+    def optimized_scale(self, positive_states: torch.Tensor, negative_states: torch.Tensor) -> torch.Tensor:
+        dot_product = torch.sum(positive_states * negative_states, dim=1, keepdim=True)
+        squared_norm = torch.sum(negative_states**2, dim=1, keepdim=True) + 1e-8
+        return dot_product / squared_norm
+
+    def solve_euler(
+        self,
+        sample: torch.Tensor,
+        timestep_span: torch.Tensor,
+        mu: torch.Tensor,
+        conditioning: torch.Tensor,
+        cfg_value: float = 1.0,
+        use_cfg_zero_star: bool = True,
+    ) -> torch.Tensor:
+        timestep = timestep_span[0]
+        delta_timestep = timestep_span[0] - timestep_span[1]
+        zero_init_steps = max(1, int(len(timestep_span) * 0.04))
+
+        for step in range(1, len(timestep_span)):
+            if use_cfg_zero_star and step <= zero_init_steps:
+                derivative = torch.zeros_like(sample)
+            else:
+                batch_size = sample.shape[0]
+                sample_input = torch.cat((sample, sample), dim=0)
+                mu_input = torch.cat((mu, torch.zeros_like(mu)), dim=0)
+                timestep_input = timestep.expand(2 * batch_size)
+                delta_timestep_input = delta_timestep.expand(2 * batch_size)
+                if not self.mean_mode:
+                    delta_timestep_input = torch.zeros_like(delta_timestep_input)
+                conditioning_input = torch.cat((conditioning, conditioning), dim=0)
+
+                positive_derivative, negative_derivative = self.estimator(
+                    sample_input,
+                    mu_input,
+                    timestep_input,
+                    conditioning_input,
+                    delta_timestep_input,
+                ).chunk(2)
+                if use_cfg_zero_star:
+                    optimized_scale = self.optimized_scale(
+                        positive_derivative.reshape(batch_size, -1), negative_derivative.reshape(batch_size, -1)
+                    )
+                    optimized_scale = optimized_scale.reshape(batch_size, *([1] * (positive_derivative.ndim - 1)))
+                else:
+                    optimized_scale = 1.0
+                derivative = negative_derivative * optimized_scale + cfg_value * (
+                    positive_derivative - negative_derivative * optimized_scale
+                )
+
+            sample = sample - delta_timestep * derivative
+            timestep = timestep - delta_timestep
+            if step < len(timestep_span) - 1:
+                delta_timestep = timestep - timestep_span[step + 1]
+
+        return sample
+
+    def adaptive_loss_weighting(
+        self,
+        losses: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        power: float = 0.0,
+        epsilon: float = 1e-3,
+    ) -> torch.Tensor:
+        weights = 1.0 / (losses + epsilon).pow(power)
+        if mask is not None:
+            weights = weights * mask
+        return weights.detach()
+
+    def sample_r_t(
+        self,
+        hidden_states: torch.Tensor,
+        mean: float = -0.4,
+        standard_deviation: float = 1.0,
+        ratio_r_neq_t: float = 0.0,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        if self.t_scheduler == "log-norm":
+            r_samples = (
+                torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation
+                + mean
+            )
+            t_samples = (
+                torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation
+                + mean
+            )
+            r_samples = torch.sigmoid(r_samples)
+            t_samples = torch.sigmoid(t_samples)
+        elif self.t_scheduler == "uniform":
+            r_samples = torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype)
+            t_samples = torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype)
+        else:
+            raise ValueError(f"Unsupported timestep scheduler: {self.t_scheduler}")
+
+        use_distinct_timesteps = (
+            torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) < ratio_r_neq_t
+        )
+        r_samples, t_samples = torch.where(
+            use_distinct_timesteps,
+            torch.stack((torch.minimum(r_samples, t_samples), torch.maximum(r_samples, t_samples))),
+            torch.stack((t_samples, t_samples)),
+        )
+        return r_samples.squeeze(), t_samples.squeeze()
+
+    def compute_loss(
+        self,
+        target: torch.Tensor,
+        mu: torch.Tensor,
+        conditioning: torch.Tensor | None = None,
+        target_mask: torch.Tensor | None = None,
+        progress: float = 0.0,
+    ) -> torch.Tensor:
+        batch_size = target.shape[0]
+        if self.training_cfg_rate > 0:
+            keep_conditioning = torch.rand(batch_size, device=target.device) > self.training_cfg_rate
+            mu = mu * keep_conditioning.view(-1, 1)
+
+        if conditioning is None:
+            conditioning = torch.zeros_like(target)
+
+        noise_probability = self.noise_cond_prob_range[0] + progress * (
+            self.noise_cond_prob_range[1] - self.noise_cond_prob_range[0]
+        )
+        noisy_conditioning = torch.rand(batch_size, device=target.device) > 1.0 - noise_probability
+        conditioning = conditioning + (
+            noisy_conditioning.view(-1, 1, 1) * torch.randn_like(conditioning) * self.noise_cond_scale
+        )
+
+        ratio_r_neq_t = (
+            self.ratio_r_neq_t_range[0] + progress * (self.ratio_r_neq_t_range[1] - self.ratio_r_neq_t_range[0])
+            if self.mean_mode
+            else 0.0
+        )
+        r_samples, t_samples = self.sample_r_t(target, ratio_r_neq_t=ratio_r_neq_t)
+        detached_r_samples = r_samples.detach().clone()
+        detached_t_samples = t_samples.detach().clone()
+
+        noise = torch.randn_like(target)
+        interpolated_states = (1 - detached_t_samples.view(-1, 1, 1)) * target + detached_t_samples.view(
+            -1, 1, 1
+        ) * noise
+        target_velocity = noise - target
+
+        def model_function(sample: torch.Tensor, r_timestep: torch.Tensor, t_timestep: torch.Tensor) -> torch.Tensor:
+            return self.estimator(
+                sample,
+                mu,
+                t_timestep,
+                conditioning,
+                delta_timestep=t_timestep - r_timestep,
+            )
+
+        if self.mean_mode:
+            r_velocity = torch.zeros_like(r_samples)
+            t_velocity = torch.ones_like(t_samples)
+            with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False):
+                predicted_velocity, velocity_derivative = jvp(
+                    model_function,
+                    (interpolated_states, r_samples, t_samples),
+                    (target_velocity, r_velocity, t_velocity),
+                )
+            target_velocity = (
+                target_velocity - (detached_t_samples - detached_r_samples).view(-1, 1, 1) * velocity_derivative
+            )
+        else:
+            predicted_velocity = model_function(interpolated_states, r_samples, t_samples)
+
+        losses = F.mse_loss(predicted_velocity, target_velocity.detach(), reduction="none").mean(dim=1)
+        if target_mask is None:
+            return losses.mean()
+        weights = self.adaptive_loss_weighting(losses, target_mask.squeeze(1))
+        return (weights * losses).sum() / torch.clamp(target_mask.sum(), min=1.0)
+
+
+@auto_docstring
+class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
+    @classmethod
+    def can_generate(cls) -> bool:
+        return True
+
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__(config)
+        lm_config = config.lm_config
+        encoder_config = config.encoder_config
+        dit_config = config.dit_config
+        audio_vae_config = config.audio_vae_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        if not isinstance(encoder_config, VoxCPM2EncoderConfig):
+            raise TypeError("`encoder_config` must be a `VoxCPM2EncoderConfig` instance")
+        if not isinstance(dit_config, VoxCPM2DiTConfig):
+            raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
+        if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
+            raise TypeError("`audio_vae_config` must be a `VoxCPM2AudioVAEConfig` instance")
+        lm_config._attn_implementation = config._attn_implementation
+
+        self.feat_dim = config.feat_dim
+        self.patch_size = config.patch_size
+
+        self.base_lm = VoxCPM2BackboneModel(_get_tslm_config(config))
+        self.residual_lm = VoxCPM2BackboneModel(_get_ralm_config(config))
+        self.feat_encoder = VoxCPM2LocalEncoder(config)
+        self.feat_decoder = VoxCPM2ConditionalFlowMatching(config)
+
+        self.fsq_layer = VoxCPM2ScalarQuantizationLayer(config)
+        self.enc_to_lm_proj = nn.Linear(encoder_config.hidden_dim, lm_config.hidden_size)
+        self.lm_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
+        self.res_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
+        self.fusion_concat_proj = nn.Linear(lm_config.hidden_size * 2, lm_config.hidden_size)
+
+        self.stop_proj = nn.Linear(lm_config.hidden_size, lm_config.hidden_size)
+        self.stop_actn = nn.SiLU()
+        self.stop_head = nn.Linear(lm_config.hidden_size, 2, bias=False)
+        self.stop_loss = nn.CrossEntropyLoss(reduction="none")
+
+        self.audio_vae = VoxCPM2AudioVAE(audio_vae_config)
+        self.chunk_size = self.audio_vae.chunk_size
+        self._decode_chunk_size = self.audio_vae.decode_chunk_size
+        self._encode_sample_rate = self.audio_vae.sample_rate
+        self.sample_rate = self.audio_vae.out_sample_rate
+
+        self.audio_start_token = config.audio_start_token_id
+        self.audio_end_token = config.audio_end_token_id
+        self.ref_audio_start_token = config.reference_audio_start_token_id
+        self.ref_audio_end_token = config.reference_audio_end_token_id
+
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.base_lm.embed_tokens
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.base_lm.embed_tokens = value
+
+    def _extract_generation_audio(
+        self,
+        input_values: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if not isinstance(input_values, torch.Tensor):
+            raise TypeError("Raw audio inputs must be PyTorch tensors")
+        if input_values.ndim == 2:
+            input_values = input_values.unsqueeze(1)
+        if input_values.ndim != 3 or input_values.shape[1] != 1:
+            raise ValueError("Raw audio inputs must have shape (batch_size, 1, num_samples)")
+        if input_values.shape[0] != 1:
+            raise ValueError("VoxCPM2 generation currently supports one audio sample at a time")
+
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                input_values.shape[0],
+                input_values.shape[-1],
+                dtype=torch.long,
+                device=input_values.device,
+            )
+        if attention_mask.shape != (input_values.shape[0], input_values.shape[-1]):
+            raise ValueError("The raw audio attention mask must match the batch and sample dimensions")
+        if not torch.all((attention_mask == 0) | (attention_mask == 1)):
+            raise ValueError("The raw audio attention mask must contain only zeros and ones")
+
+        valid_indices = attention_mask[0].nonzero(as_tuple=False).flatten()
+        if valid_indices.numel() == 0:
+            raise ValueError("Raw audio inputs must contain at least one unmasked sample")
+        first_valid_index = valid_indices[0].item()
+        last_valid_index = valid_indices[-1].item()
+        if last_valid_index - first_valid_index + 1 != valid_indices.numel():
+            raise ValueError("The unmasked raw audio samples must form one contiguous span")
+        return input_values[..., first_valid_index : last_valid_index + 1]
+
+    def _encode_generation_audio_features(
+        self,
+        input_values: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        padding_side: str,
+    ) -> torch.Tensor:
+        if padding_side not in {"left", "right"}:
+            raise ValueError("`padding_side` must be either 'left' or 'right'")
+
+        input_values = self._extract_generation_audio(input_values, attention_mask)
+        patch_num_samples = self.patch_size * self.chunk_size
+        padding = (-input_values.shape[-1]) % patch_num_samples
+        input_values = F.pad(input_values, (padding, 0) if padding_side == "left" else (0, padding))
+
+        audio_vae_parameter = next(self.audio_vae.parameters())
+        input_values = input_values.to(device=audio_vae_parameter.device, dtype=audio_vae_parameter.dtype)
+        latent_features = self.audio_vae.encode(input_values, sampling_rate=self._encode_sample_rate)
+        if latent_features.shape[-1] % self.patch_size != 0:
+            raise ValueError("The encoded audio length must be divisible by `patch_size`")
+
+        num_audio_patches = latent_features.shape[-1] // self.patch_size
+        latent_features = latent_features.transpose(1, 2).contiguous()
+        return latent_features.reshape(
+            latent_features.shape[0],
+            num_audio_patches,
+            self.patch_size,
+            latent_features.shape[-1],
+        )
+
+    def _align_generation_audio_features(
+        self,
+        input_ids: torch.LongTensor,
+        audio_mask: torch.Tensor,
+        reference_features: torch.Tensor | None = None,
+        prompt_features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if input_ids.ndim != 2 or input_ids.shape[0] != 1:
+            raise ValueError("VoxCPM2 generation currently supports a batch size of 1")
+        if audio_mask.shape != input_ids.shape:
+            raise ValueError("`audio_mask` must have the same shape as `input_ids`")
+        if not torch.all((audio_mask == 0) | (audio_mask == 1)):
+            raise ValueError("`audio_mask` must contain only zeros and ones")
+
+        feature_parts = []
+        for name, features in (("reference", reference_features), ("prompt", prompt_features)):
+            if features is None:
+                continue
+            if (
+                features.ndim != 4
+                or features.shape[0] != 1
+                or features.shape[2] != self.patch_size
+                or features.shape[3] != self.feat_dim
+            ):
+                raise ValueError(
+                    f"`{name}_features` must have shape (1, num_patches, {self.patch_size}, {self.feat_dim})"
+                )
+            feature_parts.append(features)
+
+        audio_vae_parameter = next(self.audio_vae.parameters())
+        aligned_features = torch.zeros(
+            input_ids.shape[0],
+            input_ids.shape[1],
+            self.patch_size,
+            self.feat_dim,
+            dtype=feature_parts[0].dtype if feature_parts else audio_vae_parameter.dtype,
+            device=audio_vae_parameter.device,
+        )
+        num_audio_positions = int(audio_mask.sum().item())
+        num_audio_patches = sum(features.shape[1] for features in feature_parts)
+        if num_audio_positions != num_audio_patches:
+            raise ValueError(
+                f"`audio_mask` contains {num_audio_positions} audio positions, but received {num_audio_patches} patches"
+            )
+        if feature_parts:
+            audio_features = torch.cat([features.to(aligned_features.device) for features in feature_parts], dim=1)
+            aligned_features[audio_mask.to(device=aligned_features.device, dtype=torch.bool)] = audio_features[0]
+        return aligned_features
+
+    def _prepare_generation_audio_features(
+        self,
+        input_ids: torch.LongTensor,
+        audio_mask: torch.Tensor,
+        audio_features: torch.Tensor | None = None,
+        prompt_input_values: torch.Tensor | None = None,
+        prompt_attention_mask: torch.Tensor | None = None,
+        reference_input_values: torch.Tensor | None = None,
+        reference_attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        raw_audio_inputs = (
+            prompt_input_values,
+            prompt_attention_mask,
+            reference_input_values,
+            reference_attention_mask,
+        )
+        if audio_features is not None:
+            if any(value is not None for value in raw_audio_inputs):
+                raise ValueError("Precomputed `audio_features` cannot be combined with raw audio inputs")
+            return audio_features
+
+        if prompt_input_values is None and prompt_attention_mask is not None:
+            raise ValueError("`prompt_attention_mask` requires `prompt_input_values`")
+        if reference_input_values is None and reference_attention_mask is not None:
+            raise ValueError("`reference_attention_mask` requires `reference_input_values`")
+
+        prompt_features = None
+        if prompt_input_values is not None:
+            prompt_features = self._encode_generation_audio_features(
+                prompt_input_values,
+                prompt_attention_mask,
+                padding_side="left",
+            )
+        reference_features = None
+        if reference_input_values is not None:
+            reference_features = self._encode_generation_audio_features(
+                reference_input_values,
+                reference_attention_mask,
+                padding_side="right",
+            )
+
+        return self._align_generation_audio_features(
+            input_ids,
+            audio_mask,
+            reference_features=reference_features,
+            prompt_features=prompt_features,
+        )
+
+    def _validate_generation_inputs(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        min_new_audio_patches: int,
+        max_new_audio_patches: int,
+        num_inference_steps: int,
+    ):
+        if audio_features.ndim != 4:
+            raise ValueError("`audio_features` must have shape (batch_size, sequence_length, patch_size, feature_dim)")
+        batch_size, sequence_length, patch_size, feature_dim = audio_features.shape
+        if batch_size != 1:
+            raise ValueError("VoxCPM2 generation currently supports a batch size of 1")
+        if sequence_length == 0:
+            raise ValueError("VoxCPM2 generation requires at least one prompt position")
+        if input_ids.shape != (batch_size, sequence_length):
+            raise ValueError("`input_ids` and `audio_features` must share their batch and sequence dimensions")
+        if text_mask.shape != input_ids.shape or audio_mask.shape != input_ids.shape:
+            raise ValueError("`text_mask` and `audio_mask` must have the same shape as `input_ids`")
+        if patch_size != self.patch_size or feature_dim != self.feat_dim:
+            raise ValueError(
+                f"Expected audio patches with shape ({self.patch_size}, {self.feat_dim}), "
+                f"but received ({patch_size}, {feature_dim})"
+            )
+        if min_new_audio_patches < 0:
+            raise ValueError("`min_new_audio_patches` must be non-negative")
+        if max_new_audio_patches <= 0 or min_new_audio_patches > max_new_audio_patches:
+            raise ValueError(
+                "`max_new_audio_patches` must be positive and greater than or equal to `min_new_audio_patches`"
+            )
+        if num_inference_steps <= 0:
+            raise ValueError("`num_inference_steps` must be strictly positive")
+
+    def _prefill_generation(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Cache, Cache]:
+        target_dtype = self.enc_to_lm_proj.weight.dtype
+        audio_features = audio_features.to(dtype=target_dtype)
+        encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
+
+        lm_config = self.config.lm_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        embedding_scale = lm_config.scale_emb if lm_config.use_mup else 1.0
+        text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
+        text_mask = text_mask.to(dtype=text_embeddings.dtype)
+        audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
+        inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings
+        inputs_embeds = inputs_embeds + audio_mask.unsqueeze(-1) * encoded_features
+
+        base_outputs = self.base_lm(inputs_embeds=inputs_embeds, is_causal=True, use_cache=True)
+        encoded_states = base_outputs.last_hidden_state.to(target_dtype)
+        encoded_states = self.fsq_layer(encoded_states) * audio_mask.unsqueeze(
+            -1
+        ) + encoded_states * text_mask.unsqueeze(-1)
+        lm_hidden_states = encoded_states[:, -1]
+
+        residual_inputs = self.fusion_concat_proj(
+            torch.cat((encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
+        )
+        residual_outputs = self.residual_lm(inputs_embeds=residual_inputs, is_causal=True, use_cache=True)
+        residual_hidden_states = residual_outputs.last_hidden_state[:, -1].to(target_dtype)
+
+        return (
+            lm_hidden_states,
+            residual_hidden_states,
+            audio_features[:, -1],
+            base_outputs.past_key_values,
+            residual_outputs.past_key_values,
+        )
+
+    def _sample_audio_patch(
+        self,
+        lm_hidden_states: torch.Tensor,
+        residual_hidden_states: torch.Tensor,
+        conditioning_features: torch.Tensor,
+        num_inference_steps: int,
+        guidance_scale: float,
+        temperature: float,
+        sway_sampling_coefficient: float,
+        use_cfg_zero_star: bool,
+        generator: torch.Generator | None = None,
+    ) -> torch.Tensor:
+        diffusion_hidden_states = torch.cat(
+            (
+                self.lm_to_dit_proj(lm_hidden_states),
+                self.res_to_dit_proj(residual_hidden_states),
+            ),
+            dim=-1,
+        )
+        generation_kwargs = {"generator": generator} if generator is not None else {}
+        generated_features = self.feat_decoder(
+            mu=diffusion_hidden_states,
+            num_inference_steps=num_inference_steps,
+            patch_size=self.patch_size,
+            conditioning=conditioning_features.transpose(1, 2).contiguous(),
+            temperature=temperature,
+            cfg_value=guidance_scale,
+            sway_sampling_coefficient=sway_sampling_coefficient,
+            use_cfg_zero_star=use_cfg_zero_star,
+            **generation_kwargs,
+        )
+        return generated_features.transpose(1, 2).contiguous()
+
+    def _update_generation_cache(
+        self,
+        generated_features: torch.Tensor,
+        base_past_key_values: Cache,
+        residual_past_key_values: Cache,
+    ) -> tuple[torch.Tensor, torch.Tensor, Cache, Cache]:
+        generated_features = generated_features.to(dtype=self.enc_to_lm_proj.weight.dtype)
+        encoded_features = self.enc_to_lm_proj(self.feat_encoder(generated_features.unsqueeze(1)))[:, :1]
+
+        base_outputs = self.base_lm(
+            inputs_embeds=encoded_features,
+            past_key_values=base_past_key_values,
+            use_cache=True,
+            is_causal=True,
+        )
+        lm_hidden_states = self.fsq_layer(base_outputs.last_hidden_state[:, -1])
+
+        residual_inputs = self.fusion_concat_proj(torch.cat((lm_hidden_states, encoded_features[:, 0]), dim=-1))
+        residual_outputs = self.residual_lm(
+            inputs_embeds=residual_inputs.unsqueeze(1),
+            past_key_values=residual_past_key_values,
+            use_cache=True,
+            is_causal=True,
+        )
+        residual_hidden_states = residual_outputs.last_hidden_state[:, -1]
+        return (
+            lm_hidden_states,
+            residual_hidden_states,
+            base_outputs.past_key_values,
+            residual_outputs.past_key_values,
+        )
+
+    def _get_stop_flags(self, lm_hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.BoolTensor]:
+        stop_logits = self.stop_head(self.stop_actn(self.stop_proj(lm_hidden_states)))
+        return stop_logits, stop_logits.argmax(dim=-1).bool()
+
+    def _prepare_decoder_context(
+        self,
+        audio_features: torch.Tensor,
+        audio_mask: torch.Tensor,
+        decoder_context_patches: int,
+    ) -> torch.Tensor:
+        if decoder_context_patches < 0:
+            raise ValueError("`decoder_context_patches` must be non-negative")
+        if decoder_context_patches == 0 or not audio_mask[0, -1].bool():
+            return audio_features[:, :0]
+
+        trailing_audio_patches = 0
+        for is_audio in audio_mask[0].flip(0).bool():
+            if not is_audio:
+                break
+            trailing_audio_patches += 1
+        context_length = min(decoder_context_patches, trailing_audio_patches)
+        return audio_features[:, -context_length:]
+
+    @torch.inference_mode()
+    def _generate_audio_features(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        min_new_audio_patches: int = 4,
+        max_new_audio_patches: int = 2000,
+        num_inference_steps: int = 10,
+        guidance_scale: float = 2.0,
+        temperature: float = 1.0,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        generator: torch.Generator | None = None,
+    ) -> VoxCPM2GenerationOutput:
+        self._validate_generation_inputs(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            min_new_audio_patches,
+            max_new_audio_patches,
+            num_inference_steps,
+        )
+        if input_ids.shape[1] + max_new_audio_patches > self.config.max_cache_length:
+            raise ValueError(
+                "The prompt length plus `max_new_audio_patches` cannot exceed "
+                f"`config.max_cache_length` ({self.config.max_cache_length})"
+            )
+        if generator is not None and generator.device.type != audio_features.device.type:
+            raise ValueError("The generation `generator` and model inputs must use the same device type")
+
+        (
+            lm_hidden_states,
+            residual_hidden_states,
+            conditioning_features,
+            base_past_key_values,
+            residual_past_key_values,
+        ) = self._prefill_generation(input_ids, text_mask, audio_features, audio_mask)
+        generated_patches = []
+        generated_stop_logits = []
+
+        for _ in range(max_new_audio_patches):
+            generated_features = self._sample_audio_patch(
+                lm_hidden_states,
+                residual_hidden_states,
+                conditioning_features,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                temperature=temperature,
+                sway_sampling_coefficient=sway_sampling_coefficient,
+                use_cfg_zero_star=use_cfg_zero_star,
+                generator=generator,
+            )
+            generated_patches.append(generated_features)
+            stop_logits, stop_flags = self._get_stop_flags(lm_hidden_states)
+            generated_stop_logits.append(stop_logits)
+
+            num_generated_patches = len(generated_patches)
+            if num_generated_patches >= min_new_audio_patches and stop_flags.all():
+                break
+            if num_generated_patches == max_new_audio_patches:
+                break
+
+            (
+                lm_hidden_states,
+                residual_hidden_states,
+                base_past_key_values,
+                residual_past_key_values,
+            ) = self._update_generation_cache(
+                generated_features,
+                base_past_key_values,
+                residual_past_key_values,
+            )
+            conditioning_features = generated_features
+
+        generated_audio_features = torch.stack(generated_patches, dim=1)
+        latent_features = generated_audio_features.reshape(
+            generated_audio_features.shape[0], -1, generated_audio_features.shape[-1]
+        )
+        latent_features = latent_features.transpose(1, 2).contiguous()
+        return VoxCPM2GenerationOutput(
+            latent_features=latent_features,
+            audio_features=generated_audio_features,
+            stop_logits=torch.stack(generated_stop_logits, dim=1),
+            num_generated_patches=len(generated_patches),
+        )
+
+    @torch.inference_mode()
+    def _generate_audio_features_streaming(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        min_new_audio_patches: int = 4,
+        max_new_audio_patches: int = 2000,
+        num_inference_steps: int = 10,
+        guidance_scale: float = 2.0,
+        temperature: float = 1.0,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        generator: torch.Generator | None = None,
+    ) -> Generator[VoxCPM2GenerationOutput, None, None]:
+        self._validate_generation_inputs(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            min_new_audio_patches,
+            max_new_audio_patches,
+            num_inference_steps,
+        )
+        if input_ids.shape[1] + max_new_audio_patches > self.config.max_cache_length:
+            raise ValueError(
+                "The prompt length plus `max_new_audio_patches` cannot exceed "
+                f"`config.max_cache_length` ({self.config.max_cache_length})"
+            )
+        if generator is not None and generator.device.type != audio_features.device.type:
+            raise ValueError("The generation `generator` and model inputs must use the same device type")
+
+        (
+            lm_hidden_states,
+            residual_hidden_states,
+            conditioning_features,
+            base_past_key_values,
+            residual_past_key_values,
+        ) = self._prefill_generation(input_ids, text_mask, audio_features, audio_mask)
+
+        for patch_index in range(max_new_audio_patches):
+            generated_features = self._sample_audio_patch(
+                lm_hidden_states,
+                residual_hidden_states,
+                conditioning_features,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                temperature=temperature,
+                sway_sampling_coefficient=sway_sampling_coefficient,
+                use_cfg_zero_star=use_cfg_zero_star,
+                generator=generator,
+            )
+            stop_logits, stop_flags = self._get_stop_flags(lm_hidden_states)
+            num_generated_patches = patch_index + 1
+            yield VoxCPM2GenerationOutput(
+                latent_features=generated_features.transpose(1, 2).contiguous(),
+                audio_features=generated_features.unsqueeze(1),
+                stop_logits=stop_logits.unsqueeze(1),
+                num_generated_patches=num_generated_patches,
+            )
+
+            if num_generated_patches >= min_new_audio_patches and stop_flags.all():
+                break
+            if num_generated_patches == max_new_audio_patches:
+                break
+
+            (
+                lm_hidden_states,
+                residual_hidden_states,
+                base_past_key_values,
+                residual_past_key_values,
+            ) = self._update_generation_cache(
+                generated_features,
+                base_past_key_values,
+                residual_past_key_values,
+            )
+            conditioning_features = generated_features
+
+    def _resolve_generation_parameters(
+        self,
+        generation_config: GenerationConfig | None,
+        min_new_audio_patches: int | None,
+        max_new_audio_patches: int | None,
+        guidance_scale: float | None,
+        temperature: float | None,
+        return_dict_in_generate: bool | None,
+        generation_kwargs: dict,
+    ) -> tuple[int, int, float, float, bool]:
+        generation_config = copy.deepcopy(self.generation_config if generation_config is None else generation_config)
+        unused_kwargs = generation_config.update(**generation_kwargs)
+        if unused_kwargs:
+            raise ValueError(f"Unsupported generation arguments: {sorted(unused_kwargs)}")
+
+        min_new_audio_patches = (
+            generation_config.min_new_tokens
+            if min_new_audio_patches is None and generation_config.min_new_tokens is not None
+            else min_new_audio_patches
+        )
+        min_new_audio_patches = 4 if min_new_audio_patches is None else min_new_audio_patches
+        max_new_audio_patches = (
+            generation_config.max_new_tokens
+            if max_new_audio_patches is None and generation_config.max_new_tokens is not None
+            else max_new_audio_patches
+        )
+        max_new_audio_patches = 2000 if max_new_audio_patches is None else max_new_audio_patches
+        guidance_scale = (
+            generation_config.guidance_scale
+            if guidance_scale is None and generation_config.guidance_scale is not None
+            else guidance_scale
+        )
+        dit_config = self.config.dit_config
+        if not isinstance(dit_config, VoxCPM2DiTConfig):
+            raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
+        cfm_config = dit_config.cfm_config
+        if not isinstance(cfm_config, VoxCPM2CfmConfig):
+            raise TypeError("`cfm_config` must be a `VoxCPM2CfmConfig` instance")
+        guidance_scale = cfm_config.inference_cfg_rate if guidance_scale is None else guidance_scale
+        temperature = generation_config.temperature if temperature is None else temperature
+        temperature = 1.0 if temperature is None else temperature
+        return_dict_in_generate = (
+            generation_config.return_dict_in_generate if return_dict_in_generate is None else return_dict_in_generate
+        )
+        return (
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            bool(return_dict_in_generate),
+        )
+
+    @torch.inference_mode()
+    def generate(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor | None = None,
+        audio_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        prompt_input_values: torch.Tensor | None = None,
+        prompt_attention_mask: torch.Tensor | None = None,
+        reference_input_values: torch.Tensor | None = None,
+        reference_attention_mask: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        min_new_audio_patches: int | None = None,
+        max_new_audio_patches: int | None = None,
+        num_inference_steps: int = 10,
+        guidance_scale: float | None = None,
+        temperature: float | None = None,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        decoder_context_patches: int = 3,
+        generator: torch.Generator | None = None,
+        return_dict_in_generate: bool | None = None,
+        **kwargs,
+    ) -> torch.Tensor | VoxCPM2GenerationOutput:
+        r"""
+        Generates a waveform from a mixed text-audio prompt.
+
+        `VoxCPM2Processor` prepares `input_ids`, modality masks, and optional raw prompt or reference waveforms.
+        Precomputed aligned `audio_features` are also accepted. The returned waveform uses `config.sample_rate` (48
+        kHz for the released checkpoint).
+
+        Args:
+            min_new_audio_patches (`int`, *optional*):
+                Minimum number of autoregressive audio patches. Defaults to 4, matching the effective minimum of the
+                original VoxCPM2 generation loop.
+            max_new_audio_patches (`int`, *optional*):
+                Maximum number of autoregressive audio patches. Defaults to 2000.
+            num_inference_steps (`int`, *optional*, defaults to 10):
+                Number of Euler flow-matching steps per generated patch.
+            guidance_scale (`float`, *optional*):
+                Classifier-free guidance scale. Defaults to the released flow-matching configuration value.
+            decoder_context_patches (`int`, *optional*, defaults to 3):
+                Number of trailing continuation patches decoded as context and cropped from the returned waveform.
+            generator (`torch.Generator`, *optional*):
+                Device-matched random generator used for diffusion sampling.
+            return_dict_in_generate (`bool`, *optional*):
+                Whether to return [`VoxCPM2GenerationOutput`] instead of the waveform tensor.
+        """
+        del attention_mask
+        if audio_mask is None:
+            raise ValueError("`audio_mask` is required for VoxCPM2 generation")
+        audio_features = self._prepare_generation_audio_features(
+            input_ids,
+            audio_mask,
+            audio_features=audio_features,
+            prompt_input_values=prompt_input_values,
+            prompt_attention_mask=prompt_attention_mask,
+            reference_input_values=reference_input_values,
+            reference_attention_mask=reference_attention_mask,
+        )
+        (
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+        ) = self._resolve_generation_parameters(
+            generation_config,
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+            kwargs,
+        )
+
+        generation_output = self._generate_audio_features(
+            input_ids=input_ids,
+            text_mask=text_mask,
+            audio_features=audio_features,
+            audio_mask=audio_mask,
+            min_new_audio_patches=min_new_audio_patches,
+            max_new_audio_patches=max_new_audio_patches,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            temperature=temperature,
+            sway_sampling_coefficient=sway_sampling_coefficient,
+            use_cfg_zero_star=use_cfg_zero_star,
+            generator=generator,
+        )
+
+        decoder_context = self._prepare_decoder_context(
+            audio_features,
+            audio_mask,
+            decoder_context_patches=decoder_context_patches,
+        )
+        generated_audio_features = generation_output.audio_features
+        if generated_audio_features is None:
+            raise RuntimeError("VoxCPM2 generation did not return audio features")
+        decoder_context = decoder_context.to(generated_audio_features.dtype)
+        decoder_features = torch.cat((decoder_context, generated_audio_features), dim=1)
+        decoder_features = decoder_features.reshape(decoder_features.shape[0], -1, decoder_features.shape[-1])
+        decoder_features = decoder_features.transpose(1, 2).contiguous()
+        audio_vae_dtype = next(self.audio_vae.parameters()).dtype
+        audio = self.audio_vae.decode(decoder_features.to(audio_vae_dtype)).squeeze(1)
+        context_samples = decoder_context.shape[1] * self.patch_size * self._decode_chunk_size
+        if context_samples > 0:
+            audio = audio[:, context_samples:]
+
+        if not return_dict_in_generate:
+            return audio
+        generation_output.audio = audio
+        return generation_output
+
+    @torch.inference_mode()
+    def generate_streaming(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor | None = None,
+        audio_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        prompt_input_values: torch.Tensor | None = None,
+        prompt_attention_mask: torch.Tensor | None = None,
+        reference_input_values: torch.Tensor | None = None,
+        reference_attention_mask: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        min_new_audio_patches: int | None = None,
+        max_new_audio_patches: int | None = None,
+        num_inference_steps: int = 10,
+        guidance_scale: float | None = None,
+        temperature: float | None = None,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        decoder_context_patches: int = 3,
+        generator: torch.Generator | None = None,
+        return_dict_in_generate: bool | None = None,
+        **kwargs,
+    ) -> Generator[torch.Tensor | VoxCPM2GenerationOutput, None, None]:
+        r"""Streams waveform chunks from a mixed text-audio prompt."""
+        del attention_mask
+        if audio_mask is None:
+            raise ValueError("`audio_mask` is required for VoxCPM2 generation")
+        audio_features = self._prepare_generation_audio_features(
+            input_ids,
+            audio_mask,
+            audio_features=audio_features,
+            prompt_input_values=prompt_input_values,
+            prompt_attention_mask=prompt_attention_mask,
+            reference_input_values=reference_input_values,
+            reference_attention_mask=reference_attention_mask,
+        )
+        (
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+        ) = self._resolve_generation_parameters(
+            generation_config,
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+            kwargs,
+        )
+
+        decoder_context = self._prepare_decoder_context(
+            audio_features,
+            audio_mask,
+            decoder_context_patches=decoder_context_patches,
+        )
+        audio_vae_dtype = next(self.audio_vae.parameters()).dtype
+        feature_stream = self._generate_audio_features_streaming(
+            input_ids=input_ids,
+            text_mask=text_mask,
+            audio_features=audio_features,
+            audio_mask=audio_mask,
+            min_new_audio_patches=min_new_audio_patches,
+            max_new_audio_patches=max_new_audio_patches,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            temperature=temperature,
+            sway_sampling_coefficient=sway_sampling_coefficient,
+            use_cfg_zero_star=use_cfg_zero_star,
+            generator=generator,
+        )
+
+        with self.audio_vae.streaming_decode() as streaming_decoder:
+            if decoder_context.shape[1] > 0:
+                context_features = decoder_context.reshape(decoder_context.shape[0], -1, decoder_context.shape[-1])
+                context_features = context_features.transpose(1, 2).contiguous()
+                streaming_decoder.decode_chunk(context_features.to(audio_vae_dtype))
+
+            for generation_output in feature_stream:
+                latent_features = generation_output.latent_features
+                if latent_features is None:
+                    raise RuntimeError("VoxCPM2 streaming generation did not return latent features")
+                audio = streaming_decoder.decode_chunk(latent_features.to(audio_vae_dtype)).squeeze(1)
+                if not return_dict_in_generate:
+                    yield audio
+                else:
+                    generation_output.audio = audio
+                    yield generation_output
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        loss_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        progress: float = 0.0,
+        sample_generate: bool = False,
+        num_inference_steps: int = 10,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | VoxCPM2ModelOutput:
+        r"""
+        text_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Mask selecting text positions in the mixed text-audio sequence.
+        audio_features (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, patch_size, feature_dim)`):
+            AudioVAE latent features aligned with the mixed sequence.
+        audio_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Mask selecting audio positions in the mixed text-audio sequence.
+        loss_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Positions used to compute the diffusion loss and, when `labels` are provided, the stop loss.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Accepted for compatibility with the original training batches. VoxCPM2 derives positions internally.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Stop-prediction labels. A `loss_mask` must also be supplied when labels are provided.
+        progress (`float`, *optional*, defaults to 0.0):
+            Fraction of training completed, used by the flow-matching noise schedule.
+        sample_generate (`bool`, *optional*, defaults to `False`):
+            Whether to sample diagnostic audio latents for every input sequence position.
+        num_inference_steps (`int`, *optional*, defaults to 10):
+            Number of Euler steps used when `sample_generate=True`.
+        """
+        if audio_features.ndim != 4:
+            raise ValueError("`audio_features` must have shape (batch_size, sequence_length, patch_size, feature_dim)")
+        batch_size, sequence_length, patch_size, feature_dim = audio_features.shape
+        if input_ids.shape != (batch_size, sequence_length):
+            raise ValueError("`input_ids` and `audio_features` must share their batch and sequence dimensions")
+        if text_mask.shape != input_ids.shape or audio_mask.shape != input_ids.shape:
+            raise ValueError("`text_mask` and `audio_mask` must have the same shape as `input_ids`")
+        if patch_size != self.patch_size or feature_dim != self.feat_dim:
+            raise ValueError(
+                f"Expected audio patches with shape ({self.patch_size}, {self.feat_dim}), "
+                f"but received ({patch_size}, {feature_dim})"
+            )
+        if labels is not None and loss_mask is None:
+            raise ValueError("`loss_mask` must be provided when `labels` are provided")
+        if loss_mask is not None and loss_mask.shape != input_ids.shape:
+            raise ValueError("`loss_mask` must have the same shape as `input_ids`")
+        if labels is not None and labels.shape != input_ids.shape:
+            raise ValueError("`labels` must have the same shape as `input_ids`")
+        if position_ids is not None:
+            logger.warning_once("`position_ids` are ignored because VoxCPM2 derives sequence positions internally.")
+
+        target_dtype = self.enc_to_lm_proj.weight.dtype
+        audio_features = audio_features.to(dtype=target_dtype)
+        encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
+
+        lm_config = self.config.lm_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        embedding_scale = lm_config.scale_emb if lm_config.use_mup else 1.0
+        text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
+        text_mask = text_mask.to(dtype=text_embeddings.dtype)
+        audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
+        inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings
+        inputs_embeds = inputs_embeds + audio_mask.unsqueeze(-1) * encoded_features
+
+        encoded_states = self.base_lm(inputs_embeds=inputs_embeds, is_causal=True).last_hidden_state
+        encoded_states = encoded_states.to(target_dtype)
+        encoded_states = self.fsq_layer(encoded_states) * audio_mask.unsqueeze(
+            -1
+        ) + encoded_states * text_mask.unsqueeze(-1)
+        lm_hidden_states = torch.cat((torch.zeros_like(encoded_states[:, :1]), encoded_states[:, :-1]), dim=1)
+
+        residual_inputs = self.fusion_concat_proj(
+            torch.cat((encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
+        )
+        residual_states = self.residual_lm(inputs_embeds=residual_inputs, is_causal=True).last_hidden_state
+        residual_states = residual_states.to(target_dtype)
+        residual_hidden_states = torch.cat((torch.zeros_like(residual_states[:, :1]), residual_states[:, :-1]), dim=1)
+
+        diffusion_hidden_states = torch.cat(
+            (self.lm_to_dit_proj(lm_hidden_states), self.res_to_dit_proj(residual_hidden_states)), dim=-1
+        ).reshape(batch_size * sequence_length, -1)
+        target_features = audio_features.reshape(batch_size * sequence_length, patch_size, feature_dim)
+        conditioning_features = torch.cat(
+            (torch.zeros_like(audio_features[:, :1]), audio_features[:, :-1]), dim=1
+        ).reshape(batch_size * sequence_length, patch_size, feature_dim)
+        target_features = target_features.transpose(1, 2).contiguous()
+        conditioning_features = conditioning_features.transpose(1, 2).contiguous()
+
+        diffusion_loss = None
+        if loss_mask is not None:
+            diffusion_mask = loss_mask.to(target_dtype).unsqueeze(-1).expand(-1, -1, patch_size)
+            diffusion_mask = diffusion_mask.reshape(batch_size * sequence_length, patch_size, 1)
+            diffusion_loss = self.feat_decoder.compute_loss(
+                target=target_features,
+                mu=diffusion_hidden_states,
+                conditioning=conditioning_features,
+                target_mask=diffusion_mask.transpose(1, 2).contiguous(),
+                progress=progress,
+            )
+
+        stop_logits = self.stop_head(self.stop_actn(self.stop_proj(lm_hidden_states)))
+        stop_loss = None
+        if labels is not None:
+            if loss_mask is None:
+                raise ValueError("`loss_mask` must be provided when `labels` are provided")
+            typed_loss_mask = loss_mask.to(stop_logits.dtype)
+            stop_losses = self.stop_loss(stop_logits.transpose(1, 2), labels)
+            stop_loss = (stop_losses * typed_loss_mask).sum() / torch.clamp(typed_loss_mask.sum(), min=1.0)
+
+        loss = diffusion_loss
+        if stop_loss is not None:
+            loss = stop_loss if loss is None else loss + stop_loss
+
+        generated_latent_features = None
+        if sample_generate:
+            generated_features = self.feat_decoder(
+                mu=diffusion_hidden_states,
+                num_inference_steps=num_inference_steps,
+                patch_size=patch_size,
+                conditioning=conditioning_features,
+            )
+            generated_latent_features = generated_features.transpose(1, 2)
+            generated_latent_features = generated_latent_features.reshape(
+                batch_size, sequence_length * patch_size, feature_dim
+            )
+            generated_latent_features = generated_latent_features.transpose(1, 2).contiguous()
+
+        latent_features = target_features.transpose(1, 2)
+        latent_features = latent_features.reshape(batch_size, sequence_length * patch_size, feature_dim)
+        latent_features = latent_features.transpose(1, 2).contiguous()
+
+        return VoxCPM2ModelOutput(
+            loss=loss,
+            diffusion_loss=diffusion_loss,
+            stop_loss=stop_loss,
+            stop_logits=stop_logits,
+            latent_features=latent_features,
+            generated_latent_features=generated_latent_features,
+        )
+
+
+__all__ = [
+    "VoxCPM2AudioVAEConfig",
+    "VoxCPM2CfmConfig",
+    "VoxCPM2Config",
+    "VoxCPM2DiTConfig",
+    "VoxCPM2EncoderConfig",
+    "VoxCPM2GenerationOutput",
+    "VoxCPM2Model",
+    "VoxCPM2ModelOutput",
+    "VoxCPM2PreTrainedModel",
+    "VoxCPM2TextConfig",
+]
