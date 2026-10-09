@@ -1167,7 +1167,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
             if beam_indices is not None and key == "scores":
-                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_indices[batch_idx][: len(values)])]
+                beam_idxs = beam_indices[batch_idx][: len(values)].tolist()
+                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_idxs)]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
@@ -1977,7 +1978,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # retrieve logprob of selected tokens and sum
         # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
-        sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
+        token_logprobs = logprobs.gather(-1, tokens.unsqueeze(-1)).squeeze(-1).cpu()
+        sum_logprobs = sum(token_logprobs[i] for i in range(token_logprobs.shape[0]))
 
         avg_logprobs = sum_logprobs / len(tokens)
         return avg_logprobs
@@ -1999,10 +2001,11 @@ class WhisperGenerationMixin(GenerationMixin):
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
-        timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
-        single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
-        timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
-        timestamp_segment_indices.add_(1)
+        timestamp_tokens = [token >= timestamp_begin for token in seek_sequence.tolist()]
+        single_timestamp_ending = timestamp_tokens[-2:] == [False, True]
+        timestamp_segment_indices = [
+            i + 1 for i in range(len(timestamp_tokens) - 1) if timestamp_tokens[i] and timestamp_tokens[i + 1]
+        ]
         token_timestamps = seek_outputs[idx]["token_timestamps"] if return_token_timestamps else []
         idx_offset = decoder_input_ids.shape[-1]
         device = seek_sequence.device
@@ -2011,7 +2014,7 @@ class WhisperGenerationMixin(GenerationMixin):
         # "end of segment" prediction and slice the decoding into segments accordingly
         if len(timestamp_segment_indices) > 0:
             # if the output contains two consecutive timestamp tokens
-            slices = timestamp_segment_indices.tolist()
+            slices = timestamp_segment_indices
             segments = []
             if single_timestamp_ending:
                 slices.append(len(seek_sequence))
@@ -2058,11 +2061,11 @@ class WhisperGenerationMixin(GenerationMixin):
         else:
             # If whisper does not predict any "end of segment" token, then
             # the whole decoding is considered a segment and we add it to the list of segments
-            timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
+            timestamp_indices = [i for i, is_timestamp in enumerate(timestamp_tokens) if is_timestamp]
             last_timestamp_pos = int(seek_num_frames[prev_idx] * time_precision_features / time_precision)
-            if timestamps.numel() > 0 and timestamps[-1] != timestamp_begin:
+            if len(timestamp_indices) > 0 and seek_sequence[timestamp_indices[-1]] != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
-                last_timestamp_pos = (timestamps[-1] - timestamp_begin).to(
+                last_timestamp_pos = (seek_sequence[timestamp_indices[-1]] - timestamp_begin).to(
                     torch.float32 if device.type == "mps" else torch.float64
                 )
             segments = [

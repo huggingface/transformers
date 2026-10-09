@@ -21,8 +21,8 @@ import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -65,7 +65,24 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
     """
 
     model_type = "pp_ocrv5_server_rec"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+                "stage_downsample": [True, True, True, True],
+                "stem_strides": [2, 1, 1, 1, 1],
+                "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
+            },
+        ),
+    }
 
     hidden_act: str = "silu"
     backbone_config: dict | PreTrainedConfig | None = None
@@ -82,23 +99,6 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.conv_kernel_size is None:
             self.conv_kernel_size = [1, 3]
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={
-                "arch": "L",
-                "return_idx": [0, 1, 2, 3],
-                "freeze_stem_only": True,
-                "freeze_at": 0,
-                "freeze_norm": True,
-                "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-                "stage_downsample": [True, True, True, True],
-                "stem_strides": [2, 1, 1, 1, 1],
-                "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
-            },
-            **kwargs,
-        )
         super().__post_init__(**kwargs)
 
 

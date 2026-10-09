@@ -27,6 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import SubConfigSpec
 from ...integrations.hub_processing_kernels import run_processing_kernel
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -217,7 +218,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
     def _resize_normalize_patchify_kernel(
         self,
         images,
-        size,
+        target_sizes,
         resample,
         rescale_factor,
         image_mean,
@@ -227,16 +228,6 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         merge_size,
     ):
         """Row by row patches are the kernel layout with `merge_size=1`, viewed as `(C * T, P, P)` blocks."""
-        target_sizes = [
-            smart_resize(
-                image.shape[-2],
-                image.shape[-1],
-                factor=patch_size * merge_size,
-                min_pixels=size.shortest_edge,
-                max_pixels=size.longest_edge,
-            )
-            for image in images
-        ]
         kernel_output = run_processing_kernel(
             "resize_normalize_patchify",
             images,
@@ -353,7 +344,10 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
     >>> configuration = model.config
     ```"""
 
-    sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=PaddleOCRVisionConfig),
+        "text_config": SubConfigSpec(config_class=PaddleOCRTextConfig),
+    }
 
     image_token_id: int = 100295
     video_token_id: int = 100296

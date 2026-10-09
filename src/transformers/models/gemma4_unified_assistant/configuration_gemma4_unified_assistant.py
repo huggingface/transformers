@@ -15,9 +15,9 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="google/gemma-4-12b-it")
@@ -56,9 +56,7 @@ class Gemma4UnifiedAssistantConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma4_unified_assistant"
-    sub_configs = {
-        "text_config": AutoConfig,
-    }
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_unified_text")}
 
     text_config: PreTrainedConfig | dict[str, Any] | None = None
 
@@ -69,17 +67,11 @@ class Gemma4UnifiedAssistantConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING[self.text_config.get("model_type", "gemma4_unified_text")](
-                **self.text_config
-            )
-
+        super().__post_init__(**kwargs)
         # Assistant reuses the shared kvs across all layers to skip their calculation
         # I.e. it acts as cache shared across the layers
         if self.text_config is not None and not self.text_config.num_kv_shared_layers:
             self.text_config.num_kv_shared_layers = self.text_config.num_hidden_layers
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma4UnifiedAssistantConfig"]
