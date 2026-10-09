@@ -437,36 +437,6 @@ def _format_span(surface, score, char_start, char_end, include_confidence, inclu
     return surface
 
 
-def _relation_specs(meta, query_states, directional):
-    """One spec and state per relation group, using its head and tail markers."""
-    states = query_states[0] if query_states.dim() == 3 else query_states
-    specs = []
-    packed = []
-    query_id = 0
-    limit = int(states.shape[0])
-    for group in meta.get("groups") or []:
-        if group["task_type"] == "classifications":
-            continue
-        fields = list(group["fields"])
-        if group["task_type"] == "relations" and len(fields) >= 2 and query_id + 1 < limit:
-            head_id, tail_id = query_id, query_id + 1
-            role = states[[head_id, tail_id]]
-            if directional:
-                packed.append(torch.cat((role[0], role[1]), dim=-1))
-            else:
-                packed.append(role.mean(dim=0))
-            specs.append(
-                SimpleNamespace(
-                    relation_type=group["name"],
-                    head_query_ids=(head_id,),
-                    tail_query_ids=(tail_id,),
-                    allow_self=False,
-                )
-            )
-        query_id += len(fields)
-    return specs, packed
-
-
 def _deduplicate_relation_edges(edges):
     """Collapse contained mentions and repeated head/tail text."""
     if len(edges) < 2:
@@ -480,7 +450,9 @@ def _deduplicate_relation_edges(edges):
             containing = [
                 candidate for candidate in mentions.values() if candidate[1] <= start and candidate[2] >= end
             ]
-            canonical[coordinates] = max(containing, key=lambda candidate: (candidate[2] - candidate[1], -candidate[1]))
+            canonical[coordinates] = max(
+                containing, key=lambda candidate: (candidate[2] - candidate[1], -candidate[1])
+            )
         return canonical
 
     head_canonical = canonical_mentions("head")
@@ -554,31 +526,16 @@ def _format_relation(edge, include_confidence, include_spans):
 
 
 def _decode_relations(sample_out, meta, threshold, include_confidence, include_spans):
-    """Score typed relation pairs and map them onto character offsets."""
-    scorer = sample_out.get("relation_scorer")
-    generator = sample_out.get("relation_pair_generator")
-    candidates = sample_out.get("candidates")
-    text_states = sample_out.get("text_states")
-    query_states = sample_out.get("query_states")
-    if scorer is None or generator is None or candidates is None or text_states is None or query_states is None:
+    """Map forward relation pairs and logits onto character offsets."""
+    pairs = sample_out.get("relation_pairs")
+    logits = sample_out.get("relation_logits")
+    if pairs is None or logits is None or pairs.numel() == 0:
         return {}
-    directional = sample_out.get("directional_relation_states")
-    if directional is None:
-        directional = int(getattr(scorer, "relation_query_dim", 0)) == int(text_states.shape[-1]) * 2
-    specs, packed = _relation_specs(meta, query_states, bool(directional))
-    if not specs:
-        return {}
-    relation_states = torch.stack(packed).unsqueeze(0)
-    with torch.inference_mode():
-        pairs = generator.generate(candidates, [None], specs)
-        if len(pairs) == 0:
-            return {}
-        temperature = float(sample_out.get("relation_temperature") or 1.0)
-        logits = scorer(text_states[:1], relation_states, candidates, pairs)
-        probabilities = torch.sigmoid(logits / temperature)
+    temperature = float(sample_out.get("relation_temperature") or 1.0)
+    probabilities = torch.sigmoid(logits.detach().float().cpu() / temperature)
+    relation_groups = [group for group in (meta.get("groups") or []) if group.get("task_type") == "relations"]
     aliases = {
-        f"{name}: {description}": name
-        for name, description in (meta.get("relation_descriptions") or {}).items()
+        f"{name}: {description}": name for name, description in (meta.get("relation_descriptions") or {}).items()
     }
     relation_metadata = meta.get("relation_metadata") or {}
     offset = int(meta.get("prefix_len") or 0)
@@ -587,7 +544,11 @@ def _decode_relations(sample_out, meta, threshold, include_confidence, include_s
     text = meta.get("text") or ""
     edges = {}
     for pair_index, probability in enumerate(probabilities):
-        relation_type = aliases.get(pairs.relation_types[pair_index], pairs.relation_types[pair_index])
+        relation_index = int(pairs[pair_index, 1])
+        if relation_index < 0 or relation_index >= len(relation_groups):
+            continue
+        relation_name = relation_groups[relation_index]["name"]
+        relation_type = aliases.get(relation_name, relation_name)
         relation_threshold = relation_metadata.get(relation_type, {}).get("threshold", threshold)
         if relation_threshold is None:
             relation_threshold = threshold
@@ -595,16 +556,16 @@ def _decode_relations(sample_out, meta, threshold, include_confidence, include_s
         if score < relation_threshold:
             continue
         head = _char_span(
-            int(pairs.head_start[pair_index]),
-            int(pairs.head_end[pair_index]),
+            int(pairs[pair_index, 2]),
+            int(pairs[pair_index, 3]),
             offset,
             start_map,
             end_map,
             text,
         )
         tail = _char_span(
-            int(pairs.tail_start[pair_index]),
-            int(pairs.tail_end[pair_index]),
+            int(pairs[pair_index, 4]),
+            int(pairs[pair_index, 5]),
             offset,
             start_map,
             end_map,
@@ -646,7 +607,7 @@ def decode_boundary(
     Returns:
         A dict whose `entities` value is a one-item list, matching the
         formatter used by the public extraction API. Relation groups are
-        filled from `relation_scorer` when the sample carries query states.
+        filled from `relation_pairs` and `relation_logits` scored in `forward`.
     """
     specs = _query_specs(meta)
     if sample_out.get("grouped_candidates") is not None:
@@ -694,9 +655,7 @@ def decode_boundary(
     for name, instance in structures.items():
         if any(value is not None and value != [] for value in instance.values()):
             result[name] = [instance]
-    result.update(
-        _decode_relations(sample_out, meta, threshold, include_confidence, include_spans)
-    )
+    result.update(_decode_relations(sample_out, meta, threshold, include_confidence, include_spans))
     for group in meta.get("groups") or []:
         if group["task_type"] == "relations" and group["name"] not in result:
             result[group["name"]] = []
@@ -2470,13 +2429,12 @@ def _sample_outputs(outputs, batch_size):
     if not isinstance(outputs, Mapping):
         outputs = dict(outputs.items()) if hasattr(outputs, "items") else dict(outputs)
     keys = (
-        "span_scores",
         "span_logits",
         "counts",
         "classification_logits",
-        "classification_probs",
-        "raw_logits",
         "record_logits",
+        "relation_pairs",
+        "relation_logits",
         "pair_logits",
         "grouped_candidates",
     )
@@ -4522,9 +4480,6 @@ def _span_scores_from_sample(sample, meta, schema: JointSchema):
     tensors = sample.get("span_logits")
     probabilities = False
     if tensors is None:
-        tensors = sample.get("span_scores")
-        probabilities = True
-    if tensors is None:
         raise TypeError("span scores need entity_logits [types, L, W] or a task lattice")
     if torch.is_tensor(tensors):
         tensors = [tensors]
@@ -4541,8 +4496,8 @@ def _span_scores_from_sample(sample, meta, schema: JointSchema):
         if not torch.is_tensor(tensor):
             tensor = torch.tensor(tensor, dtype=torch.float)
         tensor = tensor.detach().float().cpu()
-        if tensor.ndim == 3:
-            tensor = tensor.unsqueeze(0)
+        if tensor.ndim != 4:
+            raise ValueError("span logits must have shape (count, fields, words, width)")
         count = int(counts[index]) if counts is not None else int(tensor.shape[0])
         tensor = tensor[: max(count, 0)]
         if probabilities:

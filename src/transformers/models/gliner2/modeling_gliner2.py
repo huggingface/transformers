@@ -4141,6 +4141,14 @@ class Gliner2SchemaExtractionOutput(ModelOutput):
         Gathered field-marker states from this forward.
     query_mask (`torch.BoolTensor` of shape `(batch_size, num_queries)`, *optional*):
         Valid field markers for `query_states`.
+    relation_pairs (`torch.LongTensor` of shape `(num_pairs, 6)`, *optional*):
+        Valid relation edges as batch, relation, head start, head end, tail start, tail end.
+    relation_logits (`torch.FloatTensor` of shape `(num_pairs,)`, *optional*):
+        Raw scores for `relation_pairs`, from the relation head inside `forward`.
+    relation_temperature (`float`, *optional*):
+        Divisor applied to `relation_logits` before the sigmoid.
+    record_logits (`list`, *optional*):
+        Per-sample record object logits and field-assignment logits.
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Sum of the active training objectives. Omitted when labels are absent.
     losses (`dict`, *optional*):
@@ -4158,6 +4166,10 @@ class Gliner2SchemaExtractionOutput(ModelOutput):
     text_mask: torch.Tensor | None = None
     query_states: torch.FloatTensor | None = None
     query_mask: torch.Tensor | None = None
+    relation_pairs: torch.LongTensor | None = None
+    relation_logits: torch.FloatTensor | None = None
+    relation_temperature: float | None = None
+    record_logits: list | None = None
     loss: torch.FloatTensor | None = None
     losses: dict | None = None
 
@@ -4358,9 +4370,18 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         prompt_group_index: torch.LongTensor | None = None,
         task_type_ids: torch.LongTensor | None = None,
         group_mask: torch.Tensor | None = None,
+        relation_head_index: torch.LongTensor | None = None,
+        relation_tail_index: torch.LongTensor | None = None,
+        relation_mask: torch.Tensor | None = None,
+        record_mode_ids: torch.LongTensor | None = None,
+        record_anchor_query: torch.LongTensor | None = None,
+        record_field_query: torch.LongTensor | None = None,
+        record_field_cardinality: torch.LongTensor | None = None,
+        record_field_mask: torch.Tensor | None = None,
+        record_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: dict | None = None,
-        targets=None,
+        targets: dict | None = None,
         soft_iou_scale: float = 1.0,
         consistency_scale: float = 1.0,
         **kwargs: Unpack[TransformersKwargs],
@@ -4392,13 +4413,30 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             Task id of each schema group. Entities are `1` and classifications are `4`.
         group_mask (`torch.Tensor` of shape `(batch_size, num_groups)`, *optional*):
             Mask of valid schema groups.
+        relation_head_index (`torch.LongTensor` of shape `(batch_size, num_relations)`, *optional*):
+            Query index of each relation head.
+        relation_tail_index (`torch.LongTensor` of shape `(batch_size, num_relations)`, *optional*):
+            Query index of each relation tail.
+        relation_mask (`torch.Tensor` of shape `(batch_size, num_relations)`, *optional*):
+            Mask of valid relations.
+        record_mode_ids (`torch.LongTensor` of shape `(batch_size, num_records)`, *optional*):
+            Record mode id. Natural is `1`, latent is `2`, and anchorless is `3`.
+        record_anchor_query (`torch.LongTensor` of shape `(batch_size, num_records)`, *optional*):
+            Anchor query id, or `-1` when the record has no anchor.
+        record_field_query (`torch.LongTensor` of shape `(batch_size, num_records, num_fields)`, *optional*):
+            Boundary query id of each record field.
+        record_field_cardinality (`torch.LongTensor` of shape `(batch_size, num_records, num_fields)`, *optional*):
+            Cardinality id of each record field.
+        record_field_mask (`torch.Tensor` of shape `(batch_size, num_records, num_fields)`, *optional*):
+            Mask of valid record fields.
+        record_mask (`torch.Tensor` of shape `(batch_size, num_records)`, *optional*):
+            Mask of valid record groups.
         labels (`dict`, *optional*):
             Training targets. Span keys are `classification_targets` and `span_structures`.
             Boundary keys include `mention_pairs`, `mention_mask`, `record_groups`, and
             `relation_gold_pairs`. Absent labels keep this call inference-only.
-        targets (`object`, *optional*):
-            Optional target object merged with `labels`. `mention_pairs` and `mention_mask`
-            are read when present.
+        targets (`dict`, *optional*):
+            Extra target tensors merged into `labels`.
         soft_iou_scale (`float`, *optional*, defaults to 1.0):
             Multiplier on the soft-IoU term. The trainer anneals this value.
         consistency_scale (`float`, *optional*, defaults to 1.0):
@@ -4414,7 +4452,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             **encoder_kwargs,
         )
         hidden = encoded.last_hidden_state
-        supervision = loss_gliner2.coerce_labels(labels, targets)
+        supervision = _merged_labels(labels, targets)
         if text_word_indices is None:
             if supervision is not None:
                 raise ValueError("labels require text_word_indices")
@@ -4448,6 +4486,15 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 supervision,
                 soft_iou_scale,
                 consistency_scale,
+                relation_head_index,
+                relation_tail_index,
+                relation_mask,
+                record_mode_ids,
+                record_anchor_query,
+                record_field_query,
+                record_field_cardinality,
+                record_field_mask,
+                record_mask,
             )
 
         return self._span_forward(
@@ -4489,11 +4536,15 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         supervision,
     ) -> Gliner2SchemaExtractionOutput:
         """Score span groups. Gold counts replace predicted counts when targets exist."""
-        if supervision is not None and supervision.get("mention_pairs") is not None:
-            raise ValueError("mention targets require a boundary model")
-        if supervision is not None and (
-            supervision.get("record_groups") is not None or supervision.get("relation_gold_pairs") is not None
+        mention_mask = None if supervision is None else supervision.get("mention_mask")
+        if (
+            supervision is not None
+            and supervision.get("mention_pairs") is not None
+            and mention_mask is not None
+            and bool(mention_mask.any())
         ):
+            raise ValueError("mention targets require a boundary model")
+        if supervision is not None and _has_boundary_targets(supervision):
             raise ValueError("record and relation targets require a boundary model")
         classification_logits = _classification_logits(
             cls_states, cls_marker_mask, cls_group_index, task_type_ids, group_mask, self.classifier
@@ -4668,9 +4719,18 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         supervision,
         soft_iou_scale,
         consistency_scale,
+        relation_head_index,
+        relation_tail_index,
+        relation_mask,
+        record_mode_ids,
+        record_anchor_query,
+        record_field_query,
+        record_field_cardinality,
+        record_field_mask,
+        record_mask,
     ) -> Gliner2SchemaExtractionOutput:
         """Boundary forward. Gold spans are injected only while this module is training."""
-        if supervision is not None and supervision.get("span_structures") is not None:
+        if supervision is not None and supervision.get("span_structures") and supervision.get("mention_pairs") is None:
             raise ValueError("span_structures require a span model")
         head_targets = None
         if supervision is not None and supervision.get("mention_pairs") is not None:
@@ -4709,7 +4769,27 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 soft_iou_scale,
                 consistency_scale,
             )
-        output = Gliner2SchemaExtractionOutput(
+        relation_pairs = None
+        relation_logits = None
+        relation_temperature = None
+        record_logits = None
+        if not self.training:
+            relation_pairs, relation_logits = self._inference_relations(
+                text_states, query_states, boundary, relation_head_index, relation_tail_index, relation_mask
+            )
+            record_logits = self._inference_records(
+                query_states,
+                boundary,
+                record_mode_ids,
+                record_anchor_query,
+                record_field_query,
+                record_field_cardinality,
+                record_field_mask,
+                record_mask,
+            )
+            if relation_logits is not None:
+                relation_temperature = float(self._boundary_extras["relation_temperature"])
+        return Gliner2SchemaExtractionOutput(
             last_hidden_state=hidden,
             hidden_states=encoded.hidden_states,
             attentions=encoded.attentions,
@@ -4719,15 +4799,122 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             text_mask=text_word_mask,
             query_states=query_states,
             query_mask=query_marker_mask,
+            relation_pairs=relation_pairs,
+            relation_logits=relation_logits,
+            relation_temperature=relation_temperature,
+            record_logits=record_logits,
             loss=loss,
             losses=losses,
         )
-        if self.relation_scorer is not None and self.relation_pair_generator is not None:
-            output.relation_scorer = self.relation_scorer
-            output.relation_pair_generator = self.relation_pair_generator
-            output.relation_temperature = float(self._boundary_extras["relation_temperature"])
-            output.directional_relation_states = bool(self._boundary_extras["directional_relation_states"])
-        return output
+
+    def _inference_relations(self, text_states, query_states, boundary, head_index, tail_index, relation_mask):
+        """Score typed relation pairs. Returns coordinate rows and raw logits."""
+        if (
+            self.relation_scorer is None
+            or self.relation_pair_generator is None
+            or boundary is None
+            or boundary.candidates is None
+            or head_index is None
+            or tail_index is None
+            or relation_mask is None
+            or query_states.shape[1] == 0
+            or not bool(relation_mask.any())
+        ):
+            return None, None
+        device = text_states.device
+        head_index = head_index.to(device)
+        tail_index = tail_index.to(device)
+        relation_mask = relation_mask.to(device).bool()
+        batch, relations = head_index.shape
+        queries = query_states.shape[1]
+        hidden = query_states.shape[-1]
+        head_slot = head_index.clamp(0, queries - 1)
+        tail_slot = tail_index.clamp(0, queries - 1)
+        head_states = query_states.gather(1, head_slot.unsqueeze(-1).expand(-1, -1, hidden))
+        tail_states = query_states.gather(1, tail_slot.unsqueeze(-1).expand(-1, -1, hidden))
+        directional = bool(self._boundary_extras["directional_relation_states"])
+        if directional:
+            relation_states = torch.cat((head_states, tail_states), dim=-1)
+        else:
+            relation_states = (head_states + tail_states) * 0.5
+        head_member = torch.zeros(batch, relations, queries, dtype=torch.bool, device=device)
+        tail_member = torch.zeros_like(head_member)
+        batch_index = torch.arange(batch, device=device)[:, None].expand_as(head_index)
+        relation_index = torch.arange(relations, device=device)[None, :].expand_as(head_index)
+        valid = relation_mask
+        head_member[batch_index[valid], relation_index[valid], head_slot[valid]] = True
+        tail_member[batch_index[valid], relation_index[valid], tail_slot[valid]] = True
+        allow_self = torch.zeros(batch, relations, dtype=torch.bool, device=device)
+        pairs = self.relation_pair_generator.generate_batched(
+            boundary.candidates,
+            [None] * batch,
+            [[] for _ in range(batch)],
+            compact=False,
+            routing=(head_member, tail_member, relation_mask, allow_self),
+        )
+        logits = self.relation_scorer(text_states, relation_states, boundary.candidates, pairs)
+        keep = pairs.pair_mask
+        if keep is None or not bool(keep.any()):
+            return text_states.new_zeros(0, 6).long(), text_states.new_zeros(0)
+        coords = torch.stack(
+            (
+                pairs.batch_index,
+                pairs.relation_index,
+                pairs.head_start,
+                pairs.head_end,
+                pairs.tail_start,
+                pairs.tail_end,
+            ),
+            dim=-1,
+        )
+        return coords[keep].long(), logits[keep]
+
+    def _inference_records(
+        self,
+        query_states,
+        boundary,
+        mode_ids,
+        anchor_query,
+        field_query,
+        field_cardinality,
+        field_mask,
+        record_mask,
+    ):
+        """Score each record group. One `(object_logits, assign_logits)` pair per group."""
+        if (
+            self.record_decoder is None
+            or boundary is None
+            or boundary.candidates is None
+            or getattr(boundary.candidates, "candidate_states", None) is None
+            or record_mask is None
+            or mode_ids is None
+            or field_query is None
+            or field_cardinality is None
+            or field_mask is None
+            or not bool(record_mask.any())
+        ):
+            return None
+        device = query_states.device
+        record_mask = record_mask.to(device).bool()
+        rows = []
+        for sample_index in range(query_states.shape[0]):
+            sample = []
+            for record_index in range(record_mask.shape[1]):
+                if not bool(record_mask[sample_index, record_index]):
+                    continue
+                spec = _record_spec(
+                    int(mode_ids[sample_index, record_index]),
+                    int(anchor_query[sample_index, record_index]),
+                    field_query[sample_index, record_index],
+                    field_cardinality[sample_index, record_index],
+                    field_mask[sample_index, record_index],
+                )
+                decoded = self.record_decoder.forward_group(
+                    spec, query_states[sample_index], boundary.candidates, sample_index
+                )
+                sample.append((decoded.object_logits, decoded.assign_logits))
+            rows.append(sample)
+        return rows
 
     def _boundary_loss(
         self,
@@ -4824,6 +5011,12 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 raise ValueError("relation targets require boundary candidates")
             routing = supervision.get("relation_routing")
             rel_states = supervision.get("relation_query_states")
+            if rel_states is None and routing is not None:
+                rel_states = _states_from_routing(
+                    query_states,
+                    routing,
+                    bool(self._boundary_extras["directional_relation_states"]),
+                )
             if routing is None or rel_states is None or supervision.get("relation_gold_mask") is None:
                 raise ValueError("relation targets require routing, query states, and a gold mask")
             batch = text_states.shape[0]
@@ -4848,6 +5041,69 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         total = total + loss_gliner2.head_touch((self.record_decoder, self.relation_scorer), text_states.device)
         losses["loss"] = total
         return total, losses
+
+
+_RECORD_ID_TO_MODE = {1: "natural", 2: "latent", 3: "anchorless"}
+
+
+def _has_boundary_targets(supervision) -> bool:
+    """True when the batch contains relation edges or record groups."""
+    records = supervision.get("record_groups")
+    if records and any(records):
+        return True
+    mask = supervision.get("relation_gold_mask")
+    return mask is not None and bool(mask.any())
+
+
+def _merged_labels(labels, targets):
+    """Merge two target dicts. The processor emits the keys the loss reads."""
+    if labels is None and targets is None:
+        return None
+    if labels is not None and not isinstance(labels, dict):
+        raise TypeError("labels must be a dict")
+    if targets is not None and not isinstance(targets, dict):
+        raise TypeError("targets must be a dict")
+    if labels is None:
+        return targets
+    if targets is None:
+        return labels
+    return {**labels, **targets}
+
+
+def _states_from_routing(query_states, routing, directional):
+    """Relation queries from boolean head and tail membership."""
+    head_member, tail_member = routing[0], routing[1]
+    head_member = head_member.to(device=query_states.device, dtype=query_states.dtype)
+    tail_member = tail_member.to(device=query_states.device, dtype=query_states.dtype)
+    head = torch.einsum("brq,bqh->brh", head_member, query_states)
+    tail = torch.einsum("brq,bqh->brh", tail_member, query_states)
+    if directional:
+        return torch.cat((head, tail), dim=-1)
+    return (head + tail) * 0.5
+
+
+def _record_spec(mode_id, anchor, field_query, field_cardinality, field_mask):
+    """Record schema object `RecordHead.forward_group` reads."""
+    try:
+        mode = _RECORD_ID_TO_MODE[int(mode_id)]
+    except KeyError:
+        raise ValueError(f"unknown record mode id {mode_id}") from None
+    fields = []
+    for query_id, cardinality, keep in zip(field_query.tolist(), field_cardinality.tolist(), field_mask.tolist()):
+        if not keep:
+            continue
+        fields.append(
+            SimpleNamespace(
+                query_id=int(query_id),
+                cardinality=SimpleNamespace(is_scalar=int(cardinality) in (1, 2)),
+            )
+        )
+    anchor_id = int(anchor)
+    return SimpleNamespace(
+        mode=mode,
+        fields=fields,
+        anchor_query_id=None if anchor_id < 0 else anchor_id,
+    )
 
 
 def _load_encoder(encoder_config):

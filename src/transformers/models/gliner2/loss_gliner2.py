@@ -26,42 +26,10 @@ ENTITY_TASK_ID = 1
 CLASSIFICATION_TASK_ID = 4
 MAX_SPAN_COUNT = 19
 MASK_LOGIT = -1.0e4
-_LABEL_KEYS = (
-    "classification_targets",
-    "span_structures",
-    "mention_pairs",
-    "mention_mask",
-    "start_targets",
-    "end_targets",
-    "inside_targets",
-    "record_groups",
-    "dense_records",
-    "relation_routing",
-    "relation_gold_pairs",
-    "relation_gold_mask",
-    "relation_query_states",
-)
 
 
 class TargetCapacityError(ValueError):
     """Raised when gold records exceed the instance hypotheses."""
-
-
-def coerce_labels(labels, targets=None):
-    """Merge a label mapping and an optional target object."""
-    sources = [item for item in (labels, targets) if item is not None]
-    if not sources:
-        return None
-    merged = {}
-    for source in sources:
-        for key in _LABEL_KEYS:
-            if isinstance(source, dict):
-                value = source.get(key)
-            else:
-                value = getattr(source, key, None)
-            if value is not None:
-                merged[key] = value
-    return merged
 
 
 def finite_loss(value: torch.Tensor) -> torch.Tensor:
