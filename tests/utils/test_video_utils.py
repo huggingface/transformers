@@ -77,6 +77,22 @@ class UniformFrameIndicesTester(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
             get_uniform_frame_indices(total_num_frames=4, num_frames=5)
 
+    def test_rejects_zero_requested_frames(self):
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            get_uniform_frame_indices(total_num_frames=4, num_frames=0)
+
+    def test_rejects_negative_requested_frames(self):
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            get_uniform_frame_indices(total_num_frames=4, num_frames=-1)
+
+    def test_rejects_negative_total_frames(self):
+        with self.assertRaisesRegex(ValueError, "non-negative"):
+            get_uniform_frame_indices(total_num_frames=-1)
+
+    def test_returns_empty_indices_for_empty_video(self):
+        indices = get_uniform_frame_indices(total_num_frames=0)
+        self.assertEqual(indices.tolist(), [])
+
 
 @require_vision
 @require_torchvision
