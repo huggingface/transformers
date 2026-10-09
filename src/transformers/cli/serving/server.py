@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from .chat_completion import ChatCompletionHandler
     from .completion import CompletionHandler
     from .response import ResponseHandler
+    from .systemone import SystemOneHandler
     from .transcription import TranscriptionHandler
 
 from .model_manager import ModelManager
@@ -47,6 +48,7 @@ def build_server(
     completion_handler: "CompletionHandler",
     response_handler: "ResponseHandler",
     transcription_handler: "TranscriptionHandler",
+    systemone_handler: "SystemOneHandler",
     generation_state: GenerationState,
     enable_cors: bool = False,
 ) -> "FastAPI":
@@ -56,6 +58,7 @@ def build_server(
         model_manager: Handles model loading, caching, and cleanup.
         chat_handler: Handles `/v1/chat/completions` requests.
         response_handler: Handles `/v1/responses` requests.
+        systemone_handler: Handles `/v1/systemone` requests.
         generation_state: Owns the per-model generation managers (regular and CB). Passed
             in here so `/health` can check whether the CB worker has died and respond with
             503 instead of a misleading 200.
@@ -111,6 +114,10 @@ def build_server(
     @app.post("/v1/responses")
     async def responses(request: Request, body: dict):
         return await response_handler.handle_request(body, request.state.request_id)
+
+    @app.post("/v1/systemone")
+    async def systemone(request: Request, body: dict):
+        return await systemone_handler.handle_request(body, request.state.request_id)
 
     @app.post("/v1/audio/transcriptions")
     async def audio_transcriptions(request: Request):

@@ -31,6 +31,7 @@ from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
+from transformers.cli.serving.systemone import SystemOneHandler
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
@@ -579,12 +580,14 @@ class TestAppRoutes(unittest.TestCase):
         cls.completion_handler = MagicMock(spec=CompletionHandler)
         cls.response_handler = MagicMock(spec=ResponseHandler)
         cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
+        cls.systemone_handler = MagicMock(spec=SystemOneHandler)
         cls.app = build_server(
             cls.model_manager,
             cls.chat_handler,
             cls.completion_handler,
             cls.response_handler,
             cls.transcription_handler,
+            systemone_handler=cls.systemone_handler,
             generation_state=GenerationState(),
         )
         cls.transport = httpx.ASGITransport(app=cls.app)
@@ -613,6 +616,62 @@ class TestAppRoutes(unittest.TestCase):
     def test_request_id_passthrough(self):
         resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
+
+
+@slow
+@require_serve
+class TestSystemOneEndpoint(ServeIntegrationTestCase):
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    def setUp(self):
+        super().setUp()
+        self.body = {
+            "model": self.MODEL,
+            "state": "Our integration has been failing for 3 days and we are losing sales!",
+            "questions": {
+                "team": {
+                    "type": "choice",
+                    "instructions": "Which team handles this?",
+                    "criteria": {"billing": None, "technical": "Bugs or integration problems"},
+                },
+                "urgency": {
+                    "type": "score",
+                    "instructions": "How urgent is this ticket?",
+                    "criteria": ["low", "medium", "high"],
+                },
+                "upset": {"type": "noul", "instructions": "Is the customer upset?"},
+            },
+        }
+
+    def test_response_format(self):
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["model"], self.MODEL)
+        answers = data["answers"]
+        self.assertEqual(set(answers), {"team", "urgency", "upset"})
+        self.assertEqual(answers["team"]["type"], "choice")
+        self.assertEqual(answers["urgency"]["type"], "score")
+        self.assertEqual(answers["upset"]["type"], "noul")
+        self.assertEqual(answers["urgency"]["legend"], {"0": "low", "1": "medium", "2": "high"})
+        self.assertAlmostEqual(sum(answers["team"]["probabilities"].values()), 1.0, places=5)
+        self.assertAlmostEqual(sum(answers["urgency"]["probabilities"].values()), 1.0, places=5)
+        self.assertGreater(data["usage"]["input_tokens"], 0)
+        self.assertEqual(data["usage"]["output_tokens"], 0)
+
+    def test_decision_with_text(self):
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
+        self.assertEqual(response.status_code, 200)
+        answers = response.json()["answers"]
+        self.assertEqual(answers["team"]["choice"], "technical")
+        self.assertGreater(answers["urgency"]["score"], 1)
+        self.assertGreater(answers["upset"]["noul"], 0.5)
+
+    def test_invalid_question(self):
+        self.body["questions"]["team"]["criteria"] = {}
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("criteria", response.json()["detail"][0]["loc"])
 
 
 @slow
@@ -1895,6 +1954,7 @@ class TestCBWorkerDeadServerIntegration(unittest.TestCase):
             completion_handler=MagicMock(),
             response_handler=MagicMock(),
             transcription_handler=MagicMock(),
+            systemone_handler=MagicMock(spec=SystemOneHandler),
             generation_state=generation_state,
         )
 
