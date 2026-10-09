@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
+    get_uniform_frame_indices,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -56,6 +57,25 @@ def get_random_video(height, width, num_frames=8, return_torch=False):
         # move channel first
         return torch.from_numpy(video).permute(0, 3, 1, 2)
     return video
+
+
+class UniformFrameIndicesTester(unittest.TestCase):
+    def test_returns_requested_number_of_in_range_indices(self):
+        indices = get_uniform_frame_indices(total_num_frames=17, num_frames=7)
+
+        self.assertEqual(len(indices), 7)
+        self.assertEqual(indices.tolist(), [0, 2, 4, 7, 9, 12, 14])
+        self.assertTrue(np.all(indices >= 0))
+        self.assertTrue(np.all(indices < 17))
+
+    def test_returns_all_indices_when_num_frames_is_not_provided(self):
+        indices = get_uniform_frame_indices(total_num_frames=4)
+
+        self.assertEqual(indices.tolist(), [0, 1, 2, 3])
+
+    def test_rejects_more_frames_than_available(self):
+        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
+            get_uniform_frame_indices(total_num_frames=4, num_frames=5)
 
 
 @require_vision
