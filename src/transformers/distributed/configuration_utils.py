@@ -51,12 +51,17 @@ class DistributedConfig:
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
             a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
-            `ep_size=tp_size`; token dispatch (`"ep_dispatch_experts"`) also allows `ep_size > tp_size`.
+            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, where it dispatches tokens.
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
             `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
-            `"ep_dispatch_experts"` rule selects all-to-all token dispatch instead of router masking and all-reduce.
+            `"ep_dispatch_experts"` rule lets `ep_strategy` pick how tokens reach the experts.
+        ep_strategy (`str`, *optional*):
+            How an `"ep_dispatch_experts"` rule reaches the experts. Leave as `None` to mask the routes and all-reduce
+            the outputs when the EP group shares one batch (`ep_size == tp_size`), and send the tokens with all-to-all
+            otherwise. `ep_strategy="X"` uses the style `ep_X_experts`: `"masked"` (requires `ep_size == tp_size`),
+            `"dispatch"`, or any `EpDispatchExpertsParallel` style registered in `ALL_PARALLEL_STYLES`.
     """
 
     tp_size: int | None = None
@@ -69,6 +74,7 @@ class DistributedConfig:
     pp_size: int | None = None
     ep_size: int | None = None
     ep_plan: dict[str, str] | None = None
+    ep_strategy: str | None = None
 
     @property
     def efsdp_size(self) -> int:

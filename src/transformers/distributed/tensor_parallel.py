@@ -881,7 +881,12 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         experts_forward = module.forward
         ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
 
-        def ep_forward(hidden_states, top_k_index, top_k_weights):
+        def ep_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
+            if kwargs or not isinstance(top_k_index, torch.Tensor):
+                raise NotImplementedError(
+                    f"{type(module).__name__} routes its tokens itself, which token dispatch cannot exchange: run it "
+                    "with the router-masked plan (`ep_router` + `moe_tp_experts`) and `ep_size == tp_size`."
+                )
             # Read the full token count before the pre hook slices the inputs across the batch replicas.
             num_tokens = hidden_states.size(0)
             (hidden_states, top_k_index, top_k_weights), _ = self.transform_inputs_pre_forward(
@@ -900,6 +905,39 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
 
         module.forward = ep_forward
         return module
+
+
+class EpMaskedExpertsParallel(MoeExpertsParallel):
+    """
+    Expert parallelism when the EP group shares one batch (`ep_size == tp_size`), what `ep_dispatch_experts` resolves
+    to there: every rank runs its own experts on the whole batch, the other ranks' routes masked past them, and the
+    partial outputs are summed. No tokens move and no split size is read back, so it captures in a CUDA graph.
+
+    Example: 4 experts on 2 ranks, top-2. Token t picks E1 (weight w1) and E2 (weight w2).
+
+    GPU                    0                      1
+                           |                      |
+    batch           [====== B ======]      [====== B ======]    the same tokens on both ranks
+    experts             E0    E1               E2    E3
+    top_k_index[t]       [1, 2]                 [1, 2]          global expert ids
+    local index[t]       [1, 2]                 [2, 0]          2 = not on this rank, skipped
+    top_k_weights[t]     [w1, 0]                [0, w2]
+    expert output[t]    w1 * E1(t)             w2 * E2(t)
+    after all-reduce          w1 * E1(t) + w2 * E2(t) on both ranks
+    """
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
+        (hidden_states, top_k_index, top_k_weights, *rest), kwargs = super().transform_inputs_pre_forward(
+            module, args, kwargs, mesh, is_expert_parallel=True
+        )
+        # each rank backpropagates through its own experts only: the replicated weights' gradients are summed
+        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+        rank = mesh.get_local_rank() if mesh.ndim == 1 else mesh.get_local_rank("tp")
+        local_index = top_k_index - rank * module.num_experts
+        off_rank = (local_index < 0) | (local_index >= module.num_experts)
+        local_index = local_index.masked_fill(off_rank, module.num_experts)
+        return (hidden_states, local_index, top_k_weights.masked_fill(off_rank, 0), *rest), kwargs
 
 
 class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
@@ -940,6 +978,7 @@ class ParallelInterface(GeneralInterface):
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "ep_router": EpRouterParallel(),
             "ep_dispatch_experts": EpDispatchExpertsParallel(),
+            "ep_masked_experts": EpMaskedExpertsParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
@@ -956,12 +995,50 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
+def _dispatches_tokens(style_name: str | None) -> bool:
+    """Whether a plan style dispatches tokens: `ep_dispatch_experts` or a registered `EpDispatchExpertsParallel` style."""
+    return isinstance(ALL_PARALLEL_STYLES.get(style_name), EpDispatchExpertsParallel)
+
+
 def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
     unsupported_styles = {style for style in (plan or {}).values() if style not in ALL_PARALLEL_STYLES}
     if unsupported_styles:
         raise ValueError(
             f"Unsupported parallel styles: {unsupported_styles}. Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
         )
+
+
+def _resolve_ep_strategy(distributed_config) -> str:
+    """The style an `ep_dispatch_experts` rule resolves to. Without `ep_strategy`, the experts run masked when the EP
+    group shares one batch (`ep_size == tp_size`), where masking is the faster of the two, and dispatch tokens
+    otherwise. `ep_strategy="X"` resolves to the style `ep_X_experts`: `"masked"`, `"dispatch"`, or any
+    `EpDispatchExpertsParallel` style registered in `ALL_PARALLEL_STYLES`, such as one built on DeepEP:
+
+        class DeepEPExpertsParallel(EpDispatchExpertsParallel):
+            def install_forward(self, module, ep_mesh, *, tp_mesh=None):
+                ...  # wrap `module.forward` with DeepEP's dispatch and combine
+
+        ALL_PARALLEL_STYLES.register("ep_deepep_experts", DeepEPExpertsParallel())
+        DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_strategy="deepep")
+    """
+    ep_strategy = distributed_config.ep_strategy
+    shares_batch = distributed_config.ep_size == distributed_config.tp_size
+    if ep_strategy is None:
+        ep_strategy = "masked" if shares_batch else "dispatch"
+    style = f"ep_{ep_strategy}_experts"
+    if style == "ep_masked_experts":
+        if not shares_batch:
+            raise ValueError(
+                '`ep_strategy="masked"` requires `ep_size == tp_size`: each rank masks the routes of a batch every '
+                "rank of the expert group holds."
+            )
+        return style
+    if not _dispatches_tokens(style):
+        raise ValueError(
+            f'`ep_strategy={distributed_config.ep_strategy!r}` names no `{style}` style: use None, "masked", "dispatch", '
+            "or register an `EpDispatchExpertsParallel` style named `ep_<name>_experts` in `ALL_PARALLEL_STYLES`."
+        )
+    return style
 
 
 def resolve_parallel_plans(
@@ -983,6 +1060,12 @@ def resolve_parallel_plans(
                 raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
             setattr(model, f"_{plan_name}", plan | override)
 
+    if "ep_dispatch_experts" in model.ep_plan.values():
+        experts_style = _resolve_ep_strategy(distributed_config)
+        model._ep_plan = {
+            name: experts_style if style == "ep_dispatch_experts" else style for name, style in model.ep_plan.items()
+        }
+
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
     if distributed_config.ep_size > 1 and not ep_plan:
@@ -992,8 +1075,13 @@ def resolve_parallel_plans(
             "`base_model_ep_plan` to the model's config, or disable expert parallelism."
         )
 
-    if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
-        raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
+    masks_or_dispatches = (EpMaskedExpertsParallel, EpDispatchExpertsParallel)
+    if "ep_router" in ep_plan.values() and any(
+        isinstance(ALL_PARALLEL_STYLES.get(style), masks_or_dispatches) for style in ep_plan.values()
+    ):
+        raise ValueError(
+            "`ep_dispatch_experts` masks or routes tokens itself; remove the `ep_router` rules from `ep_plan`."
+        )
 
     # EP rules take precedence: drop TP rules on EP modules and their children.
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
@@ -1047,7 +1135,7 @@ def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: Dev
         style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             style = ALL_PARALLEL_STYLES[style_name]
-            if style_name == "ep_dispatch_experts":
+            if isinstance(style, EpDispatchExpertsParallel):
                 style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
             else:
                 style.install_forward(module, ep_mesh)

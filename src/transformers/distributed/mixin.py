@@ -24,6 +24,7 @@ from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
+    _dispatches_tokens,
     _validate_parallel_plan_styles,
     apply_expert_parallelism,
     apply_tensor_parallelism,
@@ -215,10 +216,10 @@ class DistributedMixin:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
 
-            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
-                # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
+            if "ep_masked_experts" in ep_plan.values() or {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
+                # Masked EP: the EP group is the TP group, every rank keeps every token.
                 model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
-            elif "ep_dispatch_experts" in ep_plan.values():
+            elif any(_dispatches_tokens(style) for style in ep_plan.values()):
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)

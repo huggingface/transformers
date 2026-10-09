@@ -15,18 +15,39 @@ import warnings
 from unittest.mock import patch
 
 import torch
+from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
-from transformers.distributed import tensor_parallel
+from transformers.distributed import DistributedConfig, tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     ColwiseParallel,
+    EpDispatchExpertsParallel,
+    EpMaskedExpertsParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
+    ParallelInterface,
     RowwiseParallel,
+    _resolve_ep_strategy,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+
+from ..test_tensor_parallel_mixin import _init_distributed
+
+
+# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
+def _masked_experts_keep_to_their_own_routes(rank):
+    module = torch.nn.Module()
+    module.num_experts = 2
+    args = (torch.arange(16.0).view(2, 8), torch.tensor([[0, 3], [1, 2]]), torch.ones(2, 2))
+    mesh = init_device_mesh("cpu", (2,))
+    (_, top_k_index, top_k_weights), _ = EpMaskedExpertsParallel().transform_inputs_pre_forward(module, args, {}, mesh)
+    # each rank owns 2 experts: its own become local ids, the other rank's go past them with weight 0
+    assert top_k_index.tolist() == ([[0, 2], [1, 2]] if rank == 0 else [[2, 1], [2, 0]]), top_k_index
+    assert top_k_weights.tolist() == ([[1.0, 0.0], [1.0, 0.0]] if rank == 0 else [[0.0, 1.0], [0.0, 1.0]]), (
+        top_k_weights
+    )
 
 
 @is_tensor_parallel_test
@@ -351,6 +372,8 @@ class TestTensorParallelLayer(TestCasePlus):
 
         self.assertEqual(placements["weight"].dim, 0)
         self.assertEqual(module.num_experts, 2)
+        # the experts forwards mask the routes to other ranks' experts only once their experts are split
+        self.assertTrue(module._is_expert_parallel)
 
     def test_sharding_does_not_create_unrelated_module_attributes(self):
         styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["grouped_gemm"])
@@ -365,3 +388,27 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+    def test_ep_masked_experts_keep_to_their_own_routes(self):
+        """When the EP group holds one batch, each rank runs its own experts on all of it: its experts' ids become
+        local and the other ranks' routes go past them with weight 0."""
+        _init_distributed(tp=2, backend="gloo")(_masked_experts_keep_to_their_own_routes)()
+
+    def test_ep_dispatch_resolves_the_experts_style(self):
+        """Without `ep_strategy`, the experts run masked when the EP group shares one batch and dispatch tokens
+        otherwise; `"masked"` and `"dispatch"` force one, and any registered `EpDispatchExpertsParallel` style can be
+        named."""
+        shared, split = DistributedConfig(tp_size=2, ep_size=2), DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2)
+        self.assertEqual(_resolve_ep_strategy(shared), "ep_masked_experts")
+        self.assertEqual(_resolve_ep_strategy(split), "ep_dispatch_experts")
+        self.assertEqual(
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="dispatch")),
+            "ep_dispatch_experts",
+        )
+        with self.assertRaisesRegex(ValueError, "requires `ep_size == tp_size`"):
+            _resolve_ep_strategy(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_strategy="masked"))
+        with self.assertRaisesRegex(ValueError, "names no `ep_fast_experts` style"):
+            _resolve_ep_strategy(DistributedConfig(tp_size=2, ep_size=2, ep_strategy="fast"))
+        with patch.dict(ParallelInterface._global_mapping, {"ep_custom_experts": EpDispatchExpertsParallel()}):
+            custom = DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_strategy="custom")
+            self.assertEqual(_resolve_ep_strategy(custom), "ep_custom_experts")

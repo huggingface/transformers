@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+from .tensor_parallel import _dispatches_tokens, _get_parameter_plan, replace_layer_number_by_wildcard
 from .utils import _is_torch_distributed_initialized
 
 
@@ -208,10 +208,11 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
-    if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
+
+    if distributed_config.ep_size > 1 and any(_dispatches_tokens(style) for style in model.ep_plan.values()):
         expert_mesh = mesh_manager.get_mesh("efsdp")
         for module_name, module in model.named_modules():
-            if _get_parameter_plan(module_name, model.ep_plan, is_weight=False) == "ep_dispatch_experts":
+            if _dispatches_tokens(_get_parameter_plan(module_name, model.ep_plan, is_weight=False)):
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
                 # an EP group holds ep_size / tp_size distinct batches
                 # the efsdp reduce the sums on efsdp_size copies of that expert.
