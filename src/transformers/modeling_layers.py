@@ -106,7 +106,25 @@ class GradientCheckpointingLayer(nn.Module):
                 message = message.rstrip(",") + "."
                 logger.warning_once(message)
 
-            return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
+            checkpointed_forward = partial(super().__call__, **kwargs)
+            # Normal case where the argument(s) already have grads attached to it by e.g. being called with `nn.Embedding`
+            if any(isinstance(arg, torch.Tensor) and arg.requires_grad for arg in args):
+                return self._gradient_checkpointing_func(checkpointed_forward, *args)
+
+            # We still have gradients in the module so we need to let it be seen by autograd BUT not actually used by the layer
+            if (grad_param := next((param for param in self.parameters() if param.requires_grad), None)) is not None:
+
+                def checkpointed_forward_with_gradient(*inputs):
+                    return checkpointed_forward(*inputs[:-1])
+
+                return self._gradient_checkpointing_func(
+                    checkpointed_forward_with_gradient,
+                    *args,
+                    grad_param,  # This is now seen through autograd
+                )
+
+            # ... no grads so we default to a normal super call
+
         return super().__call__(*args, **kwargs)
 
 
