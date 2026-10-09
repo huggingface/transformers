@@ -1403,7 +1403,8 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
         if hasattr(module, "gradient_clipping"):
-            init.constant_(module.gradient_clipping, self.config.gradient_clipping)
+            gradient_clipping = min(self.config.gradient_clipping, torch.finfo(module.gradient_clipping.dtype).max)
+            init.constant_(module.gradient_clipping, gradient_clipping)
 
     def get_per_layer_input_embeddings(self):
         return self.base_model.embed_tokens_per_layer
@@ -1941,11 +1942,9 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.language_model = AutoModel.from_config(config.text_config)
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
