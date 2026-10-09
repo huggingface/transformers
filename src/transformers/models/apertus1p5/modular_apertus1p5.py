@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -44,14 +44,13 @@ from ...utils import (
 )
 from ..apertus.configuration_apertus import ApertusConfig
 from ..apertus.modeling_apertus import ApertusForCausalLM, ApertusModel, ApertusPreTrainedModel
-from ..auto import CONFIG_MAPPING
+from ..auto import AutoConfig, AutoModel
 from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderConvDownsample,
     ChameleonVQVAEEncoderResnetBlock,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
-from ..wavtokenizer import WavTokenizerEncoderModel
 
 
 class Apertus1p5ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -291,8 +290,8 @@ class Apertus1p5Config(PreTrainedConfig):
         input-only ids beyond the physical LM head have no output scores and cannot be generated.
     vision_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
-    audio_config (`Union[dict, WavTokenizerConfig]`, *optional*):
-        Configuration of the WavTokenizer audio codec.
+    audio_config (`Union[dict, WavTokenizerEncoderConfig]`, *optional*):
+        Configuration of the WavTokenizer encoder that produces the audio codes.
     image_token_id (`int`, *optional*, defaults to 131079):
         Id of the `<|image|>` placeholder token that image code positions carry in `input_ids`.
     audio_token_id (`int`, *optional*, defaults to 131085):
@@ -321,10 +320,10 @@ class Apertus1p5Config(PreTrainedConfig):
 
     model_type = "apertus1p5"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {
-        "text_config": Apertus1p5TextConfig,
-        "vision_config": Apertus1p5VisionTokenizerConfig,
-        "audio_config": CONFIG_MAPPING["wavtokenizer"],
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Apertus1p5TextConfig),
+        "vision_config": SubConfigSpec(config_class=Apertus1p5VisionTokenizerConfig),
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="wavtokenizer_encoder"),
     }
 
     text_config: dict | Apertus1p5TextConfig | None = None
@@ -335,25 +334,6 @@ class Apertus1p5Config(PreTrainedConfig):
     image_token_offset: int = 131272
     audio_token_offset: int = 262344
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        """Resolve nested configs."""
-        if isinstance(self.text_config, dict):
-            self.text_config = Apertus1p5TextConfig(**self.text_config)
-        elif self.text_config is None:
-            # the extended vocabulary covers the visual and audio token ranges
-            self.text_config = Apertus1p5TextConfig()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Apertus1p5VisionTokenizerConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Apertus1p5VisionTokenizerConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = CONFIG_MAPPING["wavtokenizer"](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["wavtokenizer"]()
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
@@ -372,10 +352,10 @@ class Apertus1p5Config(PreTrainedConfig):
             )
 
     def validate_backbones(self):
-        if self.audio_config.model_type != "wavtokenizer":
+        if self.audio_config.model_type != "wavtokenizer_encoder":
             raise ValueError(
-                f"`audio_config.model_type` must be 'wavtokenizer', got {self.audio_config.model_type!r}. "
-                "Apertus 1.5 audio tokens use the WavTokenizer codebook."
+                f"`audio_config.model_type` must be 'wavtokenizer_encoder', got {self.audio_config.model_type!r}. "
+                "Apertus 1.5 audio tokens come from the WavTokenizer encoder and codebook."
             )
 
 
@@ -704,7 +684,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = WavTokenizerEncoderModel(config.audio_config)
+        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
         self.post_init()
 
     def _encode_images(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:

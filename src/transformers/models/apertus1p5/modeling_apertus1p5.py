@@ -40,7 +40,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..wavtokenizer import WavTokenizerEncoderModel
+from ..auto import AutoModel
 from .configuration_apertus1p5 import Apertus1p5Config, Apertus1p5TextConfig, Apertus1p5VisionTokenizerConfig
 
 
@@ -812,7 +812,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = WavTokenizerEncoderModel(config.audio_config)
+        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
         self.post_init()
 
     def _encode_images(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
