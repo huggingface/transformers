@@ -133,8 +133,9 @@
       "match": "You have modified the pretrained model configuration"
     },
     "Wav2Vec2/proto-wav2vec2-base-960h-slim": {
-      "issue": "https://github.com/huggingface/transformers/issues/49385: masked_spec_embed uninitialized, so the SpecAugment loss is undefined (fix #49386)",
+      "issue": "https://github.com/huggingface/transformers/issues/49385: masked_spec_embed uninitialized, so the SpecAugment loss and gradients are undefined (fix #49386)",
       "skip_outputs": [
+        "training.gradients",
         "training.loss"
       ]
     }
