@@ -2542,7 +2542,7 @@ class PreTrainedModel(
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
         if not recompute_mapping:
-            tied_keys = self.all_tied_weights_keys
+            tied_keys = getattr(self, "all_tied_weights_keys", {})
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
@@ -4760,7 +4760,8 @@ class PreTrainedModel(
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
-        for key in missing_keys - self.all_tied_weights_keys.keys():
+        all_tied_weights_keys = getattr(self, "all_tied_weights_keys", {})
+        for key in missing_keys - all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
             param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
@@ -4872,7 +4873,7 @@ class PreTrainedModel(
             loading_info.missing_keys = {
                 key
                 for key in loading_info.missing_keys
-                if key in self.all_tied_weights_keys
+                if key in getattr(self, "all_tied_weights_keys", {})
                 or not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
             }
 
@@ -4996,7 +4997,7 @@ def get_total_byte_count(
     """
 
     total_byte_count = defaultdict(lambda: 0)
-    tied_param_names = model.all_tied_weights_keys.keys()
+    tied_param_names = getattr(model, "all_tied_weights_keys", {}).keys()
     tp_plan = model.tp_plan if _is_torch_distributed_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
