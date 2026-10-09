@@ -129,6 +129,13 @@ class AutoVideoProcessorTest(unittest.TestCase):
             self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
 
     def test_video_processor_loading_does_not_resolve_other_models(self):
+        """
+        Image and video processors resolve class names for the requested backend without accessing the lazy mapping.
+        `from_pretrained` imports the resolved class directly, so `_load_attr_from_module` should not be called
+        for these named processor configurations.
+
+        Regression test for https://github.com/huggingface/transformers/pull/48984.
+        """
         for filename, processor_config in (
             ("video_preprocessor_config.json", {"video_processor_type": "LlavaOnevisionVideoProcessor"}),
             ("preprocessor_config.json", {"image_processor_type": "LlavaOnevisionImageProcessor"}),
