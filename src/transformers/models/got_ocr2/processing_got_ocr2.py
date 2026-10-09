@@ -27,7 +27,8 @@ logger = logging.get_logger(__name__)
 
 class GotOcr2TextKwargs(TextKwargs, total=False):
     """
-    format (`bool`, *optional*, defaults to `False`):
+    format (`bool`, *optional*):
+        Deprecated, use [`GotOcr2ProcessorKwargs.format`] instead.
         Whether to request formatted output from the OCR model. When enabled, the model is instructed to return
         structured and formatted text output rather than raw OCR results.
     """
@@ -78,6 +79,9 @@ class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
 
 class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     """
+    format (`bool`, *optional*, defaults to `False`):
+        Whether to request formatted output from the OCR model. When enabled, the model is instructed to return
+        structured and formatted text output rather than raw OCR results.
     color (`str`, *optional*):
         Color filter specification for OCR. When provided, the OCR query is prefixed with the color information
         to focus on text of a specific color (e.g., "red", "blue").
@@ -93,6 +97,7 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: GotOcr2TextKwargs
     images_kwargs: GotOcr2ImagesKwargs
 
+    format: bool
     color: str | None
     num_image_tokens: int
     multi_page: bool
@@ -118,13 +123,11 @@ def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) ->
 class GotOcr2Processor(ProcessorMixin):
     valid_processor_kwargs = GotOcr2ProcessorKwargs
 
+    format: bool = False
     color: str | None = None
     num_image_tokens: int = 256
     multi_page: bool = False
 
-    text_kwargs = {
-        "format": False,
-    }
     images_kwargs = {
         "crop_to_patches": False,
         "min_patches": 1,
@@ -194,15 +197,22 @@ class GotOcr2Processor(ProcessorMixin):
             **kwargs,
         )
 
-        for key in ("box", "color", "num_image_tokens", "multi_page"):
-            if key in merged_kwargs["images_kwargs"]:
+        for key, modality in (
+            ("format", "text_kwargs"),
+            ("box", "images_kwargs"),
+            ("color", "images_kwargs"),
+            ("num_image_tokens", "images_kwargs"),
+            ("multi_page", "images_kwargs"),
+        ):
+            if key in merged_kwargs[modality]:
                 logger.warning_once(
-                    f"Passing `{key}` in `images_kwargs` is deprecated "
+                    f"Passing `{key}` in `{modality}` is deprecated "
                     "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
 
-        # "images_kwargs" has priority for backwards compatibility
+        # Modality-specific kwargs have priority for backwards compatibility.
+        merged_kwargs["format"] = merged_kwargs["text_kwargs"].pop("format", merged_kwargs["format"])
         box = merged_kwargs["images_kwargs"].pop("box", box)
         for key in ("color", "num_image_tokens", "multi_page"):
             merged_kwargs[key] = merged_kwargs["images_kwargs"].pop(key, merged_kwargs[key])
@@ -265,7 +275,7 @@ class GotOcr2Processor(ProcessorMixin):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
         box = [None] if box is None else box
-        format_output = kwargs["text_kwargs"].pop("format")
+        format_output = kwargs["format"]
         crop_to_patches = kwargs["images_kwargs"].get("crop_to_patches")
         images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)
 
