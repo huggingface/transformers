@@ -10,8 +10,10 @@
     python example/run.py --framework transformers.js --variant webgpu-fp16 --golden cpu
     python example/run.py ... --output results.jsonl                # one result record per line
     git diff --name-only A B | python example/run.py --framework transformers --fixtures-only --changed-files -
+    python utils/contracts/run.py --framework transformers --lock tests/contracts/fleet-lock.json  # lock elsewhere
 
-For each contract in <framework>/tests/contracts/fleet.lock it reads the
+For each contract in <framework>/tests/contracts/fleet.lock (or --lock, with
+expectations/ next to it) it reads the
 manifest from the pinned integration repo, expands the targets (each slim
 fixture once, then each checkpoint), runs the contract, and compares the result
 with <framework>/tests/contracts/expectations/<contract>/<platform>/<target>[.<variant>].json.
@@ -52,9 +54,15 @@ Missing outputs, non-finite numeric outputs, and failed assertions (all_true,
 true) fail on their own, and are never recorded;
 --record also reruns each target in a fresh process and refuses outputs that
 differ. A
-framework can list a target under known_failures in its fleet lock (with the
-issue): a failure is then reported as xfail, and a pass as a failure, so the
-entry is removed once the bug is fixed. local_patches in the fleet lock name
+framework can list a target under known_failures in its fleet lock, for a bug
+in the framework under test. A plain reason string covers the whole target: a
+failure is reported as xfail, and a pass as a failure, so the entry is removed
+once the bug is fixed. An object {issue, match, skip_outputs} narrows it:
+with match, the target is xfail only if every failure line contains that text
+(any other failure still fails, and a pass asks to remove the entry); with
+skip_outputs, those outputs are left out of the comparison and recorded as
+skipped_outputs, and the others are checked as usual. A contract that raises
+stops there, so a matched error still hides the checks after it. local_patches in the fleet lock name
 workarounds from patches.py, applied before every contract (in this process and
 in isolated ones) and recorded in each result's environment.
 --record never touches an approved baseline; it writes <name>.candidate.json
@@ -167,8 +175,8 @@ def contract_folder(lock_dir, pin, local):
     """(folder, revision label) of a contract: the pinned Hub revision, or the local folder if unpublished or asked for.
 
     A local folder is labeled with the pinned revision when its files match the pin, else "local"."""
-    path = (lock_dir / pin["path"]).resolve()
     if local or pin["revision"] == "unpublished":
+        path = source_folder(lock_dir, pin["repo"], pin)
         same = pin.get("files_sha256") and digest(contract_files(path)) == pin["files_sha256"]
         return path, pin["revision"] if same or pin["revision"] == "unpublished" else "local"
     from huggingface_hub import snapshot_download
@@ -192,10 +200,17 @@ def checkpoint_path(repo, revision):
     return snapshot_download(repo, revision=revision, ignore_patterns=ignore)
 
 
+def source_folder(lock_dir, repo, pin):
+    """The local folder a lock entry names (path), needed only for unpublished or local runs."""
+    if "path" not in pin:
+        raise SystemExit(f"{repo}: the fleet lock gives no path, so it can only run from its pinned Hub revision")
+    return (lock_dir / pin["path"]).resolve()
+
+
 def fixture_folder(lock_dir, repo, pin, local):
     """The pinned fixture: its Hub revision, or the local build folder if unpublished or asked for."""
     if local or pin["revision"] == "unpublished":
-        return (lock_dir / pin["path"]).resolve()
+        return source_folder(lock_dir, repo, pin)
     from huggingface_hub import snapshot_download
 
     return Path(snapshot_download(repo, revision=pin["revision"]))
@@ -371,6 +386,22 @@ def dims(value):
     return f"({', '.join(map(str, shape))})"
 
 
+def known_entry(known, contract, target):
+    """The fleet lock's known_failures entry for a target, as a dict (a plain string covers the whole target)."""
+    entry = known.get(f"{contract.split('/')[-1].removesuffix('-integration')}/{target}")
+    return {"issue": entry} if isinstance(entry, str) else entry
+
+
+def shown(path):
+    """A path for result records: relative to the runner, else to the working directory."""
+    for base in (HERE, Path.cwd()):
+        try:
+            return str(Path(path).resolve().relative_to(base.resolve()))
+        except ValueError:
+            pass
+    return str(path)
+
+
 def required_outputs(rules, integration):
     """The outputs every result and baseline of this framework must hold, whatever a candidate emits:
     all of the manifest's, minus training outputs for a framework that declares no training."""
@@ -538,6 +569,7 @@ def main():
     parser.add_argument("--local-fixtures", action="store_true", help="use the local build folders instead of the pinned Hub revisions")
     parser.add_argument("--local-contracts", action="store_true",
                         help="run the contracts in example/hub instead of their pinned Hub revisions (records contract_revision 'local' if they differ)")
+    parser.add_argument("--lock", type=Path, help="fleet lock to run (default <framework>/tests/contracts/fleet.lock next to this script); expectations/ sits next to it")
     parser.add_argument("--variant", default="default")
     parser.add_argument("--isolate", action="store_true", help="run each target in its own process")
     parser.add_argument("--record", action="store_true", help="write candidate baselines for review")
@@ -553,8 +585,9 @@ def main():
     if args.golden:
         args.golden = platform_class(args.golden)
 
-    lock_dir = HERE / args.framework / "tests/contracts"
-    lock = load(lock_dir / "fleet.lock", "fleet-lock")
+    lock_path = args.lock or HERE / args.framework / "tests/contracts/fleet.lock"
+    lock_dir = lock_path.resolve().parent
+    lock = load(lock_path, "fleet-lock")
     unknown = sorted(set(args.contract or ()) - set(lock["contracts"]))
     if unknown:
         raise SystemExit(f"no contract named {unknown} in {args.framework}'s fleet lock ({sorted(lock['contracts'])})")
@@ -583,12 +616,14 @@ def main():
 
     def emit(record):
         nonlocal status
-        reason = known.get(f"{record['contract'].split('/')[-1].removesuffix('-integration')}/{record['target']}")
-        if reason and not args.record and not args.golden:
+        entry = known_entry(known, record["contract"], record["target"])
+        if entry and not args.record and not args.golden and ("match" in entry or "skip_outputs" not in entry):
+            issue = entry["issue"]
             if record["status"] in ("fail", "error"):
-                record = {**record, "status": "xfail", "known_failure": reason}
+                if "match" not in entry or all(entry["match"] in f for f in record["failures"]):
+                    record = {**record, "status": "xfail", "known_failure": issue}
             elif record["status"] == "pass":
-                record = {**record, "status": "fail", "failures": [f"listed in known_failures but passes; remove it: {reason}"]}
+                record = {**record, "status": "fail", "failures": [f"listed in known_failures but passes; remove it: {issue}"]}
         validate(record, "result", f"result for {record['contract']}/{record['target']}")
         print(json.dumps(record), flush=True)
         if args.output:
@@ -666,25 +701,31 @@ def main():
                 actual = json.loads(lines[-1])
                 platform = platform_class(actual["runtime"]["device"], actual["runtime"].get("dtype"))
                 record["platform"] = platform
+                entry = known_entry(known, record["contract"], target)
+                skipped = sorted(entry.get("skip_outputs", [])) if entry and not args.record else []
+                outputs = {k: r for k, r in manifest["outputs"].items() if k not in skipped}
+                checked = required - set(skipped)
+                if skipped:
+                    record["skipped_outputs"] = skipped
                 suffix = "" if args.variant == "default" or args.golden else f".{args.variant}"
                 platform_dir = lock_dir / "expectations" / name / (args.golden or platform)
                 baseline = platform_dir / f"{target}{suffix}.json"
-                record["baseline"] = str(baseline.relative_to(HERE))
+                record["baseline"] = shown(baseline)
                 if args.golden:
                     if not baseline.exists():
                         emit({**record, "status": "error", "failures": [f"no golden baseline at {record['baseline']}"]})
                         continue
                     expected = load(baseline, "baseline")["outputs"]
-                    exact = {k: r for k, r in manifest["outputs"].items() if r["compare"] == "exact" and k != "runtime"}
-                    failures = compare(exact, actual, expected, required)
+                    exact = {k: r for k, r in outputs.items() if r["compare"] == "exact" and k != "runtime"}
+                    failures = compare(exact, actual, expected, checked)
                     deltas = {
                         k: max(abs(x - y) for x, y in zip(flatten(lookup(actual, k)), flatten(lookup(expected, k))))
-                        for k, r in manifest["outputs"].items()
+                        for k, r in outputs.items()
                         if r["compare"] == "allclose" and lookup(actual, k) is not None
                     }
                     emit({**record, "golden": args.golden, "status": "fail" if failures else "pass", "failures": failures, "max_delta": deltas})
                     continue
-                broken = missing(required, actual) + non_finite(manifest["outputs"], actual) + violated(manifest["outputs"], actual)
+                broken = missing(checked, actual) + non_finite(outputs, actual) + violated(outputs, actual)
                 if broken:
                     # Never record incomplete or non-finite outputs or failed assertions: a baseline would approve the bug.
                     emit({**record, "status": "fail", "failures": broken})
@@ -701,7 +742,7 @@ def main():
                     candidate.parent.mkdir(parents=True, exist_ok=True)
                     recorded = {k: v for k, v in record.items() if k != "baseline"}
                     candidate.write_text(json.dumps(validate({"recorded_with": recorded, "outputs": actual}, "baseline", candidate), indent=1) + "\n")
-                    emit({**record, "status": "recorded", "baseline": str(candidate.relative_to(HERE))})
+                    emit({**record, "status": "recorded", "baseline": shown(candidate)})
                     continue
                 if not baseline.exists():
                     failures = [f"no reviewed baseline at {record['baseline']}"]
@@ -712,7 +753,8 @@ def main():
                     if identity.get("platform", platform) != platform:
                         mismatch.append("platform")
                     failures = [f"baseline identity differs: {mismatch}"] if mismatch else []
-                    failures += compare(rules_for(manifest, platform_dir), actual, reviewed["outputs"], required)
+                    rules = {k: r for k, r in rules_for(manifest, platform_dir).items() if k not in skipped}
+                    failures += compare(rules, actual, reviewed["outputs"], checked)
                 emit({**record, "status": "fail" if failures else "pass", "failures": failures})
     if not set(counts) - {"unsupported"} and (counts or args.contract or args.target):
         # Every requested target was skipped, or none matched: nothing was checked, which is not a pass.

@@ -29,8 +29,7 @@
       "type": "object",
       "required": [
        "repo",
-       "revision",
-       "path"
+       "revision"
       ],
       "properties": {
        "repo": {
@@ -44,7 +43,7 @@
        },
        "path": {
         "type": "string",
-        "description": "the contract's source folder, published by publish_contracts.py (run with --local-contracts while editing)"
+        "description": "the contract's source folder, published by publish_contracts.py (run with --local-contracts while editing); only needed for unpublished contracts, --local-contracts, and script contracts"
        },
        "files_sha256": {
         "type": "string",
@@ -62,8 +61,7 @@
       "additionalProperties": {
        "type": "object",
        "required": [
-        "revision",
-        "path"
+        "revision"
        ],
        "additionalProperties": false,
        "properties": {
@@ -73,7 +71,8 @@
          "description": "commit sha, or 'unpublished' for the folders in example/hub"
         },
         "path": {
-         "type": "string"
+         "type": "string",
+         "description": "the fixture's build folder; only needed for unpublished fixtures and --local-fixtures"
         },
         "files_sha256": {
          "type": "string",
@@ -116,10 +115,42 @@
   },
   "known_failures": {
    "type": "object",
-   "description": "<contract>/<target> -> reason with issue link; failures are reported as xfail",
+   "description": "<contract>/<target> -> a bug in the framework under test. A string (reason with issue link) makes any failure of the target xfail; an object narrows it to failures matching `match`, or leaves `skip_outputs` out of the comparison",
    "additionalProperties": {
-    "type": "string",
-    "minLength": 1
+    "oneOf": [
+     {
+      "type": "string",
+      "minLength": 1
+     },
+     {
+      "type": "object",
+      "required": [
+       "issue"
+      ],
+      "additionalProperties": false,
+      "minProperties": 2,
+      "properties": {
+       "issue": {
+        "type": "string",
+        "minLength": 1,
+        "description": "issue link and one-line reason"
+       },
+       "match": {
+        "type": "string",
+        "minLength": 1,
+        "description": "xfail only when every failure line contains this text"
+       },
+       "skip_outputs": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+         "type": "string"
+        },
+        "description": "outputs left out of the comparison while the bug is open"
+       }
+      }
+     }
+    ]
    }
   },
   "local_patches": {

@@ -1,23 +1,20 @@
 {
-  "comment": "What Transformers would keep in tests/contracts/: every contract input, pinned. Expected results live next to it in expectations/. Contracts (hf-internal-testing/*-integration) and fixtures (hf-internal-testing/proto-*) are published and pinned by revision and file hashes; 'path' points at their source folders in this example (publish_contracts.py, publish_fixtures.py).",
+  "comment": "Model integration contracts pinned for Transformers CI, vendored from huggingface/model-integration-contracts (example/transformers/tests/contracts/fleet.lock at fb28215) without paths or local_patches. Run: python utils/contracts/run.py --framework transformers --fixtures-only --lock tests/contracts/fleet-lock.json",
   "framework": "transformers",
   "contracts": {
     "SmolLM": {
       "integration": {
         "repo": "hf-internal-testing/SmolLM-integration",
         "revision": "ea5b7a6908a88f30679815d8343dde713778eb86",
-        "path": "../../../hub/SmolLM-integration",
         "files_sha256": "b5660454ba3f1996124f489e19364f30b93993aa5288d17a697f090188210805"
       },
       "fixtures": {
         "hf-internal-testing/proto-SmolLM-slim": {
           "revision": "50eacd46dbec7d33ef11b930e986399a5a8f1a43",
-          "path": "../../../hub/proto-SmolLM-slim",
           "files_sha256": "8562493b1bb64ef7fd81ceb10b47e69aa135afe9ea31385d2b3dfaaf92ba330d"
         },
         "hf-internal-testing/proto-SmolLM-1.7B-slim": {
           "revision": "58a736e869e5f9f59984b467b84e42f1aaa14d08",
-          "path": "../../../hub/proto-SmolLM-1.7B-slim",
           "files_sha256": "d6cb7aae64669f6d15ed9cbc6004396e3c12e1a9c7b2d6b41b5e1c70ca61c48b"
         }
       },
@@ -31,13 +28,11 @@
       "integration": {
         "repo": "hf-internal-testing/CLIP-integration",
         "revision": "cb2e2abc4c4c992c316ab40d4a3360b1e748fcfe",
-        "path": "../../../hub/CLIP-integration",
         "files_sha256": "a7bce4f31eb67a26a61bb21391dec0feb58abbe29ee109e90ac5e99ccd1b61b6"
       },
       "fixtures": {
         "hf-internal-testing/proto-clip-vit-base-patch32-slim": {
           "revision": "adad0f30de071148ab0b55bb2263ac909e58cc5b",
-          "path": "../../../hub/proto-clip-vit-base-patch32-slim",
           "files_sha256": "e72402276836e7b27c96687600cde8e3612a82e7b6e9d69a0523626816f99e1d"
         }
       },
@@ -49,13 +44,11 @@
       "integration": {
         "repo": "hf-internal-testing/BERT-integration",
         "revision": "e8e23b07e9e13bebf6f1f4ba20298157333f279d",
-        "path": "../../../hub/BERT-integration",
         "files_sha256": "128ccf92ca8ddb6775ce7f852bc54b7b658c16aaac8e3fde64d7aeebe782bf26"
       },
       "fixtures": {
         "hf-internal-testing/proto-bert-base-uncased-slim": {
           "revision": "a1f96617d0b6c9f76ed6822ec843c922da95878b",
-          "path": "../../../hub/proto-bert-base-uncased-slim",
           "files_sha256": "10e7f1627bf4615e202df67f40abbeb5070a88fd9741a257fbf71dee21daf16f"
         }
       },
@@ -67,18 +60,15 @@
       "integration": {
         "repo": "hf-internal-testing/T5-integration",
         "revision": "f3f9d6fc9c219baae452736af8a928c091095c02",
-        "path": "../../../hub/T5-integration",
         "files_sha256": "4a7ae9a0ac8cae0308755233877f1d858c5e1cdc2951a477f8aa35f7e882ce09"
       },
       "fixtures": {
         "hf-internal-testing/proto-t5-small-slim": {
           "revision": "4f4d0ca0db8f1823e53ac0cbcba28bd982b6e8f4",
-          "path": "../../../hub/proto-t5-small-slim",
           "files_sha256": "530a553b936f1a6c0a68b8e394e30319fd0ae38dc76718fe55c47212d053f8a6"
         },
         "hf-internal-testing/proto-umt5-small-slim": {
           "revision": "5c2db1c75f56bce8b4c200734810eb07f29bfcc3",
-          "path": "../../../hub/proto-umt5-small-slim",
           "files_sha256": "91a8c18974956cfd1e6e08cb6ec8f056b10d12ada1a3e8d35acee48a995634ac"
         }
       },
@@ -91,13 +81,11 @@
       "integration": {
         "repo": "hf-internal-testing/Whisper-integration",
         "revision": "3c3b55b0246a19c805cbf0f8a0c09d50d8fbd9a3",
-        "path": "../../../hub/Whisper-integration",
         "files_sha256": "295a044e9f48c95ccd0649f482d4e0d6810fc89ffde2ca58ffe95ebd05487d89"
       },
       "fixtures": {
         "hf-internal-testing/proto-whisper-tiny-slim": {
           "revision": "7acfb01aa91f05eb0a1507e00878c3e42901e2cc",
-          "path": "../../../hub/proto-whisper-tiny-slim",
           "files_sha256": "71e6e2a43065192dd2d535faaf16d2ed5bd2a6d6d7b8e66ef8388a159511ec9f"
         }
       },
@@ -109,13 +97,11 @@
       "integration": {
         "repo": "hf-internal-testing/Wav2Vec2-integration",
         "revision": "e3da1ed845f002de4f1ebce84b7c86a0988d62c8",
-        "path": "../../../hub/Wav2Vec2-integration",
         "files_sha256": "705477e7348651de63a1ce9c681b1aa9ff5d453e1c369eab179b438f34867b25"
       },
       "fixtures": {
         "hf-internal-testing/proto-wav2vec2-base-960h-slim": {
           "revision": "69a1a6127c38056c7e7e2053e1d208b6380b152b",
-          "path": "../../../hub/proto-wav2vec2-base-960h-slim",
           "files_sha256": "5522f324c0e8bd3e70aa54a57318e4d5016c46df7709120dfb632423f4221c2f"
         }
       },
@@ -123,11 +109,6 @@
         "facebook/wav2vec2-base-960h": "22aad52d435eb6dbaf354bdad9b0da84ce7d6156"
       }
     }
-  },
-  "local_patches": {
-    "masked-spec-embed-init": "https://github.com/huggingface/transformers/issues/49385: masked_spec_embed is left uninitialized when a checkpoint lacks it (wav2vec2-base-960h does), so SpecAugment training reads garbage; initialize it with init.uniform_ like HuBERT. Remove and re-record the Wav2Vec2 baselines once fixed upstream.",
-    "whisper-decode-tensor-batch": "https://github.com/huggingface/transformers/issues/49403: WhisperTokenizer.decode only batches a list of lists, so processor.batch_decode(model.generate(..., return_timestamps=True), decode_with_timestamps=True) merges the rows of the generated tensor into one string or raises; #47997 fixed lists only. Convert a 2-D tensor to a list first. Remove once fixed upstream.",
-    "config-field-generation-params": "https://github.com/huggingface/transformers/issues/49456: since #48282 (d4f69a869d), PreTrainedConfig._get_generation_parameters counts config fields whose default is None as user-set generation parameters, so generate() raises on every Whisper checkpoint whose config.json sets suppress_tokens (all OpenAI ones). Skip the config class's declared fields, as before. Remove once fixed upstream."
   },
   "environment": {
     "python": "3.10",
@@ -145,5 +126,17 @@
     "librosa": "0.11.0",
     "soundfile": "0.13.1",
     "scipy": "1.15.3"
+  },
+  "known_failures": {
+    "Whisper/proto-whisper-tiny-slim": {
+      "issue": "https://github.com/huggingface/transformers/issues/49456: generate() raises on suppress_tokens from config.json since #48282",
+      "match": "You have modified the pretrained model configuration"
+    },
+    "Wav2Vec2/proto-wav2vec2-base-960h-slim": {
+      "issue": "https://github.com/huggingface/transformers/issues/49385: masked_spec_embed uninitialized, so the SpecAugment loss is undefined (fix #49386)",
+      "skip_outputs": [
+        "training.loss"
+      ]
+    }
   }
 }

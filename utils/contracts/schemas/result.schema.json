@@ -101,6 +101,13 @@
     "type": "string"
    },
    "description": "packages not at the version the fleet lock pins: installed (pinned)"
+  },
+  "skipped_outputs": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "description": "outputs not compared, per the lock's known_failures"
   }
  },
  "allOf": [

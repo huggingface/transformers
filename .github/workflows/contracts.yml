@@ -1,0 +1,98 @@
+name: Model integration contracts
+
+# Proof of concept (huggingface/model-integration-contracts, docs/transformers-ci-proof.md).
+# Runs the model integration contracts the changed files can affect, on slim
+# fixtures pinned on the Hub, against the reviewed baselines in
+# tests/contracts/expectations/. Not a required check: a failure here is a
+# signal for review, with the reproduce command in the job summary.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - contracts-proof
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on:
+      group: aws-m8i-l-cache
+    timeout-minutes: 30
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb"
+    env:
+      DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
+      # Not the shared /mnt/cache: PR jobs mount it read-only, and fixtures and contracts are downloaded.
+      HF_HOME: /tmp/hf_home
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "8"
+      LOCK: tests/contracts/fleet-lock.json
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          start=$SECONDS
+          uv pip install -e .
+          uv pip install jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
+          echo "Installed in $((SECONDS - start)) s on $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) cores"
+
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/hf_home/hub
+          key: contracts-hf-${{ hashFiles('tests/contracts/fleet-lock.json') }}
+
+      - name: Run the contracts
+        id: run
+        continue-on-error: true
+        run: |
+          if [[ "${{ github.event_name }}" == pull_request ]]; then
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt
+            selection=(--changed-files /tmp/changed-files.txt)
+          else
+            selection=()  # pushes to the proof branch run every contract
+          fi
+          start=$SECONDS
+          python utils/contracts/run.py --framework transformers --fixtures-only --lock "$LOCK" --require-all \
+            "${selection[@]}" --output /tmp/results.jsonl 2> /tmp/run.log | python -c '
+          import json, sys
+          for line in sys.stdin:
+              r = json.loads(line)
+              print(r["status"].ljust(6), r["target"], r.get("platform", ""), flush=True)' || status=$?
+          echo "$(tail -1 /tmp/run.log); $((SECONDS - start)) s"
+          exit "${status:-0}"
+
+      - name: Summary
+        if: always()
+        run: |
+          touch /tmp/results.jsonl
+          python utils/contracts/report.py /tmp/results.jsonl --log /tmp/run.log \
+            --runner "python utils/contracts/run.py" --lock "$LOCK" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contracts
+          path: |
+            /tmp/results.jsonl
+            /tmp/run.log
+
+      - name: Result
+        if: steps.run.outcome == 'failure'
+        run: |
+          echo "::error::A model integration contract failed: see the job summary for the failing target and how to reproduce it."
+          exit 1

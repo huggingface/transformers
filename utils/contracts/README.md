@@ -1,9 +1,12 @@
 # Model integration contracts (proof)
 
-Vendored from [huggingface/model-integration-contracts](https://github.com/huggingface/model-integration-contracts) (`example/`, commit b303626) for the Transformers CI proof (phase 1: does the fixture baseline hold on the PR CI runner and image?). Do not edit here; change the source repository and re-vendor.
+Vendored from [huggingface/model-integration-contracts](https://github.com/huggingface/model-integration-contracts) (`example/`, fb6c686) for the Transformers CI proof. Do not edit here; change the source repository and re-vendor.
 
-- `run.py`, `select_contracts.py`, `patches.py`, `schemas/`: the contract runner.
-- `transformers/tests/contracts/fleet.lock`: pinned contracts, fixtures, checkpoints, and environment; the contracts and fixtures are downloaded from the Hub (`hf-internal-testing/*`) by revision and checked against their hashes.
-- `transformers/tests/contracts/expectations/<contract>/{cpu-x86_64,cpu-x86_64-bf16}/`: reviewed baselines.
+- `run.py`, `select_contracts.py`, `schemas/`: the contract runner.
+- `tests/contracts/fleet-lock.json`: pinned contracts, fixtures, checkpoints, and environment. Contracts and fixtures are downloaded from the Hub (`hf-internal-testing/*`) at their pinned revisions and checked against their hashes. No `local_patches`: open framework bugs are narrowed `known_failures` entries (an error message to match, or outputs to skip).
+- `tests/contracts/expectations/<contract>/{cpu-x86_64,cpu-x86_64-bf16}/`: reviewed baselines.
 
-Run by `.github/workflows/contracts-probe.yml` on pushes to `contracts-proof`.
+```sh
+python utils/contracts/run.py --framework transformers --fixtures-only --lock tests/contracts/fleet-lock.json
+git diff --name-only origin/main...HEAD | python utils/contracts/run.py --framework transformers --fixtures-only --lock tests/contracts/fleet-lock.json --changed-files -
+```
