@@ -1900,6 +1900,13 @@ def _build_checkpoint_conversion_mapping():
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
 
+    mapping["kolibri1"] = mapping["qwen2_moe"].copy()
+    mapping["kolibri1"] += [
+        WeightRenaming("moe.router.expert_bias", "mlp.gate.e_score_correction_bias"),
+        WeightRenaming("post_attn_norm", "post_self_attn_layernorm"),
+        WeightRenaming("post_ffn_norm", "post_mlp_layernorm"),
+    ]
+
     mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
     mapping["mimo_v2_flash"] += [
         WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
