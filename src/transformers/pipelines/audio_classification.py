@@ -183,7 +183,7 @@ class AudioClassificationPipeline(Pipeline):
             if isinstance(inputs, torch.Tensor):
                 inputs = inputs.cpu().numpy()
 
-        if is_torchcodec_available():
+        if is_torchcodec_available() and type(inputs).__module__.startswith("torchcodec."):
             import torch
             import torchcodec
 
