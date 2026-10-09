@@ -135,7 +135,7 @@ class SamHQProcessor(ProcessorMixin):
             if key in output_kwargs["images_kwargs"]:
                 logger.warning_once(
                     f"Passing `{key}` in `images_kwargs` is deprecated "
-                    "and will be removed in a future version. "
+                    "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
 

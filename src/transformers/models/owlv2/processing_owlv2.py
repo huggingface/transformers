@@ -101,7 +101,7 @@ class Owlv2Processor(ProcessorMixin):
         if "query_images" in output_kwargs["images_kwargs"]:
             logger.warning_once(
                 "Passing `query_images` in `images_kwargs` is deprecated "
-                "and will be removed in a future version. "
+                "and will be removed in v5.29.0. "
                 "Pass it directly to the processor instead."
             )
 

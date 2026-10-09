@@ -92,7 +92,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         if "use_image_id" in merged_kwargs["images_kwargs"]:
             logger.warning_once(
                 "Passing `use_image_id` in `images_kwargs` is deprecated "
-                "and will be removed in a future version. "
+                "and will be removed in v5.29.0. "
                 "Pass it directly to the processor instead."
             )
 
@@ -114,7 +114,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 if key in merged_kwargs["text_kwargs"]:
                     logger.warning_once(
                         f"Passing `{key}` in `text_kwargs` is deprecated "
-                        "and will be removed in a future version. "
+                        "and will be removed in v5.29.0. "
                         "Pass it directly to the processor instead."
                     )
             # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility

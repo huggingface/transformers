@@ -113,7 +113,7 @@ class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 for key in prompt_inputs:
                     warning.assert_any_call(
                         f"Passing `{key}` in `images_kwargs` is deprecated "
-                        "and will be removed in a future version. "
+                        "and will be removed in v5.29.0. "
                         "Pass it directly to the processor instead."
                     )
                 for key in ("input_points", "input_labels", "input_boxes"):

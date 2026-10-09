@@ -97,7 +97,7 @@ class UdopProcessor(ProcessorMixin):
             if key in output_kwargs["text_kwargs"]:
                 logger.warning_once(
                     f"Passing `{key}` in `text_kwargs` is deprecated "
-                    "and will be removed in a future version. "
+                    "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
 

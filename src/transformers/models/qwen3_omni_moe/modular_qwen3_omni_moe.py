@@ -2805,7 +2805,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         if "n_window" in kwargs.get("audio_kwargs", {}):
             logger.warning_once(
                 "Passing `n_window` in `audio_kwargs` is deprecated "
-                "and will be removed in a future version. "
+                "and will be removed in v5.29.0. "
                 "Pass it directly to the processor instead."
             )
             # "audio_kwargs" has priority for backwards compatibility
@@ -2820,7 +2820,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
             if key in output_kwargs["videos_kwargs"]:
                 logger.warning_once(
                     f"Passing `{key}` in `videos_kwargs` is deprecated "
-                    "and will be removed in a future version. "
+                    "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
 

@@ -107,7 +107,7 @@ class Emu3Processor(ProcessorMixin):
             if key in output_kwargs[modality]:
                 logger.warning_once(
                     f"Passing `{key}` in `{modality}` is deprecated "
-                    "and will be removed in a future version. "
+                    "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
         # Modality-specific kwargs have priority for backwards compatibility.

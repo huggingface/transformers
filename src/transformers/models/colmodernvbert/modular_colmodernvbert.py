@@ -151,7 +151,7 @@ class ColModernVBertProcessor(Idefics3Processor):
         if "suffix" in output_kwargs["text_kwargs"]:
             logger.warning_once(
                 "Passing `suffix` in `text_kwargs` is deprecated "
-                "and will be removed in a future version. "
+                "and will be removed in v5.29.0. "
                 "Pass it directly to the processor instead."
             )
         # text_kwargs has priority for backwards compatibility
@@ -222,7 +222,7 @@ class ColModernVBertProcessor(Idefics3Processor):
         if "suffix" in output_kwargs["text_kwargs"]:
             logger.warning_once(
                 "Passing `suffix` in `text_kwargs` is deprecated "
-                "and will be removed in a future version. "
+                "and will be removed in v5.29.0. "
                 "Pass it directly to the processor instead."
             )
         # text_kwargs has priority for backwards compatibility
