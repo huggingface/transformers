@@ -1,0 +1,141 @@
+{
+  "metadata": {
+    "project_name": "transformers",
+    "description": "A Python project with Python (pip)",
+    "generated_by": "Braxis",
+    "generated_at": "2026-10-08T23:32:24.634879",
+    "schema_version": "1.0"
+  },
+  "project": {
+    "languages": [
+      "python",
+      "sql"
+    ],
+    "primary_language": "python",
+    "build_system": "Python (pip)",
+    "architecture": "single-package",
+    "is_monorepo": false,
+    "monorepo_type": null,
+    "subsystems": []
+  },
+  "ai_readiness": {
+    "overall_score": 90,
+    "tier": "Agent-Optimized",
+    "dimensions": {
+      "architecture": {
+        "score": 15,
+        "reason": "Code organization and modularity"
+      },
+      "testing": {
+        "score": 15,
+        "reason": "1813 test files found"
+      },
+      "dependencies": {
+        "score": 12,
+        "reason": "Dependency management and version pinning"
+      },
+      "conventions": {
+        "score": 8,
+        "reason": "Consistency in naming and patterns"
+      },
+      "entry_points": {
+        "score": 7,
+        "reason": "1 critical files identified"
+      },
+      "security": {
+        "score": 15,
+        "reason": "Input validation and error handling"
+      },
+      "build": {
+        "score": 10,
+        "reason": "Build system clarity and configuration"
+      },
+      "documentation": {
+        "score": 8,
+        "reason": "README and code documentation"
+      }
+    }
+  },
+  "development": {
+    "setup_command": "pip install -e . && uv sync --all-groups",
+    "test_command": "pytest",
+    "lint_command": "ruff check .",
+    "format_command": "ruff format .",
+    "dev_server_command": null,
+    "prerequisites": {
+      "language_version": "3.9+",
+      "package_manager": "pip or uv",
+      "key_tools": [
+        "pytest",
+        "ruff",
+        "mypy"
+      ]
+    }
+  },
+  "architecture": {
+    "pattern": "single-package project",
+    "main_entry": "server.py",
+    "key_modules": [
+      {
+        "name": "server",
+        "path": "src/transformers/cli/serving/server.py",
+        "purpose": "Source module"
+      }
+    ],
+    "layers": [
+      "CLI interface (if applicable)",
+      "Business logic",
+      "Utilities and helpers"
+    ]
+  },
+  "mcp_servers": [],
+  "core_principles": [
+    "Modularity - Code organized by functionality",
+    "Testability - Comprehensive test coverage",
+    "Clarity - Code easy for AI agents to understand",
+    "Consistency - Uniform patterns throughout"
+  ],
+  "contribution_criteria": {
+    "what_we_want": [
+      "Bug fixes with test coverage",
+      "Code quality improvements",
+      "Test coverage increases",
+      "Documentation improvements",
+      "Performance optimizations"
+    ],
+    "what_we_dont_want": [
+      "New dependencies without justification",
+      "Code that reduces test coverage",
+      "Inconsistent naming or style",
+      "Dead code or commented code"
+    ]
+  },
+  "contribution_boundaries": {
+    "project_scale": "large",
+    "suggestion": "This large project should define clear contribution boundaries. Consider LlamaIndex model: 'no new X' policy."
+  },
+  "commands": {
+    "setup": {
+      "command": "pip install -e . && uv sync --all-groups",
+      "description": "Install dependencies and set up development environment"
+    },
+    "test": {
+      "command": "pytest",
+      "description": "Run all tests"
+    },
+    "lint": {
+      "command": "ruff check .",
+      "description": "Check code style and quality"
+    },
+    "format": {
+      "command": "ruff format .",
+      "description": "Format code to project standards"
+    }
+  },
+  "testing": {
+    "framework": "pytest",
+    "total_tests": 1813,
+    "pass_rate": 100,
+    "run_command": "pytest"
+  }
+}
