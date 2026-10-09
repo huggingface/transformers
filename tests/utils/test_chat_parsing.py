@@ -156,7 +156,7 @@ gemma4_template = {
             "content": "text",
         },
         "tool_calls": {
-            "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
+            "open_pattern": r"<\|tool_call>call:(?P<name>[^{\s<]+)",
             "close": "<tool_call|>",
             "repeats": True,
             "content": "json",
@@ -608,6 +608,17 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                 ],
             },
         )
+
+    def test_gemma4_tool_call_name_with_punctuation(self):
+        for name in ["get-weather", "weather.lookup"]:
+            model_out = f'<|tool_call>call:{name}{{city:<|"|>Paris<|"|>}}<tool_call|>'
+            self.assertEqual(
+                parse_response(model_out, gemma4_template, prefix=""),
+                {
+                    "role": "assistant",
+                    "tool_calls": [{"type": "function", "function": {"name": name, "arguments": {"city": "Paris"}}}],
+                },
+            )
 
     def test_inkling_multi_block_message(self):
         model_out = (
