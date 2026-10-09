@@ -3145,6 +3145,38 @@ class TestAttentionImplementation(unittest.TestCase):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
 
+    @parameterized.expand([(False,), (True,)])
+    def test_force_gqa_in_sdpa_attention_forward_overrides_use_gqa_in_sdpa(self, force_gqa):
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 2
+        query = torch.randn(1, 4, 16, 1, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+
+        with (
+            patch(
+                "transformers.integrations.sdpa_attention.use_gqa_in_sdpa",
+                return_value=False,
+            ) as mock_use_gqa,
+            patch(
+                "torch.nn.functional.scaled_dot_product_attention",
+                wraps=torch.nn.functional.scaled_dot_product_attention,
+            ) as mock_sdpa,
+        ):
+            sdpa_attention_forward(module, query, key, value, attention_mask=None, force_gqa=force_gqa)
+
+        if force_gqa:
+            mock_use_gqa.assert_not_called()
+        else:
+            mock_use_gqa.assert_called_once()
+
+        mock_sdpa.assert_called_once()
+        self.assertEqual(mock_sdpa.call_args.kwargs.get("enable_gqa", False), force_gqa)
+        self.assertEqual(mock_sdpa.call_args.args[1].shape[1], 2 if force_gqa else 4)  # check if key was repeated
+        self.assertEqual(mock_sdpa.call_args.args[2].shape[1], 2 if force_gqa else 4)  # check if value was repeated
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
         # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
