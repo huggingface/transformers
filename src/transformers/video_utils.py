@@ -296,7 +296,12 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
     Returns:
         np.ndarray: np array of frame indices that will be sampled.
     """
+    if total_num_frames < 0:
+        raise ValueError("total_num_frames must be non-negative.")
+
     if num_frames is not None:
+        if num_frames <= 0:
+            raise ValueError("num_frames must be a positive integer.")
         if num_frames > total_num_frames:
             raise ValueError(
                 f"When loading the video with num_frames={num_frames}, the requested number of frames "
