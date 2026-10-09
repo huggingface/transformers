@@ -1531,9 +1531,15 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             encoder_hidden_states = encoder_hidden_states * attention_mask[..., None]
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
-            decoder_input_ids = shift_tokens_right(
-                labels, self.config.decoder.pad_token_id, self.config.decoder.decoder_start_token_id
+            # Released hub checkpoints ship decoder.decoder_start_token_id=None while
+            # generation_config and bos_token_id carry the value (2048). Fall back the
+            # same way prepare_decoder_input_ids_from_labels and the melody model do.
+            decoder_start_token_id = (
+                self.config.decoder.decoder_start_token_id
+                if self.config.decoder.decoder_start_token_id is not None
+                else self.config.decoder.bos_token_id
             )
+            decoder_input_ids = shift_tokens_right(labels, self.config.decoder.pad_token_id, decoder_start_token_id)
 
         elif decoder_input_ids is None and decoder_inputs_embeds is None:
             audio_encoder_outputs = self.audio_encoder(
