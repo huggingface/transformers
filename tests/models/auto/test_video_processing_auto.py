@@ -201,9 +201,12 @@ class AutoVideoProcessorTest(unittest.TestCase):
         try:
             AutoConfig.register("custom", CustomConfig)
             AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor)
+            AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor, True)
             # Trying to register something existing in the Transformers library will raise an error
             with self.assertRaises(ValueError):
                 AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor)
+            with self.assertRaises(ValueError):
+                AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor, False)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
@@ -237,6 +240,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
             do_rescale = False
 
         try:
+            AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor, True)
             AutoVideoProcessor.register(
                 LlavaOnevisionConfig,
                 video_processor_classes={"cv2": Cv2VideoProcessor},
