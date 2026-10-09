@@ -245,6 +245,7 @@ if TYPE_CHECKING:
     from .janus import *
     from .jetmoe import *
     from .jina_embeddings_v3 import *
+    from .k2_horizon import *
     from .kimi_k25 import *
     from .kimi_linear import *
     from .kosmos2 import *
