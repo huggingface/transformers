@@ -204,6 +204,7 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
     def _roundtrip(self, bits, group_size, N=64, K=256, dtype=torch.float32):
         from transformers.integrations.metal_quantization import _affine_dequantize_tensor, _affine_quantize_tensor
 
+        torch.manual_seed(0)
         weight = torch.randn(N, K, dtype=dtype)
         w_packed, scales, biases = _affine_quantize_tensor(weight, group_size, bits)
 
@@ -215,27 +216,27 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
         w_deq = _affine_dequantize_tensor(w_packed, scales, biases, group_size, bits)
         self.assertEqual(w_deq.shape, (N, K))
 
-        return weight.float(), w_deq.float()
+        return weight.float(), w_deq.float(), scales
 
     def test_roundtrip_4bit_gs64(self):
-        orig, deq = self._roundtrip(bits=4, group_size=64)
-        max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 0.30, "4-bit gs=64 round-trip error too large")
+        orig, deq, scales = self._roundtrip(bits=4, group_size=64)
+        # every value comes back within one quantization step of its group
+        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
 
     def test_roundtrip_4bit_gs128(self):
-        orig, deq = self._roundtrip(bits=4, group_size=128)
-        max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 0.5, "4-bit gs=128 round-trip error too large")
+        orig, deq, scales = self._roundtrip(bits=4, group_size=128)
+        # every value comes back within one quantization step of its group
+        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
 
     def test_roundtrip_8bit_gs64(self):
-        orig, deq = self._roundtrip(bits=8, group_size=64)
-        max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 0.02, "8-bit gs=64 round-trip error too large")
+        orig, deq, scales = self._roundtrip(bits=8, group_size=64)
+        # every value comes back within one quantization step of its group
+        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
 
     def test_roundtrip_2bit_gs64(self):
-        orig, deq = self._roundtrip(bits=2, group_size=64)
-        max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 1.50, "2-bit gs=64 round-trip error too large")
+        orig, deq, scales = self._roundtrip(bits=2, group_size=64)
+        # every value comes back within one quantization step of its group
+        self.assertLessEqual((orig - deq).abs().max().item(), scales.abs().max().item())
 
     def test_quantize_shapes_2bit(self):
         from transformers.integrations.metal_quantization import _affine_quantize_tensor

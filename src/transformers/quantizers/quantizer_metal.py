@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+# MLX's attention kernels, adapted to varlen: handles fp16/bf16 natively, with sinks, softcap and sliding windows
+METAL_ATTN = "kernels-community/metal-flash-sdpa"
+
 
 class MetalHfQuantizer(HfQuantizer):
     """
@@ -102,6 +105,30 @@ class MetalHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
         )
+
+    def update_attn_implementation(self, config):
+        """Remember whether an attention was asked for. The default itself is set once the weights are loaded."""
+        self.attn_requested = config._attn_implementation is not None
+        return config
+
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        """ggml's layer kernels, as the GGUF path uses: the quantized matmuls are only part of a decode step,
+        and on MPS the layers around them (gated delta net, norms, router) otherwise run as many small ops.
+        Attention goes to `METAL_ATTN` unless the caller chose one."""
+        if self.quantization_config.dequantize:
+            return model
+        from ..integrations.gguf.kernels import kernelize_ggml_layers
+
+        kernelize_ggml_layers(model)
+        if not getattr(self, "attn_requested", False):
+            try:
+                model.set_attn_implementation(METAL_ATTN)
+            except Exception as error:
+                logger.warning(
+                    f"Could not use the `{METAL_ATTN}` attention kernel ({error}); keeping "
+                    f"`{model.config._attn_implementation}`. Pass `attn_implementation=` to choose one explicitly."
+                )
+        return model
 
     def is_serializable(self):
         return True
