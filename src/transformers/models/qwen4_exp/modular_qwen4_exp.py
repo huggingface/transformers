@@ -660,19 +660,21 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, state_idx=2):
-            previous_context = past_key_values.get_conv_state(self.layer_idx, state_idx=2).clone()
+        cached_ctx = (
+            past_key_values.get_conv_state(self.layer_idx, state_idx=2) if past_key_values is not None else None
+        )
+
+        if cached_ctx is not None:
+            previous_context = cached_ctx.clone()
         else:
             previous_context = input_ids.new_full((input_ids.shape[0], self.context_len), self.eos_token_id)
+
         # Store the current input_ids for the next forward
         if past_key_values is not None:
             input_ids_to_cache = input_ids
             # In the case where `input_ids` would be smaller than `self.context_len`, the `update_conv_state` will pad with zeros, whereas
             # here we want to pad with eos, so we do it explicitly
-            if (
-                not past_key_values.has_previous_state(self.layer_idx, state_idx=2)
-                and input_ids.shape[1] < self.context_len
-            ):
+            if cached_ctx is None and input_ids.shape[1] < self.context_len:
                 input_ids_to_cache = torch.nn.functional.pad(
                     input_ids_to_cache, (self.context_len - input_ids.shape[1], 0), value=self.eos_token_id
                 )

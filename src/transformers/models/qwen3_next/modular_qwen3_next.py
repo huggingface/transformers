@@ -499,7 +499,12 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         # Set up dimensions for reshapes later
         seq_len = hidden_states.shape[1]
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         projected_states_qkvz = self.in_proj_qkvz(hidden_states)
         projected_states_ba = self.in_proj_ba(hidden_states)
@@ -509,8 +514,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         mixed_qkv = torch.cat((query, key, value), dim=-1)
         mixed_qkv = mixed_qkv.transpose(1, 2)
 
-        if use_precomputed_states and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
@@ -558,8 +562,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        recurrent_state = cache_params.get_recurrent_state(self.layer_idx, 0) if use_precomputed_states else None
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
                 key,
