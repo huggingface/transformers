@@ -17,6 +17,7 @@ import json
 import os
 import tempfile
 import unittest
+import warnings
 from unittest.mock import patch
 
 import numpy as np
@@ -26,6 +27,7 @@ from transformers import (
     Apertus1p5Config,
     Apertus1p5ImageProcessor,
     Apertus1p5Processor,
+    AutoProcessor,
     AutoTokenizer,
     WavTokenizerFeatureExtractor,
     is_torch_available,
@@ -305,7 +307,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         torch.manual_seed(0)
         config = self.model_tester.get_config()
         model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
-        factor = model.model.vision_tokenizer.vision_spatial_factor
+        factor = config.vision_config.spatial_scale_factor
         input_ids = torch.tensor([[config.image_token_id, config.text_config.bos_token_id]], device=torch_device)
         image_sizes = torch.tensor([[factor, factor]], device=torch_device)
 
@@ -329,7 +331,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         tokenizer contains global attention, so padded-batch encoding would perturb the codes."""
         config = self.model_tester.get_config()
         model = Apertus1p5Model(config).to(torch_device).eval()
-        factor = model.vision_tokenizer.vision_spatial_factor
+        factor = config.vision_config.spatial_scale_factor
 
         sizes = [(12, 12), (8, 16), (16, 8)]
         pixel_values = torch.zeros(3, 3, 16, 16, device=torch_device)
@@ -466,7 +468,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         # Control discrete codes to make incorrect media ordering observable in the real language model.
         def encode_image(image):
-            factor = model.model.vision_tokenizer.vision_spatial_factor
+            factor = config.vision_config.spatial_scale_factor
             codes = image.new_full(
                 (1, image.shape[-2] // factor, image.shape[-1] // factor), int(image[0, 0, 0, 0]), dtype=torch.long
             )
@@ -757,8 +759,6 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
     def test_text_backbone_loads_from_composite(self):
         """`Apertus1p5TextForCausalLM` loads directly from the joint checkpoint: the config is extracted via
         `base_config_key` and the `model.language_model.*` keys are remapped by the conversion mapping."""
-        import warnings
-
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # the load report lists the composite's tokenizer weights as unexpected
             model, info = Apertus1p5TextForCausalLM.from_pretrained(
@@ -791,10 +791,6 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
 
     def test_multimodal_generate_via_processor(self):
         """The instruct quick-start path: processor-prepared image+audio inputs through `generate`."""
-        import numpy as np
-
-        from transformers import AutoProcessor
-
         processor = AutoProcessor.from_pretrained(self.checkpoint)
         image = np.random.default_rng(0).integers(0, 255, (256, 256, 3), dtype=np.uint8)
         clip = (0.5 * np.sin(2 * np.pi * 440.0 * np.arange(24000) / 24000.0)).astype(np.float32)
