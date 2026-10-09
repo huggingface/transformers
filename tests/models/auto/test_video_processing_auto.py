@@ -198,6 +198,10 @@ class AutoVideoProcessorTest(unittest.TestCase):
         self.assertEqual(reloaded_video_processor.__class__.__name__, "NewVideoProcessor")
 
     def test_new_video_processor_registration(self):
+        """Preserve the legacy third positional `exist_ok` argument after backend registration.
+
+        Regression from https://github.com/huggingface/transformers/pull/48984.
+        """
         try:
             AutoConfig.register("custom", CustomConfig)
             AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor)
