@@ -1765,6 +1765,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         )
 
     def get_per_layer_inputs(self, input_ids: torch.LongTensor) -> torch.Tensor:
+        in_table = torch.logical_and(input_ids >= 0, input_ids < self.config.vocab_size_per_layer_input)
+        input_ids = torch.where(in_table, input_ids, 0)
         return self.embed_tokens_per_layer(input_ids).reshape(
             *input_ids.shape,
             self.config.num_hidden_layers,
@@ -2029,6 +2031,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        per_layer_inputs: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -2036,6 +2039,12 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Attention mask for `input_features` where non-zero values mark valid audio frames.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from
+            `input_ids` via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds`
+            instead of `input_ids`, you should precompute them and forward them along `inputs_embeds`, otherwise the
+            token-identity component of the per-layer embeddings is omitted.
 
         Example:
 
@@ -2067,13 +2076,14 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
+        if input_ids is not None and per_layer_inputs is not None:
+            raise ValueError("You cannot specify per_layer_inputs if input_ids is provided")
+
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # Prepare per-layer inputs from inputs_ids
-            per_layer_inputs_mask = torch.logical_and(input_ids >= 0, input_ids < self.vocab_size_per_layer_input)
-            per_layer_inputs_tokens = torch.where(per_layer_inputs_mask, input_ids, torch.zeros_like(input_ids))
-            per_layer_inputs = self.language_model.get_per_layer_inputs(per_layer_inputs_tokens)
+            per_layer_inputs = self.language_model.get_per_layer_inputs(input_ids)
 
             # Handle vision tokens (>= embed_vision.vocab_offset and < embed_audio.vocab_offset)
             vision_mask = torch.logical_and(
@@ -2094,8 +2104,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             expanded_audio_mask = audio_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_audio_mask, audio_embeds, inputs_embeds)
-        else:
-            per_layer_inputs = None
 
         # Merge text and images
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
@@ -2221,6 +2229,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nCausalLMOutputWithPast:
@@ -2232,6 +2241,12 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in
             `[0, ..., config.text_config.vocab_size]`.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from
+            `input_ids` via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds`
+            instead of `input_ids`, you should precompute them and forward them along `inputs_embeds`, otherwise the
+            token-identity component of the per-layer embeddings is omitted.
 
         Example:
 
@@ -2282,6 +2297,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
+            per_layer_inputs=per_layer_inputs,
             labels=labels,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
