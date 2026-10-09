@@ -35,12 +35,7 @@ logger = logging.get_logger(__name__)
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    """
-    suffix (`str`, *optional*):
-        Suffix appended to queries.
-    """
-
-    suffix: str | None
+    pass
 
 
 IMAGE_TOKEN = "<image>"
@@ -102,9 +97,13 @@ class ColPaliProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        suffix: TextInput | None = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         r"""
+        suffix (`str | list[str] | list[list[str]]`, *optional*):
+            The suffix appended to all input texts.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -129,10 +128,10 @@ class ColPaliProcessor(ProcessorMixin):
                 "Passing `suffix` in `text_kwargs` is deprecated "
                 "and will be removed in v5.29.0. Pass it directly to the processor instead."
             )
+
+        suffix = self.query_augmentation_token * 10 if suffix is None else suffix
         # text_kwargs has priority for backwards compatibility
-        suffix = output_kwargs["text_kwargs"].pop(
-            "suffix", output_kwargs.get("suffix", self.query_augmentation_token * 10)
-        )
+        suffix = output_kwargs["text_kwargs"].pop("suffix", suffix)
 
         if text is not None:
             text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]

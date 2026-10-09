@@ -45,7 +45,7 @@ class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
     bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
         Deprecated, pass directly as `bboxes` to [`Kosmos2Processor.__call__`] instead.
         The bounding bboxes associated to `texts`.
-    num_image_tokens (`int`, *optional* defaults to 64):
+    num_image_tokens (`int`, *optional*):
         Deprecated, use [`Kosmos2ProcessorKwargs.num_image_tokens`] instead.
         The number of (consecutive) places that are used to mark the placeholders to store image information.
         This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
@@ -62,8 +62,9 @@ class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
 
 class Kosmos2TextKwargs(TextKwargs, total=False):
     """
-    add_eos_token (`bool`, defaults to `False`):
-    Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
+    add_eos_token (`bool`, *optional*):
+        Deprecated, use [`Kosmos2ProcessorKwargs.add_eos_token`] instead.
+        Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
     """
 
     add_eos_token: bool
@@ -77,6 +78,8 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
     first_image_token_id (`int`, *optional*):
         The token id that will be used for the first place of the subsequence that is reserved to store image
         information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
+    add_eos_token (`bool`, *optional*, defaults to `False`):
+        Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
     """
 
     text_kwargs: Kosmos2TextKwargs
@@ -84,6 +87,7 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
 
     num_image_tokens: int
     first_image_token_id: int | None
+    add_eos_token: bool
 
 
 @auto_docstring
@@ -93,10 +97,10 @@ class Kosmos2Processor(ProcessorMixin):
     text_kwargs = {
         "add_special_tokens": True,
         "return_token_type_ids": False,
-        "add_eos_token": False,
     }
     num_image_tokens: int = 64
     first_image_token_id: int | None = None
+    add_eos_token: bool = False
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         r"""
@@ -174,6 +178,12 @@ class Kosmos2Processor(ProcessorMixin):
                     "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
+        if "add_eos_token" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `add_eos_token` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. "
+                "Pass it directly to the processor instead."
+            )
 
         # "images_kwargs" has priority for backwards compatibility
         bboxes = output_kwargs["images_kwargs"].pop("bboxes", bboxes)
@@ -181,7 +191,7 @@ class Kosmos2Processor(ProcessorMixin):
         first_image_token_id = output_kwargs["images_kwargs"].pop(
             "first_image_token_id", output_kwargs["first_image_token_id"]
         )
-        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
+        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", output_kwargs["add_eos_token"])
 
         add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
         padding = output_kwargs["text_kwargs"].get("padding", False)
