@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -205,9 +204,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.5.0"):
-            self.skipTest(reason="This test requires torch >= 2.5 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
         )
@@ -280,10 +276,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     def test_export_hybrid_cache(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
-        from transformers.pytorch_utils import is_torch_greater_or_equal
-
-        if not is_torch_greater_or_equal("2.6.0"):
-            self.skipTest(reason="This test requires torch >= 2.6 to run.")
 
         model_id = "google/gemma-2-2b"
         model = AutoModelForCausalLM.from_pretrained(model_id)
