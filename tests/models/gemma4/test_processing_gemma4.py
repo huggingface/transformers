@@ -89,12 +89,14 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @property
     def video_sampling_expectations(self):
+        # Frames of all videos are concatenated along dim 0 instead of stacked on a video axis,
+        # so the sampled frame count is `shape[0]` rather than `shape[1]`.
         return [
-            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
-            {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 2},
-            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
-            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
-            {"expected_dim": 1, "output_length": 2},
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 3},
+            {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 2},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 11},
+            {"expected_dim": 0, "output_length": 2},
         ]
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens

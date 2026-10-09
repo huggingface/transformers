@@ -759,7 +759,12 @@ def enable_tf32(enable: bool) -> None:
 @lru_cache
 @_make_compile_constant
 def is_torch_flex_attn_available() -> bool:
-    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
+    return (
+        is_torch_available()
+        and version.parse(get_torch_version()) >= version.parse("2.5.0")
+        # torch's flex_attention refuses TPU tensors; checks the host accelerator, not the model's device
+        and get_device_type() != "tpu"
+    )
 
 
 @lru_cache
@@ -1180,6 +1185,14 @@ def is_decord_available() -> bool:
 @_make_compile_constant
 def is_torchcodec_available() -> bool:
     return _is_package_available("torchcodec")[0]
+
+
+@lru_cache
+def is_torchcodec_greater_or_equal(library_version: str) -> bool:
+    if not is_torchcodec_available():
+        return False
+    _, torchcodec_version = _is_package_available("torchcodec", return_version=True)
+    return version.parse(torchcodec_version) >= version.parse(library_version)
 
 
 @lru_cache

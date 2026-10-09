@@ -231,6 +231,61 @@ class AutoVideoProcessorTest(unittest.TestCase):
             if CustomConfig in VIDEO_PROCESSOR_MAPPING._extra_content:
                 del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
 
+    def test_video_processor_new_backend_registration(self):
+        class Cv2VideoProcessor(LlavaOnevisionVideoProcessor):
+            foo = True
+            do_rescale = False
+
+        try:
+            AutoVideoProcessor.register(
+                LlavaOnevisionConfig,
+                video_processor_classes={"cv2": Cv2VideoProcessor},
+                exist_ok=True,
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
+                config_tmpfile = Path(tmpdirname) / "config.json"
+                json.dump(
+                    {
+                        "video_processor_type": "LlavaOnevisionVideoProcessor",
+                        "processor_class": "LlavaOnevisionProcessor",
+                    },
+                    open(processor_tmpfile, "w", encoding="utf-8"),
+                )
+                json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w", encoding="utf-8"))
+
+                cv2_processor = AutoVideoProcessor.from_pretrained(tmpdirname, backend="cv2")
+                torch_processor = AutoVideoProcessor.from_pretrained(tmpdirname, backend="torchvision")
+                default_processor = AutoVideoProcessor.from_pretrained(tmpdirname)
+
+                self.assertEqual(cv2_processor.__class__.__name__, "Cv2VideoProcessor")
+                self.assertEqual(cv2_processor.foo, True)
+
+                self.assertEqual(torch_processor.__class__.__name__, "LlavaOnevisionVideoProcessor")
+                self.assertFalse(hasattr(torch_processor, "foo"))
+
+                self.assertEqual(default_processor.__class__.__name__, "LlavaOnevisionVideoProcessor")
+                self.assertFalse(hasattr(default_processor, "foo"))
+
+            # We can save any custom-backend processor and load it back with any backend
+            # As long as we save the `config`, the backend just get chosen at load-time
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                cv2_processor.save_pretrained(tmp_dir)
+                new_video_processor = AutoVideoProcessor.from_pretrained(tmp_dir, backend="torchvision")
+                self.assertEqual(new_video_processor.__class__.__name__, "LlavaOnevisionVideoProcessor")
+                self.assertFalse(hasattr(new_video_processor, "foo"))
+                self.assertFalse(new_video_processor.do_rescale)
+
+                new_video_processor = AutoVideoProcessor.from_pretrained(tmp_dir, backend="cv2")
+                self.assertEqual(new_video_processor.__class__.__name__, "Cv2VideoProcessor")
+                self.assertTrue(hasattr(new_video_processor, "foo"))
+                self.assertFalse(new_video_processor.do_rescale)
+
+        finally:
+            if LlavaOnevisionConfig in VIDEO_PROCESSOR_MAPPING._extra_content:
+                del VIDEO_PROCESSOR_MAPPING._extra_content[LlavaOnevisionConfig]
+
     def test_from_pretrained_dynamic_video_processor_conflict(self):
         class NewVideoProcessor(LlavaOnevisionVideoProcessor):
             is_local = True

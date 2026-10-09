@@ -1319,6 +1319,8 @@
         title: EdgeTAM
       - local: model_doc/edgetam_video
         title: EdgeTamVideo
+      - local: model_doc/embedding_gemma2
+        title: EmbeddingGemma2
       - local: model_doc/emu3
         title: Emu3
       - local: model_doc/ernie4_5_vl_moe
@@ -1473,6 +1475,8 @@
         title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_doclayout_v4
+        title: PP-DocLayoutV4
       - local: model_doc/pp_formulanet
         title: PP-FormulaNet
       - local: model_doc/pp_ocrv5_mobile_det

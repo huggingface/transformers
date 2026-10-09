@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -109,27 +109,15 @@ class Kosmos2_5Config(PreTrainedConfig):
     """
 
     model_type = "kosmos-2.5"
-    sub_configs = {"text_config": Kosmos2_5TextConfig, "vision_config": Kosmos2_5VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Kosmos2_5TextConfig),
+        "vision_config": SubConfigSpec(config_class=Kosmos2_5VisionConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     latent_query_num: int = 2048
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Kosmos2_5TextConfig()
-            logger.info("`text_config` is `None`. initializing the `Kosmos2_5TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Kosmos2_5TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Kosmos2_5VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Kosmos2_5VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Kosmos2_5VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Kosmos2_5Config", "Kosmos2_5TextConfig", "Kosmos2_5VisionConfig"]
