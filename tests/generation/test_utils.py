@@ -3404,6 +3404,45 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(on_cpu.device.type, "cpu")
         self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
 
+    @require_torch_accelerator
+    def test_generate_with_inputs_on_cpu_moves_tensors_in_dict_inputs(self):
+        """
+        Inputs kept on CPU must get the tensors nested in a dict input moved onto the model device too, not only the
+        top-level ones. With a compileable cache, the attention mask is such a dict, keyed by layer type, when the
+        config has `layer_types`.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-Gemma3ForCausalLM").to(
+            torch_device
+        )
+        config = model.config
+        input_ids = torch.randint(1, config.vocab_size, (1, 8))
+        # Left padding: without it, sdpa skips the mask and the dict only holds `None`
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[:, :2] = 0
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "cache_implementation": "static",
+            "max_cache_len": 32,
+            "pad_token_id": 0,
+        }
+
+        model_inputs = model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=StaticCache(config=config, max_cache_len=32),
+            attention_mask=attention_mask,
+        )
+        self.assertIsInstance(model_inputs["attention_mask"], dict)
+        for mask in model_inputs["attention_mask"].values():
+            self.assertEqual(mask.device, model.device)
+
+        on_device = model.generate(
+            input_ids.to(torch_device), attention_mask=attention_mask.to(torch_device), **generation_kwargs
+        )
+        on_cpu = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+        self.assertEqual(on_cpu.device.type, "cpu")
+        self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
+
     def test_generation_config_deprecation(self):
         import logging as pylogging
 

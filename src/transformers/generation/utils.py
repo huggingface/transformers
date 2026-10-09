@@ -37,6 +37,7 @@ from ..cache_utils import (
 )
 from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
+from ..distributed.tensor_parallel import get_kv_heads_per_rank
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
     check_python_requirements,
@@ -772,11 +773,19 @@ class GenerationMixin(ContinuousMixin):
         # the generation loop's growing-tensor bookkeeping stays off-device.
         input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds
         if self.device.type != "meta" and input_tensor is not None and input_tensor.device != self.device:
-            for key, value in model_inputs.items():
-                if isinstance(value, torch.Tensor):
-                    model_inputs[key] = value.to(self.device)
+            model_inputs = self._move_to_device(model_inputs)
 
         return model_inputs
+
+    def _move_to_device(self: "GenerativePreTrainedModel", value):
+        """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto the model device."""
+        if isinstance(value, torch.Tensor):
+            return value.to(self.device)
+        if isinstance(value, dict):
+            return {k: self._move_to_device(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return type(value)(self._move_to_device(v) for v in value)
+        return value
 
     def _prepare_model_inputs(
         self: "GenerativePreTrainedModel",
@@ -2134,12 +2143,10 @@ class GenerationMixin(ContinuousMixin):
         num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
         if tp_size > 1:
-            layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
-            if any(heads % tp_size for heads in layer_heads):
+            num_heads = get_kv_heads_per_rank(self.tp_plan, num_heads, tp_size)
+            if num_heads is None:
                 # The model cannot be evenly sharded by head
                 return None
-            # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
-            num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
         return num_heads, head_dim
 
     def _prepare_static_cache(

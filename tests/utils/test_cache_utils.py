@@ -984,6 +984,17 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         tp_init.assert_called_once()
         self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+
+        # A plan that leaves the key projection unsharded keeps every head on each rank.
+        tp_plan = model._tp_plan
+        for plan in ({}, {"model.layers.*.self_attn.k_proj": "colwise_gather_output"}):
+            model._cache = None
+            model._tp_plan = plan
+            with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+                model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+            tp_init.assert_called_once()
+            self.assertEqual(tp_init.call_args.kwargs["num_heads"], num_kv_heads)
+        model._tp_plan = tp_plan
         model._tp_size = None
 
         # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
