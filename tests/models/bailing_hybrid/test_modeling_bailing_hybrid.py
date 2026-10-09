@@ -93,9 +93,9 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "Ling checkpoint conversion is intentionally two-pass: `.attention.` is first renamed to `.self_attn.`, "
-        "then forget-gate parameters are moved below `.forget_gate.`. The generic reverse-mapping assertion "
-        "cannot represent this ordering; save/load round-trip tests cover the supported behavior."
+        "Ling checkpoint conversion is intentionally two-pass: `.attention.` first becomes `.self_attn.`, then "
+        "forget-gate parameters are nested and q/k/v convolution weights are packed. The generic per-transform "
+        "reverse-mapping assertion cannot represent this ordering; save/load round-trip tests cover it."
     )
     def test_reverse_loading_mapping(self):
         pass

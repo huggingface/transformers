@@ -60,7 +60,7 @@ from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compilin
 from ...utils.output_capturing import OutputRecorder
 
 
-@auto_docstring(checkpoint="inclusionAI/Ling-3.0-flash")
+@auto_docstring(checkpoint="inclusionAI/Ling-3.0-Flash")
 @strict
 class BailingHybridConfig(DeepseekV3Config):
     r"""
@@ -324,14 +324,6 @@ class BailingHybridForgetGate(nn.Module):
         return -decay_rate * F.softplus(gate_input)
 
 
-class BailingHybridShortConvolution(nn.Module):
-    """Checkpoint-compatible depthwise-convolution weights packed only for execution."""
-
-    def __init__(self, hidden_size: int, kernel_size: int):
-        super().__init__()
-        self.weight = nn.Parameter(torch.empty(hidden_size, kernel_size))
-
-
 @use_kernelized_func(
     [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
 )
@@ -350,9 +342,15 @@ class BailingHybridKimiDeltaAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
-        self.q_conv1d = BailingHybridShortConvolution(self.qkv_dim, self.conv_kernel_size)
-        self.k_conv1d = BailingHybridShortConvolution(self.qkv_dim, self.conv_kernel_size)
-        self.v_conv1d = BailingHybridShortConvolution(self.qkv_dim, self.conv_kernel_size)
+        self.conv_dim = 3 * self.qkv_dim
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
+        )
 
         self.forget_gate = BailingHybridForgetGate(config)
         if self.no_kda_lora:
@@ -365,7 +363,7 @@ class BailingHybridKimiDeltaAttention(nn.Module):
         self.o_norm = BailingHybridRMSNormGated(self.head_dim, eps=config.rms_norm_eps)
         self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
 
-    @force_accelerate_hooks(["q_conv1d", "k_conv1d", "v_conv1d"])
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -379,7 +377,6 @@ class BailingHybridKimiDeltaAttention(nn.Module):
         mixed_qkv = torch.cat(
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
-        conv_weight = torch.cat([self.q_conv1d.weight, self.k_conv1d.weight, self.v_conv1d.weight], dim=0)
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
@@ -395,7 +392,8 @@ class BailingHybridKimiDeltaAttention(nn.Module):
             mixed_qkv = conv_update(
                 mixed_qkv,
                 conv_state,
-                weight=conv_weight,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
                 activation=self.activation,
             )
         else:
@@ -410,7 +408,8 @@ class BailingHybridKimiDeltaAttention(nn.Module):
             )
             mixed_qkv = conv_fn(
                 mixed_qkv,
-                weight=conv_weight,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
                 activation=self.activation,
                 **kwargs,
             )[:, :, -seq_len:]
@@ -535,9 +534,7 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.42\..*"]
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
-        "q_conv1d",
-        "k_conv1d",
-        "v_conv1d",
+        "conv1d",
         "dt_bias",
         "A_log",
     ]
@@ -555,8 +552,6 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
             init.uniform_(module.dt_bias, a=math.log(1e-3), b=math.log(1e-1))
             dt = module.dt_bias.exp().clamp_min(1e-4)
             init.copy_(module.dt_bias, dt + torch.log(-torch.expm1(-dt)))
-        elif isinstance(module, BailingHybridShortConvolution):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, BailingHybridExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)

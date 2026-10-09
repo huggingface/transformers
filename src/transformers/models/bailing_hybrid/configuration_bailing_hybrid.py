@@ -26,7 +26,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="inclusionAI/Ling-3.0-flash")
+@auto_docstring(checkpoint="inclusionAI/Ling-3.0-Flash")
 @strict
 class BailingHybridConfig(PreTrainedConfig):
     r"""
