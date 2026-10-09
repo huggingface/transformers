@@ -21,11 +21,14 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...backbone_utils import load_backbone
+from ...image_transforms import center_to_corners_format
 from ...modeling_outputs import ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...vision_utils import box_iou
+from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
 from ..d_fine.modeling_d_fine import (
     DFineAIFILayer,
@@ -49,6 +52,8 @@ from ..d_fine.modeling_d_fine import (
     get_contrastive_denoising_training_group,
     replace_batch_norm,
 )
+from ..d_fine.modular_d_fine import DFineForObjectDetectionCriterion, DFineLoss, _set_aux_loss2
+from ..detr.modular_detr import _set_aux_loss
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 
 
@@ -860,6 +865,121 @@ class Deimv2Model(DFineModel):
         )
 
 
+class Deimv2Loss(DFineLoss):
+    def __init__(self, config):
+        super().__init__(config)
+        self.weight_dict = {
+            "loss_mal": config.weight_loss_mal,
+            "loss_bbox": config.weight_loss_bbox,
+            "loss_giou": config.weight_loss_giou,
+            "loss_fgl": config.weight_loss_fgl,
+            "loss_ddf": config.weight_loss_ddf,
+        }
+        self.losses = ["mal", "boxes", "local"]
+        self.mal_alpha = config.mal_alpha
+        self.use_dense_one_to_one = config.use_dense_one_to_one
+
+    def loss_labels_mal(self, outputs, targets, indices, num_boxes):
+        idx = self._get_source_permutation_idx(indices)
+        source_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([target["boxes"][i] for target, (_, i) in zip(targets, indices)], dim=0)
+        ious, _ = box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
+        ious = torch.diag(ious).detach()
+        source_logits = outputs["logits"]
+        target_classes = torch.full(
+            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
+        )
+        target_classes[idx] = torch.cat([target["class_labels"][i] for target, (_, i) in zip(targets, indices)])
+        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
+        target_score = torch.zeros_like(target_classes, dtype=source_logits.dtype)
+        target_score[idx] = ious.to(target_score.dtype)
+        target_score = target_score.unsqueeze(-1) * target
+        target_score = target_score.pow(self.gamma)
+        pred_score = F.sigmoid(source_logits).detach()
+        alpha = self.mal_alpha if self.mal_alpha is not None else 1
+        weight = alpha * pred_score.pow(self.gamma) * (1 - target) + target
+        loss = F.binary_cross_entropy_with_logits(source_logits, target_score, weight=weight, reduction="none")
+        return {"loss_mal": loss.mean(1).sum() * source_logits.shape[1] / num_boxes}
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "cardinality": self.loss_cardinality,
+            "local": self.loss_local,
+            "boxes": self.loss_boxes,
+            "mal": self.loss_labels_mal,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+
+class Deimv2ForObjectDetectionCriterion(DFineForObjectDetectionCriterion):
+    def __init__(self, config):
+        super().__init__(config)
+        self.loss_module = Deimv2Loss(config)
+
+    def forward(
+        self,
+        logits,
+        labels,
+        pred_boxes,
+        outputs_class=None,
+        outputs_coord=None,
+        enc_topk_logits=None,
+        enc_topk_bboxes=None,
+        denoising_meta_values=None,
+        predicted_corners=None,
+        initial_reference_points=None,
+        **kwargs,
+    ):
+        outputs_loss = {"logits": logits, "pred_boxes": pred_boxes.clamp(min=0, max=1)}
+        auxiliary_outputs = None
+        if self.auxiliary_loss:
+            if denoising_meta_values is not None:
+                dn_out_coord, normal_out_coord = torch.split(
+                    outputs_coord.clamp(min=0, max=1), denoising_meta_values["dn_num_split"], dim=2
+                )
+                dn_out_class, normal_out_class = torch.split(
+                    outputs_class, denoising_meta_values["dn_num_split"], dim=2
+                )
+                _, normal_logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
+                _, normal_pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
+                dn_out_corners, out_corners = torch.split(
+                    predicted_corners, denoising_meta_values["dn_num_split"], dim=2
+                )
+                dn_out_refs, out_refs = torch.split(
+                    initial_reference_points, denoising_meta_values["dn_num_split"], dim=2
+                )
+                outputs_loss.update(logits=normal_logits, pred_boxes=normal_pred_boxes.clamp(min=0, max=1))
+            else:
+                normal_out_coord, normal_out_class = outputs_coord.clamp(min=0, max=1), outputs_class
+                out_corners, out_refs = predicted_corners, initial_reference_points
+            auxiliary_outputs = _set_aux_loss2(
+                normal_out_class[:, :-1].transpose(0, 1),
+                normal_out_coord[:, :-1].transpose(0, 1),
+                out_corners[:, :-1].transpose(0, 1),
+                out_refs[:, :-1].transpose(0, 1),
+                out_corners[:, -1],
+                normal_out_class[:, -1],
+            )
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+            outputs_loss["auxiliary_outputs"].extend(
+                _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
+            )
+            if denoising_meta_values is not None:
+                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss2(
+                    dn_out_class.transpose(0, 1),
+                    dn_out_coord.transpose(0, 1),
+                    dn_out_corners.transpose(0, 1),
+                    dn_out_refs.transpose(0, 1),
+                    dn_out_corners[:, -1],
+                    dn_out_class[:, -1],
+                )
+                outputs_loss["denoising_meta_values"] = denoising_meta_values
+        loss_dict = self.loss_module(outputs_loss, labels)
+        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+
 class Deimv2ForObjectDetection(DFineForObjectDetection):
     _no_split_modules = None  # Restrictions are collected from self.model during post_init.
 
@@ -900,6 +1020,7 @@ class Deimv2ForObjectDetection(DFineForObjectDetection):
 
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
+        self.criterion = Deimv2ForObjectDetectionCriterion(config)
         self.post_init()
 
     def forward(**super_kwargs):
@@ -952,4 +1073,6 @@ __all__ = [
     "Deimv2Model",
     "Deimv2PreTrainedModel",
     "Deimv2ForObjectDetection",
+    "Deimv2ForObjectDetectionCriterion",
+    "Deimv2Loss",
 ]
