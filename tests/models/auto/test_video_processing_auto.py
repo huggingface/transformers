@@ -224,12 +224,19 @@ class AutoVideoProcessorTest(unittest.TestCase):
         self.assertEqual(reloaded_video_processor.__class__.__name__, "NewVideoProcessor")
 
     def test_new_video_processor_registration(self):
+        """Preserve the legacy third positional `exist_ok` argument after backend registration.
+
+        Regression from https://github.com/huggingface/transformers/pull/48984.
+        """
         try:
             AutoConfig.register("custom", CustomConfig)
             AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor)
+            AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor, True)
             # Trying to register something existing in the Transformers library will raise an error
             with self.assertRaises(ValueError):
                 AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor)
+            with self.assertRaises(ValueError):
+                AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor, False)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
@@ -263,6 +270,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
             do_rescale = False
 
         try:
+            AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor, True)
             AutoVideoProcessor.register(
                 LlavaOnevisionConfig,
                 video_processor_classes={"cv2": Cv2VideoProcessor},

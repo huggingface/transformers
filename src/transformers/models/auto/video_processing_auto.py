@@ -465,7 +465,7 @@ class AutoVideoProcessor:
     def register(
         config_class,
         video_processor_class: type | None = None,
-        video_processor_classes: dict[str, type] | None = None,
+        video_processor_classes: dict[str, type] | bool | None = None,
         exist_ok: bool = False,
     ):
         """
@@ -476,12 +476,18 @@ class AutoVideoProcessor:
                 The configuration corresponding to the model to register.
             video_processor_class ([`BaseVideoProcessor`]):
                 The video processor to register.
-            video_processor_classes (`dict[str, type]`, *optional*):
+            video_processor_classes (`dict[str, type]` or `bool`, *optional*):
                 Dictionary mapping backend names to video processor classes. Allows registering custom backends.
                 Example: `{"pil": MyPilVideoProcessor, "torchvision": MyTorchvisionVideoProcessor, "custom": MyCustomVideoProcessor}`
+                A boolean third positional argument is interpreted as the legacy `exist_ok` argument.
             exist_ok (`bool`, *optional*, defaults to `False`):
                 If `True`, allow overwriting existing registrations.
         """
+        # The legacy third positional argument was exist_ok.
+        if isinstance(video_processor_classes, bool):
+            exist_ok = video_processor_classes
+            video_processor_classes = None
+
         if video_processor_classes is None:
             # Legacy registering would pass a single torch-based class
             video_processor_classes = {"torchvision": video_processor_class}
