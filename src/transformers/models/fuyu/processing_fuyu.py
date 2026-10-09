@@ -54,12 +54,7 @@ BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 
 
 class FuyuProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-        },
-    }
+    pass
 
 
 # Simplified assuming self.crop_top = self.padding_top = 0
@@ -254,7 +249,6 @@ class FuyuProcessor(ProcessorMixin):
         requires_backends(self, ["torch"])
 
         merged_kwargs = self._merge_kwargs(
-            FuyuProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -283,9 +277,20 @@ class FuyuProcessor(ProcessorMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+                if key in merged_kwargs["text_kwargs"]:
+                    logger.warning_once(
+                        f"Passing `{key}` in `text_kwargs` is deprecated "
+                        "and will be removed in v5.29.0. "
+                        "Pass it directly to the processor instead."
+                    )
+            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
+            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             # if there is an image associated with text, process location tags

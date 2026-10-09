@@ -31,10 +31,7 @@ from ...utils import auto_docstring
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {"sampling_rate": 16000},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 # The model was trained with these Chinese names in the transcription instruction ("语音转写成<NAME>：").
@@ -61,6 +58,11 @@ def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]
 @auto_docstring
 class FunAsrNanoProcessor(ProcessorMixin):
     valid_processor_kwargs = FunAsrNanoProcessorKwargs
+
+    text_kwargs = {"return_tensors": "pt"}
+    audio_kwargs = {
+        "sampling_rate": 16000,
+    }
 
     def __init__(
         self,

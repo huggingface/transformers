@@ -1240,9 +1240,7 @@ class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
 
 
 class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):
-    _defaults = {
-        "videos_kwargs": {"do_resize": False, "return_metadata": True},
-    }
+    pass
 
 
 class MiniMaxM3VLProcessor(Qwen2VLProcessor):
@@ -1255,6 +1253,12 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     """
 
     valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
+
+    videos_kwargs = {
+        "do_resize": False,
+        "return_metadata": True,
+    }
+    return_mm_token_type_ids = AttributeError()
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["

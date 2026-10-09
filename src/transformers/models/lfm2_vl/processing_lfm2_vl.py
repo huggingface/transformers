@@ -41,22 +41,19 @@ class Lfm2VlTextKwargs(TextKwargs, total=False):
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Lfm2VlTextKwargs
-    _defaults = {
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-        "text_kwargs": {
-            "use_image_special_tokens": True,
-            "add_special_tokens": False,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-    }
 
 
 @auto_docstring
 class Lfm2VlProcessor(ProcessorMixin):
     valid_processor_kwargs = Lfm2VlProcessorKwargs
+
+    text_kwargs = {
+        "use_image_special_tokens": True,
+        "add_special_tokens": False,
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
 
     def __init__(
         self,
@@ -87,7 +84,6 @@ class Lfm2VlProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
@@ -104,9 +100,20 @@ class Lfm2VlProcessor(ProcessorMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+                if key in merged_kwargs["text_kwargs"]:
+                    logger.warning_once(
+                        f"Passing `{key}` in `text_kwargs` is deprecated "
+                        "and will be removed in v5.29.0. "
+                        "Pass it directly to the processor instead."
+                    )
+            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
+            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             text, text_replacement_offsets = self.get_text_with_replacements(text, images_replacements)

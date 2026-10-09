@@ -24,20 +24,16 @@ from ...utils import auto_docstring
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "audio_kwargs": {
-            "return_attention_mask": True,
-            "padding": "max_length",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Qwen2AudioProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen2AudioProcessorKwargs
+
+    audio_kwargs = {
+        "return_attention_mask": True,
+    }
 
     def __init__(
         self,

@@ -56,22 +56,29 @@ class ColModernVBertConfig(ColQwen2Config):
 
 
 class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
+    suffix: str | None = None
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         image_processor,
@@ -114,7 +121,7 @@ class ColModernVBertProcessor(Idefics3Processor):
         """
         Prepare for the model one or several image(s). Handles input validation, RGB conversion,
         and prepends the `visual_prompt_prefix` to each image. Optionally computes labels from
-        `token_type_ids` when a `suffix` is provided in `text_kwargs`.
+        `token_type_ids` when a `suffix` is provided.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -137,12 +144,17 @@ class ColModernVBertProcessor(Idefics3Processor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", output_kwargs["suffix"])
 
         return_token_type_ids = suffix is not None
 
@@ -202,12 +214,17 @@ class ColModernVBertProcessor(Idefics3Processor):
               `None`).
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", output_kwargs["suffix"])
 
         if isinstance(text, str):
             text = [text]

@@ -25,23 +25,22 @@ from ...video_utils import VideoInput
 
 
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class InternVLProcessor(ProcessorMixin):
     valid_processor_kwargs = InternVLProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -94,7 +93,6 @@ class InternVLProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            InternVLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -171,8 +169,7 @@ class InternVLProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = InternVLProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)

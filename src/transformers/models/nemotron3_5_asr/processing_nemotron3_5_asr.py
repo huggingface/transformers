@@ -36,20 +36,7 @@ logger = logging.get_logger(__name__)
 
 
 class Nemotron3_5AsrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-            "subsampling_factor": 8,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 # Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
@@ -185,6 +172,22 @@ DEFAULT_PROMPT_DICTIONARY = {
 @requires(backends=("torch",))
 @auto_docstring
 class Nemotron3_5AsrProcessor(ProcessorMixin):
+    valid_processor_kwargs = Nemotron3_5AsrProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": "longest",
+        "return_attention_mask": True,
+        "subsampling_factor": 8,
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         feature_extractor,
@@ -273,7 +276,6 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            Nemotron3_5AsrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -337,7 +339,6 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             timestamps = durations.cumsum(dim=-1) - durations
 
             output_kwargs = self._merge_kwargs(
-                Nemotron3_5AsrProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
@@ -402,9 +403,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
 
     @property
     def _subsampling_factor(self) -> int:
-        output_kwargs = self._merge_kwargs(
-            Nemotron3_5AsrProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs)
         return output_kwargs["audio_kwargs"]["subsampling_factor"]
 
     @property

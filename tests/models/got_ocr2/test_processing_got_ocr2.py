@@ -94,7 +94,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_subprocessor_defaults_1_images(self):
-        # overriden - pop certina keys from `merged_kwargs` which are used only by processor
         parameterized_config = MODALITY_TEST_SPECS["images"]
         subprocessor = self.get_component(parameterized_config["component_key"])
 
@@ -115,8 +114,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **kwargs,
         )
         kwargs = merged_kwargs["images_kwargs"]
-        kwargs.pop("num_image_tokens")
-        kwargs.pop("multi_page")
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:
@@ -128,3 +125,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in input_subproc:
             if input_processor and key in processor.model_input_names:
                 torch.testing.assert_close(input_subproc[key], input_processor[key])
+
+    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass

@@ -28,23 +28,19 @@ from ...utils import auto_docstring
 
 
 class QianfanOCRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class QianfanOCRProcessor(ProcessorMixin):
     valid_processor_kwargs = QianfanOCRProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
 
     def __init__(
         self,
@@ -132,8 +128,7 @@ class QianfanOCRProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = QianfanOCRProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)

@@ -28,20 +28,19 @@ logger = logging.get_logger(__name__)
 
 
 class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-            "min_patches": 2,
-            "max_patches": 6,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class DeepseekOcr2Processor(ProcessorMixin):
+    valid_processor_kwargs = DeepseekOcr2ProcessorKwargs
+
+    images_kwargs = {
+        "crop_to_patches": True,
+        "min_patches": 2,
+        "max_patches": 6,
+    }
+
     def __init__(
         self,
         image_processor=None,
@@ -123,7 +122,6 @@ class DeepseekOcr2Processor(ProcessorMixin):
             raise ValueError("`text` is required for `DeepseekOcr2Processor`. Example: `'<image>\\nFree OCR.'`")
 
         output_kwargs = self._merge_kwargs(
-            DeepseekOcr2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

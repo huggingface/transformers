@@ -91,24 +91,19 @@ def get_image_prompt_string(
 
 
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-        "videos_kwargs": {
-            "return_metadata": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class SmolVLMProcessor(ProcessorMixin):
     valid_processor_kwargs = SmolVLMProcessorKwargs
+
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
+    videos_kwargs = {
+        "return_metadata": True,
+    }
 
     def __init__(
         self,

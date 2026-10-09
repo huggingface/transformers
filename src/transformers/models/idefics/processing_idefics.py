@@ -53,14 +53,6 @@ class IdeficsTextKwargs(TextKwargs, total=False):
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: IdeficsTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": "longest",
-            "add_eos_token": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
 
 
 # copied from m4.training.packing
@@ -145,6 +137,15 @@ def is_url(string):
 @auto_docstring
 class IdeficsProcessor(ProcessorMixin):
     valid_processor_kwargs = IdeficsProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": False,
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         r"""
@@ -280,7 +281,6 @@ class IdeficsProcessor(ProcessorMixin):
                 prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
-            IdeficsProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

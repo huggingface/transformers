@@ -24,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available
+from ...utils import auto_docstring, is_torch_available, logging
 
 
 if is_torch_available():
@@ -32,24 +32,32 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
+logger = logging.get_logger(__name__)
+
+
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 @auto_docstring
 class ColQwen2Processor(ProcessorMixin):
     valid_processor_kwargs = ColQwen2ProcessorKwargs
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+
+    suffix: str | None = None
 
     def __init__(
         self,
@@ -97,11 +105,16 @@ class ColQwen2Processor(ProcessorMixin):
             raise ValueError("Only one of text or images can be processed at a time")
 
         output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", output_kwargs["suffix"])
         output_kwargs["text_kwargs"]["return_token_type_ids"] = suffix is not None
 
         if text is not None:
@@ -163,8 +176,7 @@ class ColQwen2Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = ColQwen2ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [

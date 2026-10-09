@@ -35,22 +35,16 @@ logger = logging.get_logger(__name__)
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "is_split_into_words": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Idefics3Processor(ProcessorMixin):
     valid_processor_kwargs = Idefics3ProcessorKwargs
+
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
 
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str | None = None, **kwargs
@@ -106,14 +100,27 @@ class Idefics3Processor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            Idefics3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+
+        for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+            if key in output_kwargs["text_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+        # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop(
+            "return_text_replacement_offsets", output_kwargs["return_text_replacement_offsets"]
+        )
+        # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop(
+            "return_mm_token_type_ids", output_kwargs["return_mm_token_type_ids"]
+        )
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         image_inputs = text_inputs = {}
@@ -278,8 +285,7 @@ class Idefics3Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Idefics3ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)

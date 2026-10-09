@@ -25,24 +25,26 @@ logger = logging.get_logger(__name__)
 
 
 class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-            "subsampling_factor": 8,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
+    valid_processor_kwargs = ParakeetProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "return_attention_mask": True,
+        "subsampling_factor": 8,
+        "return_tensors": "pt",
+    }
+
     def __init__(self, feature_extractor, tokenizer, blank_token="<blank>", decoder_type=None):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
@@ -88,7 +90,6 @@ class ParakeetProcessor(ProcessorMixin):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            ParakeetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -143,7 +144,6 @@ class ParakeetProcessor(ProcessorMixin):
             timestamps = durations.cumsum(dim=-1) - durations
 
             output_kwargs = self._merge_kwargs(
-                ParakeetProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (

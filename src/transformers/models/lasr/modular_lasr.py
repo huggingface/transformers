@@ -149,24 +149,25 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
 
 
 class LasrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class LasrProcessor(ProcessorMixin):
     valid_processor_kwargs = LasrProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": "longest",
+        "return_attention_mask": True,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -187,7 +188,6 @@ class LasrProcessor(ProcessorMixin):
             issued and the default sampling rate will be assumed.
         """
         output_kwargs = self._merge_kwargs(
-            LasrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -34,19 +34,21 @@ logger = logging.get_logger(__name__)
 
 
 class PI0ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 48,
-            "padding_side": "right",
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
+    valid_processor_kwargs = PI0ProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "max_length": 48,
+        "padding_side": "right",
+        "return_tensors": "pt",
+    }
+
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
@@ -111,9 +113,7 @@ class PI0Processor(ProcessorMixin):
             - **state** -- Robot state compatible with model if `state` is not None
             - **actions** -- Label-actions compatible with training if `actions` is not None
         """
-        output_kwargs = self._merge_kwargs(
-            PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
         if text is None:
             logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")

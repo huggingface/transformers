@@ -22,7 +22,10 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 BboxInput = (
@@ -36,14 +39,18 @@ BboxInput = (
 NestedList = list[tuple | None | list[tuple | None | list[tuple | None | list[tuple | None]]]]
 
 
+# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
     """
     bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
+        Deprecated, pass directly as `bboxes` to [`Kosmos2Processor.__call__`] instead.
         The bounding bboxes associated to `texts`.
     num_image_tokens (`int`, *optional* defaults to 64):
+        Deprecated, use [`Kosmos2ProcessorKwargs.num_image_tokens`] instead.
         The number of (consecutive) places that are used to mark the placeholders to store image information.
         This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
     first_image_token_id (`int`, *optional*):
+        Deprecated, use [`Kosmos2ProcessorKwargs.first_image_token_id`] instead.
         The token id that will be used for the first place of the subsequence that is reserved to store image
         information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
     """
@@ -63,29 +70,33 @@ class Kosmos2TextKwargs(TextKwargs, total=False):
 
 
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    num_image_tokens (`int`, *optional*, defaults to 64):
+        The number of (consecutive) places that are used to mark the placeholders to store image information.
+        This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
+    first_image_token_id (`int`, *optional*):
+        The token id that will be used for the first place of the subsequence that is reserved to store image
+        information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
+    """
+
     text_kwargs: Kosmos2TextKwargs
     images_kwargs: Kosmos2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "verbose": True,
-            "add_eos_token": False,
-        },
-        "images_kwargs": {
-            "num_image_tokens": 64,
-        },
-    }
+
+    num_image_tokens: int
+    first_image_token_id: int | None
 
 
 @auto_docstring
 class Kosmos2Processor(ProcessorMixin):
     valid_processor_kwargs = Kosmos2ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "return_token_type_ids": False,
+        "add_eos_token": False,
+    }
+    num_image_tokens: int = 64
+    first_image_token_id: int | None = None
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         r"""
@@ -141,24 +152,39 @@ class Kosmos2Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] = None,
+        bboxes: NestedList | None = None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
+            The bounding bboxes associated to `texts`.
+        """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
         output_kwargs = self._merge_kwargs(
-            Kosmos2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
-        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
-        first_image_token_id = output_kwargs["images_kwargs"].pop("first_image_token_id", None)
+        for key in ("bboxes", "num_image_tokens", "first_image_token_id"):
+            if key in output_kwargs["images_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `images_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+
+        # "images_kwargs" has priority for backwards compatibility
+        bboxes = output_kwargs["images_kwargs"].pop("bboxes", bboxes)
+        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", output_kwargs["num_image_tokens"])
+        first_image_token_id = output_kwargs["images_kwargs"].pop(
+            "first_image_token_id", output_kwargs["first_image_token_id"]
+        )
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
 
         add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
-        padding = output_kwargs["text_kwargs"]["padding"]
+        padding = output_kwargs["text_kwargs"].get("padding", False)
         return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
 
         encoding = BatchFeature()

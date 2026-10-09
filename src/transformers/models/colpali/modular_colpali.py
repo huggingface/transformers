@@ -30,22 +30,25 @@ logger = logging.get_logger(__name__)
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 class ColPaliProcessor(PaliGemmaProcessor):
     valid_processor_kwargs = ColPaliProcessorKwargs
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -86,11 +89,18 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
         kwargs["return_token_type_ids"] = True
         output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", self.query_augmentation_token * 10)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop(
+            "suffix", output_kwargs.get("suffix", self.query_augmentation_token * 10)
+        )
 
         if text is not None:
             text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]

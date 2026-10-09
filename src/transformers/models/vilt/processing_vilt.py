@@ -20,18 +20,7 @@ from ...utils import auto_docstring
 
 
 class ViltProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
+    pass
 
 
 @auto_docstring

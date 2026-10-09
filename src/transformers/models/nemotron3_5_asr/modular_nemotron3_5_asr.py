@@ -269,7 +269,6 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            Nemotron3_5AsrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

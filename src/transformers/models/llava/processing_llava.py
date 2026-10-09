@@ -28,9 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 class LlavaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False, "return_text_replacement_offsets": False},
-    }
+    pass
 
 
 @auto_docstring
@@ -90,8 +88,7 @@ class LlavaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LlavaProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             crop_size = images_kwargs.get("crop_size", None) or self.image_processor.crop_size
             resized_height, resized_width = crop_size["height"], crop_size["width"]
 

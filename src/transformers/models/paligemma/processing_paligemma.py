@@ -48,20 +48,15 @@ class PaliGemmaTextKwargs(TextKwargs):
 
 class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: PaliGemmaTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-        },
-    }
 
 
 @auto_docstring
 class PaliGemmaProcessor(ProcessorMixin):
     valid_processor_kwargs = PaliGemmaProcessorKwargs
+
+    images_kwargs = {
+        "data_format": "channels_first",
+    }
 
     def __init__(
         self,
@@ -118,7 +113,6 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         kwargs["return_token_type_ids"] = True
         kwargs = self._merge_kwargs(
-            PaliGemmaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

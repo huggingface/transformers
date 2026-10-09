@@ -28,16 +28,21 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
     from .modeling_owlvit import OwlViTImageGuidedObjectDetectionOutput, OwlViTObjectDetectionOutput
 
 
+# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
 class OwlViTImagesKwargs(ImagesKwargs, total=False):
     """
     query_images (`ImageInput`, *optional*):
+        Deprecated, pass directly as `query_images` to [`OwlViTProcessor.__call__`] instead.
         Query images to use for image-guided object detection. When provided, these images serve as visual queries
         to find similar objects in the main `images`. The query images override any text prompts, and the model
         performs image-to-image matching instead of text-to-image matching.
@@ -48,18 +53,20 @@ class OwlViTImagesKwargs(ImagesKwargs, total=False):
 
 class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: OwlViTImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
 
 
 @auto_docstring
 class OwlViTProcessor(ProcessorMixin):
+    valid_processor_kwargs = OwlViTProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
@@ -68,9 +75,15 @@ class OwlViTProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        query_images: ImageInput | None = None,
         **kwargs: Unpack[OwlViTProcessorKwargs],
     ) -> BatchFeature:
         r"""
+        query_images (`ImageInput`, *optional*):
+            Query images to use for image-guided object detection. When provided, these images serve as visual queries
+            to find similar objects in the main `images`. The query images override any text prompts, and the model
+            performs image-to-image matching instead of text-to-image matching.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
@@ -81,11 +94,17 @@ class OwlViTProcessor(ProcessorMixin):
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            OwlViTProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        query_images = output_kwargs["images_kwargs"].pop("query_images", None)
+        if "query_images" in output_kwargs["images_kwargs"]:
+            logger.warning_once(
+                "Passing `query_images` in `images_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+
+        # "images_kwargs" has priority for backwards compatibility
+        query_images = output_kwargs["images_kwargs"].pop("query_images", query_images)
         return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:

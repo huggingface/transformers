@@ -196,3 +196,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             EXPECTED_FP_200,
             atol=1e-4,
         )
+
+    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass

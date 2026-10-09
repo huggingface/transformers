@@ -30,15 +30,13 @@ logger = logging.get_logger(__name__)
 
 
 class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "device": "cpu",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Phi4MultimodalProcessor(ProcessorMixin):
+    valid_processor_kwargs = Phi4MultimodalProcessorKwargs
+
     def __init__(
         self,
         image_processor,
@@ -73,7 +71,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             - **audio_embed_sizes** -- List of integers specifying the size of each audio in `input_audio_embeds`.
         """
 
-        output_kwargs = self._merge_kwargs(Phi4MultimodalProcessorKwargs, self.tokenizer.init_kwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
         image_kwargs = output_kwargs["images_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
 
