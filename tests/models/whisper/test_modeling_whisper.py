@@ -863,6 +863,19 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
             self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
+    def test_generate_with_suppress_tokens_in_model_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.suppress_tokens = [1, 2]
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+
+        with torch.no_grad():
+            output_ids = model.generate(input_dict["input_features"], max_new_tokens=4)
+
+        self.assertEqual(model.generation_config.suppress_tokens, config.suppress_tokens)
+        self.assertFalse(
+            torch.isin(output_ids[:, 1:], torch.tensor(config.suppress_tokens, device=torch_device)).any()
+        )
+
     def test_generate_with_prompt_ids_max_length(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.max_target_positions = 7
