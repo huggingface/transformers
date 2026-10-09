@@ -1,0 +1,537 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import copy
+import json
+import random
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from transformers import (
+    AutoProcessor,
+    VibeVoiceConfig,
+    VibeVoiceForConditionalGeneration,
+    is_torch_available,
+)
+from transformers.testing_utils import cleanup, is_diffusers_available, require_diffusers, slow, torch_device
+from transformers.trainer_utils import set_seed
+
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    ids_tensor,
+)
+from ...test_processing_common import url_to_local_path
+
+
+if is_torch_available():
+    import torch
+
+
+if is_diffusers_available():
+    import diffusers
+
+
+class DummyNoiseScheduler:
+    """A simple dummy noise scheduler for testing purposes."""
+
+    def __init__(self):
+        self.num_inference_steps = None
+        self.timesteps = None
+
+    def step(self, eps, timestep, sample):
+        # Return an object with prev_sample attribute like real schedulers
+        class StepOutput:
+            def __init__(self, prev_sample):
+                self.prev_sample = prev_sample
+
+        # Simple update
+        return StepOutput(sample - 0.1 * eps)
+
+    def set_timesteps(self, num_inference_steps):
+        self.num_inference_steps = num_inference_steps
+        # Create timesteps as torch tensors going from high to low (typical for diffusion)
+        self.timesteps = torch.linspace(1000, 1, num_inference_steps).long()
+
+
+class VibeVoiceModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=3,
+        is_training=True,
+        use_cache=True,
+        text_config={
+            "model_type": "qwen2",
+            "intermediate_size": 36,
+            "initializer_range": 0.02,
+            "hidden_size": 32,
+            "max_position_embeddings": 52,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 4,
+            "use_labels": True,
+            "use_mrope": False,
+            "vocab_size": 10,
+            "pad_token_id": 0,
+            "eos_token_id": 0,  # same as pad_token for Vibevoice
+            "bos_token_id": None,
+        },
+        audio_config={
+            "model_type": "vibevoice_acoustic_tokenizer",
+            "hidden_size": 16,
+            "kernel_size": 3,
+            "num_filters": 4,
+            "downsampling_ratios": [2],
+            "depths": [1, 1],
+        },
+        semantic_model_config={
+            "model_type": "vibevoice_acoustic_tokenizer_encoder",
+            "channels": 1,
+            "hidden_size": 32,
+            "kernel_size": 3,
+            "num_filters": 4,
+            "downsampling_ratios": [2],
+            "depths": [1, 1],
+        },
+        diffusion_head_config={
+            "num_hidden_layers": 2,
+            "frequency_embedding_size": 8,
+            "intermediate_size": 16,
+            "hidden_size": 32,  # Should match text_config hidden_size
+            "latent_size": 16,  # Should match audio_config hidden_size
+        },
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_cache = use_cache
+        self.text_config = text_config
+        self.audio_config = audio_config
+        self.semantic_model_config = semantic_model_config
+        self.diffusion_head_config = diffusion_head_config
+
+        # Extract common attributes for testing
+        self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.pad_token_id = text_config["pad_token_id"]
+
+    def get_config(self, audio_config=None):
+        return VibeVoiceConfig(
+            text_config=self.text_config,
+            audio_config=audio_config if audio_config is not None else self.audio_config,
+            semantic_model_config=self.semantic_model_config,
+            diffusion_head_config=self.diffusion_head_config,
+            use_cache=self.use_cache,
+            pad_token_id=self.text_config["pad_token_id"],
+            eos_token_id=self.text_config["eos_token_id"],
+            audio_bos_token_id=3,  # Instead of default 151652
+            audio_eos_token_id=4,  # Instead of default 151653
+            audio_token_id=5,  # Instead of default 151654
+        )
+
+    def prepare_config_and_inputs(self, batch_size=None, seq_length=None, rng=None, audio_config=None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        seq_length = seq_length if seq_length is not None else self.seq_length
+        config = self.get_config(audio_config=audio_config)
+        input_ids = ids_tensor([batch_size, seq_length], self.vocab_size, rng=rng)
+        attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=torch_device)
+        return config, input_ids, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
+        return config, inputs_dict
+
+    def create_and_check_model(self, config, input_ids, attention_mask):
+        model = VibeVoiceForConditionalGeneration(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            result = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        # Check that the model returns expected outputs
+        self.parent.assertIsNotNone(result.logits)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_batched_matches_single(self, config, input_ids, attention_mask, use_cache=True):
+        # Fixed weights, so that the decoded audio is reproducible across runs.
+        set_seed(7)
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device)
+
+        # No `min_new_tokens`: the rows have to be free to stop at different steps.
+        generate_kwargs = {
+            "noise_scheduler": DummyNoiseScheduler(),
+            "max_new_tokens": 20,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "guidance_scale": 1.3,
+            "num_diffusion_steps": 10,
+            "use_cache": use_cache,
+        }
+
+        # Initialize diffusion with same input for comparable outputs
+        def zeros_instead_of_randn(*args, **kwargs):
+            return torch.zeros(*args, **kwargs)
+
+        with patch("torch.randn", zeros_instead_of_randn):
+            batched = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+            per_sample = [
+                model.generate(
+                    input_ids=input_ids[i : i + 1],
+                    attention_mask=attention_mask[i : i + 1],
+                    **generate_kwargs,
+                )
+                for i in range(input_ids.shape[0])
+            ]
+
+        for i, single in enumerate(per_sample):
+            self.parent.assertEqual(
+                batched.audio[i] is None,
+                single.audio[0] is None,
+                msg=f"Sequence {i}: batched and single-sample generation disagree on whether audio was produced",
+            )
+            if batched.audio[i] is not None:
+                torch.testing.assert_close(
+                    batched.audio[i],
+                    single.audio[0],
+                    msg=lambda m, i=i: f"Sequence {i} differs between batched and single-sample generation:\n{m}",
+                )
+
+
+class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (VibeVoiceForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "text-to-audio": VibeVoiceForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
+    _is_composite = True
+    test_resize_embeddings = False
+
+    def setUp(self):
+        self.model_tester = VibeVoiceModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=VibeVoiceConfig, has_text_modality=True)
+        self.skip_unsupported_generate()
+
+    def skip_unsupported_generate(self):
+        # VibeVoice replaces the standard text-token decoding loop with a diffusion-based loop with positive and
+        # negative forward passes (for classifier-free guidance), and does not emit standard text tokens.
+        # As a result, the common generation strategies (beam search, sampling, assisted/contrastive decoding, ...)
+        # and the tests that assume standard token outputs / cache handling do not apply.
+        skippable_tests = [
+            "test_assisted",
+            "test_beam",
+            "test_sample_generate",
+            "test_greedy_generate",
+            "test_generate_continue_from_past_key_values",
+            "test_generate_from_random_inputs_embeds",
+            "test_generate_from_inputs_embeds",
+            "test_generate_methods_with_logits_to_keep",
+            "test_model_parallel_beam_search",
+            "test_generate_compile_model_forward_fullgraph",
+            # VibeVoice uses two forward calls with different input shapes (positive + negative guidance
+            # pass), which causes flaky CUDAGraphs tensor overwrites and inductor dtype errors under
+            # static-cache compilation. TODO: fix in a follow-up PR.
+            "test_generate_with_static_cache",
+            "test_static_cache_no_recompile_with_smaller_length",
+        ]
+        for test in skippable_tests:
+            if self._testMethodName.startswith(test):
+                self.skipTest(
+                    reason="VibeVoice uses a diffusion-based generation loop with positive and negative forward "
+                    "passes, and standard token-based generation strategies are not supported."
+                )
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # Pass a dummy noise scheduler to `generate` so that common generation tests don't require `diffusers`
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        inputs_dict["noise_scheduler"] = DummyNoiseScheduler()
+        return config, inputs_dict
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        """
+        VibeVoice uses standard input format.
+        """
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        if return_labels:
+            inputs_dict["labels"] = torch.zeros(
+                (
+                    self.model_tester.batch_size,
+                    self.model_tester.seq_length,
+                ),
+                dtype=torch.long,
+                device=torch_device,
+            )
+
+        return inputs_dict
+
+    @unittest.skip(reason="VibeVoice has nested PreTrainedModels (audio_tower contains encoder/decoder).")
+    def test_internal_model_config_and_subconfig_are_same(self):
+        pass
+
+    @unittest.skip("Submodel (VibeVoiceAcousticTokenizerEncoderModel) does not have attention")
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
+    @pytest.mark.generate
+    def test_vibevoice_generate_max_new_tokens(self):
+        """
+        Verifies that the returned sequences include the original input_ids plus the newly generated tokens as
+        specified by max_new_tokens.
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, input_ids, attention_mask = config_and_inputs
+
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device)
+
+        max_new_tokens = 5
+        original_length = input_ids.shape[1]
+        expected_length = original_length + max_new_tokens
+
+        with torch.no_grad():
+            output = model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                noise_scheduler=DummyNoiseScheduler(),
+                max_new_tokens=max_new_tokens,
+                min_new_tokens=max_new_tokens,
+                do_sample=False,
+                return_dict_in_generate=True,
+                guidance_scale=1.3,
+                num_diffusion_steps=10,
+            )
+        self.assertIsNotNone(output.sequences)
+        self.assertEqual(output.sequences.shape[0], self.model_tester.batch_size)
+        self.assertEqual(output.sequences.shape[1], expected_length)
+        torch.testing.assert_close(
+            output.sequences[:, :original_length],
+            input_ids,
+            msg="Original input_ids should be preserved at the beginning of sequences",
+        )
+        self.assertIsNotNone(output.audio)
+        self.assertEqual(len(output.audio), self.model_tester.batch_size)
+
+    @pytest.mark.generate
+    def test_batched_equivalence_with_cache(self):
+        """
+        Each decoded audio chunk must be attributed to the sequence that produced it, see
+        https://github.com/huggingface/transformers/pull/48902.
+        """
+        # Use different input settings to trigger different stopping times for each row, so that a wrong row/audio attribution is observable.
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            batch_size=4,
+            seq_length=4,
+            rng=random.Random(7),
+            audio_config={
+                **self.model_tester.audio_config,
+                "layer_scale_init_value": 0.1,
+                "initializer_range": 0.5,
+            },
+        )
+        self.model_tester.create_and_check_batched_matches_single(*config_and_inputs, use_cache=True)
+
+    @pytest.mark.generate
+    def test_batched_equivalence_without_cache(self):
+        """
+        Each decoded audio chunk must be attributed to the sequence that produced it, see
+        https://github.com/huggingface/transformers/pull/48902.
+        """
+        # Use different input settings to trigger different stopping times for each row, so that a wrong row/audio attribution is observable.
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            batch_size=4,
+            seq_length=4,
+            rng=random.Random(7),
+            audio_config={
+                **self.model_tester.audio_config,
+                "layer_scale_init_value": 0.1,
+                "initializer_range": 0.5,
+            },
+        )
+        self.model_tester.create_and_check_batched_matches_single(*config_and_inputs, use_cache=False)
+
+    @unittest.skip(reason="Vibevoice has a special cache format so skipping for now")
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
+
+class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.model_checkpoint = "vibevoice/VibeVoice-1.5B-hf"
+        self.sampling_rate = 24000
+        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice"
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    @require_diffusers
+    def test_1b5_inference_no_voice(self):
+        """
+        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer_no_voice-py
+        diffusers library is needed (ran with `diffusers==0.35.2`)
+        """
+        set_seed(42)
+        fixtures_path = self.fixtures_path / "expected_results_single_noaudio.json"
+        max_new_tokens = 32
+
+        # Load model and processor
+        model = VibeVoiceForConditionalGeneration.from_pretrained(
+            self.model_checkpoint,
+            dtype=torch.float32,
+            device_map="auto",
+        )
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+
+        # Prepare input
+        conversation = [
+            {
+                "role": "0",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me.",
+                    },
+                ],
+            },
+            {
+                "role": "1",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings.",
+                    },
+                ],
+            },
+        ]
+        inputs = processor.apply_chat_template(
+            conversation, tokenize=True, return_dict=True, add_generation_prompt=True
+        ).to(torch_device, dtype=model.dtype)
+
+        # Generate audio
+        noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+            beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
+        )
+        generated_speech = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            return_dict_in_generate=False,
+            noise_scheduler=noise_scheduler,
+            guidance_scale=1.3,
+            num_diffusion_steps=10,
+        )
+        generated_speech = generated_speech[0].cpu().float()
+
+        # Compare against expected results
+        with open(fixtures_path, "r", encoding="utf-8") as f:
+            expected_results = json.load(f)
+        expected_speech = torch.tensor(expected_results["speech_outputs"])
+        generated_speech = generated_speech[..., : expected_speech.shape[-1]]
+        torch.testing.assert_close(generated_speech, expected_speech)
+
+    @slow
+    @require_diffusers
+    def test_1b5_inference(self):
+        """
+        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer_voice_clone-py
+        diffusers library is needed (ran with `diffusers==0.35.2`)
+        """
+        set_seed(42)
+        fixtures_path = self.fixtures_path / "expected_results_single.json"
+        max_new_tokens = 32
+
+        # Load model and processor
+        model = VibeVoiceForConditionalGeneration.from_pretrained(
+            self.model_checkpoint,
+            dtype=torch.float32,
+            device_map="auto",
+        )
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+
+        # Prepare inputs
+        conversation = [
+            {
+                "role": "0",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me.",
+                    },
+                    {
+                        "type": "audio",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav"
+                        ),
+                    },
+                ],
+            },
+            {
+                "role": "1",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings.",
+                    },
+                    {
+                        "type": "audio",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Frank_man.wav"
+                        ),
+                    },
+                ],
+            },
+        ]
+        inputs = processor.apply_chat_template(
+            conversation, tokenize=True, return_dict=True, add_generation_prompt=True, sampling_rate=self.sampling_rate
+        ).to(torch_device, dtype=model.dtype)
+
+        # Generate audio
+        noise_scheduler = diffusers.DPMSolverMultistepScheduler(
+            beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
+        )
+        generated_speech = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            return_dict_in_generate=False,
+            noise_scheduler=noise_scheduler,
+            guidance_scale=1.3,
+            num_diffusion_steps=10,
+        )
+        generated_speech = generated_speech[0].cpu().float()
+
+        # Compare against expected results
+        with open(fixtures_path, "r", encoding="utf-8") as f:
+            expected_results = json.load(f)
+        expected_speech = torch.tensor(expected_results["speech_outputs"])
+        generated_speech = generated_speech[..., : expected_speech.shape[-1]]
+        torch.testing.assert_close(generated_speech, expected_speech, rtol=1e-3, atol=1e-3)

@@ -41,6 +41,7 @@ else:
         "CandidateGenerator",
         "EarlyExitCandidateGenerator",
         "PromptLookupCandidateGenerator",
+        "DFlashTokenCandidateGenerator",
     ]
     _import_structure["logits_process"] = [
         "AlternatingCodebooksLogitsProcessor",
@@ -137,6 +138,7 @@ if TYPE_CHECKING:
         from .candidate_generator import (
             AssistedCandidateGenerator,
             CandidateGenerator,
+            DFlashTokenCandidateGenerator,
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )

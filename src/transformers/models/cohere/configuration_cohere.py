@@ -63,6 +63,7 @@ class CohereConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     vocab_size: int = 256000
     hidden_size: int = 8192
     intermediate_size: int = 22528

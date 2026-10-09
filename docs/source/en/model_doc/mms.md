@@ -36,7 +36,7 @@ for the same number of languages, as well as a language identification model for
 Experiments show that our multilingual speech recognition model more than halves the word error rate of
 Whisper on 54 languages of the FLEURS benchmark while being trained on a small fraction of the labeled data.*
 
-Here are the different models open sourced in the MMS project. The models and code are originally released [here](https://github.com/facebookresearch/fairseq/tree/main/examples/mms). We have add them to the `transformers` framework, making them easier to use.
+Here are the different models open sourced in the MMS project. The models and code are originally released [here](https://github.com/facebookresearch/fairseq/tree/main/examples/mms). We have added them to the `transformers` framework, making them easier to use.
 
 ### Automatic Speech Recognition (ASR)
 
@@ -174,7 +174,7 @@ To further improve performance from ASR models, language model decoding can be u
 MMS-TTS uses the same model architecture as VITS, which was added to 🤗 Transformers in v4.33. MMS trains a separate
 model checkpoint for each of the 1100+ languages in the project. All available checkpoints can be found on the Hugging
 Face Hub: [facebook/mms-tts](https://huggingface.co/models?sort=trending&search=facebook%2Fmms-tts), and the inference
-documentation under [VITS](https://huggingface.co/docs/transformers/main/en/model_doc/vits).
+documentation under [VITS](./vits).
 
 #### Inference
 
@@ -402,8 +402,8 @@ Pretrained models are available for two different sizes - [300M](https://hugging
 
 <Tip>
 
-The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for further
+The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](./wav2vec2) for further
 details on how to finetune with models for various downstream tasks.
 
-MMS-TTS uses the same model architecture as VITS, refer to [VITS's documentation page](vits) for API reference.
+MMS-TTS uses the same model architecture as VITS, refer to [VITS's documentation page](./vits) for API reference.
 </Tip>

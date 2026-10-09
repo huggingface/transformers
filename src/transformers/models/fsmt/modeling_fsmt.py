@@ -27,7 +27,6 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -178,14 +177,11 @@ def invert_mask(attention_mask):
 
 
 def triu_onnx(x, diagonal=0):
-    l = x.shape[0]
-    arange = torch.arange(l, device=x.device)
-    mask = arange.expand(l, l)
-    arange = arange.unsqueeze(-1)
-    if diagonal:
-        arange = arange + diagonal
-    mask = mask >= arange
-    return x.masked_fill(mask == 0, 0)
+    logger.warning_once(
+        "`triu_onnx` is deprecated and will be removed in v5.22. It emulated `torch.triu`, which now "
+        "exports cleanly — use `torch.triu` instead."
+    )
+    return torch.triu(x, diagonal)
 
 
 def _prepare_fsmt_decoder_inputs(
@@ -208,8 +204,9 @@ def _prepare_fsmt_decoder_inputs(
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(
-        device=decoder_input_ids.device
+    causal_mask = torch.triu(
+        fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype, device=decoder_input_ids.device)),
+        diagonal=1,
     )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
@@ -575,11 +572,9 @@ class FSMTDecoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            # embed positions
-            positions = self.embed_positions(input_ids)
-            if use_cache:
-                input_ids = input_ids[:, -1:]
-                positions = positions[:, -1:]  # happens after we embed them
+            # Embed positions, accounting for the tokens already in the cache
+            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
             x = self.embed_tokens(input_ids) * self.embed_scale
         elif inputs_embeds is not None:
             # We assume zeros hidden states correspond to padding tokens
@@ -789,7 +784,7 @@ class Attention(nn.Module):
 
 
 def fill_with_neg_inf(t):
-    """FP16-compatible function that fills a input_ids with -inf."""
+    """FP16-compatible function that fills an input_ids with -inf."""
     return t.float().fill_(torch.finfo(t.dtype).min).type_as(t)
 
 
@@ -978,10 +973,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Translation:
 
@@ -1108,19 +1099,14 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         mask = tensor.ne(padding_idx).int()
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
-    def forward(
-        self,
-        input,
-        incremental_state: Any | None = None,
-        timestep: Tensor | None = None,
-    ):
+    def forward(self, input, *, past_key_values_length: int = 0):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + past_key_values_length + seq_len
         if max_pos > self.weight.size(0):
             # expand embeddings if needed
             self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
-        positions = self.make_positions(input, self.padding_idx)
+        positions = self.make_positions(input, self.padding_idx) + past_key_values_length
         return super().forward(positions)
 
 

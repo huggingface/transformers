@@ -320,17 +320,27 @@ class ZayaIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 (None, None): [
-                    [0.0223, 0.0228, 0.0234],
-                    [-1.4297, -1.4297, -1.4297],
-                    [-3.0469, -3.0469, -3.0469],
+                    [0.0359, 0.0364, 0.0371],
+                    [-1.4141, -1.4141, -1.4141],
+                    [-3.0625, -3.0625, -3.0625],
+                ],
+                ("xpu", None): [
+                    [0.3203, 0.3203, 0.3203],
+                    [-1.4766, -1.4766, -1.4766],
+                    [-2.9375, -2.9375, -2.9375],
                 ],
             }
         )  # fmt: skip
         expected_slice = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=logits.dtype)
         torch.testing.assert_close(logits[0, -3:, -3:], expected_slice, rtol=1e-3, atol=1e-3)
 
-        expected_argmax = torch.tensor([[105, 9731, 107, 740, 564, 1601, 611, 3124, 236881, 107, 107]])
-        torch.testing.assert_close(logits.argmax(-1), expected_argmax)
+        expected_argmax = Expectations(
+            {
+                (None, None): [[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]],
+                ("xpu", None): [[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]],
+            }
+        )
+        torch.testing.assert_close(logits.argmax(-1), torch.tensor(expected_argmax.get_expectation()))
 
     @slow
     def test_model_cache_matches_full_forward(self):
@@ -367,7 +377,11 @@ class ZayaIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     107, 262146, 108, 9259, 236888, 1030, 5724, 1133,
-                    611, 236789, 500, 7467, 528, 4735, 1003, 5213,
+                    611, 236789, 500, 7467, 528, 506, 5213, 236778,
+                ],
+                ("xpu", None): [
+                    107, 262146, 108, 9259, 236888, 2088, 740, 564,
+                    6361, 611, 3124, 236881, 108, 2859, 611, 735,
                 ],
             }
         )  # fmt: skip

@@ -56,7 +56,7 @@ class HeliumIntegrationTest(unittest.TestCase):
             {
                 ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I have"],
                 (None, None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
-                ("cuda", 8): ['Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I'],
+                ("cuda", 8): ['Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have'],
             }
         )  # fmt: skip
         EXPECTED_TEXTS = expected_texts.get_expectation()

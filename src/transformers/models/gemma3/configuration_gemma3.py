@@ -22,12 +22,9 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-from ..siglip import SiglipVisionConfig
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
@@ -124,6 +121,15 @@ class Gemma3TextConfig(PreTrainedConfig):
                 f"heads ({self.num_attention_heads})."
             )
 
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `False` fallback.
+        if getattr(self, "use_bidirectional_attention", False):
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
+
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
@@ -180,7 +186,7 @@ class Gemma3Config(PreTrainedConfig):
     >>> configuration = Gemma3Config(vision_config, text_config)
 
     >>> # Initializing a model from the gemma-3-4b style configuration
-    >>> model = Gemma3TextConfig(configuration)
+    >>> model = Gemma3ForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -192,34 +198,19 @@ class Gemma3Config(PreTrainedConfig):
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
-    sub_configs = {
-        "text_config": Gemma3TextConfig,
-        "vision_config": SiglipVisionConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Gemma3TextConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 
-    text_config: Gemma3TextConfig | dict[str, Any] | None = None
-    vision_config: SiglipVisionConfig | dict[str, Any] | None = None
+    text_config: PreTrainedConfig | dict[str, Any] | None = None
+    vision_config: PreTrainedConfig | dict[str, Any] | None = None
     mm_tokens_per_image: int | None = 256
     boi_token_index: int | None = 255_999
     eoi_token_index: int | None = 256_000
     image_token_index: int | None = 262_144
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3TextConfig()
-            logger.info("text_config is None, using default Gemma3TextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3TextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = SiglipVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = SiglipVisionConfig()
-            logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma3Config", "Gemma3TextConfig"]

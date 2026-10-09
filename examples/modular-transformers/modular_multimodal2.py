@@ -5,7 +5,7 @@ class Multimodal2VisionModel(CLIPVisionModel):
     pass
 ```
 with the hope that all dependencies will be renamed as `Multimodal2VisionClass`. For this reason, if we want consistency and
-use the "Vision" part everywhere, we need to overwrite the intermediate classes and add the prefix everytime.
+use the "Vision" part everywhere, we need to overwrite the intermediate classes and add the prefix every time.
 This adds noise to the modular, but is unfortunately unavoidable.
 """
 

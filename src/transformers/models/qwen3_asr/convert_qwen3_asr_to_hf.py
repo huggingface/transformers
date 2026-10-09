@@ -107,7 +107,7 @@ def convert_state_dict(original_state_dict: dict[str, Any], mapping: dict[str, s
 def detect_model_type(src_root: Path) -> str:
     """Auto-detect model type from the source checkpoint's config.json."""
     config_path = src_root / "config.json"
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 
     thinker = config.get("thinker_config", {})
@@ -122,7 +122,7 @@ def detect_model_type(src_root: Path) -> str:
 def clean_config(src_root: Path, model_type: str) -> dict:
     """Load and clean up the source config for transformers compatibility."""
     config_path = src_root / "config.json"
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         model_config = json.load(f)
 
     config_dict = model_config.copy()
@@ -202,6 +202,62 @@ def clean_config(src_root: Path, model_type: str) -> dict:
 
 
 # fmt: off
+# Extends the original repo's chat template with assistant-turn rendering:
+# - system turn: concatenated text of all system messages (context/hotwords)
+# - user turn: one audio placeholder per audio input
+# - assistant turns: rendered verbatim, wrapped in `{% generation %}` for assistant token masking.
+#   Used to prefill the forced language ("language <NAME><asr_text>") via
+#   `apply_chat_template(..., continue_final_message=True)` and for training targets.
+ASR_CHAT_TEMPLATE = (
+    "{%- set ns = namespace(system_text='') -%}"
+    "{%- for m in messages -%}"
+    "{%- if m.role == 'system' -%}"
+    "{%- if m.content is string -%}"
+    "{%- set ns.system_text = ns.system_text + m.content -%}"
+    "{%- else -%}"
+    "{%- for c in m.content -%}"
+    "{%- if c.type == 'text' and (c.text is defined) -%}"
+    "{%- set ns.system_text = ns.system_text + c.text -%}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{%- endif -%}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{%- set ns2 = namespace(audio_tokens='') -%}"
+    "{%- for m in messages -%}"
+    "{%- if m.content is not string -%}"
+    "{%- for c in m.content -%}"
+    "{%- if c.type == 'audio' or ('audio' in c) or ('audio_url' in c) -%}"
+    "{%- set ns2.audio_tokens = ns2.audio_tokens + '<|audio_start|><|audio_pad|><|audio_end|>' -%}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{{- '<|im_start|>system\n' + ns.system_text + '<|im_end|>\n' -}}"
+    "{{- '<|im_start|>user\n' + ns2.audio_tokens + '<|im_end|>\n' -}}"
+    "{%- for m in messages -%}"
+    "{%- if m.role == 'assistant' -%}"
+    "{%- set ns3 = namespace(assistant_text='') -%}"
+    "{%- if m.content is string -%}"
+    "{%- set ns3.assistant_text = m.content -%}"
+    "{%- else -%}"
+    "{%- for c in m.content -%}"
+    "{%- if c.type == 'text' and (c.text is defined) -%}"
+    "{%- set ns3.assistant_text = ns3.assistant_text + c.text -%}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{%- endif -%}"
+    "{{- '<|im_start|>assistant\n' -}}"
+    "{% generation %}"
+    "{{- ns3.assistant_text + '<|im_end|>\n' -}}"
+    "{% endgeneration %}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{%- if add_generation_prompt -%}"
+    "{{- '<|im_start|>assistant\n' -}}"
+    "{%- endif -%}"
+)
+
 FORCED_ALIGNER_CHAT_TEMPLATE = (
     "{%- set ns = namespace(audio_tokens='', words=[]) -%}"
     "{%- for m in messages -%}"
@@ -228,14 +284,8 @@ def write_processor(src_root: Path, dst_root: Path, model_type: str):
     if model_type == "forced_aligner":
         chat_template = FORCED_ALIGNER_CHAT_TEMPLATE
     else:
-        # Load chat template from separate file if it exists
-        chat_template_file = src_root / "chat_template.json"
-        chat_template = None
-        if chat_template_file.exists():
-            logger.info("Loading chat template from %s", chat_template_file)
-            with open(chat_template_file, "r", encoding="utf-8") as f:
-                chat_template_data = json.load(f)
-                chat_template = chat_template_data.get("chat_template")
+        # Extended version of the original repo's chat_template.json (see comment on the constant)
+        chat_template = ASR_CHAT_TEMPLATE
 
     processor = Qwen3ASRProcessor(
         feature_extractor=Qwen3ASRFeatureExtractor(),

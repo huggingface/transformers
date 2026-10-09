@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -27,7 +26,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
-from ...utils.generic import TransformersKwargs, maybe_autocast
+from ...utils.generic import TransformersKwargs
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..olmo2.configuration_olmo2 import Olmo2Config
 from ..olmo2.modeling_olmo2 import (
@@ -187,31 +186,22 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
 
 class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: Olmo3Config, device=None):
-        super().__init__(config, device=device)
+        super().__init__(config)
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: Olmo3Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
+        config: Olmo3Config, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, layer_type)
 
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids, layer_type):
         # diff -> returns cos/sin in fp32 without casting to `x.dtype`
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos, sin
 

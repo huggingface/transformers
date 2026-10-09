@@ -108,7 +108,10 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     def test_small_model_pt(self):
         image_segmenter = pipeline("mask-generation", model="facebook/sam-vit-huge")
 
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
+        outputs = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            points_per_batch=256,
+        )
 
         # Shortening by hashing
         new_output = []
@@ -166,7 +169,9 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         image_segmenter = pipeline("mask-generation", model=model_id)
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", pred_iou_thresh=1, points_per_batch=256
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            pred_iou_thresh=1,
+            points_per_batch=256,
         )
 
         # Shortening by hashing

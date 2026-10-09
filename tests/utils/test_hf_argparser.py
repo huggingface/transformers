@@ -387,7 +387,7 @@ class HfArgumentParserTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_local_path = os.path.join(tmp_dir, "temp_json")
             os.mkdir(temp_local_path)
-            with open(temp_local_path + ".json", "w+") as f:
+            with open(temp_local_path + ".json", "w+", encoding="utf-8") as f:
                 json.dump(args_dict_for_json, f)
             parsed_args = parser.parse_json_file(Path(temp_local_path + ".json"))[0]
 
@@ -406,7 +406,7 @@ class HfArgumentParserTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_local_path = os.path.join(tmp_dir, "temp_yaml")
             os.mkdir(temp_local_path)
-            with open(temp_local_path + ".yaml", "w+") as f:
+            with open(temp_local_path + ".yaml", "w+", encoding="utf-8") as f:
                 yaml.dump(args_dict_for_yaml, f)
             parsed_args = parser.parse_yaml_file(Path(temp_local_path + ".yaml"))[0]
         args = BasicExample(**args_dict_for_yaml)
@@ -465,7 +465,7 @@ class HfArgumentParserTest(unittest.TestCase):
         # Second check: anything in `optional_dict_fields` is bad if it's not in `base_list`
         for field_ in optional_dict_fields:
             self.assertIn(
-                field.name,
+                field_.name,
                 base_list,
                 f"Optional dict field `{field_.name}` is not in the base list of valid fields. Please add it to `TrainingArguments._VALID_DICT_FIELDS`",
             )

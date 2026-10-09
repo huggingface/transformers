@@ -21,8 +21,8 @@ from typing_extensions import Unpack
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
@@ -39,11 +39,10 @@ from ..zoedepth.modeling_zoedepth import (
 )
 
 
+@auto_docstring
 @dataclass
 class Tipsv2DptDensePredictorOutput(ModelOutput):
     r"""
-    predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-        Predicted depth for each pixel.
     normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
         Raw normal map predictions (unnormalized).
     segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):
@@ -228,7 +227,17 @@ class Tipsv2DptConfig(PreTrainedConfig):
     """
 
     model_type = "tipsv2_dpt"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="tipsv2_vision_model",
+            init_kwargs={
+                "out_indices": [3, 6, 9, 12],
+                "apply_layernorm": True,
+                "reshape_hidden_states": False,
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     neck_hidden_sizes: list[int] | tuple[int, ...] | None = None
@@ -246,17 +255,6 @@ class Tipsv2DptConfig(PreTrainedConfig):
             self.neck_hidden_sizes = [96, 192, 384, 768]
         if self.reassemble_factors is None:
             self.reassemble_factors = [4, 2, 1, 0.5]
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="tipsv2_vision_model",
-            default_config_kwargs={
-                "out_indices": [3, 6, 9, 12],
-                "apply_layernorm": True,
-                "reshape_hidden_states": False,
-            },
-            **kwargs,
-        )
         super().__post_init__(**kwargs)
 
 
@@ -384,7 +382,7 @@ class Tipsv2DptFeaturesToDepth(nn.Module):
         self.max_depth = config.max_depth
         self.activation = nn.ReLU()
         bin_centers = torch.linspace(config.min_depth, config.max_depth, config.num_depth_bins)
-        self.register_buffer("bin_centers", bin_centers, persistent=False)
+        self.bin_centers = nn.Buffer(bin_centers, persistent=False)
 
     def forward(self, depth_logits: torch.Tensor) -> torch.Tensor:
         probs = self.activation(depth_logits) + self.min_depth
@@ -676,10 +674,6 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Example:
 
         ```python

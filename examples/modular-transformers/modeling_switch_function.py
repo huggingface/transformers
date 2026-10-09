@@ -11,7 +11,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
@@ -26,7 +26,7 @@ def rotate_half(x):
     return rot_x
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 

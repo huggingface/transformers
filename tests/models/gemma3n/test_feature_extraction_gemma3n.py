@@ -27,14 +27,10 @@ from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
 )
-from transformers.utils.import_utils import is_torch_available
 
 from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
-
-if is_torch_available():
-    pass
 
 MAX_LENGTH_FOR_TESTING = 512
 

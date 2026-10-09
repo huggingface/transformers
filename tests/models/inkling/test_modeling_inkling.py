@@ -23,8 +23,10 @@ from safetensors.torch import load_file
 
 from transformers import (
     AutoProcessor,
+    InklingAudioConfig,
     InklingConfig,
     InklingTextConfig,
+    InklingVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -35,32 +37,23 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...causal_lm_tester import CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...alm_tester import ALMModelTest, ALMModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import floats_tensor, ids_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        InklingForConditionalGeneration,
-        InklingModel,
-        InklingTextModel,
-    )
-
-
-GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
-    "Randomly initialized Inkling MoE routers are too sensitive to tiny eager/FA2 input differences"
-)
+    from transformers import InklingForCausalLM, InklingForConditionalGeneration, InklingModel, InklingTextModel
 
 
 class InklingTextModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = InklingTextConfig
         base_model_class = InklingTextModel
-        causal_lm_class = InklingForConditionalGeneration
+        causal_lm_class = InklingForCausalLM
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -73,106 +66,88 @@ class InklingTextModelTester(CausalLMModelTester):
         self.swa_head_dim = self.head_dim
 
         # To activate moe blocks
-        self.enable_moe_block = True
         self.moe_intermediate_size = 16
+        self.n_routed_experts = 16
 
 
-class InklingAudio2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=4,
-        boi_token_id=5,
-        eoi_token_id=6,
-        audio_token_id=7,
-        video_token_id=10,
-        seq_length=50,
-        audio_num_frames=4,
-        n_mel_bins=4,
-        mel_vocab_size=8,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.audio_token_id = audio_token_id
-        self.video_token_id = video_token_id
-        self.llm_tester = InklingTextModelTester(self.parent)
-        self.llm_tester.use_bidirectional_attention = None
-        self.text_config = self.llm_tester.get_config()
-        self.audio_num_frames = audio_num_frames
-        self.n_mel_bins = n_mel_bins
-        self.mel_vocab_size = mel_vocab_size
-        self.audio_config = {
-            "hidden_size": self.text_config.hidden_size,
-            "n_mel_bins": n_mel_bins,
-            "mel_vocab_size": mel_vocab_size,
+class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = InklingTextModelTester
+    _torch_compile_train_cls = InklingForCausalLM if is_torch_available() else None
+    model_split_percents = [0.5, 0.8, 0.9]
+
+    @unittest.skip("MoE routing on a tiny randomly-initialized model makes the overfit target unstable.")
+    def test_training_overfit(self):
+        pass
+
+    def test_dense_intermediate_size_keeps_expert_width(self):
+        # Official checkpoints: `intermediate_size` is the routed experts' width and
+        # `dense_intermediate_size` is the dense MLP's width.
+        config = InklingTextConfig.from_dict({"intermediate_size": 2048, "dense_intermediate_size": 16384})
+        self.assertEqual(config.intermediate_size, 16384)
+        self.assertEqual(config.moe_intermediate_size, 2048)
+
+        config = InklingTextConfig.from_dict({"intermediate_size": 3072, "dense_intermediate_size": 24576})
+        self.assertEqual(config.intermediate_size, 24576)
+        self.assertEqual(config.moe_intermediate_size, 3072)
+
+
+class InklingAudio2TextModelTester(ALMModelTester):
+    base_model_class = InklingModel
+    conditional_generation_class = InklingForConditionalGeneration
+    config_class = InklingConfig
+    text_config_class = InklingTextConfig
+    audio_config_class = InklingAudioConfig
+    audio_mask_key = "audio_input_ids_mask"
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("audio_token_id", 7)
+        kwargs.setdefault("pad_token_id", 0)
+        kwargs.setdefault("seq_length", 50)
+        kwargs.setdefault("feat_seq_length", 4)
+        kwargs.setdefault("n_mel_bins", 4)
+        kwargs.setdefault("mel_vocab_size", 8)
+        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("n_routed_experts", 16)
+        kwargs.setdefault("head_dim", 16)
+        kwargs.setdefault("swa_num_attention_heads", 2)
+        kwargs.setdefault("swa_num_key_value_heads", 2)
+        kwargs.setdefault("swa_head_dim", 16)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.image_token_id}
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_audio_features(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        # Quantized mel frames: (num_audios, num_frames, n_mel_bins)
+        return ids_tensor([batch_size, self.feat_seq_length, self.n_mel_bins], self.mel_vocab_size)
+
+    def get_audio_embeds_mask(self, audio_mask):
+        return audio_mask
+
+    def get_audio_feature_key(self):
+        return "audio_input_ids"
+
+    def _build_modality_sub_configs(self):
+        return {
+            "audio_config": self.get_audio_config(),
+            "vision_config": InklingVisionConfig(patch_size=5, num_hidden_layers=2, num_channels=3),
         }
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
-
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.encoder_seq_length = seq_length
-
-    def get_config(self):
-        config = InklingConfig(
-            text_config=self.text_config,
-            vision_config={"patch_size": 5, "num_hidden_layers": 2, "num_channels": 3},
-            audio_config=self.audio_config,
-            image_token_id=self.image_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            audio_token_id=self.audio_token_id,
-            video_token_id=self.video_token_id,
-        )
-        config.num_hidden_layers = config.text_config.num_hidden_layers
-        return config
-
-    def prepare_config_and_inputs(self):
-        audio_input_ids = ids_tensor([self.batch_size, self.audio_num_frames, self.n_mel_bins], self.mel_vocab_size)
-        audio_input_ids_mask = torch.ones(self.batch_size, self.audio_num_frames, dtype=torch.bool)
-        config = self.get_config()
-        return config, audio_input_ids, audio_input_ids_mask
-
-    def prepare_config_and_inputs_for_common(self):
-        config, audio_input_ids, audio_input_ids_mask = self.prepare_config_and_inputs()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-
-        # One audio embedding is produced per valid frame; place that many audio placeholders per sequence
-        input_ids[:, : self.audio_num_frames] = config.audio_token_id
-
-        inputs_dict = {
-            "audio_input_ids": audio_input_ids,
-            "audio_input_ids_mask": audio_input_ids_mask,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
 
 
 @require_torch
-class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
+class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
+    model_tester_class = InklingAudio2TextModelTester
     test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
     # Audio embeddings are packed per valid frame, so last_hidden_state[0] is the total frame count, not batch size
     skip_test_audio_features_output_shape = True
-
-    def setUp(self):
-        self.model_tester = InklingAudio2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
 
     @unittest.skip(
         "Inkling chains tower namespace and internal renames, so intermediate source keys are absent after reverse mapping"
@@ -226,10 +201,6 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Audio placeholder embeddings are replaced when audio inputs are provided")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("Accelerate does not create a device map when the entire tiny model fits on CPU")
     def test_cpu_offload(self):
         pass
@@ -242,129 +213,77 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    @unittest.skip("Randomly initialized Inkling MoE routers are too sensitive to tiny eager/FA2 input differences")
     def test_flash_attn_2_inference_equivalence(self):
         pass
 
-    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    @unittest.skip("Randomly initialized Inkling MoE routers are too sensitive to tiny eager/FA2 input differences")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @unittest.skip(
+        reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
-class InklingVision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_id=4,
-        video_token_id=7,
-        audio_token_id=8,
-        boi_token_id=5,
-        eoi_token_id=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
-            "use_labels": True,
-            "image_size": 20,
-            "patch_size": 5,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "num_key_value_heads": 1,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
-    ):
-        self.parent = parent
-        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.audio_token_id = audio_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.llm_tester = InklingTextModelTester(self.parent)
-        self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
+    @unittest.skip(
+        reason="The audio tower and embeddings are non-splittable and hold almost all of the weights, so device_map='auto' can't split the model across GPUs"
+    )
+    def test_model_parallelism(self):
+        pass
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
 
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
+class InklingVision2TextModelTester(VLMModelTester):
+    base_model_class = InklingModel
+    conditional_generation_class = InklingForConditionalGeneration
+    config_class = InklingConfig
+    text_config_class = InklingTextConfig
+    vision_config_class = InklingVisionConfig
 
-    def get_config(self):
-        config = InklingConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            audio_config={"hidden_size": self.text_config.hidden_size, "n_mel_bins": 4, "mel_vocab_size": 8},
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            audio_token_id=self.audio_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            mm_tokens_per_image=self.mm_tokens_per_image,
-        )
-        config.num_hidden_layers = config.text_config.num_hidden_layers
-        return config
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("audio_token_id", 8)
+        kwargs.setdefault("seq_length", 25)
+        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("n_routed_experts", 16)
+        kwargs.setdefault("swa_num_attention_heads", 2)
+        kwargs.setdefault("swa_num_key_value_heads", 2)
+        kwargs.setdefault("swa_head_dim", 16)
+        super().__init__(parent, **kwargs)
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        config.vision_config.pooling_kernel_size = 2
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.audio_token_id}
 
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # One packed patch per image placeholder: (num_patches, time, height, width, channels)
-        patch_size = config.vision_config.patch_size
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                config.vision_config.temporal_patch_size,
-                patch_size,
-                patch_size,
-                self.vision_config["num_channels"],
-            ]
+        return floats_tensor(
+            [batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
         )
-        return config, pixel_values
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-        input_ids[:, :1] = config.image_token_id
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+    def _build_modality_sub_configs(self):
+        return {
+            "vision_config": self.get_vision_config(),
+            "audio_config": InklingAudioConfig(n_mel_bins=4, mel_vocab_size=8),
         }
-        return config, inputs_dict
 
 
 @require_torch
-class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
+class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = InklingVision2TextModelTester
     test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
+    test_torch_exportable = False  # data-dependent control flow in the HMLP vision tower (time/space folding)
     model_split_percents = [0.85, 0.9]
-
-    def setUp(self):
-        self.model_tester = InklingVision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=InklingConfig, hidden_size=37)
 
     @unittest.skip(
         "Inkling chains tower namespace and internal renames, so intermediate source keys are absent after reverse mapping"
@@ -435,8 +354,16 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Image placeholder embeddings are replaced when pixel values are provided")
-    def test_inputs_embeds_matches_input_ids(self):
+    @unittest.skip(
+        reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
+        reason="The vision tower and embeddings are non-splittable and hold almost all of the weights, so device_map='auto' can't split the model across GPUs"
+    )
+    def test_model_parallelism(self):
         pass
 
     @unittest.skip(
@@ -469,14 +396,14 @@ class InklingIntegrationTest(unittest.TestCase):
     gist: https://gist.github.com/eustlb/cb2a5df1676911fa0eb07d0a76a38ae7
     """
 
-    IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    IMAGE_URL_2 = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    AUDIO_URL = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
+    IMAGE_URL = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
     )
-    AUDIO_URL_2 = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
+    IMAGE_URL_2 = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
     )
+    AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_medium.wav"
+    AUDIO_URL_2 = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_short.wav"
 
     @classmethod
     def setUpClass(cls):

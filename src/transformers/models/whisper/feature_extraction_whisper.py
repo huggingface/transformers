@@ -147,7 +147,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
 
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
-        magnitudes = stft[..., :-1].abs() ** 2
+        # `stft[..., :-1]` is a non-contiguous view; on some CPU backends the
+        # downstream `mel_filters.T @ magnitudes` matmul hits a slow strided
+        # path (observed ~8x slower). Forcing contiguity here is cheap and
+        # keeps the matmul on the fast path.
+        magnitudes = (stft[..., :-1].abs() ** 2).contiguous()
 
         mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
         mel_spec = mel_filters.T @ magnitudes

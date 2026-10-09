@@ -86,9 +86,6 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
-
 # celery beat schedule file
 celerybeat-schedule
 
@@ -172,6 +169,9 @@ tags
 
 # checkers cache
 utils/.checkers_cache.json
+utils/.checkers_requirements.json
+utils/.noisy_comments_cache.json
+mlinter-findings.json
 
 # modular conversion
 *.modular_backup

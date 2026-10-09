@@ -20,7 +20,6 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -44,7 +43,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -63,6 +62,11 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         self.idx_keys = idx_k if self.idx_keys is None else torch.cat([self.idx_keys, idx_k], dim=-2)
         return self.idx_keys
 
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as `update_index` grows them by concatenation, like the main states
+        self.idx_keys = None
+
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.idx_keys is not None:
@@ -78,12 +82,16 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys[indices, ...]
 
-    def crop(self, max_length: int) -> None:
-        super().crop(max_length)
-        if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
-        if self.idx_keys is not None and self.idx_keys.shape[-2] > max_length:
-            self.idx_keys = self.idx_keys[..., :max_length, :]
+    def crop(self, tokens_to_remove: int) -> None:
+        super().crop(tokens_to_remove)
+        if tokens_to_remove > 0:
+            current_length = self.idx_keys.shape[-2]
+            if tokens_to_remove >= current_length:
+                return
+            tokens_to_remove = current_length - tokens_to_remove
+        if tokens_to_remove == 0:
+            return
+        self.idx_keys = self.idx_keys[..., : -abs(tokens_to_remove), :]
 
 
 class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
@@ -195,7 +203,7 @@ class MiniMaxM3VLExperts(nn.Module):
     ) -> torch.Tensor:
         final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]
@@ -223,7 +231,7 @@ class MiniMaxM3VLTopKRouter(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
@@ -261,9 +269,7 @@ class MiniMaxM3VLSparseMoeBlock(nn.Module):
 
 
 class MiniMaxM3VLRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: MiniMaxM3VLConfig, device=None):
+    def __init__(self, config: MiniMaxM3VLConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -274,26 +280,20 @@ class MiniMaxM3VLRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: MiniMaxM3VLConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: MiniMaxM3VLConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -304,25 +304,17 @@ class MiniMaxM3VLRotaryEmbedding(nn.Module):
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -826,51 +818,38 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
 
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
 
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
 
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -881,6 +860,7 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: MiniMaxM3VLTextConfig
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
@@ -911,11 +891,6 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1006,48 +981,61 @@ class MiniMaxM3VLVisionEmbeddings(nn.Module):
         return hidden_states
 
 
-class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
-    r"""3D RoPE for the vision tower: each patch is rotated by its `(T, H, W)` grid position.
+class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
+    """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
 
-    `2 * (head_dim // 2)` rotary dims are split evenly across the three axes (each rounded
-    down to a multiple of 2), giving `axis_dim` dims per axis and `axis_dim // 2` frequencies::
-
-        |<------------------ rotated (3 * axis_dim) ------------------>|<- pass ->|
-        +--------------------+--------------------+--------------------+----------+
-        |     T  (frames)    |      H  (rows)     |      W  (cols)     |          |
-        |      axis_dim      |      axis_dim      |      axis_dim      |          |
-        +--------------------+--------------------+--------------------+----------+
-
-    Each axis' coordinate scales its own band of frequencies; the bands are concatenated as
-    `T|H|W` and duplicated via `cat([f, f])` to pair with the half-rotation in
-    `apply_rotary_pos_emb_vision`. Any head dims past `3 * axis_dim` are left unrotated.
-    """
-
-    def __init__(self, head_dim: int, theta: float = 10000.0, spatial_merge_size: int = 1):
+    def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__()
-        # `2 * (head_dim // 2)` rotary dims are split evenly across T/H/W, each axis rounded
-        # down to a multiple of 2. With head_dim=80 that is 26 dims/axis (39 freqs total); the
-        # remaining `head_dim - 3 * axis_dim` dims are never rotated (they pass through).
-        rope_dims = 2 * (head_dim // 2)
-        self.axis_dim = 2 * ((rope_dims // 3) // 2)
-        self.spatial_merge_size = spatial_merge_size
-        self.theta = theta
+        self.config = config
 
-    def forward(
-        self,
-        grid_thw: torch.Tensor,
-        device: torch.device,
-        dtype: torch.dtype,
-        kwargs: dict | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        coords = get_vision_position_ids(grid_thw, self.spatial_merge_size, include_temporal=True, kwargs=kwargs)
-        coords = coords.to(device=device, dtype=torch.float32)
-        inv_freq = 1.0 / (
-            self.theta ** (torch.arange(0, self.axis_dim, 2, dtype=torch.float32, device=device) / self.axis_dim)
-        )
-        freqs = (coords.unsqueeze(-1) * inv_freq).reshape(coords.shape[0], -1)
-        emb = torch.cat([freqs, freqs], dim=-1)
-        return emb.cos().to(dtype), emb.sin().to(dtype)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_axial_rope_parameters(
+        config: MiniMaxM3VLVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        # We have an per axis based application (THW), see `recomposition_frequencies`; the rest passes through
+        spatial_dim = 2 * ((dim // 3) // 2)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (3, N) - with direct THW order
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(x.dtype), sin.to(x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = freq.flatten(1)  # We already have THW order
+        return torch.cat([freq, freq], dim=-1)
 
 
 def apply_rotary_pos_emb_vision(
@@ -1186,10 +1174,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        head_dim = config.hidden_size // config.num_attention_heads
-        self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(
-            head_dim, theta=config.rope_parameters["rope_theta"], spatial_merge_size=config.spatial_merge_size
-        )
+        self.rotary_emb = MiniMaxM3VLVisionRotaryEmbedding(config)
         self.post_init()
 
     @merge_with_config_defaults
@@ -1204,10 +1189,15 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image.
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
-        cos, sin = self.rotary_emb(grid_thw, device=embeds.device, dtype=embeds.dtype, kwargs=kwargs)
+        position_ids = get_vision_position_ids(
+            grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
+        )
+        position_embeddings = self.rotary_emb(embeds, position_ids)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
         for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask=None, position_embeddings=(cos, sin), **kwargs)
+            hidden_states = layer(
+                hidden_states, attention_mask=None, position_embeddings=position_embeddings, **kwargs
+            )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])
 
 
@@ -1252,11 +1242,14 @@ class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
     image_hidden_states: torch.FloatTensor | None = None
 
     video_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -1282,6 +1275,10 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
+        Load-balancing auxiliary loss for the sparse modules.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -1292,6 +1289,8 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
     video_hidden_states: torch.FloatTensor | None = None
+    aux_loss: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
@@ -1316,16 +1315,13 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         image_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         # Return the raw vision-tower output (so callers can inspect hidden states /
         # attentions) while stashing the projected + spatially-merged features —
         # ready to scatter into the text embeddings — in `pooler_output`.
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
-        vision_outputs.pooler_output = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(image_features, split_sizes)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1341,11 +1337,11 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -1382,41 +1378,48 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values, image_grid_thw=image_grid_thw
-            ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
 
-        video_features = None
-        if pixel_values_videos is not None:
-            video_features = self.get_video_features(
-                pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw
-            ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
 
-        image_mask, video_mask = self.get_placeholder_mask(
-            input_ids, inputs_embeds, image_features=image_features, video_features=video_features
-        )
-        if image_features is not None:
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-        if video_features is not None:
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_features)
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -1431,8 +1434,9 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=getattr(outputs, "hidden_states", None),
             attentions=getattr(outputs, "attentions", None),
-            image_hidden_states=image_features,
-            video_hidden_states=video_features,
+            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            video_hidden_states=mm_encoder_outputs["video"].pooler_output if mm_encoder_outputs.get("video") else None,
+            router_logits=getattr(outputs, "router_logits", None),
         )
 
     @merge_with_config_defaults
@@ -1446,18 +1450,9 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor`):
-            The tensors corresponding to the input video frames.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         # Video frames flow through the same vision pipeline as images (the tower is
         # grid-agnostic); only the placeholder token they scatter into differs.
-        vision_outputs = self.vision_tower(pixel_values=pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        vision_outputs.pooler_output = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
-        return vision_outputs
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
@@ -1476,11 +1471,6 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
 
     @auto_docstring
     def get_image_features(self, pixel_values, image_grid_thw, **kwargs) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -1497,17 +1487,39 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLCausalLMOutputWithPast:
         r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+        >>> from transformers import AutoProcessor, MiniMaxM3SparseForConditionalGeneration
+
+        >>> model = MiniMaxM3SparseForConditionalGeneration.from_pretrained("mini_max_m3_sparse-hf/mini_max_m3_sparse-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("mini_max_m3_sparse-hf/mini_max_m3_sparse-1.5-7b-hf")
+
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1518,6 +1530,8 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -1526,11 +1540,26 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.config.text_config.num_experts,
+                self.config.text_config.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(loss.device)
 
         return MiniMaxM3VLCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
+            router_logits=outputs.router_logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -1538,44 +1567,8 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- pixel inputs are merged into the cache on the first step, so we
-        # only forward them once (image and video alike).
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-
-        return model_inputs
-
+    @auto_docstring
     def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):
-        r"""
-        pixel_values_videos (`torch.FloatTensor`):
-            The tensors corresponding to the input video frames.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 

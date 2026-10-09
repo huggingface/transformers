@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:13.0.3-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,12 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.11.0'
+ARG PYTORCH='2.14.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu126'
+ARG CUDA='cu130'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.11.0'
+ARG TORCHCODEC='0.16.0'
 
 ARG FLASH_ATTN='false'
 
@@ -32,12 +32,22 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
 #    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
 # 3. `set -e` means "exit immediately if any command fails".
+# 4. Warning: torchaudio only publishes wheels for the CUDA version it was released with (e.g. 2.11.0
+#    only has a cu130 build). If torch is installed with a different CUDA suffix (e.g. cu132), pip
+#    will keep the torchaudio installed in the previous step and torchaudio will raise a RuntimeError on import due to the
+#    CUDA version mismatch. When upgrading CUDA, make sure torchaudio has a wheel for the new version.
 RUN set -e; \
     # Determine torch version
     if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
         VERSION="torch==${PYTORCH}.*"; \
-        TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
+        # torchaudio is in maintenance mode: 2.11 is the final release, compatible with torch 2.11+
+        # (no need to upgrade it with torch; it does not pin torch to a specific version)
+        if printf '%s\n' "2.11.0" "${PYTORCH}" | sort -V | head -1 | grep -qx "2.11.0"; then \
+            TORCHAUDIO_VERSION="torchaudio==2.11.0"; \
+        else \
+            TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
+        fi; \
     else \
         VERSION="torch"; \
         TORCHAUDIO_VERSION="torchaudio"; \
@@ -81,8 +91,6 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
-# For kernels
-RUN python3 -m pip install --no-cache-dir kernels
 
 # For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime-gpu validates the exported
 # graph on GPU for faster export testing)
@@ -97,20 +105,61 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Some tests require quanto
 RUN python3 -m pip install --no-cache-dir quanto
 
-# After using A10 as CI runner, let's run FA2 tests
-# Notes on the install command below (see https://github.com/huggingface/transformers/pull/47251):
-# - wheel is upgraded before flash-attn: torch 2.13.0 added an unconditional setuptools>=77.0.3
-#   requirement, which pip resolves to setuptools 83.0.0 (which removed pkg_resources). The Ubuntu
-#   22.04 system wheel still imports pkg_resources, so --no-build-isolation builds fail. wheel>=0.43
-#   (Feb 2024) uses importlib.metadata instead and is not affected.
-# - if/else instead of `... || echo`: the old pattern silently swallowed real install failures;
-#   now only FLASH_ATTN=false skips gracefully, and any actual install error will correctly
-#   fail the Docker build.
+# Install FA2:
+#
+# FA2 is built from source because Dao-AILab stopped publishing wheels for torch>=2.9.
+# Key changes vs the naive `pip install flash-attn --no-build-isolation`:
+#   1. ninja       – parallel compilation (without it the build falls back to sequential make)
+#   2. wheel       – force-reinstall the pip-managed wheel (>=0.43) instead of the Ubuntu 22.04
+#                    system wheel (0.37.1) that still imports pkg_resources, which was removed in
+#                    setuptools>=83 (pulled in by torch>=2.13). Correctness fix, not a speed opt.
+#   3. C++20       – torch>=2.14 requires C++20; FA2 v2.8.3.post1 still ships -std=c++17 in its
+#                    setup.py, so we patch it with sed before building.
+#   4. SKIP_CK_BUILD=True  – skip ROCm composable_kernel submodule; on NVIDIA it is useless
+#                    but setup.py unconditionally sets SKIP_CK_BUILD=False, causing ~1100
+#                    extra .cu files to be compiled.
+#   5. csrc/cutlass – init only the CUTLASS submodule (headers required by flash_attn kernels).
+#   6. FLASH_ATTN_CUDA_ARCHS='80' – compile only for Ampere (SM 8.0/8.6, covers A10G & A100);
+#                    skips Hopper (90), Blackwell (100/120) and cuts compile time ~4× (biggest
+#                    speedup along with ninja).
+#   7. Dynamic MAX_JOBS / NVCC_THREADS – derived from available RAM so the build never OOMs
+#                    on the CI runner (formula: floor(RAM_GB/2.8), capped at nproc, then
+#                    split as NVCC_THREADS=4 / MAX_JOBS=product÷4).
+#   8. --allow-unsupported-compiler – CUDA 13.0 dropped GCC 11 from its supported-compiler
+#                    matrix; Ubuntu 22.04 ships GCC 11 by default, so NVCC hard-errors without
+#                    this flag even though GCC 11 compiles FA2 fine in practice.
+#
+# FA3 and FA4 are skipped — FA3/FA4 require Hopper/Blackwell; our runners use Ampere (A10G).
 RUN if [ "$FLASH_ATTN" != "false" ]; then \
-        python3 -m pip uninstall -y ninja && \
-        python3 -m pip install --no-cache-dir ninja && \
-        python3 -m pip install --no-cache-dir -U wheel && \
-        python3 -m pip install flash-attn --no-cache-dir --no-build-isolation; \
+        set -e; \
+        \
+        python3 -m pip install --no-cache-dir ninja; \
+        python3 -m pip install --force-reinstall --no-cache-dir wheel; \
+        \
+        cd /tmp; \
+        git clone --depth=1 --branch v2.8.3.post1 \
+            https://github.com/Dao-AILab/flash-attention.git flash-attention; \
+        cd flash-attention; \
+        \
+        sed -i 's/-std=c++17/-std=c++20/g' setup.py; \
+        sed -i 's/SKIP_CK_BUILD = os.getenv.*if USE_TRITON_ROCM else False/SKIP_CK_BUILD = True/' setup.py; \
+        git submodule update --init --depth=1 csrc/cutlass; \
+        \
+        RAM_GB=$(free -g | awk '/^Mem:/{print $2}'); \
+        NCPU=$(nproc); \
+        MAX_PRODUCT=$(python3 -c "print(min(${NCPU}, int(${RAM_GB}/2.8)))"); \
+        NVCC_THREADS=4; \
+        MAX_JOBS=$(python3 -c "print(max(1, ${MAX_PRODUCT} // ${NVCC_THREADS}))"); \
+        echo "Building FA2: MAX_JOBS=${MAX_JOBS} NVCC_THREADS=${NVCC_THREADS} RAM=${RAM_GB}GB CPUs=${NCPU}"; \
+        \
+        FLASH_ATTN_CUDA_ARCHS='80' \
+        MAX_JOBS=${MAX_JOBS} \
+        NVCC_THREADS=${NVCC_THREADS} \
+        FLASH_ATTENTION_FORCE_BUILD=TRUE \
+        NVCC_APPEND_FLAGS='--allow-unsupported-compiler' \
+            python3 setup.py bdist_wheel --dist-dir=dist; \
+        python3 -m pip install --no-cache-dir dist/*.whl; \
+        cd /tmp && rm -rf flash-attention; \
     else \
         echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN})"; \
     fi

@@ -1,0 +1,23 @@
+# Packages the checkers in this directory need, that must not go in `setup.py`.
+#
+# `utils/checkers.py` installs this file once per environment, so running a checker that needs it
+# pulls in whatever is listed here without anyone having to know about it. Mark the checker with
+# `"needs_requirements": True` in its CHECKER_CONFIG, or nothing will be installed for it.
+#
+# That opt-in is not decoration. `make style` and `make fix-repo` run inside serge's normalize
+# sandbox — a read-only container with `--network none` — where pip cannot succeed and every
+# attempt burns its retry budget for nothing. Only checkers that actually need a package reach for
+# one. Set TRANSFORMERS_SKIP_CHECKER_REQUIREMENTS=1 to turn the install off entirely.
+#
+# Why not `setup.py`: these are not runtime dependencies of `transformers`, and some cannot be
+# expressed there at all. A `git+` URL is a PEP 508 direct reference, which PyPI rejects in
+# `Requires-Dist` when this package is uploaded — putting one in an extra breaks the release. A
+# requirements file never becomes packaging metadata, so it is free of that constraint.
+#
+# A checker that needs one of these is responsible for saying so when it is missing, and for
+# deciding whether that is fatal: installing may fail, and running the checkers offline is normal.
+
+# `utils/check_reviewers.py` — the resolver it shares with the `Assign PR Reviewers` workflow, so
+# the check and the thing that actually assigns reviewers cannot disagree. Pin this to a released
+# version once transformers-ci is published, the way transformers-mlinter already is.
+transformers-ci[reviewers] @ git+https://github.com/huggingface/transformers-ci@main

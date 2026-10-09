@@ -265,11 +265,6 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     This can happen if `save_pretrained` remove the targets and not the keys from serialiazation, or you hardcoded `self.xxx = yyy` thus forcing to always tie -> they are removed from serialization.",
             )
 
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

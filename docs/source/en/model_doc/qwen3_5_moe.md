@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -27,6 +27,9 @@ rendered properly in your Markdown viewer.
 Notable checkpoints include Qwen/Qwen3.5-35B-A3B (35B total/3B active), Qwen/Qwen3.5-122B-A10B, Qwen/Qwen3.5-397B-A17B, and Qwen/Qwen3.6-35B-A3B. Qwen3.6 checkpoints share the same architecture and `model_type` as Qwen3.5 and are loaded with the same classes. The text tower reuses `Qwen3NextSparseMoeBlock` and expert kernels from Qwen3-Next; the vision tower is inherited from Qwen3-VL.
 
 You can find all the official Qwen3.5 MoE checkpoints under the [Qwen](https://huggingface.co/Qwen) organization.
+
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 ## Quickstart
 
@@ -81,6 +84,8 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
   | `True` ([`Atlas-Inference/gdn`](https://huggingface.co/kernels/Atlas-Inference/gdn)) | 0.53 s (1.38x faster) | 16.7 tok/s |
 
   Decode is roughly flat because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel currently requires `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## Qwen3_5MoeConfig
 

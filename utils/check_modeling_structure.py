@@ -26,7 +26,7 @@ CHECKER_CONFIG = {
         "src/transformers/models/**/modular_*.py",
         "src/transformers/models/**/configuration_*.py",
     ],
-    "check_args": ["--rules-toml", "utils/rules.toml"],
+    "check_args": ["--rules-toml", "utils/rules.toml", "--output-json", "mlinter-findings.json"],
     "fix_args": None,
 }
 

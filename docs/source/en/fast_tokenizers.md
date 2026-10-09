@@ -8,7 +8,7 @@ distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for 
 the
 specific language governing permissions and limitations under the License.
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that 
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that 
 may not be
 rendered properly in your Markdown viewer.
 -->
@@ -90,22 +90,22 @@ tokenizer("Sphinx of black quartz, judge my vow.", return_tensors="pt")
 from transformers import AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
-tokenizer.encode("Sphinx of black quartz, judge my vow.")
+input_ids = tokenizer.encode("Sphinx of black quartz, judge my vow.")
 [2, 235277, 82913, 576, 2656, 30407, 235269, 11490, 970, 29871, 235265]
 ```
 
 [`TokenizersBackend.decode`] converts a single sequence or batch of tokenized `input_ids` back to text.
 
 ```py
-tokenizer.decode(outputs["input_ids"])
-['<bos>Sphinx of black quartz, judge my vow.']
+tokenizer.decode(input_ids)
+'<bos>Sphinx of black quartz, judge my vow.'
 ```
 
 [`TokenizersBackend.decode`] preserves the exact tokenization spacing. Set `clean_up_tokenization_spaces` to remove spaces before punctuation, and `skip_special_tokens` to strip special tokens from the output.
 
 ```py
-tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
-['Sphinx of black quartz, judge my vow.']
+tokenizer.decode(input_ids, skip_special_tokens=True)
+'Sphinx of black quartz, judge my vow.'
 ```
 
 ## Special tokens
@@ -113,10 +113,10 @@ tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
 Special tokens mark structural boundaries in a sequence, like the beginning-of-sequence or padding positions. Each model defines its own set of special tokens. The tokenizer adds them when you call it.
 
 ```py
-tokenizer.encode("Sphinx of black quartz, judge my vow.")
+input_ids = tokenizer.encode("Sphinx of black quartz, judge my vow.")
 [2, 235277, 82913, 576, 2656, 30407, 235269, 11490, 970, 29871, 235265]
-tokenizer.decode(outputs["input_ids"])
-['<bos>Sphinx of black quartz, judge my vow.']
+tokenizer.decode(input_ids)
+'<bos>Sphinx of black quartz, judge my vow.'
 ```
 
 Register additional named special tokens with the `extra_special_tokens` argument. Multimodal models use them as placeholders for images, video, or audio.
@@ -255,7 +255,7 @@ A checkpoint resolves to a generic `TokenizersBackend` for one of three reasons.
 
 The affected model types and checkpoints grow as configs are corrected on the Hub. For the current set, see the `MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS` and `MODEL_IDS_TO_TOKENIZERS_BACKEND` definitions in [tokenization_auto.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/auto/tokenization_auto.py).
 
-The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies. To override the choice, pass `backend="tokenizers"` or `backend="sentencepiece"`.
+The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies.
 
 Check which backend a tokenizer is using with the `backend` property.
 

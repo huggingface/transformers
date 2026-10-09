@@ -15,8 +15,6 @@ import subprocess
 import tempfile
 import unittest
 
-from parameterized import parameterized
-
 from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
@@ -119,12 +117,6 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
-    @unittest.skip(
-        "V4's compressor stores rolling-window state on custom cache layers, which is not compatible with QuantizedCache."
-    )
-    def test_generate_with_quant_cache(self):
-        pass
-
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
@@ -141,19 +133,6 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertIsInstance(layer_attention, torch.Tensor)
                 self.assertEqual(layer_attention.shape[0], batch_size)
                 self.assertEqual(layer_attention.shape[1], config.num_attention_heads)
-
-    @unittest.skip(
-        "V4's rotary uses per-layer-type inv_freq buffers (Gemma3 pattern); the common test calls forward without `layer_type` and reads `.inv_freq`, neither of which apply."
-    )
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip(
-        "V4's rotary uses per-layer-type rope_parameters; the common test sets a flat dict and skips for multi-layer-type rotaries."
-    )
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
 
     def test_hidden_states_output(self):
         # V4 layers emit a 4D ``[B, S, hc_mult, hidden]`` tensor — the hc_mult streams
@@ -468,7 +447,9 @@ def main() -> int:
         dtype="auto",
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
-        distributed_config=DistributedConfig(enable_expert_parallel=True),
+        distributed_config=DistributedConfig(
+            tp_size=int(os.environ["WORLD_SIZE"]), ep_size=int(os.environ["WORLD_SIZE"])
+        ),
     )
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -545,7 +526,9 @@ def main() -> int:
         dtype="auto",
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
-        distributed_config=DistributedConfig(enable_expert_parallel=True),
+        distributed_config=DistributedConfig(
+            tp_size=int(os.environ["WORLD_SIZE"]), ep_size=int(os.environ["WORLD_SIZE"])
+        ),
     )
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -613,7 +596,7 @@ def _run_distributed_compile_worker(
     if num_gpus < 1:
         raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
     redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
-    with tempfile.NamedTemporaryFile("w", suffix="_distributed_compile_worker.py") as f:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix="_distributed_compile_worker.py") as f:
         f.write(script)
         f.flush()
         result = subprocess.run(
@@ -648,7 +631,7 @@ def _run_distributed_worker(
     # subprocess stderr and the test failure message — `:3` would file-log both and turn any
     # rank>0 crash into a bare non-zero return code with no diagnostic.
     redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
-    with tempfile.NamedTemporaryFile("w", suffix="_distributed_worker.py") as f:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix="_distributed_worker.py") as f:
         f.write(script)
         f.flush()
         result = subprocess.run(

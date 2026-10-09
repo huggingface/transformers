@@ -19,19 +19,13 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
-from ...integrations import (
-    use_experts_implementation,
-    use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
-    use_kernelized_func,
-)
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -39,7 +33,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_openai_privacy_filter import OpenAIPrivacyFilterConfig
 
@@ -66,9 +60,7 @@ class OpenAIPrivacyFilterRMSNorm(nn.Module):
 
 
 class OpenAIPrivacyFilterRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: OpenAIPrivacyFilterConfig, device=None):
+    def __init__(self, config: OpenAIPrivacyFilterConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -79,26 +71,18 @@ class OpenAIPrivacyFilterRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: OpenAIPrivacyFilterConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: OpenAIPrivacyFilterConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -107,25 +91,17 @@ class OpenAIPrivacyFilterRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = freqs
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = freqs
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(x.dtype), sin.to(x.dtype)
 
@@ -142,7 +118,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -275,8 +251,8 @@ class OpenAIPrivacyFilterExperts(nn.Module):
         self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_size))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.intermediate_size, self.hidden_size)))
         self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
-        self.alpha = 1.702
-        self.limit = 7.0
+        self.alpha = config.swiglu_alpha
+        self.limit = config.swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Concatenated layout instead of interleaving
@@ -419,7 +395,13 @@ class OpenAIPrivacyFilterPreTrainedModel(PreTrainedModel):
         "attentions": OpenAIPrivacyFilterAttention,
     }
     _keep_in_fp32_modules = []
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    # metal-flash-sdpa covers MPS and aiter-flash-attn ROCm, the others CUDA
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/metal-flash-sdpa",
+        "kernels-community/aiter-flash-attn",
+    ]
     _keep_in_fp32_modules_strict = ["sinks"]
 
     @torch.no_grad()

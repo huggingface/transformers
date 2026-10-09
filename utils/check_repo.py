@@ -91,6 +91,7 @@ PRIVATE_MODELS = [
     "Qwen3VLMoeVisionModel",
     "Qwen3_5VisionModel",
     "Qwen3_5MoeVisionModel",
+    "Qwen4ExpVisionModel",  # Building part of Qwen4ExpModel and tested through its multimodal forward.
     "SwitchTransformersStack",
     "SiglipTextTransformer",
     "Siglip2TextTransformer",
@@ -193,6 +194,7 @@ IGNORE_NON_TESTED = (
         "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
+        "Cosmos3EdgeVisionModel",  # Building part of the tested Cosmos3EdgeModel.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -208,6 +210,7 @@ IGNORE_NON_TESTED = (
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
         "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
@@ -224,6 +227,7 @@ IGNORE_NON_TESTED = (
         "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "MiniCPMV4_7VisionModel",  # Building part of bigger (tested) model - FIXME: raushan; adding each VLM backbone here is annoying!
         "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
@@ -260,16 +264,20 @@ IGNORE_NON_TESTED = (
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
         "GlmImageTextModel",  # Building part of bigger (tested) model
         "GlmOcrTextModel",  # Building part of bigger (tested) model
+        "Glm5NextTextModel",  # Building part of bigger (tested) model
+        "Glm5NextVisionModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
-        "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
-        "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
+        "Step3p7Model",  # `base_model_class = Step3p7Model if is_torch_available() else None`; check_repo's regex can't parse the conditional. Tested implicitly through Step3p7ForConditionalGeneration.
+        "Step3p7TextModel",  # Building part of bigger (tested) model
+        "Step3p7VisionModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
         "TimesFm2_5Model",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
@@ -280,6 +288,7 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "VibeVoiceModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
         "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
         "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model
         "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
@@ -300,11 +309,14 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
         "Kimi_K25VisionModel",
+        "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
     ]
 )
 
@@ -312,6 +324,7 @@ IGNORE_NON_TESTED = (
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/esmfold2/test_modeling_esmfold2.py",
     "models/camembert/test_modeling_camembert.py",
     "models/mbart/test_modeling_mbart.py",
     "models/mt5/test_modeling_mt5.py",
@@ -359,6 +372,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "BlipVisionModel",
         "BlipTextLMHeadModel",
         "BlipTextModel",
+        "NeoMMEForRetrieval",
         "BrosSpadeEEForTokenClassification",
         "BrosSpadeELForTokenClassification",
         "Swin2SRForImageSuperResolution",
@@ -369,6 +383,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "CLIPSegVisionModel",
         "CLIPSegTextModel",
         "EsmForProteinFolding",
+        "EsmFold2Model",
         "GPTSanJapaneseModel",
         "TimeSeriesTransformerForPrediction",
         "InformerForPrediction",
@@ -497,6 +512,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "JanusVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
+        "Step3p7TextModel",  # Building part of bigger (tested) model
+        "Step3p7VisionModel",  # Building part of bigger (tested) model
         "SLANetSLAHead",  # Building part of bigger (tested) model
         "SLANetBackbone",  # Building part of bigger (tested) model
         "SLANeXtSLAHead",  # Building part of bigger (tested) model
@@ -545,6 +562,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "VibeVoiceModel",  # Building part of a bigger model
     ]
 )
 
@@ -572,8 +590,8 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "ul2",
     "phobert",
     "herbert",
-    "dit",
     "lasr",
+    "granite_speech5",
     "mluke",
     "xlsr_wav2vec2",
     "xls_r",
@@ -589,7 +607,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "bertweet",
     "nllb",
     "xlm-v",
-    "dialogpt",
     "flan-t5",
     "bert-japanese",
     "mms",
@@ -599,7 +616,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "madlad-400",
     "granitevision",
     "falcon3",
-    "megatron_gpt2",
     "code_llama",
 }
 

@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2025-12-01.*
@@ -69,8 +69,8 @@ messages = [
 
 tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to(model.device)
 
-tokenized["input_ids"] = tokenized["input_ids"].to(device="cuda")
-tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device="cuda")
+tokenized["input_ids"] = tokenized["input_ids"].to(device=model.device)
+tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device=model.device)
 image_sizes = [tokenized["pixel_values"].shape[-2:]]
 
 output = model.generate(

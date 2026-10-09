@@ -68,7 +68,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         examples = [
             self.example_video_filepath,
             # TODO: re-enable this once we have a stable hub solution for CI
-            # "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
+            # "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/archery.mp4",
         ]
         return video_classifier, examples
 

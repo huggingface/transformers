@@ -34,18 +34,18 @@ from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
+    use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_inkling import InklingAudioConfig, InklingConfig, InklingTextConfig, InklingVisionConfig
 
 
@@ -63,6 +63,7 @@ class InklingModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -93,6 +94,7 @@ class InklingCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -320,7 +322,7 @@ class InklingExperts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -351,7 +353,7 @@ class InklingTopkRouter(nn.Module):
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
         self.global_scale = nn.Parameter(torch.ones(1))
-        self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -382,10 +384,9 @@ class InklingSharedExperts(nn.Module):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
         intermediate_dim = config.moe_intermediate_size
-        # TP loader cuts shards on the raw tensor but validates shapes on the target, so a Transpose
-        # conversion op breaks sharded loads. The runtime transpose(1, 2) is not a per-forward
-        # cost: it is a stride-metadata view, so the same
-        # matmul layout every nn.Linear runs
+        # TP loader cuts shards on the raw tensor but validates shapes on the target, so a Transpose conversion op breaks sharded
+        # loads. The runtime transpose(1, 2) is not a per-forward cost: it is a stride-metadata view, so the same matmul layout
+        # every nn.Linear runs
         self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, intermediate_dim, config.hidden_size))
         self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, intermediate_dim, config.hidden_size))
         self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, intermediate_dim))
@@ -430,14 +431,14 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
     # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if attention_mask is not None:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
 
 
-@use_kernel_func_from_hub("causal_conv1d_update")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -457,7 +458,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub("causal_conv1d_fn")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -535,7 +536,7 @@ class InklingShortConvolution(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if past_key_values is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -592,6 +593,15 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class InklingNormedEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_norm = InklingRMSNorm(embedding_dim, eps=norm_eps)
+
+    def forward(self, input_ids: torch.Tensor):
+        return self.embed_norm(super().forward(input_ids))
+
+
 @auto_docstring
 class InklingPreTrainedModel(PreTrainedModel):
     config_class = InklingConfig
@@ -611,6 +621,7 @@ class InklingPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": InklingDecoderLayer,
         "attentions": InklingAttention,
+        "router_logits": OutputRecorder(InklingTopkRouter, index=0),
     }
 
     @torch.no_grad()
@@ -651,12 +662,13 @@ class InklingTextModel(InklingPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = InklingNormedEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
+        )
         self.layers = nn.ModuleList(
             [InklingDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = InklingRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.embed_norm = InklingRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -674,12 +686,12 @@ class InklingTextModel(InklingPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_norm(self.embed_tokens(input_ids))
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -716,7 +728,7 @@ class InklingTextModel(InklingPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -728,6 +740,7 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: InklingTextConfig
 
     def __init__(self, config: InklingTextConfig):
@@ -759,14 +772,14 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, InklingForCausalLM
 
-        >>> model = InklingForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = InklingForCausalLM.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
@@ -798,6 +811,7 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -805,8 +819,8 @@ class InklingAudioModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
-        self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
+        self.audio_tokens_offsets = nn.Buffer(
+            torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
         )
 
     def forward(self, input_ids):
@@ -815,13 +829,19 @@ class InklingAudioModelEmbeddings(nn.Module):
         return inputs_embeds
 
 
+@auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
         self.norm = InklingRMSNorm(config.text_hidden_size, eps=1e-6)
 
-    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
+        r"""
+        audio_input_ids (`torch.Tensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
+            Mel-spectrogram frames of the input audios.
+        """
         hidden_states = self.embed_audio_tokens(audio_input_ids)
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPooling(
@@ -946,6 +966,7 @@ def plan_out_scales(
     return scales[idxs]
 
 
+@auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
@@ -963,8 +984,8 @@ class InklingVisionModel(InklingPreTrainedModel):
                 (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
             )
             output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else end_scale[3]
-            hw_fold = end_scale[1] // start_scale[1]
-            t_fold = end_scale[0] // start_scale[0]
+            hw_fold = int(end_scale[1] // start_scale[1])
+            t_fold = int(end_scale[0] // start_scale[0])
             self.encoder_layers.append(
                 InklingVisionEncoderLayer(
                     input_dim=start_scale[3] * shuffle_mult,
@@ -978,14 +999,15 @@ class InklingVisionModel(InklingPreTrainedModel):
         self.final_norm = InklingRMSNorm(config.text_hidden_size)
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 
         hidden_states = self.final_norm(hidden_states)
-        hidden_states = hidden_states.reshape(num_patches, -1)
+        hidden_states = hidden_states.reshape(num_patches, 1, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
@@ -1076,30 +1098,26 @@ class InklingModel(InklingPreTrainedModel):
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InklingModelOutputWithPast:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`, *optional*):
             Batch of (padded) discretized dMel bin tokens produced by [`InklingProcessor`].
         audio_input_ids_mask (`torch.Tensor` of shape `(num_audios, max_num_frames)`, *optional*):
             Mask marking valid (non-padding) audio frames in `audio_input_ids`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/inkling2-3b-mix-224")
-        >>> processor = AutoProcessor.from_pretrained("google/inkling2-3b-mix-224")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -1116,17 +1134,22 @@ class InklingModel(InklingPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds = self.language_model.embed_norm(self.get_input_embeddings()(input_ids))
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds, image_features, self.config.image_token_id
+                input_ids, inputs_embeds, image_embeds, self.config.image_token_id
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
 
         # Merge text and audio
         audio_features = None
@@ -1160,7 +1183,7 @@ class InklingModel(InklingPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return InklingModelOutputWithPast(
@@ -1168,7 +1191,8 @@ class InklingModel(InklingPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1212,6 +1236,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InklingCausalLMOutputWithPast:
         r"""
@@ -1228,12 +1253,12 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> messages = [
         ...     {
@@ -1273,7 +1298,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            labels=labels,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1296,6 +1321,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
@@ -1309,7 +1335,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         audio_input_ids=None,
         audio_input_ids_mask=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         labels=None,
         is_first_iteration=False,
         **kwargs,

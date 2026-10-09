@@ -21,11 +21,11 @@
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ...utils.type_validators import interval
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="HKUSTAudio/xcodec2-hf")
@@ -73,7 +73,11 @@ class Xcodec2Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: int | float | None = 0.0
     head_dim: int = 64
-    sub_configs = {"semantic_model_config": AutoConfig}
+    sub_configs_defaults = {
+        "semantic_model_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="wav2vec2-bert", init_kwargs={"num_hidden_layers": 16}
+        ),
+    }
 
     encoder_hidden_size: int = 48
     downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5)
@@ -84,13 +88,6 @@ class Xcodec2Config(PreTrainedConfig):
     quantization_levels: list[int] | tuple[int, ...] = (4, 4, 4, 4, 4, 4, 4, 4)
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.semantic_model_config, dict):
-            self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "wav2vec2-bert")
-            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
-                **self.semantic_model_config
-            )
-        elif self.semantic_model_config is None:
-            self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](num_hidden_layers=16)
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:

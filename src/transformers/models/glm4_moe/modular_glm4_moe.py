@@ -91,11 +91,11 @@ class Glm4MoeConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
@@ -118,6 +118,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 1408
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     n_routed_experts: int = 128
     routed_scaling_factor: float = 1.0
@@ -183,7 +184,7 @@ class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.num_experts), dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
 
 class Glm4MoeRMSNorm(DeepseekV3RMSNorm):

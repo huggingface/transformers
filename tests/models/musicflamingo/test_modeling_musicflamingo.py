@@ -77,6 +77,7 @@ class MusicFlamingoModelTester(ALMModelTester):
         # MusicFlamingoConfig requires rope_parameters.
         config = super().get_config()
         config.rope_parameters = {"rope_type": "default", "rope_theta": 2048, "partial_rotary_factor": 0.5}
+        config.max_position_embeddings = 2048  # config syncs it with theta in `post-init`
         return config
 
 
@@ -193,7 +194,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3",
                     },
                 ],
             }
@@ -258,7 +259,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3",
                         },
                     ],
                 }
@@ -273,7 +274,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_2.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_2.mp3",
                         },
                     ],
                 }
