@@ -1,4 +1,3 @@
-# Python lives in the uv venv at /opt/python (on PATH); flash-attn is already installed in this image.
 FROM rocm/vllm:rocm10.0.0_ubuntu24.04_py3.14_pytorch_2.12.0_vllm_0.27.0
 LABEL maintainer="Hugging Face"
 
