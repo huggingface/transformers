@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -155,9 +155,9 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
     """
 
     model_type = "cosmos3_edge"
-    sub_configs = {
-        "text_config": Cosmos3EdgeTextConfig,
-        "vision_config": Cosmos3EdgeVisionConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Cosmos3EdgeVisionConfig),
+        "text_config": SubConfigSpec(config_class=Cosmos3EdgeTextConfig),
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -169,19 +169,6 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
     vision_start_token_id: int = 20
     vision_end_token_id: int = 21
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Cosmos3EdgeTextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Cosmos3EdgeTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Cosmos3EdgeVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Cosmos3EdgeVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()

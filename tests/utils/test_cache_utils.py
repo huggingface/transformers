@@ -215,6 +215,34 @@ class CacheTest(unittest.TestCase):
             torch.testing.assert_close(keys, expected, rtol=0, atol=1e-2)
             torch.testing.assert_close(values, expected, rtol=0, atol=1e-2)
 
+    @parameterized.expand(
+        [
+            ("empty_at_capacity", [2, 4, 4], [0, 0, 0]),
+            ("empty_over_capacity", [2, 8], [0, 0]),
+            ("nonempty_at_capacity", [2, 1, 3], [0, 1, 0]),
+            ("nonempty_over_capacity", [2, 1, 4], [0, 1, 0]),
+            ("below_capacity", [2, 1, 2], [0, 1, 3]),
+            ("single_token", [2, 1, 1, 1, 1], [0, 1, 2, 3, 0]),
+        ]
+    )
+    @require_optimum_quanto
+    def test_quantized_layer_chunked_updates(self, _, chunk_lengths, expected_residual_lengths):
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+        sequence_length = 0
+        for chunk_length, expected_residual_length in zip(chunk_lengths, expected_residual_lengths):
+            states = torch.ones(1, 2, chunk_length, 16, device=torch_device)
+            keys, values = layer.update(states, 2 * states)
+            sequence_length += chunk_length
+            self.assertEqual(layer.get_seq_length(), sequence_length)
+            self.assertEqual(keys.shape[-2], sequence_length)
+            torch.testing.assert_close(keys, torch.ones_like(keys), rtol=0, atol=1e-2)
+            torch.testing.assert_close(values, 2 * torch.ones_like(values), rtol=0, atol=1e-2)
+            self.assertEqual(layer.keys.numel(), expected_residual_length * 2 * 16)
+            self.assertEqual(layer.values.numel(), expected_residual_length * 2 * 16)
+            self.assertEqual(
+                layer._dequantize(layer._quantized_keys).shape[-2], sequence_length - expected_residual_length
+            )
+
     @require_optimum_quanto
     def test_quantized_layer_reset(self):
         """`reset` must also drop the quantized states, which hold most of the cache."""
