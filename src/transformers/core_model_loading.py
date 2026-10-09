@@ -148,6 +148,39 @@ class Chunk(ConversionOps):
         return Concatenate(self.dim, self.num_shards_attribute)
 
 
+class Split(ConversionOps):
+    """Split a tensor along `dim` into one piece per target, sized like that target's model parameter.
+    WARNING this op is not TP-safe, a sharded fused tensor needs each target's local slice, not the full parameter sizes."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str,
+        model: PreTrainedModel,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) > 1:
+            raise ValueError("Undefined Operation encountered")
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        sizes = [
+            model.get_parameter(full_layer_name.replace(target_patterns[0], target)).shape[self.dim]
+            for target in target_patterns
+        ]
+        chunks = torch.split(tensor, sizes, dim=self.dim)
+        return {target: chunk.contiguous() for target, chunk in zip(target_patterns, chunks)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Concatenate(self.dim)
+
+
 class Concatenate(ConversionOps):
     """Concatenate tensors along `dim`. Additionally, if concatenating an aribitrary number of tensors, `num_shards_attribute` is
     a config field to read to know how many tensors to recreate when using the opposite Ops."""
