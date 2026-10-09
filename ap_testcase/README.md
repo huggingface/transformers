@@ -104,7 +104,7 @@ setup or case failures produce a nonzero exit code.
 | `03_image_tokenization.py` | Image tokenization from processor output vs. fully manual preprocessing | yes |
 | `04_audio_tokenization.py` | Audio tokenization from processor output vs. fully manual preprocessing | yes |
 | `05_generation_chat_messages.py` | Full generation from chat messages (text-only + multimodal, incl. media auto-loading), thinking activation via `enable_thinking`, seeded sampling parameters | yes |
-| `06_generation_raw_text.py` | Full generation from raw text with image and audio placeholders (base-model style), incl. a batch | yes |
+| `06_generation_raw_text.py` | Raw-text generation with image/audio placeholders; greedy and beam parity for uneven batches with multiple media items and text-only rows | yes |
 | `07_language_model_from_composite.py` | All text-only classes from the composite: `Apertus1p5TextConfig` extraction, `Apertus1p5TextForCausalLM` (pruned output layer, finite physical-width logits, greedy + beam generation), bare `Apertus1p5TextModel` hidden states | yes |
 | `08_multi_device_inference.py` | Multi-device placement (needs >= 2 GPUs, else skips): `device_map="auto"` sharding (fp32-keep of media tokenizers, physical-width logits, generation parity vs single device) and `DistributedConfig(tp_size=2)` tensor parallelism over the text backbone via torchrun | yes |
 | `09_training_loop.py` | Training smoke test (needs a GPU, else skips): pruned-head label contract (physical-width loss logits, finite loss with input-only labels masked using `-100`), an overfit loop on the last layer + lm_head, and a DDP variant via torchrun with >= 2 GPUs | yes |

@@ -38,7 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..wavtokenizer import WavTokenizerEncoderModel
 from .configuration_apertus1p5 import Apertus1p5Config, Apertus1p5TextConfig, Apertus1p5VisionTokenizerConfig
@@ -338,8 +338,8 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
             language-vocabulary offset.
         """
         # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
-        # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
-        pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
+        # move the input to the encoder's device and dtype so callers can pass fp16/bf16 pixel values
+        pixel_values = pixel_values.to(self.encoder.conv_in.weight.device, self.encoder.conv_in.weight.dtype)
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
         return Apertus1p5VisionTokenizerEncoderOutput(image_tokens=self.quantize(hidden_states))
@@ -644,18 +644,10 @@ class Apertus1p5TextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -850,7 +842,10 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     @can_return_tuple
     @auto_docstring(custom_intro="Tokenizes images and embeds their discrete codes with the text embedding layer.")
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
@@ -892,15 +887,23 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             )
         vocab_ids_list = []
         for clip, length in zip(input_features, audio_lengths):
-            clip = clip[None, :, : int(length)].to(self.audio_tokenizer.dtype)
+            clip = clip[None, :, : int(length)].to(self.audio_tokenizer.device, self.audio_tokenizer.dtype)
             codes = self.audio_tokenizer.encode(clip, return_dict=True).audio_codes
             vocab_ids_list.append(codes.flatten() + self.config.audio_token_offset)
         return torch.cat(vocab_ids_list)
 
+    def _get_audio_token_counts(self, feature_attention_mask: torch.Tensor) -> list[int]:
+        """Number of audio codes per clip: one per started `hop_length` window of valid samples."""
+        hop_length = self.audio_tokenizer.config.hop_length
+        return ((feature_attention_mask.sum(dim=-1) + hop_length - 1) // hop_length).tolist()
+
     @can_return_tuple
     @auto_docstring(custom_intro="Tokenizes audio and embeds its discrete codes with the text embedding layer.")
     def get_audio_features(
-        self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
@@ -909,8 +912,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
         """
         vocab_ids = self.get_audio_tokens(input_features, feature_attention_mask)
-        hop_length = self.audio_tokenizer.config.hop_length
-        split_sizes = [-(-int(length) // hop_length) for length in feature_attention_mask.sum(dim=-1)]
+        split_sizes = self._get_audio_token_counts(feature_attention_mask)
         audio_embeddings = self.get_input_embeddings()(vocab_ids)
         audio_features = torch.split(audio_embeddings, split_sizes)
         audio_tokens = [ids - self.config.audio_token_offset for ids in torch.split(vocab_ids, split_sizes)]
@@ -971,6 +973,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -987,7 +990,13 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Input embeddings instead of `input_ids`. With modality inputs, placeholder positions must contain
             their exact token embeddings so the model can detect them.
+        mm_encoder_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+            Precomputed image features under the `"image"` key. Its `pooler_output` contains one
+            `(num_image_tokens, hidden_size)` tensor per image, in placeholder order. Replaces `pixel_values`
+            and `image_sizes`; audio still uses `input_features` and `feature_attention_mask`.
         """
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -996,10 +1005,15 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_sizes, return_dict=True)
+
         image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_sizes, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0)
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
         audio_features = None
         if input_features is not None:
             audio_features = self.get_audio_features(
@@ -1047,6 +1061,36 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
         self.post_init()
 
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
+            The tensors corresponding to the input images, padded to a common size.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
+            The true size of each image, being (height, width).
+        """
+        return self.model.get_image_features(pixel_values, image_sizes, **kwargs)
+
+    @auto_docstring
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
+            Mono 24 kHz waveforms, padded to a common length.
+        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
+            Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
+        """
+        return self.model.get_audio_features(input_features, feature_attention_mask, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1063,6 +1107,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1079,6 +1124,10 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Next-token labels in `[0, output_vocab_size)` (or `[0, text_config.vocab_size)` when unset).
             Use `-100` for input-only multimodal tokens and other ignored positions.
+        mm_encoder_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+            Precomputed image features under the `"image"` key. Its `pooler_output` contains one
+            `(num_image_tokens, hidden_size)` tensor per image, in placeholder order. Replaces `pixel_values`
+            and `image_sizes`; audio still uses `input_features` and `feature_attention_mask`.
 
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
@@ -1096,6 +1145,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )
@@ -1124,98 +1174,43 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor | None, dict[str, Any]]:
-        """Expand complete per-sample media groups together for beam or return-sequence expansion."""
-        if expand_size == 1:
-            return input_ids, model_kwargs
+        """Expand audio clips by prompt; shared generation handles precomputed image features."""
+        if expand_size == 1 or model_kwargs.get("input_features") is None:
+            return super()._expand_inputs_for_generation(expand_size, is_encoder_decoder, input_ids, **model_kwargs)
 
-        def _get_placeholder_counts(token_id: int) -> list[int]:
-            inputs_embeds = model_kwargs.get("inputs_embeds")
-            if inputs_embeds is not None:
-                token_embed = self.get_input_embeddings()(
-                    torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                placeholder_mask = (inputs_embeds == token_embed).all(dim=-1)
-            elif input_ids is not None:
-                placeholder_mask = input_ids == token_id
-            else:
-                raise ValueError("Either `input_ids` or `inputs_embeds` must be provided for multimodal expansion.")
-            return placeholder_mask.sum(dim=-1).tolist()
-
-        def _get_media_nums(placeholder_counts: list[int], media_token_counts: list[int], modality: str) -> list[int]:
-            media_nums = []
-            media_idx = 0
-            for sample_idx, expected_tokens in enumerate(placeholder_counts):
-                sample_media_idx = media_idx
-                actual_tokens = 0
-                while actual_tokens < expected_tokens and media_idx < len(media_token_counts):
-                    actual_tokens += media_token_counts[media_idx]
-                    media_idx += 1
-                if actual_tokens != expected_tokens:
-                    raise ValueError(
-                        f"Cannot assign flattened {modality} inputs to sample {sample_idx}: found "
-                        f"{expected_tokens} placeholder tokens, but the corresponding media inputs produce "
-                        f"{actual_tokens} tokens."
-                    )
-                media_nums.append(media_idx - sample_media_idx)
-
-            if media_idx != len(media_token_counts):
-                raise ValueError(
-                    f"Cannot assign all flattened {modality} inputs to the batch: {len(media_token_counts) - media_idx} "
-                    f"media inputs remain after matching the per-sample placeholder counts."
-                )
-            return media_nums
-
-        image_nums = None
-        pixel_values = model_kwargs.get("pixel_values")
-        image_sizes = model_kwargs.get("image_sizes")
-        if pixel_values is not None:
-            factor = self.model.vision_tokenizer.vision_spatial_factor
-            image_token_counts = (image_sizes // factor).prod(dim=-1).tolist()
-            image_nums = _get_media_nums(
-                _get_placeholder_counts(self.config.image_token_id), image_token_counts, "image"
+        inputs_embeds = model_kwargs.get("inputs_embeds")
+        if inputs_embeds is not None:
+            token_embed = self.get_input_embeddings()(
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
+            placeholder_mask = (inputs_embeds == token_embed).all(dim=-1)
+        elif input_ids is not None:
+            placeholder_mask = input_ids == self.config.audio_token_id
+        else:
+            raise ValueError("Either `input_ids` or `inputs_embeds` must be provided for multimodal expansion.")
 
-        audio_nums = None
-        input_features = model_kwargs.get("input_features")
-        feature_attention_mask = model_kwargs.get("feature_attention_mask")
-        if input_features is not None:
-            hop_length = self.model.audio_tokenizer.config.hop_length
-            audio_lengths = feature_attention_mask.sum(dim=-1)
-            audio_token_counts = ((audio_lengths + hop_length - 1) // hop_length).tolist()
-            audio_nums = _get_media_nums(
-                _get_placeholder_counts(self.config.audio_token_id), audio_token_counts, "audio"
-            )
+        audio_token_counts = self.model._get_audio_token_counts(model_kwargs["feature_attention_mask"])
+        audio_nums = []
+        audio_idx = 0
+        for expected_tokens in placeholder_mask.sum(dim=-1).tolist():
+            sample_audio_idx = audio_idx
+            actual_tokens = 0
+            while actual_tokens < expected_tokens and audio_idx < len(audio_token_counts):
+                actual_tokens += audio_token_counts[audio_idx]
+                audio_idx += 1
+            audio_nums.append(audio_idx - sample_audio_idx)
 
-        def _repeat_interleave_samples(tensor: torch.Tensor, lengths: list[int]) -> torch.Tensor:
-            samples = torch.split(tensor, lengths)
-            repeat_args = [expand_size] + [1] * (tensor.dim() - 1)
-            return torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+        # Keep flattened audio tensors out of the shared per-text-row expansion.
+        audio_kwargs = {}
+        for key in ("input_features", "feature_attention_mask"):
+            value = model_kwargs.pop(key)
+            repeats = (expand_size,) + (1,) * (value.ndim - 1)
+            audio_kwargs[key] = torch.cat([group.repeat(repeats) for group in value.split(audio_nums)], dim=0)
 
-        image_keys = {"pixel_values", "image_sizes"}
-        audio_keys = {"input_features", "feature_attention_mask"}
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key, value in dict_to_expand.items():
-                if value is None or not isinstance(value, torch.Tensor):
-                    continue
-                if key in image_keys and image_nums is not None:
-                    dict_to_expand[key] = _repeat_interleave_samples(value, image_nums)
-                elif key in audio_keys and audio_nums is not None:
-                    dict_to_expand[key] = _repeat_interleave_samples(value, audio_nums)
-                else:
-                    dict_to_expand[key] = value.repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size, is_encoder_decoder, input_ids, **model_kwargs
+        )
+        model_kwargs.update(audio_kwargs)
         return input_ids, model_kwargs
 
 
