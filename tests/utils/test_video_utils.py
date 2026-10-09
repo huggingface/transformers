@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+import warnings
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -32,6 +33,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
+    get_uniform_frame_indices,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -405,6 +407,13 @@ class LoadVideoTester(unittest.TestCase):
         )
         self.assertEqual(video.shape, (22, 360, 640, 3))
 
+    def test_load_video_num_frames_exceeds_total(self):
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
+            load_video(video_file_path, num_frames=300)
+
     def test_load_video_fps(self):
         video, _ = load_video(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4", fps=1
@@ -424,9 +433,10 @@ class LoadVideoTester(unittest.TestCase):
                 num_frames=10,
             )
 
-    def test_load_video_num_frames_exceeds_total(self):
-        video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
-        )
-        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
-            load_video(video_file_path, num_frames=300)
+
+def test_get_uniform_frame_indices_deprecated():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        get_uniform_frame_indices(17, 7)
+
+    assert any(issubclass(w.category, FutureWarning) and "default_sample_indices_fn" in str(w.message) for w in caught)

@@ -296,6 +296,12 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
     Returns:
         np.ndarray: np array of frame indices that will be sampled.
     """
+    warnings.warn(
+        "`get_uniform_frame_indices` is deprecated and will be removed in a future version. "
+        "Please use `default_sample_indices_fn` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if num_frames is not None:
         indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
     else:
@@ -305,7 +311,7 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
 
 def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs) -> np.ndarray:
     """
-    A default sampling function that replicates the logic used in get_uniform_frame_indices,
+    A default sampling function that handles uniform frame sampling,
     while optionally handling `fps` if `num_frames` is not provided.
 
     Args:
