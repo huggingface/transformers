@@ -422,53 +422,90 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 logits.append(model(**{**inputs_dict, "input_features": features}).logits)
         self.assertFalse(torch.allclose(*logits), "different audio codes must yield different logits")
 
-    def test_expand_inputs_for_generation_preserves_media_groups(self):
+    def test_generate_preserves_image_and_audio_groups(self):
+        torch.manual_seed(0)
+        expand_size = 3
         config = self.model_tester.get_config()
         model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
-        expand_size = 2
-
-        input_ids = torch.full((2, 12), config.text_config.pad_token_id, device=torch_device, dtype=torch.long)
-        input_ids[0, :8] = config.image_token_id
-        input_ids[0, 8:11] = config.audio_token_id
-        input_ids[0, 11] = config.text_config.bos_token_id
-        input_ids[1, :2] = config.image_token_id
-        input_ids[1, 2:5] = config.audio_token_id
-        input_ids[1, 5] = config.text_config.bos_token_id
+        # Text-only, two images and clips, image-only, and audio-only prompts, all left padded.
+        input_ids = torch.full((4, 12), config.text_config.pad_token_id, device=torch_device, dtype=torch.long)
+        input_ids[:, -1] = config.text_config.bos_token_id
+        input_ids[1, :8] = config.image_token_id
+        input_ids[1, 8:11] = config.audio_token_id
+        input_ids[2, -3:-1] = config.image_token_id
+        input_ids[3, -4:-1] = config.audio_token_id
         attention_mask = input_ids.ne(config.text_config.pad_token_id)
 
         image_sizes = torch.tensor([[8, 8], [4, 16], [4, 8]], device=torch_device)
         pixel_values = torch.empty(3, 3, 8, 16, device=torch_device)
-        for image, value in zip(pixel_values, (10.0, 20.0, 30.0)):
+        for image, value in zip(pixel_values, (1.0, 2.0, 3.0)):
             image.fill_(value)
-
         feature_attention_mask = torch.zeros(3, 12, device=torch_device, dtype=torch.long)
         for mask, length in zip(feature_attention_mask, (4, 8, 12)):
             mask[:length] = 1
         input_features = torch.empty(3, 1, 12, device=torch_device)
         for clip, value in zip(input_features, (1.0, 2.0, 3.0)):
             clip.fill_(value)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+            "image_sizes": image_sizes,
+            "input_features": input_features,
+            "feature_attention_mask": feature_attention_mask,
+        }
+        inputs["position_ids"] = attention_mask.long().cumsum(-1) - 1
+        inputs["position_ids"].masked_fill_(~attention_mask, 0)
+        reference = {
+            key: inputs[key].repeat_interleave(expand_size, dim=0)
+            for key in ("input_ids", "attention_mask", "position_ids")
+        }
+        media_indices = [0, 1] * expand_size + [2] * expand_size
+        for key in ("pixel_values", "image_sizes", "input_features", "feature_attention_mask"):
+            reference[key] = inputs[key][media_indices]
 
-        expanded_input_ids, expanded_kwargs = model._expand_inputs_for_generation(
-            expand_size=expand_size,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
-        )
+        # Control discrete codes to make incorrect media ordering observable in the real language model.
+        def encode_image(image):
+            factor = model.model.vision_tokenizer.vision_spatial_factor
+            codes = image.new_full(
+                (1, image.shape[-2] // factor, image.shape[-1] // factor), int(image[0, 0, 0, 0]), dtype=torch.long
+            )
+            return Apertus1p5VisionTokenizerEncoderOutput(image_tokens=codes)
 
-        self.assertTrue(torch.equal(expanded_input_ids, input_ids.repeat_interleave(expand_size, dim=0)))
-        self.assertTrue(
-            torch.equal(expanded_kwargs["attention_mask"], attention_mask.repeat_interleave(expand_size, dim=0))
-        )
-        self.assertEqual(expanded_kwargs["pixel_values"][:, 0, 0, 0].tolist(), [10, 20, 10, 20, 30, 30])
-        self.assertEqual(
-            expanded_kwargs["image_sizes"].tolist(),
-            [[8, 8], [4, 16], [8, 8], [4, 16], [4, 8], [4, 8]],
-        )
-        self.assertEqual(expanded_kwargs["input_features"][:, 0, 0].tolist(), [1, 2, 1, 2, 3, 3])
-        self.assertEqual(expanded_kwargs["feature_attention_mask"].sum(dim=-1).tolist(), [4, 8, 4, 8, 12, 12])
+        def encode_audio(clip, return_dict):
+            count = -(-clip.shape[-1] // config.audio_config.hop_length)
+            codes = clip.new_full((1, 1, count), int(clip[0, 0, 0]), dtype=torch.long)
+            return WavTokenizerEncoderOutput(audio_codes=codes)
+
+        options = {
+            "max_new_tokens": 2,
+            "eos_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+            "use_cache": False,
+            "suppress_tokens": [config.image_token_id, config.audio_token_id],
+        }
+        with (
+            torch.no_grad(),
+            patch.object(model.model.vision_tokenizer, "encode", side_effect=encode_image) as image_encode,
+            patch.object(model.model.audio_tokenizer, "encode", side_effect=encode_audio),
+        ):
+            expected = model.generate(**reference, do_sample=False, **options)
+            image_encode.reset_mock()
+            actual = model.generate(**inputs, num_beams=expand_size, num_return_sequences=expand_size, **options)
+            self.assertEqual(image_encode.call_count, 3)
+        torch.testing.assert_close(actual.logits[0], expected.logits[0], rtol=1e-4, atol=1e-5)
+
+    def test_precomputed_images_match_pixel_values(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
+        with torch.no_grad():
+            expected = model(**inputs).logits
+            image_outputs = model.get_image_features(
+                inputs.pop("pixel_values"), inputs.pop("image_sizes"), return_dict=True
+            )
+            actual = model(**inputs, mm_encoder_outputs={"image": image_outputs}).logits
+        torch.testing.assert_close(actual, expected)
 
     def test_mismatched_media_placeholders_raise(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
