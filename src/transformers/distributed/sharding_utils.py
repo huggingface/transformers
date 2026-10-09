@@ -36,6 +36,26 @@ if is_torch_distributed_available():
         Shard.local_shard_size_and_offset = Shard._local_shard_size_and_offset
 
 
+def read_intervals(read, intervals: list[list[tuple[int, int]]] | None) -> torch.Tensor:
+    """Read the `intervals` of a tensor (one list of `(start, end)` per dim) with `read(index)`.
+
+    `None` or `[]` means the whole tensor. A dim with several intervals is read piece by piece and
+    concatenated; only one such dim is supported."""
+    if not intervals:
+        return read(...)
+    concat_dims = [dim for dim, dim_intervals in enumerate(intervals) if len(dim_intervals) > 1]
+    if len(concat_dims) > 1:
+        # NOTE(3outeille): not sure yet which scenario will have StridedShard
+        # placements on both row and column. Thus, delay implementing this for now.
+        raise ValueError("Current shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
+    base = [slice(*dim_intervals[0]) if dim_intervals else slice(0, 0) for dim_intervals in intervals]
+    if not concat_dims:
+        return read(tuple(base))
+    dim = concat_dims[0]
+    pieces = [read((*base[:dim], slice(start, end), *base[dim + 1 :])) for start, end in intervals[dim]]
+    return torch.cat(pieces, dim=dim)
+
+
 class DtensorShardOperation:
     """Shard-on-read: slice a full disk tensor down to this rank's local
     DTensor shard, for any combination of placements on a 1-D or n-D mesh.  It's on
@@ -91,29 +111,28 @@ class DtensorShardOperation:
         self._axis0_offset = offsets[0]
         self._axis0_local_size = local_shape[0]
 
-    def shard_tensor(
-        self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
-    ) -> torch.Tensor | None:
-        """Return this rank's local shard of a checkpoint tensor.
+    def intervals(self, source_shape: list[int], tensor_idx: int | None = None) -> list[list[tuple[int, int]]] | None:
+        """The intervals of a checkpoint tensor this rank keeps, one list of `(start, end)` per dim (several on a
+        dim for interleaved layouts), or `None` if the rank doesn't keep any of it.
 
         Two layouts (example param shape [N, in, out]):
 
         - tensor_idx is None: one stacked [N, in, out] tensor;
           slice every sharded dim (including axis 0).
         - tensor_idx given: one [in, out] tensor per expert;
-          return None if this rank does not own that expert, else slice
+          `None` if this rank does not own that expert, else slice
           inner dims only. Surviving pieces are stacked by MergeModulelist
           into this rank's local [n_local, in, out] shard.
         """
-        source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
         dim_placements = [
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
 
         # Dense path
         if tensor_idx is None:
+            intervals_by_dim = [[(0, size)] for size in source_shape]
             if not dim_placements:
-                return source[...].to(device=device, dtype=dtype)
+                return intervals_by_dim
 
             # Determine for each tensor dimension, which type of sharding operations to apply (_StridedShard or Shard) and which rank to apply it to.
             # i.e: dim 0 -> [ Strided(rank0, size=2, sf=2), Shard(rank1, size=2) ]
@@ -125,8 +144,6 @@ class DtensorShardOperation:
                 dim_idx = self._normalize_param_dim(placement.dim)
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
-            # prepare the slices to fetch on disk for each tensor dimension.
-            intervals_by_dim = [[(0, size)] for size in source_shape]
             for dim_idx, planned_ops in enumerate(planned_ops_by_dim):
                 intervals = intervals_by_dim[dim_idx]
                 for placement, rank, world_size in planned_ops:
@@ -135,20 +152,7 @@ class DtensorShardOperation:
                     else:
                         intervals = self._compute_strided_slice(intervals, rank, world_size, placement.split_factor)
                 intervals_by_dim[dim_idx] = intervals
-
-            has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
-            # finally fetch from the disk only the slices
-            # finally fetch from the disk only the slices
-            if has_strided_shard:
-                # Multi-interval dim: read each piece separately, then concatenate.
-                return self._slice_and_cat(source, intervals_by_dim, device, dtype)
-            else:
-                slice_parts = []
-                for intervals in intervals_by_dim:
-                    start, end = intervals[0] if len(intervals) > 0 else (0, 0)
-                    slice_parts.append(slice(start, end))
-
-                return source[tuple(slice_parts)].to(device=device, dtype=dtype)
+            return intervals_by_dim
 
         # MoE path
         # tensor_idx identifies the axis-0 piece in param space (not in source.shape).
@@ -182,13 +186,17 @@ class DtensorShardOperation:
             for rank, world_size in planned_ops:
                 intervals = self._compute_contiguous_slice(intervals, rank, world_size)
             intervals_by_source_dim[source_dim] = intervals
+        return intervals_by_source_dim
 
-        slice_parts = []
-        for intervals in intervals_by_source_dim:
-            start, end = intervals[0] if intervals else (0, 0)
-            slice_parts.append(slice(start, end))
-
-        return source[tuple(slice_parts)].to(device=device, dtype=dtype)
+    def shard_tensor(
+        self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor | None:
+        """This rank's shard of a checkpoint tensor (see `intervals`), or `None` if it doesn't own any."""
+        source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
+        intervals = self.intervals(source_shape, tensor_idx)
+        if intervals is None:
+            return None
+        return read_intervals(lambda index: source[index], intervals).to(device=device, dtype=dtype)
 
     def _compute_strided_slice(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
@@ -266,47 +274,6 @@ class DtensorShardOperation:
                 local_intervals.append((source_overlap_start, source_overlap_end))
 
         return local_intervals
-
-    def _slice_and_cat(
-        self,
-        source: torch.Tensor,
-        intervals: list[list[tuple[int, int]]],
-        device: torch.device | str | int | None,
-        dtype: torch.dtype | None,
-    ) -> torch.Tensor:
-        multi_interval_dims = [dim_idx for dim_idx, dim_intervals in enumerate(intervals) if len(dim_intervals) > 1]
-        if len(multi_interval_dims) > 1:
-            # NOTE(3outeille): not sure yet which scenario will have StridedShard
-            # placements on both row and column. Thus, delay implementing this for now.
-            raise ValueError("Current shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
-        concat_dim = multi_interval_dims[0] if multi_interval_dims else None
-
-        base_slices = []
-        for dim_idx, dim_intervals in enumerate(intervals):
-            if dim_idx == concat_dim:
-                # Disconnected intervals on this dim — placeholder; filled per interval below.
-                base_slices.append(slice(None))
-            else:
-                # Single contiguous slice on this dim.
-                start, end = dim_intervals[0]
-                base_slices.append(slice(start, end))
-
-        # Fast path: every dim is one contiguous interval, read in a single slice.
-        if concat_dim is None:
-            return source[tuple(base_slices)].to(device=device, dtype=dtype)
-
-        # Multi-interval dim: keep base slices fixed and vary concat_dim only.
-        base_slices_tuple = tuple(base_slices)
-        interval_tensors = []
-        for interval_start, interval_end in intervals[concat_dim]:
-            interval_slices = (
-                *base_slices_tuple[:concat_dim],
-                slice(interval_start, interval_end),
-                *base_slices_tuple[concat_dim + 1 :],
-            )
-            interval_tensors.append(source[interval_slices])
-
-        return torch.cat(interval_tensors, dim=concat_dim).to(device=device, dtype=dtype)
 
     def _get_sub_mesh(self, mesh_dim: int):
         if self.device_mesh.ndim == 1:

@@ -15,7 +15,7 @@ import unittest
 
 import torch
 
-from transformers.distributed.sharding_utils import DtensorShardOperation
+from transformers.distributed.sharding_utils import DtensorShardOperation, read_intervals
 
 
 if torch.distributed.is_available():
@@ -338,11 +338,9 @@ class TestDtensorShardOperation(unittest.TestCase):
             with self.subTest(intervals=intervals, rank=rank, ws=ws):
                 self.assertEqual(op._compute_contiguous_slice(list(intervals), rank=rank, world_size=ws), exp)
 
-    def test_slice_and_cat(self):
-        # Direct tests for _slice_and_cat(source, intervals, device, dtype).
+    def test_read_intervals(self):
         tensor = torch.arange(64).reshape(8, 8).float()
-        mesh = FakeMesh(shape=(2,), rank=0)
-        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8, 8), local_shape=(4, 8))
+        read = lambda index: tensor[index]  # noqa: E731
         expected = {
             # Fast path: every dim is single-interval -> one slice read, no cat
             "fast_path": ([[(0, 4)], [(0, 8)]], tensor[:4, :]),
@@ -353,13 +351,13 @@ class TestDtensorShardOperation(unittest.TestCase):
         }
         for case, (intervals, exp) in expected.items():
             with self.subTest(case=case):
-                torch.testing.assert_close(op._slice_and_cat(tensor, intervals, None, None), exp)
+                torch.testing.assert_close(read_intervals(read, intervals), exp)
 
         # Reject: two dims with disjoint ranges -> would require an outer-product of reads.
         with self.assertRaises(ValueError):
-            op._slice_and_cat(tensor, [[(0, 2), (4, 6)], [(0, 2), (4, 6)]], None, None)
+            read_intervals(read, [[(0, 2), (4, 6)], [(0, 2), (4, 6)]])
 
-        result = op._slice_and_cat(tensor, [[(0, 4)], [(0, 8)]], None, torch.float16)
+        result = read_intervals(read, [[(0, 4)], [(0, 8)]]).to(dtype=torch.float16)
         self.assertEqual(result.dtype, torch.float16)
 
 
