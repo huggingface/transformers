@@ -34,6 +34,7 @@ if is_torch_available():
         Apertus1p5VisionTokenizerConfig,
         Apertus1p5VisionTokenizerModel,
         WavTokenizerConfig,
+        WavTokenizerEncoderConfig,
         WavTokenizerModel,
     )
     from transformers.models.apertus1p5 import convert_apertus1p5_weights_to_hf as conversion
@@ -106,7 +107,7 @@ class Apertus1p5ConversionTest(unittest.TestCase):
                     self.assertEqual(saved_config["dtype"], expected_dtype)
                     self.assertEqual(config.architectures, ["Apertus1p5ForConditionalGeneration"])
                     self.assertIsInstance(config.text_config, Apertus1p5TextConfig)
-                    self.assertIsInstance(config.audio_config, WavTokenizerConfig)
+                    self.assertIsInstance(config.audio_config, WavTokenizerEncoderConfig)
                     self.assertEqual(config.text_config.model_type, "apertus1p5_text")
                     # source entrypoints must not leak into nested sub-configs
                     self.assertIsNone(getattr(config.text_config, "architectures", None))
