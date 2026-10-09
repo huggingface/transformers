@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GlmMoeDsa model."""
 
+import copy
 import os
 import unittest
 
@@ -32,6 +33,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -123,6 +125,30 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
         self,
     ):
         pass
+
+    def test_indexer_chunking(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config.index_topk = 2
+        for model_class in self.all_model_classes:
+            set_seed(42)
+            model = model_class(copy.deepcopy(original_config))
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            set_seed(42)
+            config = copy.deepcopy(original_config)
+            config.index_chunk_size = 1
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+            torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-3, atol=1e-3)
 
     @require_torch_accelerator
     @slow

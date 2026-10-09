@@ -36,7 +36,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_hy_v4 import HYV4Config
@@ -236,26 +236,34 @@ class HYV4Indexer(nn.Module):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         # Apply softmax scale later
         weights = (
             self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
             * (self.n_heads**-0.5)
             * self.softmax_scale
         )
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
-
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        chunk_size = self.config.index_chunk_size
+        if is_torchdynamo_compiling() or not chunk_size:
+            windows = [slice(None)]
         else:
-            index_scores = index_scores + attention_mask
+            windows = [slice(start, start + chunk_size) for start in range(0, seq_len, chunk_size)]
+        topk_indices = []
+        for window in windows:
+            scores = torch.matmul(q[:, window].float(), k.transpose(-1, -2).float().unsqueeze(1))
+            scores = F.relu(scores)
 
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+            # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+            index_scores = torch.matmul(weights[:, window].unsqueeze(-2), scores).squeeze(-2)
+
+            # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+            if attention_mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~attention_mask[:, window], float("-inf"))
+            else:
+                index_scores = index_scores + attention_mask[:, window]
+
+            topk = min(self.index_topk, index_scores.shape[-1])
+            topk_indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
+        return torch.cat(topk_indices, dim=1)  # [B, S, topk]
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
