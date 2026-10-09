@@ -120,3 +120,5 @@ print(processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_specia
 
 [[autodoc]] Apertus1p5ForConditionalGeneration
     - forward
+    - get_image_features
+    - get_audio_features
