@@ -114,8 +114,7 @@ class JanusProcessor(ProcessorMixin):
         if "generation_mode" in merged_kwargs["text_kwargs"]:
             logger.warning_once(
                 "Passing `generation_mode` in `text_kwargs` is deprecated "
-                "and will be removed in v5.29.0. "
-                "Pass it directly to the processor instead."
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
             )
         # generation_mode in text_kwargs has priority for backwards compatibility
         generation_mode = merged_kwargs["text_kwargs"].pop("generation_mode", merged_kwargs["generation_mode"])

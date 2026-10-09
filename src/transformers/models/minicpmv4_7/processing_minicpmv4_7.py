@@ -100,8 +100,7 @@ class MiniCPMV4_7Processor(ProcessorMixin):
         if "use_image_id" in merged_kwargs["images_kwargs"]:
             logger.warning_once(
                 "Passing `use_image_id` in `images_kwargs` is deprecated "
-                "and will be removed in v5.29.0. "
-                "Pass it directly to the processor instead."
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
             )
 
         # "images_kwargs" has priority for backwards compatibility
