@@ -5,7 +5,7 @@ name: Self-hosted runner scale set (Intel XPU scheduled CI caller)
 #              2gpu scale set: hfc-intel-b60-2gpu
 # Important: Do not pin the reusable workflow ref to a SHA. Intel XPU runner groups only route jobs for
 # workflows referenced at @main; a pinned SHA causes jobs to wait for a runner until the 24h timeout.
-# TEST 10
+# TEST 11
 
 on:
   workflow_run:
