@@ -1057,7 +1057,6 @@ class HYV4VLVisionTransformer(HYV4VLPreTrainedModel):
 
 
 class HYV4VLRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: HYV4VLTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -1069,16 +1068,13 @@ class HYV4VLRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
-        if device is not None:
-            self.to(device)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: HYV4VLTextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -1095,21 +1091,17 @@ class HYV4VLRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, HYV4VL has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        # So position_ids is broadcast to (3, bs, positions) and freqs has shape (3, bs, positions, dim // 2)
+        position_ids = position_ids.expand(3, -1, -1)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)
@@ -1136,7 +1128,6 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [HYV4VLDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -1443,12 +1434,12 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
             return position_ids
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if past_length == 0:
-            # A new request must not reuse offsets from a previous multimodal sequence.
+            # Do not carry an earlier request's multimodal offset into a new prefill.
             self.rope_deltas = None
             if image_grid_thw is not None or video_grid_thw is not None:
                 if mm_token_type_ids is None:
                     raise ValueError("Multimodal prefill requires mm_token_type_ids or explicit position_ids.")
-                # The scanner uses modality spans, not token values, so embeddings-only inputs are sufficient.
+                # The HY scanner reads modality spans rather than token values.
                 position_input = input_ids if input_ids is not None else mm_token_type_ids.long()
                 position_ids, self.rope_deltas = self.get_rope_index(
                     position_input,
@@ -1490,6 +1481,8 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs.")
         if inputs_embeds is None:
@@ -1529,7 +1522,6 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
             mm_token_type_ids=mm_token_type_ids,
             position_ids=position_ids,
         )
-        kwargs.setdefault("output_router_logits", self.config.text_config.output_router_logits)
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
@@ -1603,6 +1595,7 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1637,6 +1630,9 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
         >>> generated_trimmed = generated_ids[0][inputs["input_ids"].shape[-1]:]
         >>> print(processor.decode(generated_trimmed, skip_special_tokens=True))
         ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1650,6 +1646,7 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1710,38 +1707,6 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
         position_ids = torch.cat([text_positions, vision_positions], dim=0)
 
         return position_ids
-
-    def _expand_multimodal_outputs(
-        self,
-        input_ids: torch.LongTensor,
-        mm_encoder_output: dict,
-        expand_size: int = 1,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> dict:
-        for modality in ("image", "video"):
-            outputs = mm_encoder_output.get(modality)
-            if outputs is None or outputs.pooler_output is None:
-                continue
-            token_id = getattr(self.config, f"{modality}_token_id")
-            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-                token_embed = self.get_input_embeddings()(
-                    torch.tensor(token_id, device=inputs_embeds.device, dtype=torch.long)
-                )
-                counts = (inputs_embeds == token_embed).all(-1).sum(-1)
-            else:
-                counts = (input_ids == token_id).sum(-1)
-            sample_ends = set(itertools.accumulate(counts.tolist()))
-            features = outputs.pooler_output
-            feature_ends = itertools.accumulate(feature.shape[0] for feature in features)
-            offsets = [0] + [index + 1 for index, end in enumerate(feature_ends) if end in sample_ends]
-            # This base repeats individual images; repeat the whole sample's visual sequence instead.
-            outputs.pooler_output = [
-                feature
-                for start, end in zip(offsets[:-1], offsets[1:])
-                for _ in range(expand_size)
-                for feature in features[start:end]
-            ]
-        return mm_encoder_output
 
 
 __all__ = [

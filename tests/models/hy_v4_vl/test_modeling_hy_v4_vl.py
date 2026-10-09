@@ -24,18 +24,8 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import HYV4VLConfig, HYV4VLTextConfig, HYV4VLVisionConfig, is_torch_available
-from transformers.testing_utils import (
-    CaptureLogger,
-    require_torch,
-    require_torch_greater_or_equal,
-    require_torch_multi_gpu,
-    set_config_for_less_flaky_test,
-    set_model_for_less_flaky_test,
-    torch_device,
-)
-from transformers.utils import logging
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
 
-from ...generation.test_utils import assert_similar_generate_outputs
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -59,7 +49,6 @@ if is_torch_available():
     from transformers.conversion_mapping import get_model_conversion_mapping
     from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
     from transformers.distributed.tensor_parallel import apply_tensor_parallelism
-    from transformers.generation import CompileConfig
     from transformers.modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
     from transformers.models.hy_v4_vl.modeling_hy_v4_vl import (
         HYV4VLVisionPatchMerger,
@@ -283,71 +272,6 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
             with self.assertRaises(ValueError):
                 model.set_attn_implementation({"text_config": "sdpa"})
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        # The shared helper on this base slices the packed patch stream as if it were a batch.
-        original_batch_size = self.model_tester.batch_size
-        try:
-            self.model_tester.batch_size = batch_size
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        finally:
-            self.model_tester.batch_size = original_batch_size
-        config.text_config.eos_token_id = None
-        config.text_config.forced_eos_token_id = None
-        return config, inputs
-
-    @require_torch_greater_or_equal("2.6")
-    def test_generate_compile_model_forward_fullgraph(self):
-        config, inputs = self.prepare_config_and_inputs_for_generate(batch_size=4)
-        set_config_for_less_flaky_test(config)
-        model = HYV4VLForConditionalGeneration(config).to(torch_device)
-        set_model_for_less_flaky_test(model)
-        model.eval()
-        half_batch = inputs[model.main_input_name].shape[0] // 2
-        input_sets = []
-        for start in (0, half_batch):
-            # The shared test slices every tensor as a batch, but pixels are a flat patch stream.
-            row = {}
-            for key, value in inputs.items():
-                if key == "pixel_values":
-                    offset = start * self.model_tester.num_image_patches
-                    row[key] = value[offset : offset + half_batch * self.model_tester.num_image_patches]
-                elif isinstance(value, torch.Tensor):
-                    row[key] = value[start : start + half_batch]
-                else:
-                    row[key] = value
-            input_sets.append(row)
-        torch.compiler.reset()
-        compile_config = CompileConfig(fullgraph=True, dynamic=False)
-        compile_config._compile_all_devices = True
-        kwargs = {
-            "use_cache": True,
-            "do_sample": False,
-            "max_new_tokens": 5,
-            "return_dict_in_generate": True,
-            "output_scores": True,
-            "compile_config": compile_config,
-        }
-        with torch.compiler.set_stance("force_eager"):
-            dynamic_outputs = [model.generate(**row, **kwargs) for row in input_sets]
-        for output in dynamic_outputs:
-            self.assertIsInstance(output.past_key_values, DynamicCache)
-        self.assertFalse(hasattr(model, "_compiled_call"))
-        kwargs["cache_implementation"] = "static"
-        try:
-            torch._logging.set_logs(recompiles_verbose=True)
-            with CaptureLogger(logging.get_logger("torch._dynamo.guards")) as captured:
-                compiled_outputs = [model.generate(**row, **kwargs) for row in input_sets]
-        finally:
-            torch._logging.set_logs()
-        for output in compiled_outputs:
-            self.assertNotIsInstance(output.past_key_values, DynamicCache)
-            self.assertTrue(output.past_key_values.is_compileable)
-        self.assertTrue(hasattr(model, "_compiled_call"))
-        self.assertNotIn("Recompiling", captured.out)
-        self.assertFalse("guard" in captured.out and "failure" in captured.out)
-        for eager, compiled in zip(dynamic_outputs, compiled_outputs):
-            assert_similar_generate_outputs(eager, compiled, atol=1e-3, rtol=1e-3)
-
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
@@ -361,7 +285,7 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 self.assertEqual(state.shape, (batch_size, length, config.hc_mult, config.hidden_size))
             self.assertEqual(layer_states[-1].shape, (batch_size, length, config.hidden_size))
 
-    def test_router_logits_are_recorded_on_pr_base(self):
+    def test_router_logits_follow_explicit_and_config_defaults(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config)).to(torch_device).eval()
@@ -500,6 +424,29 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                     torch.testing.assert_close(layer.self_attn.sinks, restored_layer.self_attn.sinks, atol=0, rtol=0)
                 with torch.no_grad():
                     torch.testing.assert_close(restored(**inputs)[0], expected)
+
+    def test_subconfig_specs_initialize_and_round_trip_without_ocr_side_effects(self):
+        config = HYV4VLConfig()
+        self.assertIsInstance(config.text_config, HYV4VLTextConfig)
+        self.assertIsInstance(config.vision_config, HYV4VLVisionConfig)
+        self.assertFalse(config.tie_word_embeddings)
+        self.assertFalse(hasattr(config.vision_config, "text_hidden_size"))
+        self.assertEqual(config.image_token_id, 120120)
+        self.assertEqual(config.video_token_id, 120124)
+        text_config = self.model_tester.get_text_config()
+        vision_config = self.model_tester.get_vision_config()
+        for text, vision in (
+            (text_config, vision_config),
+            (text_config.to_dict(), vision_config.to_dict()),
+            (None, None),
+        ):
+            with self.subTest(text_type=type(text).__name__):
+                restored = HYV4VLConfig(text_config=text, vision_config=vision)
+                self.assertIsInstance(restored.text_config, HYV4VLTextConfig)
+                self.assertIsInstance(restored.vision_config, HYV4VLVisionConfig)
+                self.assertFalse(restored.tie_word_embeddings)
+                round_trip = HYV4VLConfig.from_dict(restored.to_dict())
+                self.assertEqual(round_trip.to_dict(), restored.to_dict())
 
     @parameterized.expand(
         [

@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -148,6 +148,7 @@ class HYV4VLTextConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float = 0.0
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     num_experts_per_tok: int = 8
     routed_scaling_factor: float = 2.827
@@ -173,7 +174,6 @@ class HYV4VLTextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section"}
-    output_router_logits: bool = False
 
     def __post_init__(self, **kwargs):
         # MLA expands the latent to one key/value per query head, so keys are never grouped.
@@ -228,25 +228,17 @@ class HYV4VLConfig(PreTrainedConfig):
     """Configuration for the HY4-VL text and vision backbones."""
 
     model_type = "hy_v4_vl"
-    sub_configs = {"vision_config": HYV4VLVisionConfig, "text_config": HYV4VLTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=HYV4VLVisionConfig),
+        "text_config": SubConfigSpec(config_class=HYV4VLTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-
     image_token_id: int = 120120
-    tie_word_embeddings: bool = False
-
     video_token_id: int = 120124
-
-    def __post_init__(self, **kwargs):
-        for key, config_class in self.sub_configs.items():
-            config = getattr(self, key)
-            if isinstance(config, dict):
-                setattr(self, key, config_class(**config))
-            elif config is None:
-                setattr(self, key, config_class())
-        super().__post_init__(**kwargs)
+    tie_word_embeddings: bool = False
 
 
 __all__ = ["HYV4VLConfig", "HYV4VLVisionConfig", "HYV4VLTextConfig"]

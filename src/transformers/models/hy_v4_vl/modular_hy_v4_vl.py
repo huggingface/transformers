@@ -22,7 +22,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...distributed.utils import is_dtensor
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
@@ -38,7 +38,7 @@ from ...utils.output_capturing import OutputRecorder
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
-from ..hunyuan_vl.configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLVisionConfig
+from ..hunyuan_vl.configuration_hunyuan_vl import HunYuanVLVisionConfig
 from ..hunyuan_vl.modeling_hunyuan_vl import (
     HunYuanVLRMSNorm,
     HunYuanVLVisionPatchEmbed,
@@ -54,10 +54,7 @@ from ..hy_v4.modeling_hy_v4 import (
     HYV4TopkRouter,
     repeat_kv,
 )
-from ..qwen2_vl.modeling_qwen2_vl import (
-    Qwen2VLForConditionalGeneration,
-    Qwen2VLModel,
-)
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLModel
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 from ..qwen3_vl.video_processing_qwen3_vl import Qwen3VLVideoProcessor, Qwen3VLVideoProcessorInitKwargs
@@ -178,27 +175,21 @@ class HYV4VLTextConfig(HYV4Config):
 
 @auto_docstring(checkpoint="tencent/Hy4")
 @strict
-class HYV4VLConfig(HunYuanVLConfig):
+class HYV4VLConfig(PreTrainedConfig):
     """Configuration for the HY4-VL text and vision backbones."""
 
-    im_start_id = AttributeError()
-    im_end_id = AttributeError()
-    im_newline_id = AttributeError()
-
     model_type = "hy_v4_vl"
-    sub_configs = {"vision_config": HYV4VLVisionConfig, "text_config": HYV4VLTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=HYV4VLVisionConfig),
+        "text_config": SubConfigSpec(config_class=HYV4VLTextConfig),
+    }
+    keys_to_ignore_at_inference = ["past_key_values"]
 
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 120120
     video_token_id: int = 120124
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        for key, config_class in self.sub_configs.items():
-            config = getattr(self, key)
-            if isinstance(config, dict):
-                setattr(self, key, config_class(**config))
-            elif config is None:
-                setattr(self, key, config_class())
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class HYV4VLAttention(HYV4Attention):
@@ -338,10 +329,7 @@ class HYV4VLVisionTransformer(HunYuanVLVisionTransformer):
 
 
 class HYV4VLRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
-    def __init__(self, config: HYV4VLTextConfig, device=None):
-        super().__init__(config, device=device)
-        if device is not None:
-            self.to(device)
+    pass
 
 
 class HYV4VLTextModel(HYV4Model):
@@ -558,12 +546,12 @@ class HYV4VLModel(Qwen2VLModel):
             return position_ids
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if past_length == 0:
-            # A new request must not reuse offsets from a previous multimodal sequence.
+            # Do not carry an earlier request's multimodal offset into a new prefill.
             self.rope_deltas = None
             if image_grid_thw is not None or video_grid_thw is not None:
                 if mm_token_type_ids is None:
                     raise ValueError("Multimodal prefill requires mm_token_type_ids or explicit position_ids.")
-                # The scanner uses modality spans, not token values, so embeddings-only inputs are sufficient.
+                # The HY scanner reads modality spans rather than token values.
                 position_input = input_ids if input_ids is not None else mm_token_type_ids.long()
                 position_ids, self.rope_deltas = self.get_rope_index(
                     position_input,
@@ -603,6 +591,8 @@ class HYV4VLModel(Qwen2VLModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs.")
         if inputs_embeds is None:
@@ -642,7 +632,6 @@ class HYV4VLModel(Qwen2VLModel):
             mm_token_type_ids=mm_token_type_ids,
             position_ids=position_ids,
         )
-        kwargs.setdefault("output_router_logits", self.config.text_config.output_router_logits)
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
@@ -709,6 +698,7 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -743,6 +733,9 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         >>> generated_trimmed = generated_ids[0][inputs["input_ids"].shape[-1]:]
         >>> print(processor.decode(generated_trimmed, skip_special_tokens=True))
         ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -756,6 +749,7 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -778,38 +772,6 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
-
-    def _expand_multimodal_outputs(
-        self,
-        input_ids: torch.LongTensor,
-        mm_encoder_output: dict,
-        expand_size: int = 1,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> dict:
-        for modality in ("image", "video"):
-            outputs = mm_encoder_output.get(modality)
-            if outputs is None or outputs.pooler_output is None:
-                continue
-            token_id = getattr(self.config, f"{modality}_token_id")
-            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-                token_embed = self.get_input_embeddings()(
-                    torch.tensor(token_id, device=inputs_embeds.device, dtype=torch.long)
-                )
-                counts = (inputs_embeds == token_embed).all(-1).sum(-1)
-            else:
-                counts = (input_ids == token_id).sum(-1)
-            sample_ends = set(itertools.accumulate(counts.tolist()))
-            features = outputs.pooler_output
-            feature_ends = itertools.accumulate(feature.shape[0] for feature in features)
-            offsets = [0] + [index + 1 for index, end in enumerate(feature_ends) if end in sample_ends]
-            # This base repeats individual images; repeat the whole sample's visual sequence instead.
-            outputs.pooler_output = [
-                feature
-                for start, end in zip(offsets[:-1], offsets[1:])
-                for _ in range(expand_size)
-                for feature in features[start:end]
-            ]
-        return mm_encoder_output
 
 
 def smart_resize(
@@ -1022,18 +984,10 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
             tensor_type=return_tensors,
         )
 
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None) -> int:
-        """
-        Number of video patches for a given clip size.
-        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
-        without a video.
-        """
-        grid_t, grid_h, grid_w = self.get_video_grid(num_frames, height, width, videos_kwargs)
-        return grid_t * grid_h * grid_w
-
-    def get_video_grid(
-        self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
-    ) -> tuple[int, int, int]:
+    def get_num_of_video_patches(
+        self, num_frames: int, height: int, width: int, videos_kwargs=None, *, return_grid: bool = False
+    ) -> int | tuple[int, int, int, int]:
+        """Count video patches without preprocessing; optionally return the temporal and spatial grid."""
         videos_kwargs = videos_kwargs or {}
         size = videos_kwargs.get("size", self.size)
         max_image_size = videos_kwargs.get("max_image_size", self.max_image_size)
@@ -1051,7 +1005,9 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
                 max_image_size=max_image_size["longest_edge"],
             )
         grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
-        return grid_t, height // patch_size, width // patch_size
+        grid_h, grid_w = height // patch_size, width // patch_size
+        num_patches = grid_t * grid_h * grid_w
+        return (num_patches, grid_t, grid_h, grid_w) if return_grid else num_patches
 
 
 class HYV4VLProcessorKwargs(ProcessingKwargs, total=False):
@@ -1100,7 +1056,9 @@ class HYV4VLProcessor(Qwen2VLProcessor):
             merge_size = videos_kwargs.get("merge_size") or self.video_processor.merge_size
             num_video_tokens = []
             for num_frames, height, width in video_sizes:
-                grid_t, grid_h, grid_w = self.video_processor.get_video_grid(num_frames, height, width, videos_kwargs)
+                _, grid_t, grid_h, grid_w = self.video_processor.get_num_of_video_patches(
+                    num_frames, height, width, videos_kwargs, return_grid=True
+                )
                 num_video_tokens.append(grid_t * self._num_frame_tokens(grid_h, grid_w, merge_size))
             vision_data["num_video_tokens"] = num_video_tokens
         return MultiModalData(**vision_data)

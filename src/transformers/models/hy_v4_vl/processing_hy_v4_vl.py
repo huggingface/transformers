@@ -77,7 +77,9 @@ class HYV4VLProcessor(ProcessorMixin):
             merge_size = videos_kwargs.get("merge_size") or self.video_processor.merge_size
             num_video_tokens = []
             for num_frames, height, width in video_sizes:
-                grid_t, grid_h, grid_w = self.video_processor.get_video_grid(num_frames, height, width, videos_kwargs)
+                _, grid_t, grid_h, grid_w = self.video_processor.get_num_of_video_patches(
+                    num_frames, height, width, videos_kwargs, return_grid=True
+                )
                 num_video_tokens.append(grid_t * self._num_frame_tokens(grid_h, grid_w, merge_size))
             vision_data["num_video_tokens"] = num_video_tokens
         return MultiModalData(**vision_data)

@@ -106,8 +106,6 @@ class HunYuanVLRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        if device is not None:
-            self.to(device)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
     @staticmethod

@@ -558,8 +558,6 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     def __init__(self, config: HunYuanVLTextConfig):
         super().__init__(config)
-        if device is not None:
-            self.to(device)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
     def forward(self, x, position_ids):

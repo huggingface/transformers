@@ -151,33 +151,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        filtered_inputs_dict = {}
-        for key, value in inputs_dict.items():
-            if key == "pixel_values":
-                filtered_inputs_dict[key] = value[: batch_size * self.model_tester.num_image_patches]
-            elif key == "image_grid_thw":
-                filtered_inputs_dict[key] = value[:batch_size]
-            elif key == "position_ids":
-                continue
-            elif isinstance(value, torch.Tensor):
-                filtered_inputs_dict[key] = value[:batch_size, ...]
-            else:
-                filtered_inputs_dict[key] = value
-
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
-
     def test_auto_model_uses_base_model(self):
         config = self.model_tester.get_config()
         model = AutoModel.from_config(config).to(self.model_tester.device)

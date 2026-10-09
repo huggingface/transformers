@@ -221,7 +221,10 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         video = torch.zeros((frames, 3, height, width), dtype=torch.uint8, device=torch_device)
         output = processor(video, input_data_format="channels_first", return_tensors="pt")
         self.assertEqual(output.video_grid_thw.tolist(), [[frames, grid_h, grid_w]])
-        self.assertEqual(processor.get_video_grid(frames, height, width), (frames, grid_h, grid_w))
+        self.assertEqual(
+            processor.get_num_of_video_patches(frames, height, width, return_grid=True)[1:],
+            (frames, grid_h, grid_w),
+        )
 
     def test_call_time_area_cap_overrides_instance_without_mutating_it(self):
         processor = self.fast_video_processing_class(**self.video_processor_dict)
@@ -232,7 +235,10 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         capped = processor(video, input_data_format="channels_first", return_tensors="pt", **kwargs)
         self.assertEqual(default.video_grid_thw.tolist(), [[3, 4, 8]])
         self.assertEqual(capped.video_grid_thw.tolist(), [[3, 2, 4]])
-        self.assertEqual(processor.get_video_grid(3, 64, 128, kwargs), tuple(capped.video_grid_thw[0].tolist()))
+        self.assertEqual(
+            processor.get_num_of_video_patches(3, 64, 128, kwargs, return_grid=True)[1:],
+            tuple(capped.video_grid_thw[0].tolist()),
+        )
         self.assertEqual(processor.get_num_of_video_patches(3, 64, 128, kwargs), capped.pixel_values_videos.shape[0])
         self.assertEqual(processor.max_image_size, original_cap)
         repeated = processor(video, input_data_format="channels_first", return_tensors="pt")
@@ -241,7 +247,7 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     @parameterized.expand([("landscape", 64, 8192), ("portrait", 8192, 64)])
     def test_extreme_aspect_ratio_respects_clip_budget(self, _, height, width):
         processor = self.fast_video_processing_class(device=torch_device)
-        grid_t, grid_h, grid_w = processor.get_video_grid(1024, height, width)
+        _, grid_t, grid_h, grid_w = processor.get_num_of_video_patches(1024, height, width, return_grid=True)
         patch_area = processor.patch_size**2
         self.assertLessEqual(grid_t * grid_h * grid_w * patch_area, processor.size["longest_edge"])
         self.assertEqual((grid_h, grid_w), (2, 64) if height < width else (64, 2))
@@ -272,7 +278,7 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pixel budget"):
             processor(video, input_data_format="channels_first", return_tensors="pt", **kwargs)
         with self.assertRaisesRegex(ValueError, "pixel budget"):
-            processor.get_video_grid(2, 32, 64, kwargs)
+            processor.get_num_of_video_patches(2, 32, 64, kwargs)
 
     def test_resample_argument_controls_pixels(self):
         processor = self.fast_video_processing_class(**self.video_processor_dict)
@@ -376,7 +382,9 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         output = processor(video, **kwargs, return_tensors="pt")
         estimate = processor.get_num_of_video_patches(3, 64, 128, kwargs)
         self.assertIsInstance(estimate, int)
-        self.assertEqual(processor.get_video_grid(3, 64, 128, kwargs), tuple(output.video_grid_thw[0].tolist()))
+        patches, grid_t, grid_h, grid_w = processor.get_num_of_video_patches(3, 64, 128, kwargs, return_grid=True)
+        self.assertEqual(patches, estimate)
+        self.assertEqual((grid_t, grid_h, grid_w), tuple(output.video_grid_thw[0].tolist()))
         self.assertEqual(estimate, output.pixel_values_videos.shape[0])
         self.assertEqual(estimate, output.video_grid_thw.prod().item())
 

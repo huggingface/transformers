@@ -306,18 +306,10 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
             tensor_type=return_tensors,
         )
 
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None) -> int:
-        """
-        Number of video patches for a given clip size.
-        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
-        without a video.
-        """
-        grid_t, grid_h, grid_w = self.get_video_grid(num_frames, height, width, videos_kwargs)
-        return grid_t * grid_h * grid_w
-
-    def get_video_grid(
-        self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
-    ) -> tuple[int, int, int]:
+    def get_num_of_video_patches(
+        self, num_frames: int, height: int, width: int, videos_kwargs=None, *, return_grid: bool = False
+    ) -> int | tuple[int, int, int, int]:
+        """Count video patches without preprocessing; optionally return the temporal and spatial grid."""
         videos_kwargs = videos_kwargs or {}
         size = videos_kwargs.get("size", self.size)
         max_image_size = videos_kwargs.get("max_image_size", self.max_image_size)
@@ -335,7 +327,9 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
                 max_image_size=max_image_size["longest_edge"],
             )
         grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
-        return grid_t, height // patch_size, width // patch_size
+        grid_h, grid_w = height // patch_size, width // patch_size
+        num_patches = grid_t * grid_h * grid_w
+        return (num_patches, grid_t, grid_h, grid_w) if return_grid else num_patches
 
 
 __all__ = ["HYV4VLVideoProcessor"]
