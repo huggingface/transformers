@@ -639,8 +639,14 @@ class ImageProcessingTestMixin:
             module_name = f"transformers.models.{model_name}.image_processing_pil_{model_name}"
             module = importlib.import_module(module_name)
 
-            # Restore the real module state afterwards to not drag patches module into other tests
-            self.addCleanup(importlib.reload, module)
+            # Restore the original module namespace afterwards so other tests keep seeing the original class objects
+            original_namespace = dict(module.__dict__)
+
+            def restore_module():
+                module.__dict__.clear()
+                module.__dict__.update(original_namespace)
+
+            self.addCleanup(restore_module)
 
             with patch.dict(
                 import_utils.BACKENDS_MAPPING,
