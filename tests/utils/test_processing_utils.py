@@ -68,7 +68,7 @@ class ProcessorMixinTest(unittest.TestCase):
         """Check that flat and nested kwargs only defined on the subprocessor raise if passed twice"""
         processor = DummyProcessor()
         with self.assertRaises(ValueError):
-            merged_kwargs = processor._merge_kwargs(max_length=32, text_kwargs={"max_length": 32})
+            processor._merge_kwargs(max_length=32, text_kwargs={"max_length": 32})
 
     def test_merge_kwargs_common_kwargs(self):
         """Check that common kwargs are propagated to all modalities"""
@@ -161,7 +161,7 @@ class ProcessorMixinTest(unittest.TestCase):
         processor = DefaultsProcessor()
         logger = logging.get_logger("transformers.processing_utils")
         with CaptureLogger(logger) as caplog:
-            merged_kwargs = processor._merge_kwargs(unknown_kwarg=True)
+            processor._merge_kwargs(unknown_kwarg=True)
         self.assertIn("Keyword argument `unknown_kwarg` is not a valid argument", caplog.out)
 
     def test_merge_kwargs_warn_on_unknown_nested_kwargs(self):
@@ -172,5 +172,5 @@ class ProcessorMixinTest(unittest.TestCase):
         processor = DefaultsProcessor()
         logger = logging.get_logger("transformers.processing_utils")
         with CaptureLogger(logger) as caplog:
-            merged_kwargs = processor._merge_kwargs(text_kwargs={"unknown_kwarg": True})
+            processor._merge_kwargs(text_kwargs={"unknown_kwarg": True})
         self.assertEqual(caplog.out, "")
