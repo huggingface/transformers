@@ -51,7 +51,7 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrModel,
     DeformableDetrMultiscaleDeformableAttention,
 )
-from ..detr.modular_detr import DetrHungarianMatcher, DetrLoss, _set_aux_loss
+from ..detr.modeling_detr import DetrHungarianMatcher, DetrLoss, _set_aux_loss
 from ..llama.modeling_llama import eager_attention_forward
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
 from ..vit.modeling_vit import ViTAttention
@@ -140,7 +140,7 @@ class LwDetrHungarianMatcher(DetrHungarianMatcher):
 
 class LwDetrLoss(DetrLoss):
     def __init__(self, config, losses, weight_dict):
-        super().__init__(config, losses, weight_dict)
+        nn.Module.__init__(self)
         requires_backends(self, ["scipy"])
         self.matcher = LwDetrHungarianMatcher(
             class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost

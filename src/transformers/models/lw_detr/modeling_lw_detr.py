@@ -33,6 +33,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
+from ...loss.loss_utils import dice_loss, sigmoid_focal_loss
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -49,8 +50,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import box_iou, generalized_box_iou
-from ..detr.modular_detr import DetrHungarianMatcher, DetrLoss, _set_aux_loss
+from ...vision_utils import box_iou, generalized_box_iou, nested_tensor_from_tensor_list
 from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
 
@@ -66,7 +66,34 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 
-class LwDetrHungarianMatcher(DetrHungarianMatcher):
+# taken from https://github.com/facebookresearch/lw_detr/blob/master/models/matcher.py
+class LwDetrHungarianMatcher(nn.Module):
+    """
+    This class computes an assignment between the targets and the predictions of the network.
+
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
+    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
+    un-matched (and thus treated as non-objects).
+
+    Args:
+        class_cost:
+            The relative weight of the classification error in the matching cost.
+        bbox_cost:
+            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+        giou_cost:
+            The relative weight of the giou loss of the bounding box in the matching cost.
+    """
+
+    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+
+        self.class_cost = class_cost
+        self.bbox_cost = bbox_cost
+        self.giou_cost = giou_cost
+        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
+
     @torch.no_grad()
     def forward(self, outputs, targets, group_detr):
         """
@@ -125,9 +152,34 @@ class LwDetrHungarianMatcher(DetrHungarianMatcher):
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
-class LwDetrLoss(DetrLoss):
+# taken from https://github.com/facebookresearch/lw_detr/blob/master/models/lw_detr.py
+class LwDetrLoss(nn.Module):
+    """
+    This class computes the losses for LwDetrForObjectDetection/LwDetrForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
+
+    A note on the `num_classes` argument (copied from original repo in lw_detr.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
+    https://github.com/facebookresearch/lw_detr/issues/108#issuecomment-650269223"
+
+
+    Args:
+        matcher (`LwDetrHungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
+        losses (`list[str]`):
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
+    """
+
     def __init__(self, config, losses, weight_dict):
-        super().__init__(config, losses, weight_dict)
+        super().__init__()
         requires_backends(self, ["scipy"])
         self.matcher = LwDetrHungarianMatcher(
             class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
@@ -145,7 +197,12 @@ class LwDetrLoss(DetrLoss):
             self.weight_dict.update(aux_weight_dict)
         self.weight_dict.update({k + "_enc": v for k, v in self.weight_dict.items()})
 
+    # removed logging parameter, which was part of the original implementation
     def loss_labels(self, outputs, targets, indices, num_boxes):
+        """
+        Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
+        [nb_target_boxes]
+        """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
         source_logits = outputs["logits"]
@@ -195,6 +252,89 @@ class LwDetrLoss(DetrLoss):
         card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
+
+    def loss_boxes(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
+
+        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
+        are expected in format (center_x, center_y, w, h), normalized by the image size.
+        """
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
+        idx = self._get_source_permutation_idx(indices)
+        source_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+
+        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
+
+        losses = {}
+        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
+
+        loss_giou = 1 - torch.diag(
+            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
+        )
+        losses["loss_giou"] = loss_giou.sum() / num_boxes
+        return losses
+
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the masks: the focal loss and the dice loss.
+
+        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
+        """
+        if "pred_masks" not in outputs:
+            raise KeyError("No predicted masks found in outputs")
+
+        source_idx = self._get_source_permutation_idx(indices)
+        target_idx = self._get_target_permutation_idx(indices)
+        source_masks = outputs["pred_masks"]
+        source_masks = source_masks[source_idx]
+        masks = [t["masks"] for t in targets]
+        # TODO use valid to mask invalid areas due to padding in loss
+        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
+        target_masks = target_masks.to(source_masks)
+        target_masks = target_masks[target_idx]
+
+        # upsample predictions to the target size
+        source_masks = nn.functional.interpolate(
+            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
+        source_masks = source_masks[:, 0].flatten(1)
+
+        target_masks = target_masks.flatten(1)
+        target_masks = target_masks.view(source_masks.shape)
+        losses = {
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
+        }
+        return losses
+
+    def _get_source_permutation_idx(self, indices):
+        # permute predictions following indices
+        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        source_idx = torch.cat([source for (source, _) in indices])
+        return batch_idx, source_idx
+
+    def _get_target_permutation_idx(self, indices):
+        # permute targets following indices
+        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        target_idx = torch.cat([target for (_, target) in indices])
+        return batch_idx, target_idx
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "labels": self.loss_labels,
+            "cardinality": self.loss_cardinality,
+            "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+    def get_weighted_loss(self, loss_dict):
+        return sum(loss_dict[k] * self.weight_dict[k] for k in loss_dict if k in self.weight_dict)
 
     def forward(self, outputs, targets):
         """
@@ -252,6 +392,10 @@ class LwDetrLoss(DetrLoss):
                 losses.update(l_dict)
 
         return losses
+
+
+def _set_aux_loss(outputs_class, outputs_coord):
+    return [{"logits": logits, "pred_boxes": boxes} for logits, boxes in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
 class LwDetrForObjectDetectionCriterion(nn.Module):
