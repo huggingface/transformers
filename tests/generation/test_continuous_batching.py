@@ -2427,6 +2427,47 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     ]
     # fmt: on
 
+    def test_memory_prediction_under_tensor_parallelism(self) -> None:
+        """A rank holding 1 / tp_size of the heads predicts the footprint of a model with that many heads."""
+        head_dim, num_kv_heads, num_attention_heads, tp_size = 64, 4, 8, 2
+        dtype = torch.float16
+
+        def make_handler(kv_heads: int, attention_heads: int, tp: int) -> PagedAttentionMemoryHandler:
+            config = SimpleNamespace(
+                head_dim=head_dim,
+                num_key_value_heads=kv_heads,
+                num_attention_heads=attention_heads,
+                hidden_size=512,
+                vocab_size=32000,
+                _attn_implementation="sdpa",
+            )
+            cb_config = ContinuousBatchingConfig(page_size=32, num_blocks=self.NUM_BLOCKS, max_memory_percent=0.9)
+            # The cache geometry is built from the per-rank KV heads, as PagedAttentionCache does under TP
+            bytes_per_token = 2 * (kv_heads // tp) * head_dim * dtype.itemsize
+            bytes_per_block = bytes_per_token * 32 * 22
+            bytes_per_sector = math.lcm(bytes_per_block, 128)
+            return PagedAttentionMemoryHandler(
+                config=config,
+                cb_config=cb_config,
+                dtype=dtype,
+                bytes_per_sector=bytes_per_sector,
+                tokens_per_sector=bytes_per_sector // bytes_per_block * 32,
+                bytes_per_block=bytes_per_block,
+                attn_types=["full_attention"],
+                tp_size=tp,
+            )
+
+        sharded = make_handler(num_kv_heads, num_attention_heads, tp_size)
+        reference = make_handler(num_kv_heads // tp_size, num_attention_heads // tp_size, 1)
+        unsharded = make_handler(num_kv_heads, num_attention_heads, 1)
+        M, num_sectors = self.MAX_BATCH_TOKENS, 4
+        self.assertEqual(
+            sharded.compute_memory_footprint(M, num_sectors), reference.compute_memory_footprint(M, num_sectors)
+        )
+        self.assertLess(
+            sharded.compute_memory_footprint(M, num_sectors), unsharded.compute_memory_footprint(M, num_sectors)
+        )
+
     @parameterized.expand(CONFIGS)
     def test_memory_prediction(
         self,
