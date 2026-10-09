@@ -231,52 +231,34 @@ class ContractBranchTest(unittest.TestCase):
 @require_torch
 class ContractDecodeTest(unittest.TestCase):
     def _schema(self):
-        from transformers.models.gliner2.decoding_gliner2 import (
-            ClassificationSchema,
-            all_of,
-            any_of,
-            any_other_selected,
-            any_selected,
-            at_least,
-            at_level,
-            at_most,
-            exactly,
-            exactly_one_of,
-            excludes,
-            iff,
-            implies,
-            is_default,
-            label,
-            max_level,
-            min_level,
-            not_,
-        )
+        def label(task, name):
+            return {"type": "LabelRef", "task": task, "label": name}
 
-        schema = (
-            ClassificationSchema()
-            .single("topic", ["math", "art"])
-            .multi("mood", ["calm", "tense"], default="calm")
-            .ordinal("level", ["low", "high"])
-        )
-        schema.constrain(
-            implies(label("topic", "math"), label("mood", "calm")),
-            not_(label("mood", "tense")),
-            excludes(label("topic", "art"), label("mood", "tense")),
-            iff(label("topic", "math"), label("mood", "calm")),
-            all_of(label("topic", "math")),
-            any_of(label("mood", "calm"), label("level", "low")),
-            exactly_one_of(label("level", "low"), label("level", "high")),
-            at_least("mood", 1),
-            at_most("mood", 1),
-            exactly("mood", 1),
-            any_selected("mood"),
-            any_other_selected("mood"),
-            is_default("mood"),
-            min_level("level", "low"),
-            max_level("level", "high"),
-            at_level("level", "low"),
-        )
-        return schema
+        return {
+            "tasks": {
+                "topic": {"labels": ["math", "art"], "min_labels": 1, "max_labels": 1},
+                "mood": {"labels": ["calm", "tense"], "default": "calm"},
+                "level": {"labels": ["low", "high"], "min_labels": 1, "max_labels": 1, "ordered": True},
+            },
+            "constraints": [
+                {"type": "Implies", "cond": label("topic", "math"), "then": label("mood", "calm")},
+                {"type": "Not", "child": label("mood", "tense")},
+                {"type": "Excludes", "left": label("topic", "art"), "right": label("mood", "tense")},
+                {"type": "Iff", "left": label("topic", "math"), "right": label("mood", "calm")},
+                {"type": "And", "children": [label("topic", "math")]},
+                {"type": "Or", "children": [label("mood", "calm"), label("level", "low")]},
+                {"type": "ExactlyOneOf", "children": [label("level", "low"), label("level", "high")]},
+                {"type": "Cardinality", "task": "mood", "minimum": 1, "maximum": None},
+                {"type": "Cardinality", "task": "mood", "minimum": 0, "maximum": 1},
+                {"type": "Cardinality", "task": "mood", "minimum": 1, "maximum": 1},
+                {"type": "AnySelected", "task": "mood"},
+                {"type": "AnyOtherSelected", "task": "mood"},
+                {"type": "IsDefault", "task": "mood"},
+                {"type": "MinLevel", "task": "level", "level": "low"},
+                {"type": "MaxLevel", "task": "level", "level": "high"},
+                {"type": "AtLevel", "task": "level", "level": "low"},
+            ],
+        }
 
     def test_constraint_operators_and_decoders(self):
         from transformers.models.gliner2.decoding_gliner2 import decode_constrained_classification
@@ -307,22 +289,22 @@ class ContractDecodeTest(unittest.TestCase):
             self.assertLessEqual(len(kept), len(spans))
 
     def test_joint_optimizers(self):
-        from transformers.models.gliner2.decoding_gliner2 import JointSchema, decode_joint
+        from transformers.models.gliner2.decoding_gliner2 import decode_joint
 
-        schema = JointSchema().entity("person").relation("wrote", "person", "person")
+        schema = {
+            "entities": {"person": {}},
+            "relations": {"wrote": {"head": "person", "tail": "person"}},
+        }
         scores = {"entity_logits": torch.zeros(1, 3, 2), "text": "Ada wrote notes"}
         for optimizer in ("greedy", "beam"):
             decoded = decode_joint(scores, schema, "span", text="Ada wrote notes", optimizer=optimizer, beam_size=2)
             self.assertIsInstance(decoded, dict)
 
     def test_long_text_aggregation(self):
-        from transformers.models.gliner2.decoding_gliner2 import (
-            ClassificationSchema,
-            aggregate_classification_logits,
-        )
+        from transformers.models.gliner2.decoding_gliner2 import aggregate_classification_logits
         from transformers.models.gliner2.processing_gliner2 import merge_chunk_results
 
-        schema = ClassificationSchema().single("topic", ["math", "art"])
+        schema = {"tasks": {"topic": {"labels": ["math", "art"], "min_labels": 1, "max_labels": 1}}}
         chunks = [{"topic": {"math": 1.0, "art": 0.0}}, {"topic": {"math": 0.0, "art": 2.0}}]
         self.assertEqual(aggregate_classification_logits(chunks, schema, "max")["topic"]["art"], 2.0)
         self.assertEqual(aggregate_classification_logits(chunks, schema, "mean")["topic"]["math"], 0.5)

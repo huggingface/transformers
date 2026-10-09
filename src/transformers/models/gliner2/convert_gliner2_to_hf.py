@@ -51,7 +51,7 @@ print(extractor("Ada Lovelace wrote notes about the analytical engine.", schema=
 
 
 def _config_from_payload(payload: dict):
-    """Build an encoder config from an inlined ``config.json`` object."""
+    """Build an encoder config from an inline config dict."""
     model_type = payload.get("model_type")
     if model_type not in CONFIG_MAPPING:
         raise ValueError(f"unsupported encoder model_type {model_type!r}")
@@ -59,7 +59,7 @@ def _config_from_payload(payload: dict):
 
 
 def _encoder_config(source: Path, raw: dict):
-    """Inline ``encoder_config/config.json`` from the checkpoint directory."""
+    """Load the encoder config from the sidecar, an inline dict, or model_name."""
     nested = source / "encoder_config" / "config.json"
     if nested.is_file():
         return _config_from_payload(json.loads(nested.read_text()))
@@ -72,9 +72,18 @@ def _encoder_config(source: Path, raw: dict):
     return AutoConfig.from_pretrained(name, local_files_only=True)
 
 
+def _published_head(raw: dict) -> dict:
+    """Read boundary_head, or boundary_config when the source is already converted."""
+    head = raw.get("boundary_head")
+    if isinstance(head, dict) and head:
+        return head
+    nested = raw.get("boundary_config")
+    return nested if isinstance(nested, dict) else {}
+
+
 def _boundary_config(raw: dict):
     """Keep boundary fields that the native config defines."""
-    head = raw.get("boundary_head") or {}
+    head = _published_head(raw)
     if raw.get("architecture") != "boundary" and not head:
         return None
     known = set(Gliner2BoundaryConfig.__dataclass_fields__)
@@ -100,7 +109,7 @@ def _max_width(raw: dict) -> int:
 
 
 def convert(source: Path, dest: Path) -> None:
-    """Write a Transformers checkpoint. Tokenizer files are copied unchanged."""
+    """Write config.json with an inline encoder_config and copy weights unchanged."""
     source = Path(source)
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -109,6 +118,7 @@ def convert(source: Path, dest: Path) -> None:
     boundary = _boundary_config(raw)
     architecture = raw.get("architecture", "boundary" if boundary else "span")
     span_head = raw.get("span_head")
+    head = _published_head(raw)
     config = Gliner2Config(
         encoder_config=encoder,
         architecture=architecture,
@@ -122,13 +132,14 @@ def convert(source: Path, dest: Path) -> None:
         config_version=raw.get("config_version"),
         boundary_config=boundary,
         classification_temperature=float(
-            (raw.get("boundary_head") or {}).get(
-                "classification_temperature", raw.get("classification_temperature", 1.0)
-            )
+            head.get("classification_temperature", raw.get("classification_temperature", 1.0))
         ),
     )
     config.architectures = ["Gliner2ForSchemaExtraction"]
     config.save_pretrained(dest)
+    saved = json.loads((dest / "config.json").read_text())
+    if "encoder_config" not in saved:
+        raise ValueError("converted config.json is missing inline encoder_config")
 
     weight = source / "model.safetensors"
     if not weight.is_file():
@@ -144,6 +155,7 @@ def convert(source: Path, dest: Path) -> None:
 
 
 def main():
+    """Convert one checkpoint directory."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--dest", type=Path, required=True)

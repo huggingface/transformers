@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 
 import torch
@@ -22,10 +22,10 @@ from torch import nn
 
 from transformers import AutoModel
 
+from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.import_utils import requires_backends
 from . import loss_gliner2
 from .configuration_gliner2 import Gliner2Config
 
@@ -35,12 +35,11 @@ _CLASSIFICATION_TASK = 4
 
 def _mlp(input_dim, intermediate_dims, output_dim, dropout=0.0, activation="relu"):
     """Build the sequential MLP whose indices match published checkpoints."""
-    activations = {"relu": nn.ReLU, "gelu": nn.GELU}
     layers = []
     in_dim = input_dim
     for dim in intermediate_dims:
         layers.append(nn.Linear(in_dim, dim))
-        layers.append(activations[activation]())
+        layers.append(ACT2FN[activation])
         if dropout > 0:
             layers.append(nn.Dropout(dropout))
         in_dim = dim
@@ -49,12 +48,12 @@ def _mlp(input_dim, intermediate_dims, output_dim, dropout=0.0, activation="relu
 
 
 def _projection(hidden_size, dropout, out_dim=None):
-    """Expand by 4, then ReLU and dropout, then project back."""
+    """Expand by 4, apply relu, then project back."""
     if out_dim is None:
         out_dim = hidden_size
     return nn.Sequential(  # trf-ignore: TRF036
         nn.Linear(hidden_size, out_dim * 4),
-        nn.ReLU(),
+        ACT2FN["relu"],
         nn.Dropout(dropout),
         nn.Linear(out_dim * 4, out_dim),
     )
@@ -774,47 +773,6 @@ MASK_LOGIT = -1.0e4
 
 
 @dataclass(frozen=True)
-class ProposalSettings:
-    """Budgets and flags for sparse boundary proposal.
-
-    Attributes:
-        start_top_k: Starts retained before conditional end scoring.
-        end_top_k: Ends retained before conditional start scoring.
-        ends_per_start: Ends kept for each selected start.
-        starts_per_end: Starts kept for each selected end.
-        candidate_budget: Candidates kept at evaluation.
-        training_candidate_budget: Candidates kept while training.
-        max_gold_per_query: Reserved gold capacity from the head settings.
-        end_block_size: Streaming block width.
-        bidirectional: Also propose starts conditioned on selected ends.
-        export_mode: `"auto"`, `"streaming"`, or `"vectorized"`.
-        vectorized_pair_elements: Auto-mode cutoff for one full block.
-        enable_rotary_endpoints: Rotate proposal endpoints.
-        rotary_base: Rotary frequency base.
-        boundary_top_k_alpha: Length-adaptive top-k slope. Zero keeps `base_k`.
-        boundary_top_k_max: Cap for the adaptive top-k.
-        boundary_top_k_bucket: Rounding bucket for the adaptive top-k.
-    """
-
-    start_top_k: int
-    end_top_k: int
-    ends_per_start: int
-    starts_per_end: int
-    candidate_budget: int
-    training_candidate_budget: int
-    max_gold_per_query: int
-    end_block_size: int
-    bidirectional: bool = True
-    export_mode: str = "auto"
-    vectorized_pair_elements: int = 16_777_216
-    enable_rotary_endpoints: bool = False
-    rotary_base: float = 10000.0
-    boundary_top_k_alpha: float = 0.0
-    boundary_top_k_max: int = 128
-    boundary_top_k_bucket: int = 8
-
-
-@dataclass(frozen=True)
 class ProposalStats:
     """Element counts and optional gold-recall diagnostics."""
 
@@ -1193,15 +1151,10 @@ def assemble_candidates(
 
 
 class SparseBoundaryProposer(nn.Module):
-    """Select a capped set of start/end pairs for each query.
+    """Select a capped set of start/end pairs for each query."""
 
-    Args:
-        boundary_dim: Boundary state width.
-        query_dim: Query state width.
-        settings: Proposal budgets and rotary flags.
-    """
-
-    def __init__(self, boundary_dim: int, query_dim: int, settings: ProposalSettings):
+    def __init__(self, boundary_dim: int, query_dim: int, settings):
+        """Read proposal budgets from `boundary_config`."""
         super().__init__()
         self.boundary_dim = boundary_dim
         self.settings = settings
@@ -1296,27 +1249,7 @@ class SparseBoundaryProposer(nn.Module):
         scorer_start_states: torch.Tensor | None = None,
         scorer_end_states: torch.Tensor | None = None,
     ) -> BoundaryProposals:
-        """Propose capped start/end pairs and their compatibility prior.
-
-        Args:
-            boundary_states: Boundary states `[B, N, D]`.
-            boundary_mask: Valid boundaries `[B, N]`.
-            query_states: Query states `[B, Q, H]`.
-            query_mask: Valid queries `[B, Q]`.
-            start_logits: Start marginals `[B, Q, N]`.
-            end_logits: End marginals `[B, Q, N]`.
-            gold_pairs: Optional supervised spans. Injected only while training.
-            gold_mask: Mask for `gold_pairs`.
-            return_stats: Populate proposal diagnostics.
-            return_proposal_logits: Materialize the full prior.
-            gold_injection_prob: Fraction of gold spans injected in training.
-            generator: Generator for partial gold injection.
-            scorer_start_states: Optional reranker start states `[B, N, P]`.
-            scorer_end_states: Optional reranker end states `[B, N, P]`.
-
-        Returns:
-            Padded proposals. Invalid slots have a zero compatibility prior.
-        """
+        """Propose capped start/end pairs and their compatibility prior."""
         settings = self.settings
         batch, n_boundaries, _dim = boundary_states.shape
         queries = query_states.shape[1]
@@ -1387,7 +1320,7 @@ class SparseBoundaryProposer(nn.Module):
         cond_e2 = 0
         maxe2 = 0
         en_idx = en_valid = None
-        if settings.bidirectional:
+        if settings.bidirectional_proposals:
             with torch.no_grad():
                 en_scores, en_idx, en_valid = select_top_boundaries(select_end_logits, b_valid, end_k)
                 eq = gather_states(select_end, en_idx) * select_gate.unsqueeze(2)
@@ -1476,7 +1409,7 @@ class SparseBoundaryProposer(nn.Module):
                 gold_total = diagnostic_gold.sum()
                 selected_starts = st_idx
                 selected_starts_valid = st_valid
-                if settings.bidirectional:
+                if settings.bidirectional_proposals:
                     selected_ends = en_idx
                     selected_ends_valid = en_valid
                 else:
@@ -2442,32 +2375,8 @@ class SharedPoolScorer(nn.Module):
 
 
 @dataclass(frozen=True)
-class RelationProposalSettings:  # trf-ignore: TRF031
-    """Caps for typed relation-pair proposal.
-
-    Attributes:
-        heads_per_relation: Head mentions retained per relation.
-        tails_per_relation: Tail mentions retained per relation.
-        pair_cap: Pairs retained after the capped cross product.
-        argument_threshold: Minimum mention probability.
-    """
-
-    heads_per_relation: int = 32
-    tails_per_relation: int = 32
-    pair_cap: int = 128
-    argument_threshold: float = 0.0
-
-
-@dataclass(frozen=True)
 class RelationTypeSpec:
-    """One relation type and the entity queries allowed at each argument.
-
-    Attributes:
-        relation_type: Relation name.
-        head_query_ids: Entity queries that may be the head.
-        tail_query_ids: Entity queries that may be the tail.
-        allow_self: Whether a span may fill both arguments.
-    """
+    """One relation type and the entity queries allowed at each argument."""
 
     relation_type: str
     head_query_ids: tuple[int, ...]
@@ -2541,14 +2450,20 @@ def safe_relation_indices(relation_indices: torch.Tensor, relation_count: int) -
 
 
 class TypedRelationPairGenerator:
-    """Propose a capped cross product of typed head and tail mentions.
+    """Propose a capped cross product of typed head and tail mentions."""
 
-    Args:
-        settings: Retention caps. Defaults to the standard inference caps.
-    """
-
-    def __init__(self, settings: RelationProposalSettings | None = None) -> None:
-        self.settings = settings or RelationProposalSettings()
+    def __init__(
+        self,
+        heads_per_relation: int = 32,
+        tails_per_relation: int = 32,
+        pair_cap: int = 128,
+        argument_threshold: float = 0.0,
+    ) -> None:
+        """Store the retention caps used while proposing pairs."""
+        self.heads_per_relation = heads_per_relation
+        self.tails_per_relation = tails_per_relation
+        self.pair_cap = pair_cap
+        self.argument_threshold = argument_threshold
 
     def generate(
         self,
@@ -2581,19 +2496,8 @@ class TypedRelationPairGenerator:
         compact: bool = False,
         routing: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
     ) -> RelationPairBatch:
-        """Propose `[B, R, pair_cap]` typed pairs.
-
-        Args:
-            candidates: Per-query mention candidates.
-            query_layouts: Layouts used only when `compact` attaches names.
-            relation_schemas: Relation types for each sample.
-            compact: Drop invalid pads and materialize presentation keys.
-            routing: Optional `(head_member, tail_member, relation_valid, allow_self)`.
-
-        Returns:
-            Flattened relation pairs. Invalid pads remain when `compact` is false.
-        """
-        settings = self.settings
+        """Propose `[B, R, pair_cap]` typed pairs."""
+        settings = self
         device = candidates.indices.device
         batch_size, queries, cand_count = candidates.valid_mask.shape
         rel_count = (
@@ -2918,266 +2822,8 @@ class RecordGroupOutput:
         return int(self.object_logits.shape[0])
 
 
-@dataclass
-class DecodedRecord:  # trf-ignore: TRF031
-    """One decoded record.
-
-    Attributes:
-        fields: Field query id to selected half-open spans.
-        field_scores: Field query id to the score of each selected span.
-        anchor_span: Anchor span for natural-mode instances.
-        score: Object probability of the instance.
-    """
-
-    fields: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
-    field_scores: dict[int, list[float]] = field(default_factory=dict)
-    anchor_span: tuple[int, int] | None = None
-    score: float = 0.0
-
-
-def _dedup_key(record: DecodedRecord) -> tuple:
-    """Return a span key that identifies duplicate decoded records."""
-    return tuple((qid, tuple(sorted(spans))) for qid, spans in sorted(record.fields.items()))
-
-
-class _ScipyAssignment:
-    """Minimum-cost assignment through SciPy."""
-
-    def prepare(self) -> None:
-        """Require SciPy before a decode that may assign exclusive fields."""
-        requires_backends(self, ["scipy"])
-
-    def __call__(self, cost_matrix: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Solve a rectangular assignment problem.
-
-        Args:
-            cost_matrix: Costs `[R, C]`.
-
-        Returns:
-            Matched row and column indices, with rows ascending.
-        """
-        requires_backends(self, ["scipy"])
-        if cost_matrix.ndim != 2:
-            raise ValueError("cost_matrix must be 2-D")
-        cost = cost_matrix.detach().cpu().to(torch.float64)
-        if torch.isnan(cost).any():
-            raise ValueError("cost_matrix contains NaN")
-        if torch.isinf(cost).any():
-            finite = cost[torch.isfinite(cost)]
-            scale = float(finite.abs().max()) if finite.numel() else 1.0
-            big = 1e6 * (scale + 1.0)
-            cost = torch.nan_to_num(cost, posinf=big, neginf=-big)
-        rows, cols = cost.shape
-        if rows == 0 or cols == 0:
-            empty = torch.zeros(0, dtype=torch.long)
-            return empty, empty
-        from scipy.optimize import linear_sum_assignment as scipy_assignment
-
-        array = cost.numpy()
-        scale = max(float(abs(array).max()), 1.0)
-        epsilon = torch.finfo(torch.float64).eps * scale
-        tie = torch.arange(rows * cols, dtype=torch.float64).reshape(rows, cols).numpy()
-        row_ind, col_ind = scipy_assignment(array + epsilon * tie)
-        pairs = sorted(zip(row_ind.tolist(), col_ind.tolist()))
-        return (
-            torch.tensor([row for row, _ in pairs], dtype=torch.long),
-            torch.tensor([col for _, col in pairs], dtype=torch.long),
-        )
-
-
-def _decode_group(
-    group: RecordGroupOutput,
-    assign: _ScipyAssignment,
-    *,
-    anchor_threshold: float = 0.5,
-    field_threshold: float = 0.5,
-    object_threshold: float = 0.5,
-    temperature: float = 1.0,
-) -> list[DecodedRecord]:
-    """Decode one group after SciPy has been required by the caller."""
-    ni = group.num_instances
-    if ni == 0:
-        return []
-    if temperature <= 0:
-        raise ValueError("temperature must be > 0")
-    obj_prob = torch.sigmoid(group.object_logits.detach() / temperature)
-    select_thr = object_threshold if group.spec.mode == "anchorless" else anchor_threshold
-    order = sorted(range(ni), key=lambda i: (-float(obj_prob[i]), i))
-    selected_instances = [inst for inst in order if float(obj_prob[inst]) >= select_thr]
-
-    scalar_choices: dict[tuple[int, int], tuple[int, float] | None] = {}
-    list_owners: dict[tuple[int, int], tuple[int, float]] = {}
-    for f_idx, fspec in enumerate(group.field_specs):
-        if not fspec.exclusive or not selected_instances:
-            continue
-        logits = torch.stack([group.assign_logits[f_idx][inst].detach() / temperature for inst in selected_instances])
-        candidate_count = max(int(logits.shape[-1]) - 1, 0)
-        if fspec.cardinality.is_scalar:
-            if candidate_count == 0:
-                for inst in selected_instances:
-                    scalar_choices[(inst, f_idx)] = None
-                continue
-            probs = torch.softmax(logits, dim=-1)
-            candidate_probs = probs[:, 1:]
-            eps = torch.finfo(candidate_probs.dtype).eps
-            candidate_cost = -torch.log(candidate_probs.clamp_min(eps))
-            row_count = len(selected_instances)
-            diagonal = -torch.log(probs[:, 0].clamp_min(eps))
-            if not fspec.allows_absent:
-                diagonal = candidate_cost.max().detach() + 50.0
-                diagonal = diagonal.expand(row_count)
-            invalid_cost = max(float(candidate_cost.max()), float(diagonal.max())) + 1_000.0
-            absent_cost = candidate_cost.new_full((row_count, row_count), invalid_cost)
-            absent_cost[torch.arange(row_count), torch.arange(row_count)] = diagonal
-            cost = torch.cat((candidate_cost, absent_cost), dim=-1)
-            rows, cols = assign(cost)
-            assignments = {int(row): int(col) for row, col in zip(rows, cols)}
-            for row, inst in enumerate(selected_instances):
-                col = assignments.get(row, candidate_count + row)
-                if col >= candidate_count:
-                    scalar_choices[(inst, f_idx)] = None
-                    continue
-                probability = float(candidate_probs[row, col])
-                if probability < field_threshold and fspec.allows_absent:
-                    scalar_choices[(inst, f_idx)] = None
-                    continue
-                scalar_choices[(inst, f_idx)] = (col, probability)
-        else:
-            if candidate_count == 0:
-                continue
-            probabilities = torch.sigmoid(logits[:, 1:])
-            for cand_idx in range(candidate_count):
-                probability, row = probabilities[:, cand_idx].max(dim=0)
-                if float(probability) >= field_threshold:
-                    list_owners[(f_idx, cand_idx)] = (
-                        selected_instances[int(row)],
-                        float(probability),
-                    )
-
-    records: list[DecodedRecord] = []
-    for inst in selected_instances:
-        rec = DecodedRecord(score=float(obj_prob[inst]))
-        anchor_field_idx = None
-        if group.spec.mode == "natural":
-            anchor_field_idx = group.field_query_ids.index(group.spec.anchor_query_id)
-            seed = group.instance_seed[inst]
-            if seed is not None:
-                rec.anchor_span = group.instance_spans[inst]
-        for f_idx, fspec in enumerate(group.field_specs):
-            qid = fspec.query_id
-            spans_tensor = group.field_spans[f_idx]
-            logits_row = group.assign_logits[f_idx][inst].detach() / temperature
-            if anchor_field_idx is not None and f_idx == anchor_field_idx:
-                if rec.anchor_span is not None:
-                    rec.fields.setdefault(qid, []).append(rec.anchor_span)
-                    rec.field_scores.setdefault(qid, []).append(rec.score)
-                continue
-            if fspec.cardinality.is_scalar:
-                if fspec.exclusive:
-                    choice = scalar_choices.get((inst, f_idx))
-                    if choice is None:
-                        continue
-                    cand_idx, probability = choice
-                    span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
-                    rec.fields.setdefault(qid, []).append(span)
-                    rec.field_scores.setdefault(qid, []).append(probability)
-                    continue
-                probs = torch.softmax(logits_row, dim=-1)
-                chosen = None
-                for col in torch.argsort(probs, descending=True).tolist():
-                    if col == 0:
-                        if fspec.allows_absent:
-                            chosen = 0
-                            break
-                        continue
-                    chosen = col
-                    break
-                if chosen is None or chosen == 0:
-                    continue
-                if float(probs[chosen]) < field_threshold and fspec.allows_absent:
-                    continue
-                cand_idx = chosen - 1
-                span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
-                rec.fields.setdefault(qid, []).append(span)
-                rec.field_scores.setdefault(qid, []).append(float(probs[chosen]))
-            else:
-                cand_logits = logits_row[1:]
-                if cand_logits.numel() == 0:
-                    continue
-                probs = torch.sigmoid(cand_logits)
-                selected: list[tuple[int, int]] = []
-                selected_scores: list[float] = []
-                for cand_idx in range(cand_logits.shape[0]):
-                    if fspec.exclusive:
-                        owner = list_owners.get((f_idx, cand_idx))
-                        if owner is None or owner[0] != inst:
-                            continue
-                        probability = owner[1]
-                    else:
-                        probability = float(probs[cand_idx])
-                        if probability < field_threshold:
-                            continue
-                    span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
-                    selected.append(span)
-                    selected_scores.append(probability)
-                if selected:
-                    rec.fields.setdefault(qid, []).extend(selected)
-                    rec.field_scores.setdefault(qid, []).extend(selected_scores)
-        if rec.fields:
-            records.append(rec)
-
-    if group.spec.mode in ("latent", "anchorless"):
-        best: dict[tuple, DecodedRecord] = {}
-        for rec in records:
-            key = _dedup_key(rec)
-            if key not in best or rec.score > best[key].score:
-                best[key] = rec
-        records = list(best.values())
-    elif group.spec.mode == "natural":
-        records.sort(key=lambda record: (record.anchor_span is None, record.anchor_span or (0, 0)))
-    return records
-
-
-def decode_group(
-    group: RecordGroupOutput,
-    *,
-    anchor_threshold: float = 0.5,
-    field_threshold: float = 0.5,
-    object_threshold: float = 0.5,
-    temperature: float = 1.0,
-) -> list[DecodedRecord]:
-    """Decode one record group into selected field spans.
-
-    Args:
-        group: Scores from `RecordHead.forward_group`.
-        anchor_threshold: Minimum object probability for anchored instances.
-        field_threshold: Minimum field probability.
-        object_threshold: Minimum object probability for anchorless instances.
-        temperature: Positive divisor applied to logits before probabilities.
-
-    Returns:
-        Decoded records that contain at least one field span.
-    """
-    assign = _ScipyAssignment()
-    assign.prepare()
-    return _decode_group(
-        group,
-        assign,
-        anchor_threshold=anchor_threshold,
-        field_threshold=field_threshold,
-        object_threshold=object_threshold,
-        temperature=temperature,
-    )
-
-
 class RecordHead(nn.Module):
-    """Form record instances and score field-to-instance assignment.
-
-    Args:
-        hidden_size: Candidate and query width.
-        record_dim: Width of the assignment space.
-        instance_queries: Learned queries used when the schema is anchorless.
-    """
+    """Form record instances and score field-to-instance assignment."""
 
     def __init__(self, hidden_size: int, record_dim: int, instance_queries: int) -> None:
         super().__init__()
@@ -3349,149 +2995,10 @@ class RecordHead(nn.Module):
             instance_spans=instance_spans,
         )
 
-    def decode_group(
-        self,
-        group: RecordGroupOutput,
-        *,
-        anchor_threshold: float = 0.5,
-        field_threshold: float = 0.5,
-        object_threshold: float = 0.5,
-        temperature: float = 1.0,
-    ) -> list[DecodedRecord]:
-        """Decode `group` with the same assignment used by `decode_group`.
-
-        Args:
-            group: Scores from `forward_group`.
-            anchor_threshold: Minimum object probability for anchored instances.
-            field_threshold: Minimum field probability.
-            object_threshold: Minimum object probability for anchorless instances.
-            temperature: Positive divisor applied before probabilities.
-
-        Returns:
-            Decoded records that contain at least one field span.
-        """
-        requires_backends(self, ["scipy"])
-        return _decode_group(
-            group,
-            _ScipyAssignment(),
-            anchor_threshold=anchor_threshold,
-            field_threshold=field_threshold,
-            object_threshold=object_threshold,
-            temperature=temperature,
-        )
-
-
-@dataclass
-class BoundarySettings:  # trf-ignore: TRF031
-    """Inference settings read by the boundary head.
-
-    The parent model passes ``config.boundary_config``. Only fields that change
-    parameters or inference math are stored here.
-
-    Attributes:
-        boundary_dim: Boundary state width.
-        pair_dim: Pair-scorer width.
-        boundary_refinement_layers: Residual blocks in the boundary encoder.
-        boundary_ffn_multiplier: SwiGLU hidden multiplier.
-        start_top_k: Starts kept before conditional end scoring.
-        end_top_k: Ends kept before conditional start scoring.
-        ends_per_start: Ends retained for each start.
-        starts_per_end: Starts retained for each end.
-        candidate_budget: Candidates kept at evaluation.
-        training_candidate_budget: Candidates kept while the module is training.
-        max_gold_per_query: Gold spans reserved by the proposal settings.
-        end_block_size: Streaming proposal block width.
-        bidirectional_proposals: Also propose starts from selected ends.
-        use_inside_evidence: Add inside-prefix evidence to pair scores.
-        dropout: Dropout probability.
-        export_mode: `"auto"`, `"streaming"`, or `"vectorized"`.
-        vectorized_pair_elements: Auto-mode cutoff for a single proposal block.
-        enable_span_content: Pool token content into pair scores.
-        content_dim: Content projection width.
-        content_soft_max_pool: Also pool a smooth maximum.
-        enable_rotary_endpoints: Rotate proposal and reranker endpoints.
-        rotary_base: Rotary frequency base.
-        boundary_attention_layers: Boundary self-attention blocks.
-        boundary_attention_heads: Heads in those blocks.
-        boundary_attention_window: Local window, or 0 for full attention.
-        query_conditioned_inside_weight: Predict the inside coefficient.
-        endpoint_difference_features: Add an endpoint-difference feature.
-        reranker_endpoint_compat: Add multi-head endpoint compatibility.
-        multihead_pair_compat_heads: Heads mixed into the compatibility logit.
-        boundary_top_k_alpha: Length-adaptive top-k slope.
-        boundary_top_k_max: Cap for the adaptive top-k.
-        boundary_top_k_bucket: Rounding bucket for the adaptive top-k.
-        candidate_pool: `"per_query"` or `"shared"`.
-        pool_boundary_top_k: Endpoints kept in the shared pool.
-        pool_size: Spans kept in the shared pool.
-        min_pool_per_query: Spans reserved for each query.
-        candidate_attention_layers: Shared-pool candidate attention blocks.
-        candidate_attention_heads: Heads in shared-pool attention.
-        query_attention_layers: Shared-pool query attention blocks.
-        enable_abstention: Build the null-query projection.
-        enable_count_head: Build the count log-rate projection.
-    """
-
-    boundary_dim: int = 128
-    pair_dim: int = 128
-    boundary_refinement_layers: int = 1
-    boundary_ffn_multiplier: float = 2.0
-    start_top_k: int = 16
-    end_top_k: int = 16
-    ends_per_start: int = 8
-    starts_per_end: int = 8
-    candidate_budget: int = 128
-    training_candidate_budget: int = 160
-    max_gold_per_query: int = 32
-    end_block_size: int = 256
-    bidirectional_proposals: bool = True
-    use_inside_evidence: bool = True
-    dropout: float = 0.1
-    export_mode: str = "auto"
-    vectorized_pair_elements: int = 16_777_216
-    enable_span_content: bool = False
-    content_dim: int = 64
-    content_soft_max_pool: bool = False
-    enable_rotary_endpoints: bool = False
-    rotary_base: float = 10000.0
-    boundary_attention_layers: int = 0
-    boundary_attention_heads: int = 4
-    boundary_attention_window: int = 0
-    query_conditioned_inside_weight: bool = False
-    endpoint_difference_features: bool = False
-    reranker_endpoint_compat: bool = True
-    multihead_pair_compat_heads: int = 8
-    boundary_top_k_alpha: float = 0.0
-    boundary_top_k_max: int = 128
-    boundary_top_k_bucket: int = 8
-    candidate_pool: str = "per_query"
-    pool_boundary_top_k: int = 64
-    pool_size: int = 384
-    min_pool_per_query: int = 8
-    candidate_attention_layers: int = 2
-    candidate_attention_heads: int = 4
-    query_attention_layers: int = 1
-    enable_abstention: bool = True
-    enable_count_head: bool = True
-
 
 @dataclass
 class BoundaryHeadOutput:  # trf-ignore: TRF031
-    """Inference outputs of `BoundaryHead`.
-
-    Attributes:
-        start_logits: Start marginals `[B, Q, L + 1]`.
-        end_logits: End marginals `[B, Q, L + 1]`.
-        inside_logits: Inside marginals `[B, Q, L]`.
-        candidates: Sparse candidates when requested.
-        null_logits: Abstention logits `[B, Q]`.
-        count_log_rates: Count-head log-rates `[B, Q]`.
-        loss: Unused during inference.
-        total_loss: Unused during inference.
-        losses: Unused during inference.
-        metrics: Proposal-recall counts when targets are passed. None in inference.
-        batch_size: Batch size.
-    """
+    """Marginal logits and sparse candidates from `BoundaryHead`."""
 
     start_logits: torch.Tensor | None = None
     end_logits: torch.Tensor | None = None
@@ -3499,154 +3006,24 @@ class BoundaryHeadOutput:  # trf-ignore: TRF031
     candidates: CandidateTensorBatch | None = None
     null_logits: torch.Tensor | None = None
     count_log_rates: torch.Tensor | None = None
-    loss: torch.Tensor | None = None
-    total_loss: torch.Tensor | None = None
-    losses: dict | None = None
-    metrics: dict | None = None
     batch_size: int = 0
 
 
-def _metric_scalar(value) -> float:
-    """Read one diagnostic count as a float."""
-    if isinstance(value, torch.Tensor):
-        return float(value.detach().cpu())
-    return float(value)
-
-
-def _proposal_diagnostic_metrics(
-    proposals: BoundaryProposals, targets, query_mask: torch.Tensor | None
-) -> dict | None:
-    """Count pre-injection oracle hits and retained length-bucket coverage.
-
-    Args:
-        proposals: Candidates plus optional pre-injection stats.
-        targets: Gold spans with `mention_pairs` and `mention_mask`.
-        query_mask: Valid queries `[B, Q]`.
-
-    Returns:
-        Count tensors and recall rates, or None when `targets` is absent.
-    """
-    if targets is None:
-        return None
-    metrics: dict = {}
-    stats = proposals.stats
-    if stats is not None:
-        for key, value in (
-            ("proposal_gold_hit", stats.gold_hit_without_injection),
-            ("proposal_gold_total", stats.gold_total),
-            ("start_hit", stats.start_hit),
-            ("end_hit", stats.end_hit),
-            ("boundary_total", stats.boundary_total),
-            ("unique_candidates", stats.unique_candidates),
-        ):
-            if value is not None:
-                metrics[key] = value
-    if query_mask is not None:
-        metrics["valid_queries"] = query_mask.sum()
-    mention_pairs = getattr(targets, "mention_pairs", None)
-    mention_mask = getattr(targets, "mention_mask", None)
-    if mention_pairs is not None and mention_mask is not None and proposals.valid_mask is not None:
-        same = (proposals.indices.unsqueeze(2) == mention_pairs.unsqueeze(3)).all(-1)
-        covered = (same & proposals.valid_mask.unsqueeze(2)).any(-1) & mention_mask
-        lengths = mention_pairs[..., 1] - mention_pairs[..., 0]
-        for label, in_bucket in (
-            ("1", lengths == 1),
-            ("2", lengths == 2),
-            ("3_4", (lengths >= 3) & (lengths <= 4)),
-            ("5_8", (lengths >= 5) & (lengths <= 8)),
-            ("9_plus", lengths >= 9),
-        ):
-            bucket = in_bucket & mention_mask
-            metrics[f"length_{label}_hit"] = (covered & bucket).sum()
-            metrics[f"length_{label}_total"] = bucket.sum()
-    if not metrics:
-        return None
-    gold_total = _metric_scalar(metrics.get("proposal_gold_total", 0.0))
-    if gold_total > 0:
-        metrics["proposal_oracle_recall"] = _metric_scalar(metrics["proposal_gold_hit"]) / gold_total
-    boundary_total = _metric_scalar(metrics.get("boundary_total", 0.0))
-    if boundary_total > 0:
-        metrics["start_recall"] = _metric_scalar(metrics["start_hit"]) / boundary_total
-        metrics["end_recall"] = _metric_scalar(metrics["end_hit"]) / boundary_total
-    valid_queries = _metric_scalar(metrics.get("valid_queries", 0.0))
-    if valid_queries > 0 and "unique_candidates" in metrics:
-        metrics["candidates_per_query"] = _metric_scalar(metrics["unique_candidates"]) / valid_queries
-    for label in ("1", "2", "3_4", "5_8", "9_plus"):
-        total = _metric_scalar(metrics.get(f"length_{label}_total", 0.0))
-        if total > 0:
-            metrics[f"recall_length_{label}"] = _metric_scalar(metrics[f"length_{label}_hit"]) / total
-    return metrics
-
-
-def _coerce_settings(settings):
-    """Accept a dataclass, namespace, or dict of boundary settings."""
-    if isinstance(settings, dict):
-        names = {item.name for item in fields(BoundarySettings)}
-        return BoundarySettings(**{key: settings[key] for key in names if key in settings})
-    return settings
-
-
-def _proposal_settings(settings) -> ProposalSettings:
-    """Copy the proposal fields read by `SparseBoundaryProposer`."""
-    return ProposalSettings(
-        start_top_k=settings.start_top_k,
-        end_top_k=settings.end_top_k,
-        ends_per_start=settings.ends_per_start,
-        starts_per_end=settings.starts_per_end,
-        candidate_budget=settings.candidate_budget,
-        training_candidate_budget=settings.training_candidate_budget,
-        max_gold_per_query=settings.max_gold_per_query,
-        end_block_size=settings.end_block_size,
-        bidirectional=settings.bidirectional_proposals,
-        export_mode=settings.export_mode,
-        vectorized_pair_elements=settings.vectorized_pair_elements,
-        enable_rotary_endpoints=settings.enable_rotary_endpoints,
-        rotary_base=settings.rotary_base,
-        boundary_top_k_alpha=settings.boundary_top_k_alpha,
-        boundary_top_k_max=settings.boundary_top_k_max,
-        boundary_top_k_bucket=settings.boundary_top_k_bucket,
-    )
-
-
 class BoundaryHead(nn.Module):
-    """Encode boundaries, propose spans, and rerank them.
-
-    Args:
-        hidden_size: Token hidden size.
-        settings: Boundary configuration namespace or dict.
-        query_dim: Query width. Defaults to `hidden_size`.
-        loss_weights: Accepted for caller compatibility and unused here.
-        hard_negatives_per_positive: Accepted for caller compatibility.
-        minimum_hard_negatives: Accepted for caller compatibility.
-        build_candidate_states: Add the record-head candidate encoder.
-    """
+    """Encode boundaries, propose spans, and rerank them."""
 
     def __init__(
         self,
         hidden_size: int,
         settings,
         query_dim: int | None = None,
-        loss_weights: dict | None = None,
-        hard_negatives_per_positive: int | None = None,
-        minimum_hard_negatives: int | None = None,
         build_candidate_states: bool = False,
     ):
+        """Build the encoder, proposer, and scorer from `boundary_config`."""
         super().__init__()
-        settings = _coerce_settings(settings)
         self.hidden_size = hidden_size
         self.settings = settings
         self.query_dim = query_dim if query_dim is not None else hidden_size
-        self.loss_weights = dict(loss_weights or {})
-        self.hard_negatives_per_positive = (
-            hard_negatives_per_positive
-            if hard_negatives_per_positive is not None
-            else getattr(settings, "hard_negatives_per_positive", 5)
-        )
-        self.minimum_hard_negatives = (
-            minimum_hard_negatives
-            if minimum_hard_negatives is not None
-            else getattr(settings, "minimum_hard_negatives", 8)
-        )
         self.collect_diagnostics = False
         self._gold_injection_prob = 1.0
         self._consistency_scale = 1.0
@@ -3665,7 +3042,7 @@ class BoundaryHead(nn.Module):
             settings.boundary_attention_window,
         )
         self.boundary_query_head = BoundaryQueryHead(hidden_size, dim, self.query_dim, settings.dropout)
-        self.boundary_proposer = SparseBoundaryProposer(dim, self.query_dim, _proposal_settings(settings))
+        self.boundary_proposer = SparseBoundaryProposer(dim, self.query_dim, settings)
         self.pair_scorer = SparseBoundaryPairScorer(
             dim,
             self.query_dim,
@@ -3829,22 +3206,7 @@ class BoundaryHead(nn.Module):
         gold_injection_prob: float | None = None,
         collect_diagnostics: bool | None = None,
     ) -> BoundaryHeadOutput:
-        """Propose and rerank boundary spans.
-
-        Args:
-            token_states: Token states `[B, L, H]`.
-            text_mask: Valid tokens `[B, L]`.
-            query_states: Query states `[B, Q, H]`.
-            query_mask: Valid queries `[B, Q]`.
-            targets: Optional targets with `mention_pairs` and `mention_mask`.
-                Gold is injected only while this module is training.
-            return_candidates: Attach the sparse candidate batch.
-            gold_injection_prob: Override for the stored injection probability.
-            collect_diagnostics: Request proposal statistics. Targets always do.
-
-        Returns:
-            Marginal logits, scored candidates, and recall counts when targets are passed.
-        """
+        """Propose and rerank boundary spans."""
         batch = token_states.shape[0]
         text_lengths = text_mask.sum(dim=1).long()
         encoding = self.boundary_encoder(token_states, text_mask)
@@ -3947,7 +3309,6 @@ class BoundaryHead(nn.Module):
                 text_mask,
                 inside_prefix_mean=marginals.inside_prefix_mean,
             )
-        self._last_proposal_stats = proposals.stats  # trf-ignore: TRF046
         null_logits = self.null_projection(query_states).squeeze(-1) if self.null_projection is not None else None
         count_log_rates = self.count_head(query_states).squeeze(-1) if self.count_head is not None else None
 
@@ -3978,103 +3339,8 @@ class BoundaryHead(nn.Module):
             candidates=candidates,
             null_logits=null_logits,
             count_log_rates=count_log_rates,
-            metrics=_proposal_diagnostic_metrics(proposals, targets, query_mask),
             batch_size=batch,
         )
-
-
-def _boundary_parts(parent):
-    """Read every boundary-config field into the head settings and side modules."""
-    config = parent.boundary_config
-    settings = BoundarySettings(
-        boundary_dim=config.boundary_dim,
-        pair_dim=config.pair_dim,
-        boundary_refinement_layers=config.boundary_refinement_layers,
-        boundary_ffn_multiplier=config.boundary_ffn_multiplier,
-        start_top_k=config.start_top_k,
-        end_top_k=config.end_top_k,
-        ends_per_start=config.ends_per_start,
-        starts_per_end=config.starts_per_end,
-        candidate_budget=config.candidate_budget,
-        training_candidate_budget=config.training_candidate_budget,
-        max_gold_per_query=config.max_gold_per_query,
-        end_block_size=config.end_block_size,
-        bidirectional_proposals=config.bidirectional_proposals,
-        use_inside_evidence=config.use_inside_evidence,
-        dropout=config.dropout,
-        export_mode=config.export_mode,
-        vectorized_pair_elements=config.vectorized_pair_elements,
-        enable_span_content=config.enable_span_content,
-        content_dim=config.content_dim,
-        content_soft_max_pool=config.content_soft_max_pool,
-        enable_rotary_endpoints=config.enable_rotary_endpoints,
-        rotary_base=config.rotary_base,
-        boundary_attention_layers=config.boundary_attention_layers,
-        boundary_attention_heads=config.boundary_attention_heads,
-        boundary_attention_window=config.boundary_attention_window,
-        query_conditioned_inside_weight=config.query_conditioned_inside_weight,
-        endpoint_difference_features=config.endpoint_difference_features,
-        reranker_endpoint_compat=config.reranker_endpoint_compat,
-        multihead_pair_compat_heads=config.multihead_pair_compat_heads,
-        boundary_top_k_alpha=config.boundary_top_k_alpha,
-        boundary_top_k_max=config.boundary_top_k_max,
-        boundary_top_k_bucket=config.boundary_top_k_bucket,
-        candidate_pool=config.candidate_pool,
-        pool_boundary_top_k=config.pool_boundary_top_k,
-        pool_size=config.pool_size,
-        min_pool_per_query=config.min_pool_per_query,
-        candidate_attention_layers=config.candidate_attention_layers,
-        candidate_attention_heads=config.candidate_attention_heads,
-        query_attention_layers=config.query_attention_layers,
-        enable_abstention=config.enable_abstention,
-        enable_count_head=config.enable_count_head,
-    )
-    extras = {
-        "enable_records": config.enable_records,
-        "enable_relations": config.enable_relations,
-        "record_dim": config.record_dim,
-        "record_instance_queries": config.record_instance_queries,
-        "relation_heads_per_type": config.relation_heads_per_type,
-        "relation_tails_per_type": config.relation_tails_per_type,
-        "relation_pair_cap": config.relation_pair_cap,
-        "relation_argument_proposal_threshold": config.relation_argument_proposal_threshold,
-        "directional_relation_states": config.directional_relation_states,
-        "relation_biaffine_content": config.relation_biaffine_content,
-        "pair_temperature": config.pair_temperature,
-        "relation_temperature": config.relation_temperature,
-        "record_temperature": config.record_temperature,
-        "overlap_policy": config.overlap_policy,
-        "abstention_threshold": config.abstention_threshold,
-        "record_anchor_proposal_threshold": config.record_anchor_proposal_threshold,
-        "record_anchor_threshold": config.record_anchor_threshold,
-        "record_field_threshold": config.record_field_threshold,
-        "dropout": config.dropout,
-        "abstention_loss_weight": config.abstention_loss_weight,
-        "adaptive_threshold": config.adaptive_threshold,
-        "boundary_focal_clip": config.boundary_focal_clip,
-        "boundary_focal_gamma_negative": config.boundary_focal_gamma_negative,
-        "boundary_focal_gamma_positive": config.boundary_focal_gamma_positive,
-        "boundary_marginal_loss": config.boundary_marginal_loss,
-        "boundary_negative_weight": config.boundary_negative_weight,
-        "classification_loss_weight": config.classification_loss_weight,
-        "classification_temperature": config.classification_temperature,
-        "consistency_loss_weight": config.consistency_loss_weight,
-        "consistency_warmup_steps": config.consistency_warmup_steps,
-        "count_loss_weight": config.count_loss_weight,
-        "hard_negative_keep_all_when_absent": config.hard_negative_keep_all_when_absent,
-        "hard_negatives_per_positive": config.hard_negatives_per_positive,
-        "loss_reduction": config.loss_reduction,
-        "max_negative_queries_per_batch": config.max_negative_queries_per_batch,
-        "minimum_hard_negatives": config.minimum_hard_negatives,
-        "negative_query_ratio": config.negative_query_ratio,
-        "proposal_loss_weight": config.proposal_loss_weight,
-        "record_loss_weight": config.record_loss_weight,
-        "relation_loss_weight": config.relation_loss_weight,
-        "rerank_listwise_weight": config.rerank_listwise_weight,
-        "soft_iou_anneal_steps": config.soft_iou_anneal_steps,
-        "soft_iou_aux_weight": config.soft_iou_aux_weight,
-    }
-    return settings, extras
 
 
 @auto_docstring
@@ -4132,7 +3398,7 @@ class Gliner2SchemaExtractionOutput(ModelOutput):
     counts (`list`, *optional*):
         Instance counts aligned with `span_logits`.
     boundary (`BoundaryHeadOutput`, *optional*):
-        Boundary-head marginals and candidates. `metrics` is set only when mention labels are passed.
+        Boundary-head marginals and candidates.
     text_states (`torch.FloatTensor` of shape `(batch_size, num_words, hidden_size)`, *optional*):
         Gathered word states from this forward. Attribute rescoring reuses them.
     text_mask (`torch.BoolTensor` of shape `(batch_size, num_words)`, *optional*):
@@ -4258,49 +3524,35 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         self.encoder = _load_encoder(config.encoder_config)
         hidden = config.encoder_config.hidden_size
         self.max_width = config.max_width
-        self.counting_layer = config.counting_layer
-        self.token_pooling = config.token_pooling
-        self.max_len = config.max_len
-        self.classification_temperature = config.classification_temperature
-        self.model_name = config.model_name
-        self.span_mode = config.span_mode
-        self.span_head = config.span_head
-        self.architecture_version = config.architecture_version
-        self.config_version = config.config_version
         dropout = 0.0
         if config.architecture == "boundary":
-            settings, extras = _boundary_parts(config)
-            dropout = extras["dropout"]
+            cfg = config.boundary_config
+            dropout = cfg.dropout
             self.boundary_head = BoundaryHead(
                 hidden,
-                settings,
-                build_candidate_states=extras["enable_records"],
+                cfg,
+                build_candidate_states=cfg.enable_records,
             )
             self.record_decoder = (
-                RecordHead(hidden, extras["record_dim"], extras["record_instance_queries"])
-                if extras["enable_records"]
-                else None
+                RecordHead(hidden, cfg.record_dim, cfg.record_instance_queries) if cfg.enable_records else None
             )
-            if extras["enable_relations"]:
-                query_dim = hidden * 2 if extras["directional_relation_states"] else hidden
+            if cfg.enable_relations:
+                query_dim = hidden * 2 if cfg.directional_relation_states else hidden
                 self.relation_scorer = SparseRelationScorer(
                     hidden,
-                    dropout=extras["dropout"],
+                    dropout=cfg.dropout,
                     relation_query_dim=query_dim,
-                    use_biaffine_content=extras["relation_biaffine_content"],
+                    use_biaffine_content=cfg.relation_biaffine_content,
                 )
                 self.relation_pair_generator = TypedRelationPairGenerator(
-                    RelationProposalSettings(
-                        heads_per_relation=extras["relation_heads_per_type"],
-                        tails_per_relation=extras["relation_tails_per_type"],
-                        pair_cap=extras["relation_pair_cap"],
-                        argument_threshold=extras["relation_argument_proposal_threshold"],
-                    )
+                    heads_per_relation=cfg.relation_heads_per_type,
+                    tails_per_relation=cfg.relation_tails_per_type,
+                    pair_cap=cfg.relation_pair_cap,
+                    argument_threshold=cfg.relation_argument_proposal_threshold,
                 )
             else:
                 self.relation_scorer = None
                 self.relation_pair_generator = None
-            self._boundary_extras = extras
         else:
             self.span_rep = SpanRepLayer(hidden, config.max_width, span_mode="markerV0", dropout=0.1)
             if config.counting_layer == "count_lstm_v2":
@@ -4671,7 +3923,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                     if torch.is_tensor(structure):
                         structure = structure[:gold]
                     projected = self.count_embed(fields, gold)
-                    scores = loss_gliner2.count_conditioned_scores(rep, projected)
+                    scores = count_conditioned_scores(rep, projected)
                     sample_spans.append(scores)
                     sample_counts.append(gold)
                     span_mask = loss_gliner2.invalid_span_mask(length, self.max_width, scores.device)
@@ -4788,7 +4040,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 record_mask,
             )
             if relation_logits is not None:
-                relation_temperature = float(self._boundary_extras["relation_temperature"])
+                relation_temperature = float(self.config.boundary_config.relation_temperature)
         return Gliner2SchemaExtractionOutput(
             last_hidden_state=hidden,
             hidden_states=encoded.hidden_states,
@@ -4832,7 +4084,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         tail_slot = tail_index.clamp(0, queries - 1)
         head_states = query_states.gather(1, head_slot.unsqueeze(-1).expand(-1, -1, hidden))
         tail_states = query_states.gather(1, tail_slot.unsqueeze(-1).expand(-1, -1, hidden))
-        directional = bool(self._boundary_extras["directional_relation_states"])
+        directional = bool(self.config.boundary_config.directional_relation_states)
         if directional:
             relation_states = torch.cat((head_states, tail_states), dim=-1)
         else:
@@ -5015,7 +4267,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 rel_states = _states_from_routing(
                     query_states,
                     routing,
-                    bool(self._boundary_extras["directional_relation_states"]),
+                    bool(self.config.boundary_config.directional_relation_states),
                 )
             if routing is None or rel_states is None or supervision.get("relation_gold_mask") is None:
                 raise ValueError("relation targets require routing, query states, and a gold mask")
@@ -5135,6 +4387,11 @@ def _classification_logits(cls_states, cls_mask, cls_groups, task_ids, group_mas
     return rows
 
 
+def count_conditioned_scores(span_rep: torch.Tensor, projected: torch.Tensor) -> torch.Tensor:
+    """Score spans with count-conditioned field states."""
+    return torch.einsum("lkd,bpd->bplk", span_rep, projected)
+
+
 def _span_logits(
     text_states,
     text_mask,
@@ -5181,7 +4438,7 @@ def _span_logits(
                 sample_spans.append(text_states.new_zeros(0, fields.shape[0], length, max_width))
                 continue
             projected = count_embed(fields, predicted)
-            sample_spans.append(torch.einsum("lkd,bpd->bplk", rep, projected))
+            sample_spans.append(count_conditioned_scores(rep, projected))
         span_rows.append(sample_spans)
         count_rows.append(sample_counts)
     return span_rows, count_rows

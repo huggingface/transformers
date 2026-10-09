@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import bisect
 import copy
 import logging
 import re
@@ -24,10 +23,22 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+from torch.nn.utils.rnn import pad_sequence
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...utils import auto_docstring
+from .decoding_gliner2 import (
+    _doc_axis,
+    decode_boundary,
+    decode_classification,
+    decode_joint,
+    decode_records,
+    decode_spans,
+    format_span,
+    normalize_overlap_policy,
+    resolve_overlaps,
+)
 from .loss_gliner2 import dense_targets_from_pairs
 
 
@@ -74,19 +85,36 @@ CARDINALITY_TO_ID = {
 VALID_RECORD_MODES = ("natural", "latent", "anchorless")
 RECORD_TASK_TYPES = ("json_structures",)
 _SPAN_RESERVED = frozenset({"text", "confidence", "start", "end"})
-_OVERLAP_ALIASES = {
-    "allow": "allow",
-    "all": "allow",
-    "none": "allow",
-    "nested": "nested",
-    "allow_nested": "nested",
-    "flat": "disallow",
-    "disallow": "disallow",
-    "no_overlap": "disallow",
-    "non_overlapping": "disallow",
-    "longest": "longest",
-    "keep_longest": "longest",
-}
+
+
+class Gliner2TextKwargs(TextKwargs, total=False):
+    """GLiNER2 call options merged through `ProcessingKwargs`."""
+
+    max_len: int | None
+    architecture: str
+    rng: Any
+    sampling_config: Any
+    labels: Any
+    max_gold_per_query: int | None
+
+
+class Gliner2ProcessorKwargs(ProcessingKwargs, total=False):
+    """Defaults for schema collation."""
+
+    text_kwargs: Gliner2TextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "max_len": None,
+            "architecture": "span",
+            "rng": None,
+            "sampling_config": None,
+            "labels": None,
+            "max_gold_per_query": None,
+        }
+    }
+
+
+Gliner2ProcessorKwargs.__annotations__["text_kwargs"] = Gliner2TextKwargs
 
 
 @dataclass
@@ -132,9 +160,6 @@ class SchemaGroup:
     fields: tuple[SchemaField, ...] = ()
     tokens: tuple[str, ...] = ()
     options: dict[str, Any] = field(default_factory=dict)
-    examples: tuple[tuple[str, str], ...] = ()
-    label_descriptions: dict[str, str] = field(default_factory=dict)
-    example_mode: str = "none"
     choices: dict[str, tuple[str, ...]] = field(default_factory=dict)
     true_labels: tuple[str, ...] | None = None
 
@@ -205,150 +230,6 @@ def _resolve_schema(schema: Any) -> Any:
     if hasattr(schema, "schema"):
         return schema.schema
     return schema
-
-
-def _normalize_overlap_policy(policy: str | None, default: str | None = None) -> str:
-    """Return a canonical overlap policy."""
-    selected = default if policy is None else policy
-    if selected is None:
-        raise ValueError("overlap_policy=None requires an architecture default")
-    if not isinstance(selected, str):
-        raise TypeError("overlap_policy must be a string or None")
-    key = selected.strip().lower().replace("-", "_")
-    try:
-        return _OVERLAP_ALIASES[key]
-    except KeyError:
-        raise ValueError(
-            f"unknown overlap_policy {selected!r}; expected one of: allow, nested, flat/disallow, longest"
-        ) from None
-
-
-def _resolve_overlaps(
-    items: Sequence[Any],
-    policy: str | None,
-    *,
-    score: Callable[[Any], float],
-    start: Callable[[Any], int],
-    end: Callable[[Any], int],
-    default: str | None = None,
-) -> list[Any]:
-    """Resolve half-open spans with shared overlap semantics."""
-    canonical = _normalize_overlap_policy(policy, default=default)
-    if not items:
-        return []
-    indexed = list(enumerate(items))
-
-    def rank_key(row):
-        index, item = row
-        return (-float(score(item)), int(start(item)), int(end(item)), index)
-
-    ranked = sorted(indexed, key=rank_key)
-    distinct = []
-    seen_boundaries = set()
-    for row in ranked:
-        item = row[1]
-        boundaries = (int(start(item)), int(end(item)))
-        if boundaries in seen_boundaries:
-            continue
-        seen_boundaries.add(boundaries)
-        distinct.append(row)
-    if canonical == "allow":
-        return [item for _, item in distinct]
-    if canonical == "nested":
-        kept = []
-        for row in distinct:
-            candidate = row[1]
-            candidate_start = int(start(candidate))
-            candidate_end = int(end(candidate))
-            crossing = False
-            for _, existing in kept:
-                existing_start = int(start(existing))
-                existing_end = int(end(existing))
-                overlaps = candidate_start < existing_end and existing_start < candidate_end
-                contains = (candidate_start <= existing_start and existing_end <= candidate_end) or (
-                    existing_start <= candidate_start and candidate_end <= existing_end
-                )
-                if overlaps and not contains:
-                    crossing = True
-                    break
-            if not crossing:
-                kept.append(row)
-        return [item for _, item in kept]
-    if canonical == "longest":
-        kept = []
-        for row in distinct:
-            candidate = row[1]
-            candidate_start = int(start(candidate))
-            candidate_end = int(end(candidate))
-            strictly_contained = any(
-                int(start(other)) <= candidate_start
-                and candidate_end <= int(end(other))
-                and (int(start(other)) < candidate_start or candidate_end < int(end(other)))
-                for _, other in distinct
-            )
-            if not strictly_contained:
-                kept.append(row)
-        return [item for _, item in kept]
-    by_end = sorted(
-        distinct,
-        key=lambda row: (int(end(row[1])), int(start(row[1])), -float(score(row[1])), row[0]),
-    )
-    ends = [int(end(item)) for _, item in by_end]
-    predecessors = [
-        bisect.bisect_right(ends, int(start(item)), 0, index) - 1 for index, (_, item) in enumerate(by_end)
-    ]
-    best: list[tuple] = [(0.0, ())]
-
-    def selection_key(selection: tuple):
-        rows = [by_end[index] for index in selection]
-        return tuple(rank_key(row) for row in sorted(rows, key=rank_key))
-
-    for index, (_, item) in enumerate(by_end):
-        previous_score, previous_selection = best[predecessors[index] + 1]
-        with_item = (previous_score + float(score(item)), previous_selection + (index,))
-        without_item = best[index]
-        if with_item[0] > without_item[0] or (
-            with_item[0] == without_item[0]
-            and (
-                len(with_item[1]) > len(without_item[1])
-                or (
-                    len(with_item[1]) == len(without_item[1])
-                    and selection_key(with_item[1]) < selection_key(without_item[1])
-                )
-            )
-        ):
-            best.append(with_item)
-        else:
-            best.append(without_item)
-    selected = [by_end[index] for index in best[-1][1]]
-    selected.sort(key=rank_key)
-    return [item for _, item in selected]
-
-
-def _finalize_spans(
-    raw_spans: Sequence[RawSpan],
-    *,
-    dtype: str = "list",
-    overlap_policy: str | None = None,
-) -> list[RawSpan]:
-    """Keep non-overlapping spans, highest confidence first when policy is unset."""
-    if overlap_policy is None:
-        ranked = sorted(raw_spans, key=lambda span: span[1], reverse=True)
-        spans: list[RawSpan] = []
-        for candidate in ranked:
-            candidate_start, candidate_end = candidate[2], candidate[3]
-            if any(candidate_start < existing[3] and existing[2] < candidate_end for existing in spans):
-                continue
-            spans.append(candidate)
-    else:
-        spans = _resolve_overlaps(
-            list(raw_spans),
-            overlap_policy,
-            score=lambda span: span[1],
-            start=lambda span: span[2],
-            end=lambda span: span[3],
-        )
-    return spans if dtype == "list" else spans[:1]
 
 
 def _default_cardinality(dtype: str | None, is_anchor: bool) -> str:
@@ -494,7 +375,7 @@ def _dedupe_items(items: list[Any], overlap_policy: str | None = None) -> list[A
     other_items = [item for item in items if not _is_span_dict(item)]
     deduped: list[Any] = []
     if span_items:
-        selected = _resolve_overlaps(
+        selected = resolve_overlaps(
             span_items,
             overlap_policy,
             default="allow",
@@ -642,6 +523,82 @@ def _strip_span_metadata(value: Any, include_confidence: bool, include_spans: bo
     return value
 
 
+def _is_joint_result(result: Mapping[str, Any]) -> bool:
+    entities = result.get("entities")
+    if not isinstance(entities, list):
+        return False
+    return not entities or (isinstance(entities[0], Mapping) and "type" in entities[0])
+
+
+def _merge_joint_documents(original_text, chunks, chunk_results, include_confidence, include_spans) -> dict[str, Any]:
+    """Merge joint graphs by document offsets. Relations stay inside one chunk."""
+    entity_by_key = {}
+    relation_rows = {}
+    for chunk, raw in zip(chunks, chunk_results):
+        start_char = int(_chunk_field(chunk, "start_char"))
+        entities = list(raw.get("entities") or [])
+        relations = list(raw.get("relations") or [])
+        local_keys = {}
+        for entity in entities:
+            start = int(entity.get("start", 0)) + start_char
+            end = int(entity.get("end", 0)) + start_char
+            key = (str(entity.get("type", entity.get("label", ""))), start, end)
+            local_keys[str(entity.get("id", ""))] = key
+            confidence = entity.get("confidence")
+            previous = entity_by_key.get(key)
+            previous_confidence = (
+                float("-inf") if previous is None or previous.get("confidence") is None else previous["confidence"]
+            )
+            current_confidence = float("-inf") if confidence is None else confidence
+            if previous is None or current_confidence > previous_confidence:
+                entity_by_key[key] = {
+                    "type": key[0],
+                    "text": original_text[start:end],
+                    "start": start,
+                    "end": end,
+                    "confidence": confidence,
+                    "sentence_id": entity.get("sentence_id"),
+                    "rescued": bool(entity.get("rescued", False)),
+                }
+        for relation in relations:
+            head, tail = str(relation.get("head", "")), str(relation.get("tail", ""))
+            if head not in local_keys or tail not in local_keys:
+                continue
+            head_key, tail_key = local_keys[head], local_keys[tail]
+            key = (str(relation.get("type", relation.get("label", ""))), head_key, tail_key)
+            confidence = relation.get("confidence")
+            previous = relation_rows.get(key)
+            previous_confidence = float("-inf") if previous is None or previous[3] is None else previous[3]
+            current_confidence = float("-inf") if confidence is None else confidence
+            if previous is None or current_confidence > previous_confidence:
+                relation_rows[key] = (key[0], head_key, tail_key, confidence, bool(relation.get("derived", False)))
+    ordered = sorted(entity_by_key, key=lambda key: (key[1], key[2], key[0]))
+    key_to_id = {key: f"e{index + 1}" for index, key in enumerate(ordered)}
+    entities_out = []
+    for key in ordered:
+        item = entity_by_key[key]
+        payload = {"id": key_to_id[key], "type": item["type"], "text": item["text"]}
+        if include_spans:
+            payload.update(start=item["start"], end=item["end"])
+            if item["sentence_id"] is not None:
+                payload["sentence_id"] = item["sentence_id"]
+        if include_confidence and item["confidence"] is not None:
+            payload["confidence"] = item["confidence"]
+        if item["rescued"]:
+            payload["rescued"] = True
+        entities_out.append(payload)
+    relations_out = []
+    for label, head, tail, confidence, derived in relation_rows.values():
+        payload = {"type": label, "head": key_to_id[head], "tail": key_to_id[tail]}
+        if include_confidence and confidence is not None:
+            payload["confidence"] = confidence
+        if derived:
+            payload["derived"] = True
+        relations_out.append(payload)
+    relations_out.sort(key=lambda item: (item["type"], item["head"], item["tail"]))
+    return {"entities": entities_out, "relations": relations_out}
+
+
 def merge_chunk_results(
     original_text: str,
     chunks: Sequence[Any],
@@ -654,7 +611,9 @@ def merge_chunk_results(
     """Merge formatted chunk results onto document character offsets."""
     if len(chunks) != len(chunk_results):
         raise ValueError("chunks and chunk_results must have the same length")
-    policy = _normalize_overlap_policy(overlap_policy, default="disallow")
+    if chunk_results and all(isinstance(item, Mapping) and _is_joint_result(item) for item in chunk_results):
+        return _merge_joint_documents(original_text, chunks, chunk_results, include_confidence, include_spans)
+    policy = normalize_overlap_policy(overlap_policy, default="disallow")
     remapped = [remap_result_spans(result, original_text, chunk) for chunk, result in zip(chunks, chunk_results)]
     merged = _merge_result_dicts(remapped, set(scalar_entity_labels or ()), policy)
     return _strip_span_metadata(merged, include_confidence, include_spans)
@@ -802,23 +761,6 @@ def format_results(
     if relations:
         formatted["relation_extraction"] = relations
     return formatted
-
-
-def _optional_decoding():
-    """Return ``decoding_gliner2`` when that module is importable."""
-    try:
-        from . import decoding_gliner2
-    except ImportError:
-        return None
-    return decoding_gliner2
-
-
-def _call_decoder(name: str, *args, **kwargs):
-    module = _optional_decoding()
-    function = getattr(module, name, None) if module is not None else None
-    if function is None:
-        raise NotImplementedError(f"{name} is not available; expected decoding_gliner2.{name}")
-    return function(*args, **kwargs)
 
 
 def _transform_schema(
@@ -1262,6 +1204,7 @@ def _compile_record_specs(
                     "name": query["role_name"],
                     "cardinality": card,
                     "is_anchor": is_anchor,
+                    "exclusive": bool(fcfg.get("exclusive", False)),
                 }
             )
             if is_anchor:
@@ -1288,53 +1231,6 @@ def _find_choice_idx(choice: str, tokens: Sequence[str]) -> int:
     return -1
 
 
-def _find_spans(
-    scores: torch.Tensor,
-    threshold: float,
-    text: str,
-    start_map: Sequence[int],
-    end_map: Sequence[int],
-) -> list[RawSpan]:
-    """Return spans at or above ``threshold`` as ``(text, score, start, end)``."""
-    text_len = len(start_map)
-    valid = torch.where(scores >= threshold)
-    spans: list[RawSpan] = []
-    for start, width in zip(valid[0].tolist(), valid[1].tolist()):
-        end = start + width + 1
-        if not (0 <= start < text_len and end <= text_len):
-            continue
-        try:
-            char_start = start_map[start]
-            char_end = end_map[end - 1]
-            span_text = text[char_start:char_end].strip()
-        except (IndexError, KeyError):
-            continue
-        if span_text:
-            spans.append((span_text, float(scores[start, width].item()), int(char_start), int(char_end)))
-    return spans
-
-
-def _format_spans(spans: Sequence[RawSpan], include_confidence: bool, include_spans: bool) -> list[Any]:
-    if include_spans and include_confidence:
-        return [{"text": span[0], "confidence": span[1], "start": span[2], "end": span[3]} for span in spans]
-    if include_spans:
-        return [{"text": span[0], "start": span[2], "end": span[3]} for span in spans]
-    if include_confidence:
-        return [{"text": span[0], "confidence": span[1]} for span in spans]
-    return [span[0] for span in spans]
-
-
-def _format_one_span(span: RawSpan, include_confidence: bool, include_spans: bool) -> Any:
-    text, confidence, char_start, char_end = span
-    if include_spans and include_confidence:
-        return {"text": text, "confidence": confidence, "start": char_start, "end": char_end}
-    if include_spans:
-        return {"text": text, "start": char_start, "end": char_end}
-    if include_confidence:
-        return {"text": text, "confidence": confidence}
-    return text
-
-
 def _passes_validators(text: str, validators: Sequence[Any]) -> bool:
     for validator in validators or []:
         if hasattr(validator, "validate") and not validator.validate(text):
@@ -1345,7 +1241,8 @@ def _passes_validators(text: str, validators: Sequence[Any]) -> bool:
 def _resolve_classification_config(
     prompt_str: str, classifications: Sequence[Mapping[str, Any]]
 ) -> Mapping[str, Any] | None:
-    """Find the classification config that owns ``prompt_str``."""
+    """Longest boundary-aware task name for a prompt, including descriptions."""
+    prompt_str = str(prompt_str or "")
     best = None
     for config in classifications:
         task = config.get("task", "")
@@ -1355,6 +1252,9 @@ def _resolve_classification_config(
         if rest == "" or rest[0] in (":", " "):
             if best is None or len(task) > len(best.get("task", "")):
                 best = config
+    if best is None:
+        bare = prompt_str.split(" [DESCRIPTION] ", 1)[0].split(":", 1)[0]
+        best = next((config for config in classifications if config.get("task") == bare), None)
     if best is None:
         best = next((config for config in classifications if prompt_str.startswith(config.get("task", ""))), None)
     return best
@@ -1366,13 +1266,6 @@ def _classification_probs(logits: torch.Tensor, multi_label: bool, activation: s
     if activation == "softmax":
         return torch.softmax(logits, dim=-1)
     return torch.sigmoid(logits) if multi_label else torch.softmax(logits, dim=-1)
-
-
-def _doc_axis(tensor: torch.Tensor, doc_len: int) -> torch.Tensor:
-    """Take the document-word rows, leaving an empty axis when there are none."""
-    if doc_len <= 0:
-        return tensor[..., :0, :]
-    return tensor[..., -doc_len:, :]
 
 
 def _decode_classification_group(
@@ -1409,24 +1302,24 @@ def _decode_classification_group(
     return (labels[best], float(probs[best].item()))
 
 
-def _group_attr(group: Any, name: str, default=None):
-    if isinstance(group, dict):
-        return group.get(name, default)
-    return getattr(group, name, default)
-
-
 def _assign_entity_attributes(
     logits: torch.Tensor, start: int, width: int, group_indices: dict[str, Any], entity_name: str
 ) -> dict[str, Any]:
     assigned: dict[str, Any] = {}
     for group_name, (labels, indices, group) in group_indices.items():
-        applies_to = _group_attr(group, "applies_to")
+        applies_to = group.get("applies_to") if isinstance(group, Mapping) else getattr(group, "applies_to", None)
         if applies_to is not None and entity_name not in applies_to:
             continue
         values = logits[indices, start, width]
-        if _group_attr(group, "multi_label", False):
+        multi_label = (
+            group.get("multi_label", False) if isinstance(group, Mapping) else getattr(group, "multi_label", False)
+        )
+        if multi_label:
             probabilities = torch.sigmoid(values)
-            threshold = float(_group_attr(group, "threshold", 0.5))
+            raw_threshold = (
+                group.get("threshold", 0.5) if isinstance(group, Mapping) else getattr(group, "threshold", 0.5)
+            )
+            threshold = float(raw_threshold)
             assigned[group_name] = [
                 {"label": labels[index], "confidence": float(probabilities[index].item())}
                 for index in range(len(labels))
@@ -2077,13 +1970,13 @@ def _is_span_structure(labels: Any) -> bool:
     )
 
 
-def _pack_targets(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _pack_targets(records: Sequence[Mapping[str, Any]], max_gold_per_query: int | None = None) -> dict[str, Any]:
     """Pad mention, classification, and relation targets."""
     batch = len(records)
     supervisions = [record["supervision"] for record in records]
     query_width = max((item["query_count"] for item in supervisions), default=0)
-    gold_width = 1
     grouped: list[dict[int, list[tuple[int, int]]]] = []
+    observed = 0
     for item in supervisions:
         per_query: dict[int, list[tuple[int, int]]] = {}
         for query_id, start, end in item["mentions"]:
@@ -2091,8 +1984,21 @@ def _pack_targets(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             pair = (start, end)
             if pair not in pairs:
                 pairs.append(pair)
-        gold_width = max(gold_width, max((len(pairs) for pairs in per_query.values()), default=0))
+        observed = max(observed, max((len(pairs) for pairs in per_query.values()), default=0))
         grouped.append(per_query)
+    if max_gold_per_query is None:
+        gold_width = max(observed, 1)
+    else:
+        if max_gold_per_query <= 0:
+            raise ValueError("max_gold_per_query must be > 0 or None")
+        gold_width = max_gold_per_query
+        for batch_index, per_query in enumerate(grouped):
+            for query_id, pairs in per_query.items():
+                if len(pairs) > gold_width:
+                    raise ValueError(
+                        f"sample={batch_index} query_id={query_id} contains {len(pairs)} gold spans, "
+                        f"but max_gold_per_query={gold_width}."
+                    )
     mention_pairs = torch.zeros((batch, query_width, gold_width, 2), dtype=torch.long)
     mention_mask = torch.zeros((batch, query_width, gold_width), dtype=torch.bool)
     for batch_index, per_query in enumerate(grouped):
@@ -2243,12 +2149,39 @@ class Gliner2Processor(ProcessorMixin):
             self._encode_piece(token)
 
     def _encode_piece(self, piece: str) -> tuple[int, ...]:
-        """Cache one piece's ids. Pieces are encoded, then concatenated."""
+        """Cache one piece's ids for words the batched call drops."""
         cached = self._piece_ids.get(piece)
         if cached is None:
             cached = tuple(int(item) for item in self.tokenizer.encode(piece, add_special_tokens=False))
             self._piece_ids[piece] = cached
         return cached
+
+    def _encode_words(self, words: Sequence[str]) -> tuple[list[int], list[int], set[int]]:
+        """Encode pre-split words in one call and return first-subword indexes."""
+        if not words:
+            return [], [], set()
+        encoding = self.tokenizer(list(words), is_split_into_words=True, add_special_tokens=False)
+        ids = [int(item) for item in encoding["input_ids"]]
+        first: list[int] = []
+        empty: set[int] = set()
+        cursor = 0
+        shift = 0
+        for index, word in enumerate(words):
+            span = encoding.word_to_tokens(index)
+            missing = span is None or int(span.start) == int(span.end)
+            if not missing:
+                first.append(int(span.start) + shift)
+                cursor = int(span.end)
+                continue
+            piece = self._encode_piece(word)
+            at = cursor + shift
+            if piece:
+                ids = ids[:at] + list(piece) + ids[at:]
+                shift += len(piece)
+            else:
+                empty.add(index)
+            first.append(at)
+        return ids, first, empty
 
     def _split_words(self, text: str) -> tuple[list[str], list[int], list[int]]:
         words, starts, ends = [], [], []
@@ -2276,7 +2209,7 @@ class Gliner2Processor(ProcessorMixin):
                 schema_marker_orig_indices.add(offset + 1)
             schema_marker_orig_indices.update(offset + index for index in range(4, len(struct) - 2, 2))
             offset += len(struct) + 1
-        input_ids: list[int] = []
+        input_ids, first_positions, empty_words = self._encode_words(combined)
         text_word_first_positions: list[int] = []
         schema_special_positions: list[list[int]] = [[] for _ in schema_tokens_list]
         num_schemas = len(schema_tokens_list)
@@ -2296,12 +2229,10 @@ class Gliner2Processor(ProcessorMixin):
             else:
                 seg_type = "text"
                 schema_idx = num_schemas
-            subword_pos = len(input_ids)
-            piece_ids = self._encode_piece(token)
-            input_ids.extend(piece_ids)
+            subword_pos = first_positions[orig_idx]
             if seg_type == "text" and orig_idx != last_text_orig:
                 last_text_orig = orig_idx
-                if not piece_ids:
+                if orig_idx in empty_words:
                     logger.warning(
                         "text word %r (index %d) produced no subwords; inserting a placeholder",
                         token,
@@ -2468,16 +2399,18 @@ class Gliner2Processor(ProcessorMixin):
             "record_mask": record_mask,
         }
 
-    def _collate(self, records: Sequence[Mapping[str, Any]], architecture: str) -> dict[str, Any]:
+    def _collate(
+        self, records: Sequence[Mapping[str, Any]], architecture: str, max_gold_per_query: int | None = None
+    ) -> dict[str, Any]:
         batch_size = len(records)
-        max_len = max((len(record["input_ids"]) for record in records), default=0)
-        input_ids = torch.zeros((batch_size, max_len), dtype=torch.long)
-        attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
-        for index, record in enumerate(records):
-            length = len(record["input_ids"])
-            if length:
-                input_ids[index, :length] = torch.tensor(record["input_ids"], dtype=torch.long)
-                attention_mask[index, :length] = 1
+        id_rows = [torch.tensor(record["input_ids"], dtype=torch.long) for record in records]
+        mask_rows = [torch.ones(len(record["input_ids"]), dtype=torch.long) for record in records]
+        if not id_rows:
+            input_ids = torch.zeros((0, 0), dtype=torch.long)
+            attention_mask = torch.zeros((0, 0), dtype=torch.long)
+        else:
+            input_ids = pad_sequence(id_rows, batch_first=True, padding_value=0)
+            attention_mask = pad_sequence(mask_rows, batch_first=True, padding_value=0)
         word_counts = [len(record["text_word_first_positions"]) for record in records]
         max_words = max(word_counts) if word_counts else 0
         text_word_indices = torch.zeros((batch_size, max_words), dtype=torch.long)
@@ -2562,7 +2495,7 @@ class Gliner2Processor(ProcessorMixin):
         if any(record.get("supervision") is not None for record in records):
             if any(record.get("supervision") is None for record in records):
                 raise ValueError("labels must be provided for every text in the batch")
-            data["targets"] = _pack_targets(records)
+            data["targets"] = _pack_targets(records, max_gold_per_query=max_gold_per_query)
         return data
 
     @auto_docstring
@@ -2600,9 +2533,23 @@ class Gliner2Processor(ProcessorMixin):
             sampling_config (`SamplingConfig`, *optional*):
                 Task, field, and label sampling.
         """
-        if kwargs:
-            unknown = ", ".join(sorted(kwargs))
-            raise TypeError(f"Unexpected keyword argument(s): {unknown}")
+        merged = self._merge_kwargs(
+            Gliner2ProcessorKwargs,
+            tokenizer_init_kwargs=getattr(self.tokenizer, "init_kwargs", None),
+            max_len=max_len,
+            architecture=architecture,
+            rng=rng,
+            sampling_config=sampling_config,
+            labels=labels,
+            **kwargs,
+        )
+        text_kwargs = merged["text_kwargs"]
+        max_len = text_kwargs.get("max_len", max_len)
+        architecture = text_kwargs.get("architecture", architecture)
+        rng = text_kwargs.get("rng", rng)
+        sampling_config = text_kwargs.get("sampling_config", sampling_config)
+        labels = text_kwargs.get("labels", labels)
+        max_gold_per_query = text_kwargs.get("max_gold_per_query")
         if return_tensors != "pt":
             raise ValueError("Gliner2Processor only returns PyTorch tensors")
         if architecture not in ("span", "boundary"):
@@ -2646,7 +2593,11 @@ class Gliner2Processor(ProcessorMixin):
         skipped = ["metadata"]
         if any(record.get("supervision") is not None for record in records):
             skipped.append("targets")
-        return BatchFeature(self._collate(records, architecture), tensor_type="pt", skip_tensor_conversion=skipped)
+        return BatchFeature(
+            self._collate(records, architecture, max_gold_per_query),
+            tensor_type="pt",
+            skip_tensor_conversion=skipped,
+        )
 
     def chunk_words(
         self,
@@ -2822,7 +2773,7 @@ class Gliner2Processor(ProcessorMixin):
             group_indices = {}
             doc_logits = _doc_axis(raw_logits[0], doc_len)
             for group_name, group in groups.items():
-                labels = list(_group_attr(group, "labels", []))
+                labels = list(group.get("labels", []) if isinstance(group, Mapping) else getattr(group, "labels", []))
                 present = [
                     (label, field_names.index(prompt_labels.get(label, label)))
                     for label in labels
@@ -2862,24 +2813,25 @@ class Gliner2Processor(ProcessorMixin):
                             **_assign_entity_attributes(doc_logits, start, width, group_indices, name),
                         }
                     )
-                surviving = _finalize_spans(
+                extras = {
+                    (item["start"], item["end"]): {
+                        key: value for key, value in item.items() if key not in _SPAN_RESERVED
+                    }
+                    for item in found
+                }
+                entity_results[name] = decode_spans(
                     [(item["text"], item["confidence"], item["start"], item["end"]) for item in found],
-                    dtype=dtype,
-                    overlap_policy=overlap_policy,
+                    {
+                        "dtype": dtype,
+                        "include_confidence": include_confidence,
+                        "include_spans": include_spans,
+                        "extras": extras,
+                    },
+                    text,
+                    {"start": start_map, "end": end_map},
+                    threshold,
+                    overlap_policy,
                 )
-                found_by_span = {(item["start"], item["end"]): item for item in found}
-                formatted = []
-                for _, _, char_start, char_end in surviving:
-                    entity = found_by_span[(char_start, char_end)]
-                    result = {"text": entity["text"]}
-                    if include_confidence:
-                        result["confidence"] = entity["confidence"]
-                    if include_spans:
-                        result["start"] = entity["start"]
-                        result["end"] = entity["end"]
-                    result.update((key, value) for key, value in entity.items() if key not in _SPAN_RESERVED)
-                    formatted.append(result)
-                entity_results[name] = formatted if dtype == "list" else (formatted[0] if formatted else None)
             return [entity_results] if entity_results else []
         order = [name for name in meta.get("entity_order", field_names) if name in field_names]
         for name in order:
@@ -2888,15 +2840,21 @@ class Gliner2Processor(ProcessorMixin):
             dtype = entity_meta.get("dtype", "list")
             ent_threshold = entity_meta.get("threshold")
             ent_threshold = float(ent_threshold) if ent_threshold is not None else threshold
-            spans = _find_spans(scores[index], ent_threshold, text, start_map, end_map)
-            spans = [span for span in spans if _passes_validators(span[0], entity_meta.get("validators", []))]
-            spans = _finalize_spans(spans, dtype=dtype, overlap_policy=overlap_policy)
-            if dtype == "list":
-                entity_results[name] = _format_spans(spans, include_confidence, include_spans)
-            elif spans:
-                entity_results[name] = _format_one_span(spans[0], include_confidence, include_spans)
-            else:
-                entity_results[name] = "" if not include_spans and not include_confidence else None
+            entity_results[name] = decode_spans(
+                scores[index],
+                {
+                    "dtype": dtype,
+                    "threshold": ent_threshold,
+                    "validators": entity_meta.get("validators", []),
+                    "include_confidence": include_confidence,
+                    "include_spans": include_spans,
+                    "empty": "blank",
+                },
+                text,
+                {"start": start_map, "end": end_map},
+                threshold,
+                overlap_policy,
+            )
         return [entity_results] if entity_results else []
 
     def _decode_relations(
@@ -2921,53 +2879,33 @@ class Gliner2Processor(ProcessorMixin):
             rel_threshold = configured
         ordered = (meta.get("field_orders") or {}).get(rel_name, field_names)
         instances = []
+        maps = {"start": start_map, "end": end_map}
         for inst in range(count):
-            values = []
-            field_data = []
+            sides = []
             for fname in ordered:
                 if fname not in field_names:
                     continue
                 fidx = list(field_names).index(fname)
-                spans = _find_spans(
-                    _doc_axis(span_scores[inst, fidx], doc_len), rel_threshold, text, start_map, end_map
+                sides.append(
+                    decode_spans(
+                        _doc_axis(span_scores[inst, fidx], doc_len),
+                        {
+                            "dtype": "str",
+                            "threshold": rel_threshold,
+                            "include_confidence": include_confidence,
+                            "include_spans": include_spans,
+                        },
+                        text,
+                        maps,
+                        threshold,
+                        overlap_policy,
+                    )
                 )
-                spans = _finalize_spans(spans, overlap_policy=overlap_policy)
-                if spans:
-                    text_val, confidence, char_start, char_end = spans[0]
-                    values.append(text_val)
-                    field_data.append(
-                        {"text": text_val, "confidence": confidence, "start": char_start, "end": char_end}
-                    )
+            if len(sides) == 2 and sides[0] and sides[1]:
+                if include_spans or include_confidence:
+                    instances.append({"head": sides[0], "tail": sides[1]})
                 else:
-                    values.append(None)
-                    field_data.append(None)
-            if len(values) == 2 and values[0] and values[1]:
-                if include_spans and include_confidence:
-                    instances.append({"head": field_data[0], "tail": field_data[1]})
-                elif include_spans:
-                    instances.append(
-                        {
-                            "head": {
-                                "text": field_data[0]["text"],
-                                "start": field_data[0]["start"],
-                                "end": field_data[0]["end"],
-                            },
-                            "tail": {
-                                "text": field_data[1]["text"],
-                                "start": field_data[1]["start"],
-                                "end": field_data[1]["end"],
-                            },
-                        }
-                    )
-                elif include_confidence:
-                    instances.append(
-                        {
-                            "head": {"text": field_data[0]["text"], "confidence": field_data[0]["confidence"]},
-                            "tail": {"text": field_data[1]["text"], "confidence": field_data[1]["confidence"]},
-                        }
-                    )
-                else:
-                    instances.append((values[0], values[1]))
+                    instances.append((sides[0], sides[1]))
         return instances
 
     def _decode_structures(
@@ -3017,9 +2955,7 @@ class Gliner2Processor(ProcessorMixin):
                             if idx >= 0 and idx < prefix_scores.shape[0]:
                                 score = float(prefix_scores[idx, 0].item())
                                 if score >= field_threshold:
-                                    selected.append(
-                                        {"text": choice, "confidence": score} if include_confidence else choice
-                                    )
+                                    selected.append(format_span(choice, score, 0, 0, include_confidence, False))
                                     seen.add(choice)
                         instance[fname] = selected
                     else:
@@ -3033,21 +2969,24 @@ class Gliner2Processor(ProcessorMixin):
                                     best_score = score
                                     best = choice
                         if best and best_score >= field_threshold:
-                            instance[fname] = {"text": best, "confidence": best_score} if include_confidence else best
+                            instance[fname] = format_span(best, best_score, 0, 0, include_confidence, False)
                         else:
                             instance[fname] = None
                 else:
-                    spans = _find_spans(
-                        _doc_axis(span_scores[inst, fidx], doc_len), field_threshold, text, start_map, end_map
+                    instance[fname] = decode_spans(
+                        _doc_axis(span_scores[inst, fidx], doc_len),
+                        {
+                            "dtype": dtype,
+                            "threshold": field_threshold,
+                            "validators": validators,
+                            "include_confidence": include_confidence,
+                            "include_spans": include_spans,
+                        },
+                        text,
+                        {"start": start_map, "end": end_map},
+                        threshold,
+                        overlap_policy,
                     )
-                    spans = [span for span in spans if _passes_validators(span[0], validators)]
-                    spans = _finalize_spans(spans, dtype=dtype, overlap_policy=overlap_policy)
-                    if dtype == "list":
-                        instance[fname] = _format_spans(spans, include_confidence, include_spans)
-                    elif spans:
-                        instance[fname] = _format_one_span(spans[0], include_confidence, include_spans)
-                    else:
-                        instance[fname] = None
             if any(value is not None and value != [] for value in instance.values()):
                 instances.append(instance)
         return instances
@@ -3063,8 +3002,7 @@ class Gliner2Processor(ProcessorMixin):
         temperature: float,
     ) -> dict[str, Any]:
         if sample_out.get("pair_logits") is not None or sample_out.get("grouped_candidates") is not None:
-            decoded = _call_decoder(
-                "decode_boundary",
+            decoded = decode_boundary(
                 sample_out,
                 meta,
                 threshold=threshold,
@@ -3087,8 +3025,7 @@ class Gliner2Processor(ProcessorMixin):
                     )
             return decoded
         if sample_out.get("record_logits") is not None:
-            return _call_decoder(
-                "decode_records",
+            return decode_records(
                 sample_out,
                 meta,
                 threshold=threshold,
@@ -3234,7 +3171,7 @@ class Gliner2Processor(ProcessorMixin):
             chosen = overlap_policy if overlap_policy is not None else meta.get("_overlap_policy")
             if chosen is None and meta.get("architecture") == "boundary":
                 chosen = "disallow"
-            policy = None if chosen is None else _normalize_overlap_policy(chosen)
+            policy = None if chosen is None else normalize_overlap_policy(chosen)
             raw = self._decode_sample(
                 sample_out,
                 meta,
@@ -3273,8 +3210,7 @@ class Gliner2Processor(ProcessorMixin):
         rows = self._unpack_metadata(metadata)
         needs_solver = decoder in ("beam", "exact") or any(row.get("constraints") for row in rows)
         if needs_solver and decoder != "independent":
-            return _call_decoder(
-                "decode_classification",
+            return decode_classification(
                 outputs,
                 rows,
                 threshold=threshold,
@@ -3320,8 +3256,7 @@ class Gliner2Processor(ProcessorMixin):
         ``decoding_gliner2.decode_joint``.
         """
         if optimizer in ("beam", "exact", "greedy"):
-            return _call_decoder(
-                "decode_joint",
+            return decode_joint(
                 outputs,
                 metadata,
                 threshold=threshold,

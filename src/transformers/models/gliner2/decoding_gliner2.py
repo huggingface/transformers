@@ -19,16 +19,17 @@ import hashlib
 import json
 import logging
 import math
-import warnings
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable, Hashable, Mapping, Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from itertools import combinations, product
 from types import SimpleNamespace
 from typing import Any
 
 import torch
+
+from ...utils.import_utils import requires_backends
 
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,222 @@ _JOINT_FIELDS = {
     "InverseRelation": ("relation", "inverse"),
     "AcyclicRelation": ("relation",),
 }
+
+
+def linear_sum_assignment(cost_matrix: torch.Tensor):
+    """Minimum-cost assignment using gliner2's SciPy cost tie-break."""
+    requires_backends(linear_sum_assignment, ["scipy"])
+    if cost_matrix.ndim != 2:
+        raise ValueError("cost_matrix must be 2-D")
+    cost = cost_matrix.detach().cpu().to(torch.float64)
+    if torch.isnan(cost).any():
+        raise ValueError("cost_matrix contains NaN")
+    if torch.isinf(cost).any():
+        finite = cost[torch.isfinite(cost)]
+        scale = float(finite.abs().max()) if finite.numel() else 1.0
+        big = 1e6 * (scale + 1.0)
+        cost = torch.nan_to_num(cost, posinf=big, neginf=-big)
+    rows, cols = cost.shape
+    if rows == 0 or cols == 0:
+        empty = torch.zeros(0, dtype=torch.long)
+        return empty, empty
+    from scipy.optimize import linear_sum_assignment as scipy_assignment
+
+    array = cost.numpy()
+    scale = max(float(abs(array).max()), 1.0)
+    epsilon = torch.finfo(torch.float64).eps * scale
+    tie = torch.arange(rows * cols, dtype=torch.float64).reshape(rows, cols).numpy()
+    row_ind, col_ind = scipy_assignment(array + epsilon * tie)
+    pairs = sorted(zip(row_ind.tolist(), col_ind.tolist()))
+    return (
+        torch.tensor([row for row, _ in pairs], dtype=torch.long),
+        torch.tensor([col for _, col in pairs], dtype=torch.long),
+    )
+
+
+@dataclass
+class DecodedRecord:
+    """One decoded record."""
+
+    fields: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
+    field_scores: dict[int, list[float]] = field(default_factory=dict)
+    anchor_span: tuple[int, int] | None = None
+    score: float = 0.0
+
+
+def _dedup_key(record: DecodedRecord) -> tuple:
+    """Return a span key that identifies duplicate decoded records."""
+    return tuple((qid, tuple(sorted(spans))) for qid, spans in sorted(record.fields.items()))
+
+
+def _decode_group(
+    group,
+    *,
+    anchor_threshold: float = 0.5,
+    field_threshold: float = 0.5,
+    object_threshold: float = 0.5,
+    temperature: float = 1.0,
+) -> list[DecodedRecord]:
+    """Assign field spans for one record group."""
+    ni = int(group.num_instances)
+    if ni == 0:
+        return []
+    if temperature <= 0:
+        raise ValueError("temperature must be > 0")
+    obj_prob = torch.sigmoid(group.object_logits.detach() / temperature)
+    select_thr = object_threshold if group.spec.mode == "anchorless" else anchor_threshold
+    order = sorted(range(ni), key=lambda i: (-float(obj_prob[i]), i))
+    selected_instances = [inst for inst in order if float(obj_prob[inst]) >= select_thr]
+
+    scalar_choices: dict[tuple[int, int], tuple[int, float] | None] = {}
+    list_owners: dict[tuple[int, int], tuple[int, float]] = {}
+    for f_idx, fspec in enumerate(group.field_specs):
+        if not fspec.exclusive or not selected_instances:
+            continue
+        logits = torch.stack([group.assign_logits[f_idx][inst].detach() / temperature for inst in selected_instances])
+        candidate_count = max(int(logits.shape[-1]) - 1, 0)
+        if fspec.cardinality.is_scalar:
+            if candidate_count == 0:
+                for inst in selected_instances:
+                    scalar_choices[(inst, f_idx)] = None
+                continue
+            probs = torch.softmax(logits, dim=-1)
+            candidate_probs = probs[:, 1:]
+            eps = torch.finfo(candidate_probs.dtype).eps
+            candidate_cost = -torch.log(candidate_probs.clamp_min(eps))
+            row_count = len(selected_instances)
+            diagonal = -torch.log(probs[:, 0].clamp_min(eps))
+            if not fspec.allows_absent:
+                diagonal = candidate_cost.max().detach() + 50.0
+                diagonal = diagonal.expand(row_count)
+            invalid_cost = max(float(candidate_cost.max()), float(diagonal.max())) + 1_000.0
+            absent_cost = candidate_cost.new_full((row_count, row_count), invalid_cost)
+            absent_cost[torch.arange(row_count), torch.arange(row_count)] = diagonal
+            cost = torch.cat((candidate_cost, absent_cost), dim=-1)
+            rows, cols = linear_sum_assignment(cost)
+            assignments = {int(row): int(col) for row, col in zip(rows, cols)}
+            for row, inst in enumerate(selected_instances):
+                col = assignments.get(row, candidate_count + row)
+                if col >= candidate_count:
+                    scalar_choices[(inst, f_idx)] = None
+                    continue
+                probability = float(candidate_probs[row, col])
+                if probability < field_threshold and fspec.allows_absent:
+                    scalar_choices[(inst, f_idx)] = None
+                    continue
+                scalar_choices[(inst, f_idx)] = (col, probability)
+        else:
+            if candidate_count == 0:
+                continue
+            probabilities = torch.sigmoid(logits[:, 1:])
+            for cand_idx in range(candidate_count):
+                probability, row = probabilities[:, cand_idx].max(dim=0)
+                if float(probability) >= field_threshold:
+                    list_owners[(f_idx, cand_idx)] = (
+                        selected_instances[int(row)],
+                        float(probability),
+                    )
+
+    records: list[DecodedRecord] = []
+    for inst in selected_instances:
+        rec = DecodedRecord(score=float(obj_prob[inst]))
+        anchor_field_idx = None
+        if group.spec.mode == "natural":
+            anchor_field_idx = group.field_query_ids.index(group.spec.anchor_query_id)
+            seed = group.instance_seed[inst]
+            if seed is not None:
+                rec.anchor_span = group.instance_spans[inst]
+        for f_idx, fspec in enumerate(group.field_specs):
+            qid = fspec.query_id
+            spans_tensor = group.field_spans[f_idx]
+            logits_row = group.assign_logits[f_idx][inst].detach() / temperature
+            if anchor_field_idx is not None and f_idx == anchor_field_idx:
+                if rec.anchor_span is not None:
+                    rec.fields.setdefault(qid, []).append(rec.anchor_span)
+                    rec.field_scores.setdefault(qid, []).append(rec.score)
+                continue
+            if fspec.cardinality.is_scalar:
+                if fspec.exclusive:
+                    choice = scalar_choices.get((inst, f_idx))
+                    if choice is None:
+                        continue
+                    cand_idx, probability = choice
+                    span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
+                    rec.fields.setdefault(qid, []).append(span)
+                    rec.field_scores.setdefault(qid, []).append(probability)
+                    continue
+                probs = torch.softmax(logits_row, dim=-1)
+                chosen = None
+                for col in torch.argsort(probs, descending=True).tolist():
+                    if col == 0:
+                        if fspec.allows_absent:
+                            chosen = 0
+                            break
+                        continue
+                    chosen = col
+                    break
+                if chosen is None or chosen == 0:
+                    continue
+                if float(probs[chosen]) < field_threshold and fspec.allows_absent:
+                    continue
+                cand_idx = chosen - 1
+                span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
+                rec.fields.setdefault(qid, []).append(span)
+                rec.field_scores.setdefault(qid, []).append(float(probs[chosen]))
+            else:
+                cand_logits = logits_row[1:]
+                if cand_logits.numel() == 0:
+                    continue
+                probs = torch.sigmoid(cand_logits)
+                selected: list[tuple[int, int]] = []
+                selected_scores: list[float] = []
+                for cand_idx in range(cand_logits.shape[0]):
+                    if fspec.exclusive:
+                        owner = list_owners.get((f_idx, cand_idx))
+                        if owner is None or owner[0] != inst:
+                            continue
+                        probability = owner[1]
+                    else:
+                        probability = float(probs[cand_idx])
+                        if probability < field_threshold:
+                            continue
+                    span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
+                    selected.append(span)
+                    selected_scores.append(probability)
+                if selected:
+                    rec.fields.setdefault(qid, []).extend(selected)
+                    rec.field_scores.setdefault(qid, []).extend(selected_scores)
+        if rec.fields:
+            records.append(rec)
+
+    if group.spec.mode in ("latent", "anchorless"):
+        best: dict[tuple, DecodedRecord] = {}
+        for rec in records:
+            key = _dedup_key(rec)
+            if key not in best or rec.score > best[key].score:
+                best[key] = rec
+        records = list(best.values())
+    elif group.spec.mode == "natural":
+        records.sort(key=lambda record: (record.anchor_span is None, record.anchor_span or (0, 0)))
+    return records
+
+
+def decode_group(
+    group,
+    *,
+    anchor_threshold: float = 0.5,
+    field_threshold: float = 0.5,
+    object_threshold: float = 0.5,
+    temperature: float = 1.0,
+) -> list[DecodedRecord]:
+    """Decode one record group into selected field spans."""
+    return _decode_group(
+        group,
+        anchor_threshold=anchor_threshold,
+        field_threshold=field_threshold,
+        object_threshold=object_threshold,
+        temperature=temperature,
+    )
 
 
 class SchemaError(ValueError):
@@ -251,6 +468,18 @@ def _item_bound(item: Any, primary: str, aliases: Sequence[str]) -> int:
     raise ValueError(f"span is missing a {primary} offset")
 
 
+def _greedy_overlaps(spans, score_fn, start_fn, end_fn):
+    """Keep the highest-scoring span that does not overlap an earlier pick."""
+    ranked = sorted(enumerate(spans), key=lambda row: (-float(score_fn(row[1])), row[0]))
+    kept = []
+    for _, item in ranked:
+        item_start, item_end = int(start_fn(item)), int(end_fn(item))
+        if any(item_start < int(end_fn(other)) and int(start_fn(other)) < item_end for other in kept):
+            continue
+        kept.append(item)
+    return kept
+
+
 def resolve_overlaps(
     spans,
     policy,
@@ -260,18 +489,15 @@ def resolve_overlaps(
     end: Callable[[Any], int] | None = None,
     default: str | None = None,
 ):
-    """Resolve half-open spans for flat, nested, or longest overlap.
-
-    Flat (and disallow) is the maximum-total-score non-overlapping set.
-    Ties prefer more spans, then the rank key. Nested keeps containment and
-    rejects crossings. Longest drops spans strictly inside another candidate.
-    """
+    """Resolve half-open spans. None is the confidence-sorted greedy."""
     score_fn = score or _item_score
     start_fn = start or (lambda item: _item_bound(item, "start", ("char_start", "token_start")))
     end_fn = end or (lambda item: _item_bound(item, "end", ("char_end", "token_end")))
-    canonical = normalize_overlap_policy(policy, default=default)
     if not spans:
         return []
+    if policy is None and default is None:
+        return _greedy_overlaps(spans, score_fn, start_fn, end_fn)
+    canonical = normalize_overlap_policy(policy, default=default)
     indexed = list(enumerate(spans))
 
     def rank_key(row):
@@ -420,14 +646,15 @@ def _group_candidates(candidates, threshold, temperature):
 def _kept_spans(scored, policy):
     return resolve_overlaps(
         scored,
-        policy or "disallow",
+        policy,
         score=lambda item: item[0],
         start=lambda item: item[1],
         end=lambda item: item[2],
     )
 
 
-def _format_span(surface, score, char_start, char_end, include_confidence, include_spans):
+def format_span(surface, score, char_start, char_end, include_confidence, include_spans):
+    """Public span payload."""
     if include_spans and include_confidence:
         return {"text": surface, "confidence": score, "start": char_start, "end": char_end}
     if include_spans:
@@ -435,6 +662,111 @@ def _format_span(surface, score, char_start, char_end, include_confidence, inclu
     if include_confidence:
         return {"text": surface, "confidence": score}
     return surface
+
+
+def _passes_text(surface: str, validators) -> bool:
+    for validator in validators or []:
+        if hasattr(validator, "validate") and not validator.validate(surface):
+            return False
+    return True
+
+
+def _matrix_spans(scores: torch.Tensor, threshold: float, text: str, start_map, end_map) -> list:
+    """Spans at or above `threshold` as `(text, score, start, end)`."""
+    doc_len = len(start_map)
+    found = []
+    starts, widths = torch.where(scores >= threshold)
+    for start, width in zip(starts.tolist(), widths.tolist()):
+        end = start + int(width) + 1
+        if not (0 <= start < doc_len and end <= doc_len):
+            continue
+        try:
+            char_start, char_end = start_map[start], end_map[end - 1]
+            span_text = text[char_start:char_end].strip()
+        except (IndexError, KeyError):
+            continue
+        if span_text:
+            found.append((span_text, float(scores[start, width].item()), int(char_start), int(char_end)))
+    return found
+
+
+def decode_spans(scores, group, text, maps, threshold, overlap):
+    """Threshold, resolve overlaps, and format one field."""
+    include_confidence = bool(group.get("include_confidence", False))
+    include_spans = bool(group.get("include_spans", False))
+    dtype = group.get("dtype") or "list"
+    validators = group.get("validators") or []
+    field_threshold = group.get("threshold", threshold)
+    if field_threshold is None:
+        field_threshold = threshold
+    if isinstance(maps, Mapping):
+        start_map, end_map = maps.get("start") or [], maps.get("end") or []
+        offset = int(maps.get("offset") or 0)
+    else:
+        start_map, end_map = maps[0], maps[1]
+        offset = int(maps[2]) if len(maps) > 2 else 0
+    raw = []
+    extras = dict(group.get("extras") or {})
+    if torch.is_tensor(scores):
+        for surface, score, char_start, char_end in _matrix_spans(
+            scores, float(field_threshold), text, start_map, end_map
+        ):
+            if _passes_text(surface, validators):
+                raw.append((surface, score, char_start, char_end))
+        selected = resolve_overlaps(
+            raw,
+            overlap,
+            score=lambda span: span[1],
+            start=lambda span: span[2],
+            end=lambda span: span[3],
+        )
+    else:
+        token_rows = []
+        char_rows = []
+        for item in scores or []:
+            if len(item) >= 4 and isinstance(item[0], str):
+                surface, score, char_start, char_end = item[0], item[1], item[2], item[3]
+                if surface and _passes_text(surface, validators):
+                    char_rows.append((surface, float(score), int(char_start), int(char_end)))
+            else:
+                token_rows.append((float(item[0]), int(item[1]), int(item[2])))
+        if token_rows:
+            kept = resolve_overlaps(
+                token_rows,
+                overlap,
+                score=lambda span: span[0],
+                start=lambda span: span[1],
+                end=lambda span: span[2],
+            )
+            for score, start, end in kept:
+                mapped = _char_span(start, end, offset, start_map, end_map, text)
+                if mapped is not None and _passes_text(mapped[0], validators):
+                    char_rows.append((mapped[0], score, mapped[1], mapped[2]))
+        elif char_rows:
+            char_rows = resolve_overlaps(
+                char_rows,
+                overlap,
+                score=lambda span: span[1],
+                start=lambda span: span[2],
+                end=lambda span: span[3],
+            )
+        selected = char_rows
+    if dtype != "list":
+        selected = selected[:1]
+    formatted = []
+    for surface, score, char_start, char_end in selected:
+        payload = format_span(surface, score, char_start, char_end, include_confidence, include_spans)
+        extra = extras.get((char_start, char_end))
+        if extra:
+            payload = {"text": surface, **extra} if not isinstance(payload, dict) else {**payload, **extra}
+        formatted.append(payload)
+    if dtype == "list":
+        return formatted
+    if formatted:
+        return formatted[0]
+    if group.get("empty") == "blank":
+        return "" if not include_spans and not include_confidence else None
+    return None
 
 
 def _deduplicate_relation_edges(edges):
@@ -503,7 +835,7 @@ def _deduplicate_relation_edges(edges):
     return sorted(kept, key=lambda edge: (edge["head"][1], edge["tail"][1], -edge["score"]))
 
 
-def _format_relation(edge, include_confidence, include_spans):
+def format_relation(edge, include_confidence, include_spans):
     """Public head/tail payload for one kept relation edge."""
     score = edge["score"]
     head, head_start, head_end = edge["head"]
@@ -577,7 +909,7 @@ def _decode_relations(sample_out, meta, threshold, include_confidence, include_s
     formatted = {}
     for relation_type, relation_edges in edges.items():
         formatted[relation_type] = [
-            _format_relation(edge, include_confidence, include_spans)
+            format_relation(edge, include_confidence, include_spans)
             for edge in _deduplicate_relation_edges(relation_edges)
         ]
     return formatted
@@ -593,22 +925,7 @@ def decode_boundary(
     overlap_policy="disallow",
     temperature=1.0,
 ):
-    """Decode one boundary sample into the pre-format result dict.
-
-    Args:
-        sample_out: Candidate batch row, or a mapping with `grouped_candidates`.
-        meta: Processor metadata for one example.
-        threshold: Pair-probability cutoff.
-        include_confidence: Keep scores on formatted spans.
-        include_spans: Keep character offsets.
-        overlap_policy: One of the shared overlap policies. `flat` means disallow.
-        temperature: Positive divisor applied to pair logits before the sigmoid.
-
-    Returns:
-        A dict whose `entities` value is a one-item list, matching the
-        formatter used by the public extraction API. Relation groups are
-        filled from `relation_pairs` and `relation_logits` scored in `forward`.
-    """
+    """Decode one boundary sample into the pre-format result dict."""
     specs = _query_specs(meta)
     if sample_out.get("grouped_candidates") is not None:
         grouped = sample_out["grouped_candidates"]
@@ -621,34 +938,42 @@ def decode_boundary(
     text = meta.get("text") or ""
     null_logits = sample_out.get("null_logits")
     abstain = float(meta.get("abstention_threshold") or 0.5)
+    maps = {"start": start_map, "end": end_map, "offset": offset}
     entities = OrderedDict()
     structures = OrderedDict()
+    field_options = {}
+    for group in meta.get("groups") or []:
+        stored = (group.get("options") or {}).get("fields") or {}
+        for field_name, options in stored.items():
+            field_options[(group.get("name"), field_name)] = options
     for query_id, spec in enumerate(specs):
         if query_id >= len(grouped):
             break
         if null_logits is not None and float(torch.sigmoid(null_logits[query_id])) > abstain:
             scored = []
         else:
-            scored = _kept_spans(grouped[query_id], overlap_policy)
-        spans = []
-        for score, start, end in scored:
-            mapped = _char_span(start, end, offset, start_map, end_map, text)
-            if mapped is None:
-                continue
-            surface, char_start, char_end = mapped
-            spans.append((surface, score, char_start, char_end))
+            scored = grouped[query_id]
+        options = field_options.get((spec["task_name"], spec["field_name"]), {})
+        dtype = "list" if spec["task_type"] == "entities" else "str"
+        decoded = decode_spans(
+            scored,
+            {
+                "dtype": dtype,
+                "threshold": options.get("threshold", threshold),
+                "validators": options.get("validators") or [],
+                "include_confidence": include_confidence,
+                "include_spans": include_spans,
+                "empty": "blank" if spec["task_type"] == "entities" else None,
+            },
+            text,
+            maps,
+            threshold,
+            overlap_policy,
+        )
         if spec["task_type"] == "entities":
-            entities[spec["field_name"]] = [
-                _format_span(surface, score, char_start, char_end, include_confidence, include_spans)
-                for surface, score, char_start, char_end in spans
-            ]
+            entities[spec["field_name"]] = decoded
         elif spec["task_type"] == "json_structures":
-            instance = structures.setdefault(spec["task_name"], OrderedDict())
-            formatted = [
-                _format_span(surface, score, char_start, char_end, include_confidence, include_spans)
-                for surface, score, char_start, char_end in spans
-            ]
-            instance[spec["field_name"]] = formatted[0] if formatted else None
+            structures.setdefault(spec["task_name"], OrderedDict())[spec["field_name"]] = decoded
     result = {}
     if entities:
         result["entities"] = [entities]
@@ -659,7 +984,87 @@ def decode_boundary(
     for group in meta.get("groups") or []:
         if group["task_type"] == "relations" and group["name"] not in result:
             result[group["name"]] = []
+    recorded = decode_records(
+        sample_out,
+        meta,
+        threshold=threshold,
+        include_confidence=include_confidence,
+        include_spans=include_spans,
+        overlap_policy=overlap_policy,
+    )
+    result.update(recorded)
     return result
+
+
+def _records_enabled(sample_out, meta) -> bool:
+    """False when records are off or the checkpoint predates config version 3."""
+    version = sample_out.get("config_version", meta.get("config_version"))
+    if version is not None and int(version) < 3:
+        return False
+    enabled = sample_out.get("enable_records", meta.get("enable_records"))
+    if enabled is None:
+        return sample_out.get("record_logits") is not None
+    return bool(enabled)
+
+
+def _query_spans(candidates, query_id: int) -> torch.Tensor:
+    """Valid `(start, end)` rows for one boundary query."""
+    if candidates is None or query_id < 0 or query_id >= int(candidates.indices.shape[1]):
+        return torch.zeros((0, 2), dtype=torch.long)
+    mask = candidates.valid_mask[0, query_id]
+    keep = torch.nonzero(mask, as_tuple=False).flatten()
+    return candidates.indices[0, query_id][keep].to(torch.long)
+
+
+def _record_group(spec, logits, candidates):
+    """Record group whose spans line up with forward's `record_logits`."""
+    object_logits, assign_logits = logits
+    if not torch.is_tensor(object_logits):
+        object_logits = torch.tensor(object_logits, dtype=torch.float)
+    fields = []
+    spans = []
+    for field_spec in spec.get("fields") or []:
+        card = str(field_spec.get("cardinality") or "zero_or_more")
+        fields.append(
+            SimpleNamespace(
+                query_id=int(field_spec["query_id"]),
+                name=field_spec.get("name"),
+                exclusive=bool(field_spec.get("exclusive", False)),
+                allows_absent=card in ("optional_one", "zero_or_more"),
+                cardinality=SimpleNamespace(is_scalar=card in ("optional_one", "required_one")),
+            )
+        )
+        spans.append(_query_spans(candidates, int(field_spec["query_id"])))
+    mode = spec.get("mode")
+    seeds: list = []
+    instance_spans: list = []
+    if mode == "natural":
+        anchor_id = spec.get("anchor_query_id")
+        anchor_index = next(index for index, field in enumerate(fields) if field.query_id == anchor_id)
+        anchor_spans = spans[anchor_index]
+        for cand_idx in range(int(anchor_spans.shape[0])):
+            seeds.append((anchor_index, cand_idx))
+            instance_spans.append((int(anchor_spans[cand_idx, 0]), int(anchor_spans[cand_idx, 1])))
+    elif mode == "latent":
+        for field_index, field_spans in enumerate(spans):
+            for cand_idx in range(int(field_spans.shape[0])):
+                seeds.append((field_index, cand_idx))
+                instance_spans.append((int(field_spans[cand_idx, 0]), int(field_spans[cand_idx, 1])))
+    else:
+        count = int(object_logits.shape[0])
+        seeds = [None] * count
+        instance_spans = [None] * count
+    return SimpleNamespace(
+        spec=SimpleNamespace(mode=mode, anchor_query_id=spec.get("anchor_query_id")),
+        object_logits=object_logits,
+        assign_logits=list(assign_logits),
+        field_query_ids=[field.query_id for field in fields],
+        field_specs=fields,
+        field_spans=spans,
+        instance_seed=seeds,
+        instance_spans=instance_spans,
+        num_instances=int(object_logits.shape[0]),
+    )
 
 
 def decode_records(
@@ -669,21 +1074,59 @@ def decode_records(
     threshold=0.5,
     include_confidence=False,
     include_spans=False,
+    overlap_policy=None,
 ):
-    """Decode record-head outputs when a sample carries `records`.
-
-    Args:
-        sample_out: Mapping with decoded `records`.
-        meta: Processor metadata. Unused by the already-decoded path.
-        threshold: Unused when records are pre-decoded.
-        include_confidence: Unused when records are pre-decoded.
-        include_spans: Unused when records are pre-decoded.
-
-    Returns:
-        The record mapping stored on the sample.
-    """
-    del meta, threshold, include_confidence, include_spans
-    return dict(sample_out.get("records") or {})
+    """Assign `record_logits` with `decode_group` when records are enabled."""
+    if not _records_enabled(sample_out, meta):
+        return {}
+    groups = sample_out.get("record_logits")
+    specs = list(meta.get("record_specs") or [])
+    if not groups or not specs:
+        return dict(sample_out.get("records") or {})
+    candidates = sample_out.get("candidates")
+    text = meta.get("text") or ""
+    maps = {
+        "start": list(meta.get("start") or []),
+        "end": list(meta.get("end") or []),
+        "offset": int(meta.get("prefix_len") or 0),
+    }
+    temperature = float(sample_out.get("record_temperature") or meta.get("record_temperature") or 1.0)
+    out = OrderedDict()
+    for spec, logits in zip(specs, groups):
+        group = _record_group(spec, logits, candidates)
+        if group.num_instances != len(group.instance_seed):
+            continue
+        decoded = decode_group(
+            group,
+            anchor_threshold=threshold,
+            field_threshold=threshold,
+            object_threshold=threshold,
+            temperature=temperature,
+        )
+        instances = []
+        for record in decoded:
+            instance = OrderedDict()
+            for field_spec in group.field_specs:
+                spans = record.fields.get(field_spec.query_id, [])
+                scores = record.field_scores.get(field_spec.query_id, [])
+                raw = [(score, start, end) for (start, end), score in zip(spans, scores)]
+                instance[field_spec.name] = decode_spans(
+                    raw,
+                    {
+                        "dtype": "str" if field_spec.cardinality.is_scalar else "list",
+                        "include_confidence": include_confidence,
+                        "include_spans": include_spans,
+                    },
+                    text,
+                    maps,
+                    threshold,
+                    overlap_policy,
+                )
+            if any(value is not None and value != [] for value in instance.values()):
+                instances.append(instance)
+        if instances:
+            out[spec.get("task_name") or spec.get("name")] = instances
+    return dict(out)
 
 
 class Expr:
@@ -923,122 +1366,6 @@ def _expr_from_dict(data: Mapping) -> Expr:
     return Expr(kind, **fields)
 
 
-def _as_expr(value) -> Expr:
-    if isinstance(value, Expr):
-        return value
-    if isinstance(value, tuple) and len(value) == 2 and all(isinstance(item, str) for item in value):
-        return Expr("LabelRef", task=value[0], label=value[1])
-    raise SchemaError(
-        f"cannot interpret {value!r} as a constraint expression; use a ('task', 'label') tuple or a DSL constructor"
-    )
-
-
-def _int(value, what) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-        raise SchemaError(f"{what} must be a non-negative int")
-    return value
-
-
-def _task_name(value, what) -> str:
-    if not isinstance(value, str) or not value:
-        raise SchemaError(f"{what} must be a task name string")
-    return value
-
-
-def all_of(*exprs) -> Expr:
-    """Conjunction of constraint expressions."""
-    return Expr("And", children=tuple(_as_expr(item) for item in exprs))
-
-
-def any_of(*exprs) -> Expr:
-    """Disjunction of constraint expressions."""
-    return Expr("Or", children=tuple(_as_expr(item) for item in exprs))
-
-
-def not_(expr) -> Expr:
-    """Negation of one constraint expression."""
-    return Expr("Not", child=_as_expr(expr))
-
-
-def implies(cond, then) -> Expr:
-    """``cond`` implies ``then``."""
-    return Expr("Implies", cond=_as_expr(cond), then=_as_expr(then))
-
-
-def iff(left, right) -> Expr:
-    """Both sides are equivalent."""
-    return Expr("Iff", left=_as_expr(left), right=_as_expr(right))
-
-
-def excludes(left, right) -> Expr:
-    """The two sides cannot both hold."""
-    return Expr("Excludes", left=_as_expr(left), right=_as_expr(right))
-
-
-def exactly_one_of(*exprs) -> Expr:
-    """Exactly one child holds."""
-    return Expr("ExactlyOneOf", children=tuple(_as_expr(item) for item in exprs))
-
-
-def at_least(task, count) -> Expr:
-    """The task selects at least ``count`` labels."""
-    return Expr(
-        "Cardinality", task=_task_name(task, "at_least task"), minimum=_int(count, "at_least count"), maximum=None
-    )
-
-
-def at_most(task, count) -> Expr:
-    """The task selects at most ``count`` labels."""
-    return Expr("Cardinality", task=_task_name(task, "at_most task"), minimum=0, maximum=_int(count, "at_most count"))
-
-
-def exactly(task, count) -> Expr:
-    """The task selects exactly ``count`` labels."""
-    number = _int(count, "exactly count")
-    return Expr("Cardinality", task=_task_name(task, "exactly task"), minimum=number, maximum=number)
-
-
-def at_level(task, level) -> Expr:
-    """An ordered task is exactly ``level``."""
-    return Expr("AtLevel", task=_task_name(task, "at_level task"), level=level)
-
-
-def min_level(task, level) -> Expr:
-    """An ordered task is at least ``level``."""
-    return Expr("MinLevel", task=_task_name(task, "min_level task"), level=level)
-
-
-def max_level(task, level) -> Expr:
-    """An ordered task is at most ``level``."""
-    return Expr("MaxLevel", task=_task_name(task, "max_level task"), level=level)
-
-
-def between_level(task, lo, hi) -> Expr:
-    """An ordered task lies between ``lo`` and ``hi``."""
-    name = _task_name(task, "between_level task")
-    return Expr("And", children=(Expr("MinLevel", task=name, level=lo), Expr("MaxLevel", task=name, level=hi)))
-
-
-def any_selected(task) -> Expr:
-    """At least one label of ``task`` is selected."""
-    return Expr("AnySelected", task=_task_name(task, "any_selected task"))
-
-
-def any_other_selected(task) -> Expr:
-    """At least one non-default label of ``task`` is selected."""
-    return Expr("AnyOtherSelected", task=_task_name(task, "any_other_selected task"))
-
-
-def is_default(task) -> Expr:
-    """The declared default label is selected."""
-    return Expr("IsDefault", task=_task_name(task, "is_default task"))
-
-
-def label(task, name) -> Expr:
-    """A single (task, label) literal."""
-    return Expr("LabelRef", task=_task_name(task, "label task"), label=name)
-
-
 @dataclass(frozen=True)
 class LabelSpec:
     """One classification label."""
@@ -1141,221 +1468,6 @@ def _coerce_labels(labels: Any) -> tuple:
         else:
             raise SchemaError(f"invalid label entry {item!r}")
     return tuple(coerced)
-
-
-def _partition(constraints, active):
-    keep, pure_drop, mixed = [], [], []
-    for constraint in constraints:
-        refs = frozenset(constraint.references())
-        if refs <= active:
-            keep.append(constraint)
-        elif refs & active:
-            mixed.append(constraint)
-        else:
-            pure_drop.append(constraint)
-    return keep, pure_drop, mixed
-
-
-class ClassificationSchema:
-    """Mutable builder for tasks and hard constraints."""
-
-    def __init__(self) -> None:
-        self._tasks: dict = {}
-        self._constraints: list = []
-
-    @property
-    def task_specs(self) -> tuple:
-        return tuple(self._tasks.values())
-
-    @property
-    def task_order(self) -> tuple:
-        return tuple(self._tasks.keys())
-
-    @property
-    def constraints(self) -> tuple:
-        return tuple(self._constraints)
-
-    def task_spec(self, name: str) -> TaskSpec:
-        try:
-            return self._tasks[name]
-        except KeyError:
-            raise SchemaError(f"unknown task {name!r}") from None
-
-    def task(
-        self,
-        name,
-        labels,
-        *,
-        min_labels=0,
-        max_labels=None,
-        ordered=False,
-        threshold=0.5,
-        candidate_threshold=None,
-        activation="auto",
-        temperature=1.0,
-        default=None,
-        instruction=None,
-        examples=(),
-    ):
-        if name in self._tasks:
-            raise SchemaError(f"task {name!r} is already defined")
-        self._tasks[name] = TaskSpec(
-            name=name,
-            labels=_coerce_labels(labels),
-            min_labels=min_labels,
-            max_labels=max_labels,
-            ordered=ordered,
-            threshold=threshold,
-            candidate_threshold=candidate_threshold,
-            activation=activation,
-            temperature=temperature,
-            default=default,
-            instruction=instruction,
-            examples=tuple(examples),
-        )
-        return self
-
-    def single(self, name, labels, **kwargs):
-        kwargs.setdefault("min_labels", 1)
-        kwargs.setdefault("max_labels", 1)
-        return self.task(name, labels, **kwargs)
-
-    def multi(self, name, labels, **kwargs):
-        return self.task(name, labels, **kwargs)
-
-    def ordinal(self, name, labels, **kwargs):
-        kwargs.setdefault("min_labels", 1)
-        kwargs.setdefault("max_labels", 1)
-        kwargs["ordered"] = True
-        return self.task(name, labels, **kwargs)
-
-    def constrain(self, *expressions):
-        """Append constraints validated against tasks declared so far."""
-        declared = set(self._tasks)
-        for expr in expressions:
-            if not hasattr(expr, "references"):
-                raise SchemaError(
-                    f"constraint {expr!r} is not a constraint expression; build one with the constraints DSL"
-                )
-            missing = frozenset(expr.references()) - declared
-            if missing:
-                name = sorted(missing)[0]
-                raise SchemaError(
-                    f"constraint references undeclared task {name!r}; declare task {name!r} before constraining it"
-                )
-            self._constraints.append(expr)
-        return self
-
-    def subset(self, *names, keep_constraints="strict"):
-        """Return a new schema containing only ``names``."""
-        return self._narrow(self._resolve_names(names), keep_constraints)
-
-    def drop(self, *names, keep_constraints="strict"):
-        """Return a new schema with ``names`` removed."""
-        removed = self._resolve_names(names)
-        return self._narrow(frozenset(self._tasks) - removed, keep_constraints)
-
-    def _resolve_names(self, names) -> frozenset:
-        requested = frozenset(names)
-        unknown = requested - set(self._tasks)
-        if unknown:
-            raise SchemaError(f"unknown task(s): {sorted(unknown)}")
-        return requested
-
-    def _narrow(self, active: frozenset, keep_constraints: str):
-        if keep_constraints not in ("strict", "prune", "error_on_mixed"):
-            raise SchemaError("keep_constraints must be 'strict', 'prune' or 'error_on_mixed'")
-        keep, pure_drop, mixed = _partition(self._constraints, active)
-        if mixed:
-            raise SchemaError(
-                "cannot narrow: constraint(s) reference both kept and removed tasks; "
-                "a half-applied invariant is never safe"
-            )
-        if keep_constraints == "strict" and pure_drop:
-            raise SchemaError(
-                "cannot narrow under keep_constraints='strict': would drop "
-                f"{len(pure_drop)} constraint(s); use 'prune' or 'error_on_mixed'"
-            )
-        if keep_constraints == "prune" and pure_drop:
-            warnings.warn(
-                f"subset/drop dropped {len(pure_drop)} constraint(s) referencing only "
-                f"removed tasks; the prompt changes, so remaining scores are a new "
-                f"measurement",
-                stacklevel=3,
-            )
-        out = ClassificationSchema()
-        for name, spec in self._tasks.items():
-            if name in active:
-                out._tasks[name] = spec
-        out._constraints = list(keep)
-        return out
-
-    def to_dict(self) -> dict:
-        return {
-            "version": 3,
-            "tasks": {name: _task_to_dict(spec) for name, spec in self._tasks.items()},
-            "constraints": [constraint.to_dict() for constraint in self._constraints],
-        }
-
-    def to_json(self, **kwargs) -> str:
-        return json.dumps(self.to_dict(), **kwargs)
-
-    @classmethod
-    def from_dict(cls, data: Mapping) -> ClassificationSchema:
-        schema = cls()
-        for name, spec in data.get("tasks", {}).items():
-            schema.task(name, **_task_kwargs_from_dict(spec))
-        for raw in data.get("constraints", ()):
-            schema.constrain(_expr_from_dict(raw))
-        return schema
-
-    @classmethod
-    def from_json(cls, value: str) -> ClassificationSchema:
-        return cls.from_dict(json.loads(value))
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, ClassificationSchema):
-            return NotImplemented
-        return self._tasks == other._tasks and list(self._constraints) == list(other._constraints)
-
-    def __repr__(self) -> str:
-        return f"ClassificationSchema(tasks={list(self._tasks)}, constraints={len(self._constraints)})"
-
-
-def _task_to_dict(spec: TaskSpec) -> dict:
-    descs = {item.name: item.description for item in spec.labels if item.description is not None}
-    labels: Any = {item.name: item.description for item in spec.labels} if descs else list(spec.label_names)
-    out: dict = {"labels": labels}
-    if spec.min_labels:
-        out["min_labels"] = spec.min_labels
-    if spec.max_labels is not None:
-        out["max_labels"] = spec.max_labels
-    if spec.ordered:
-        out["ordered"] = spec.ordered
-    if spec.threshold != 0.5:
-        out["threshold"] = spec.threshold
-    if spec.candidate_threshold is not None:
-        out["candidate_threshold"] = spec.candidate_threshold
-    if spec.activation != "auto":
-        out["activation"] = spec.activation
-    if spec.temperature != 1.0:
-        out["temperature"] = spec.temperature
-    if spec.default is not None:
-        out["default"] = spec.default
-    if spec.instruction is not None:
-        out["instruction"] = spec.instruction
-    if spec.examples:
-        out["examples"] = [list(pair) for pair in spec.examples]
-    return out
-
-
-def _task_kwargs_from_dict(spec: Mapping) -> dict:
-    kwargs = dict(spec)
-    kwargs["labels"] = kwargs.pop("labels")
-    examples = kwargs.pop("examples", None)
-    if examples is not None:
-        kwargs["examples"] = tuple(tuple(pair) for pair in examples)
-    return kwargs
 
 
 class Assignment:
@@ -1500,8 +1612,7 @@ def _check_prefix_collisions(task_order) -> None:
                 )
 
 
-def _static_feasibility(schema, task_specs) -> None:
-    constraints = schema.constraints
+def _static_feasibility(constraints, task_specs) -> None:
     if not constraints:
         return
     specs = _spec_map(task_specs)
@@ -1528,8 +1639,8 @@ def _static_feasibility(schema, task_specs) -> None:
             )
 
 
-def _lower_defaults(schema, task_specs) -> tuple:
-    constraints = list(schema.constraints)
+def _lower_defaults(constraints, task_specs) -> tuple:
+    constraints = list(constraints)
     for spec in task_specs:
         if spec.default is not None:
             constraints.append(
@@ -1542,23 +1653,88 @@ def _lower_defaults(schema, task_specs) -> tuple:
     return tuple(constraints)
 
 
-def _fingerprint(schema: ClassificationSchema) -> str:
-    payload = json.dumps(schema.to_dict(), sort_keys=True)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+class _TaskIndex:
+    """Task lookup used while checking constraint references."""
+
+    def __init__(self, specs):
+        self._specs = {spec.name: spec for spec in specs}
+
+    def task_spec(self, name):
+        try:
+            return self._specs[name]
+        except KeyError:
+            raise SchemaError(f"unknown task {name!r}") from None
+
+    def task(self, name):
+        return self.task_spec(name)
+
+
+def _constraint_list(raw) -> tuple:
+    constraints = []
+    for item in raw or ():
+        if isinstance(item, Expr):
+            constraints.append(item)
+        elif isinstance(item, Mapping) and item.get("type") in _EXPR_FIELDS:
+            constraints.append(_expr_from_dict(item))
+    return tuple(constraints)
+
+
+def _task_spec_from_body(name, body) -> TaskSpec:
+    """Build one task record from a tasks-dict or classifications entry."""
+    body = dict(body or {})
+    labels = body.pop("labels", None)
+    descriptions = body.pop("label_descriptions", None) or {}
+    if descriptions and not isinstance(labels, Mapping):
+        labels = {label: descriptions.get(label) for label in labels}
+    examples = tuple(tuple(pair) for pair in (body.pop("examples", ()) or ()))
+    if "multi_label" in body or "cls_threshold" in body or "class_act" in body or "task" in body:
+        multi = bool(body.pop("multi_label", False))
+        body.pop("task", None)
+        return TaskSpec(
+            name=name,
+            labels=_coerce_labels(labels),
+            min_labels=int(body.pop("min_labels", 0 if multi else 1)),
+            max_labels=body.pop("max_labels", None if multi else 1),
+            ordered=bool(body.pop("ordered", False)),
+            threshold=body.pop("cls_threshold", body.pop("threshold", 0.5)),
+            candidate_threshold=body.pop("candidate_threshold", None),
+            activation=body.pop("class_act", body.pop("activation", "auto")),
+            temperature=body.pop("temperature", 1.0),
+            default=body.pop("default", None),
+            instruction=body.pop("prompt", body.pop("instruction", None)),
+            examples=examples,
+        )
+    return TaskSpec(name=name, labels=_coerce_labels(labels), examples=examples, **body)
+
+
+def _specs_from_schema(schema: Mapping) -> tuple:
+    constraints = _constraint_list(schema.get("constraints"))
+    tasks = schema.get("tasks")
+    if isinstance(tasks, Mapping):
+        return tuple(_task_spec_from_body(name, spec) for name, spec in tasks.items()), constraints
+    entries = []
+    for entry in schema.get("classifications") or []:
+        entries.append(_task_spec_from_body(entry["task"], entry))
+    return tuple(entries), constraints
 
 
 def _compile_classification(schema) -> CompiledClassificationSchema:
     if isinstance(schema, CompiledClassificationSchema):
         return schema
-    if not isinstance(schema, ClassificationSchema):
-        raise SchemaError(f"compile_schema expects a ClassificationSchema, got {type(schema).__name__}")
-    task_specs = schema.task_specs
+    if not isinstance(schema, Mapping):
+        if hasattr(schema, "to_dict"):
+            schema = schema.to_dict()
+        else:
+            raise SchemaError(f"expected a classification schema dict, got {type(schema).__name__}")
+    task_specs, constraints = _specs_from_schema(schema)
     if not task_specs:
         raise SchemaError("cannot compile a schema with no tasks")
-    for constraint in schema.constraints:
-        _walk(constraint, schema)
-    _check_prefix_collisions(schema.task_order)
-    _static_feasibility(schema, task_specs)
+    index = _TaskIndex(task_specs)
+    for constraint in constraints:
+        _walk(constraint, index)
+    order = tuple(spec.name for spec in task_specs)
+    _check_prefix_collisions(order)
+    _static_feasibility(constraints, task_specs)
     model = {
         "json_structures": [],
         "classifications": [_classification_entry(spec) for spec in task_specs],
@@ -1568,12 +1744,17 @@ def _compile_classification(schema) -> CompiledClassificationSchema:
         "entity_descriptions": {},
     }
     _assert_model_schema(model)
+    payload = {
+        "tasks": [spec.name for spec in task_specs],
+        "constraints": [item.to_dict() for item in constraints],
+    }
+    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     return CompiledClassificationSchema(
         model_schema=model,
         task_specs=tuple(task_specs),
-        constraints=_lower_defaults(schema, task_specs),
-        task_order=tuple(schema.task_order),
-        fingerprint=_fingerprint(schema),
+        constraints=_lower_defaults(constraints, task_specs),
+        task_order=order,
+        fingerprint=fingerprint,
     )
 
 
@@ -2119,49 +2300,15 @@ class ClassificationConfig:
             raise ValueError("max_candidates_per_task must be positive")
 
 
-def _aggregate(values, mode):
-    if mode == "max":
-        return max(values)
-    if mode == "mean":
-        return sum(values) / len(values)
-    return values[0]
-
-
-def _schema_from_model_dict(data: Mapping) -> ClassificationSchema:
-    schema = ClassificationSchema()
-    for entry in data.get("classifications", ()):
-        labels = entry["labels"]
-        descriptions = entry.get("label_descriptions") or {}
-        if descriptions:
-            labels = {name: descriptions.get(name) for name in labels}
-        multi = bool(entry.get("multi_label", False))
-        kwargs = {
-            "threshold": entry.get("cls_threshold", 0.5),
-            "activation": entry.get("class_act", "auto"),
-            "instruction": entry.get("prompt"),
-            "examples": tuple(tuple(pair) for pair in entry.get("examples", ())),
-        }
-        if multi:
-            schema.multi(entry["task"], labels, **kwargs)
-        else:
-            schema.single(entry["task"], labels, **kwargs)
-    return schema
-
-
 def _coerce_schema(schema):
     if isinstance(schema, CompiledClassificationSchema):
         return schema
-    if isinstance(schema, ClassificationSchema):
+    if isinstance(schema, Mapping) and ("tasks" in schema or "classifications" in schema):
         return schema
-    if isinstance(schema, Mapping):
-        if "tasks" in schema:
-            return ClassificationSchema.from_dict(schema)
-        if "classifications" in schema:
-            return _schema_from_model_dict(schema)
-    if hasattr(schema, "to_dict") and hasattr(schema, "task_order"):
+    if hasattr(schema, "to_dict"):
         payload = schema.to_dict()
-        if isinstance(payload, Mapping) and "tasks" in payload:
-            return ClassificationSchema.from_dict(payload)
+        if isinstance(payload, Mapping) and ("tasks" in payload or "classifications" in payload):
+            return payload
     raise SchemaError(f"expected a classification schema, got {type(schema).__name__}")
 
 
@@ -2338,7 +2485,15 @@ def aggregate_classification_logits(chunk_logits, schema, mode: str = "max") -> 
     tasks = {}
     for spec in compiled.task_specs:
         tasks[spec.name] = {
-            label_name: _aggregate([row[spec.name][label_name] for row in aligned], mode)
+            label_name: (
+                max(row[spec.name][label_name] for row in aligned)
+                if mode == "max"
+                else (
+                    sum(row[spec.name][label_name] for row in aligned) / len(aligned)
+                    if mode == "mean"
+                    else aligned[0][spec.name][label_name]
+                )
+            )
             for label_name in spec.label_names
         }
     return tasks
@@ -2463,28 +2618,12 @@ def _sample_outputs(outputs, batch_size):
 
 
 def _classification_schema_from_row(meta, threshold):
-    schema = ClassificationSchema()
+    entries = []
     for entry in meta.get("classifications") or []:
-        labels = entry["labels"]
-        descriptions = entry.get("label_descriptions") or {}
-        if descriptions:
-            labels = {name: descriptions.get(name) for name in labels}
-        kwargs = {
-            "threshold": entry.get("cls_threshold", threshold),
-            "activation": entry.get("class_act", "auto"),
-            "instruction": entry.get("prompt"),
-            "examples": tuple(tuple(pair) for pair in entry.get("examples", ()) or ()),
-        }
-        if bool(entry.get("multi_label", False)):
-            schema.multi(entry["task"], labels, **kwargs)
-        else:
-            schema.single(entry["task"], labels, **kwargs)
-    for raw in meta.get("constraints") or []:
-        if isinstance(raw, Expr):
-            schema.constrain(raw)
-        elif isinstance(raw, Mapping) and raw.get("type") in _EXPR_FIELDS:
-            schema.constrain(_expr_from_dict(raw))
-    return schema
+        row = dict(entry)
+        row.setdefault("cls_threshold", threshold)
+        entries.append(row)
+    return {"classifications": entries, "constraints": list(meta.get("constraints") or [])}
 
 
 def _task_logits(sample, classifications):
@@ -2824,197 +2963,151 @@ class RelationSpec:
                 raise ValueError(f"{attr} must be non-negative")
 
 
-class JointSchema:
-    """Mutable builder for entity types, relations, and constraints."""
-
-    def __init__(self):
-        self._entities = {}
-        self._relations = {}
-        self._constraints = []
-
-    @property
-    def entity_specs(self):
-        return tuple(self._entities.values())
-
-    @property
-    def relation_specs(self):
-        return tuple(self._relations.values())
-
-    @property
-    def constraints(self):
-        return tuple(self._constraints)
-
-    def entity(
-        self,
-        name,
-        description=None,
-        *,
-        threshold=None,
-        candidate_threshold=None,
-        max_candidates=None,
-        allow_nested=None,
-    ):
-        if name in self._entities:
-            raise ValueError(f"entity {name!r} is already defined")
-        self._entities[name] = EntitySpec(
-            name, description, threshold, candidate_threshold, max_candidates, allow_nested
-        )
-        return self
-
-    def entities(self, entities):
-        if isinstance(entities, str):
-            return self.entity(entities)
-        items = entities.items() if isinstance(entities, Mapping) else ((item, None) for item in entities)
-        for name, value in items:
-            if isinstance(value, Mapping):
-                self.entity(name, **dict(value))
-            else:
-                self.entity(name, value)
-        return self
-
-    def relation(
-        self,
-        name,
-        head,
-        tail,
-        description=None,
-        *,
-        threshold=None,
-        candidate_threshold=None,
-        directed=True,
-        symmetric=False,
-        inverse=None,
-        allow_self=False,
-        max_per_head=None,
-        max_per_tail=None,
-        **aliases,
-    ):
-        if name in self._relations:
-            raise ValueError(f"relation {name!r} is already defined")
-        inverse_of = aliases.pop("inverse_of", None)
-        allow_self_loops = aliases.pop("allow_self_loops", None)
-        no_self = aliases.pop("no_self_loops", None)
-        unique_head = aliases.pop("unique_head", False)
-        unique_tail = aliases.pop("unique_tail", False)
-        aliases.pop("unique_pair", None)
-        acyclic = aliases.pop("acyclic", False)
-        if aliases:
-            raise TypeError(f"unknown relation options: {sorted(aliases)}")
-        if inverse is not None and inverse_of is not None and inverse != inverse_of:
-            raise ValueError("inverse and inverse_of disagree")
-        inverse = inverse or inverse_of
-        if allow_self_loops is not None:
-            allow_self = allow_self_loops
-        if no_self is not None:
-            allow_self = not no_self
-        if unique_head and max_per_head is None:
-            max_per_head = 1
-        if unique_tail and max_per_tail is None:
-            max_per_tail = 1
-        spec = RelationSpec(
-            name,
-            _joint_types(head, "head"),
-            _joint_types(tail, "tail"),
-            description,
-            threshold,
-            candidate_threshold,
-            directed,
-            symmetric,
-            inverse,
-            allow_self,
-            max_per_head,
-            max_per_tail,
-        )
-        unknown = (set(spec.head) | set(spec.tail)) - set(self._entities)
-        if unknown:
-            raise ValueError(f"relation {name!r} references unknown entity types: {sorted(unknown)}")
-        self._relations[name] = spec
-        if acyclic:
-            self.acyclic(name)
-        return self
-
-    def constraint(self, constraint):
-        if isinstance(constraint, Mapping) and "type" in constraint:
-            constraint = _joint_from_dict(constraint)
-        elif not isinstance(constraint, Mapping):
-            raise TypeError("constraint must implement Constraint")
-        self._constraints.append(constraint)
-        return self
-
-    def _validate_relation_name(self, name):
-        if name is not None and name not in self._relations:
-            raise ValueError(f"unknown relation {name!r}")
-
-    def no_self_loops(self, relation=None):
-        self._validate_relation_name(relation)
-        return self.constraint(_joint_constraint("NoSelfLoops", relation=relation))
-
-    def acyclic(self, relation):
-        self._validate_relation_name(relation)
-        return self.constraint(_joint_constraint("AcyclicRelation", relation=relation))
-
-    def at_most(self, relation=None, *, per_head=None, per_tail=None, per=None, limit=None):
-        if isinstance(relation, int):
-            old_limit = relation
-            relation = limit if isinstance(limit, str) else None
-            limit = old_limit
-        self._validate_relation_name(relation)
-        if limit is not None:
-            if per == "tail":
-                per_tail = limit
-            else:
-                per_head = limit
-        if per_head is None and per_tail is None:
-            raise ValueError("provide per_head and/or per_tail")
-        if per_head is not None:
-            self.constraint(_joint_constraint("MaxRelationsPerHead", limit=per_head, relation=relation))
-        if per_tail is not None:
-            self.constraint(_joint_constraint("MaxRelationsPerTail", limit=per_tail, relation=relation))
-        return self
-
-    def to_dict(self):
-        return {
-            "entities": {
-                spec.name: {key: value for key, value in asdict(spec).items() if key != "name" and value is not None}
-                for spec in self.entity_specs
-            },
-            "relations": {
-                spec.name: {key: value for key, value in asdict(spec).items() if key != "name" and value is not None}
-                for spec in self.relation_specs
-            },
-            "constraints": [dict(item) for item in self.constraints],
+def _entity_spec(name, value=None) -> EntitySpec:
+    """One entity record from a string, a field dict, or a bare name."""
+    if isinstance(value, Mapping):
+        fields = {
+            key: value[key]
+            for key in ("description", "threshold", "candidate_threshold", "max_candidates", "allow_nested")
+            if key in value
         }
+        description = fields.pop("description", None)
+        return EntitySpec(
+            name,
+            description,
+            fields.get("threshold"),
+            fields.get("candidate_threshold"),
+            fields.get("max_candidates"),
+            fields.get("allow_nested"),
+        )
+    if isinstance(value, str) and value:
+        return EntitySpec(name, value)
+    return EntitySpec(name)
 
-    def to_json(self, **kwargs):
-        return json.dumps(self.to_dict(), **kwargs)
 
-    @classmethod
-    def from_dict(cls, data):
-        schema = cls()
-        entities = data.get("entities", {})
-        if isinstance(entities, Mapping):
-            for name, value in entities.items():
-                if isinstance(value, Mapping):
-                    schema.entity(name, **dict(value))
-                else:
-                    schema.entity(name, value)
+def _entities_from_raw(raw) -> dict:
+    entities = {}
+    if isinstance(raw, Mapping):
+        for name, value in raw.items():
+            entities[name] = _entity_spec(name, value)
+        return entities
+    for value in raw or ():
+        if isinstance(value, str):
+            entities[value] = EntitySpec(value)
+        elif isinstance(value, Mapping) and "name" in value:
+            entities[value["name"]] = _entity_spec(value["name"], value)
         else:
-            for value in entities:
-                schema.entity(value) if isinstance(value, str) else schema.entity(**value)
-        relations = data.get("relations", {})
-        if isinstance(relations, Mapping):
-            for name, value in relations.items():
-                schema.relation(name, **dict(value))
-        else:
-            for value in relations:
-                schema.relation(**value)
-        for value in data.get("constraints", ()):
-            schema.constraint(value)
-        return schema
+            raise ValueError(f"invalid entity entry {value!r}")
+    return entities
 
-    @classmethod
-    def from_json(cls, value):
-        return cls.from_dict(json.loads(value))
+
+def _relation_spec(name, head, tail, description=None, **aliases):
+    """One relation record plus constraints implied by aliases such as acyclic."""
+    inverse = aliases.pop("inverse", None)
+    inverse_of = aliases.pop("inverse_of", None)
+    allow_self = aliases.pop("allow_self", False)
+    allow_self_loops = aliases.pop("allow_self_loops", None)
+    no_self = aliases.pop("no_self_loops", None)
+    unique_head = aliases.pop("unique_head", False)
+    unique_tail = aliases.pop("unique_tail", False)
+    aliases.pop("unique_pair", None)
+    acyclic = aliases.pop("acyclic", False)
+    threshold = aliases.pop("threshold", None)
+    candidate_threshold = aliases.pop("candidate_threshold", None)
+    directed = aliases.pop("directed", True)
+    symmetric = aliases.pop("symmetric", False)
+    max_per_head = aliases.pop("max_per_head", None)
+    max_per_tail = aliases.pop("max_per_tail", None)
+    if aliases:
+        raise TypeError(f"unknown relation options: {sorted(aliases)}")
+    if inverse is not None and inverse_of is not None and inverse != inverse_of:
+        raise ValueError("inverse and inverse_of disagree")
+    inverse = inverse or inverse_of
+    if allow_self_loops is not None:
+        allow_self = allow_self_loops
+    if no_self is not None:
+        allow_self = not no_self
+    if unique_head and max_per_head is None:
+        max_per_head = 1
+    if unique_tail and max_per_tail is None:
+        max_per_tail = 1
+    spec = RelationSpec(
+        name,
+        _joint_types(head, "head"),
+        _joint_types(tail, "tail"),
+        description,
+        threshold,
+        candidate_threshold,
+        directed,
+        symmetric,
+        inverse,
+        allow_self,
+        max_per_head,
+        max_per_tail,
+    )
+    extras = [_joint_constraint("AcyclicRelation", relation=name)] if acyclic else []
+    return spec, extras
+
+
+def _unwrap_endpoint(value):
+    if isinstance(value, Mapping):
+        return value.get("type") or value.get("entity")
+    return value
+
+
+def _relations_from_raw(raw, entities) -> tuple:
+    relations = {}
+    extras = []
+
+    def add(spec, more):
+        unknown = (set(spec.head) | set(spec.tail)) - set(entities)
+        if unknown:
+            raise ValueError(f"relation {spec.name!r} references unknown entity types: {sorted(unknown)}")
+        if spec.name in relations:
+            raise ValueError(f"relation {spec.name!r} is already defined")
+        relations[spec.name] = spec
+        extras.extend(more)
+
+    if isinstance(raw, Mapping):
+        for name, value in raw.items():
+            body = dict(value)
+            add(*_relation_spec(name, body.pop("head"), body.pop("tail"), body.pop("description", None), **body))
+        return relations, extras
+    for item in raw or ():
+        if isinstance(item, Mapping) and "name" in item and "head" in item:
+            body = dict(item)
+            add(
+                *_relation_spec(
+                    body.pop("name"), body.pop("head"), body.pop("tail"), body.pop("description", None), **body
+                )
+            )
+            continue
+        for name, fields in item.items():
+            head = _unwrap_endpoint(fields.get("head"))
+            tail = _unwrap_endpoint(fields.get("tail"))
+            options = {
+                key: fields[key]
+                for key in (
+                    "description",
+                    "threshold",
+                    "candidate_threshold",
+                    "directed",
+                    "symmetric",
+                    "inverse",
+                    "inverse_of",
+                    "allow_self",
+                    "allow_self_loops",
+                    "no_self_loops",
+                    "max_per_head",
+                    "max_per_tail",
+                    "unique_head",
+                    "unique_tail",
+                    "acyclic",
+                )
+                if key in fields
+            }
+            add(*_relation_spec(name, head, tail, **options))
+    return relations, extras
 
 
 @dataclass(frozen=True)
@@ -3041,10 +3134,13 @@ def _compile_joint(schema) -> CompiledJointSchema:
     """Lower relation flags into concrete constraints."""
     if isinstance(schema, CompiledJointSchema):
         return schema
-    if not isinstance(schema, JointSchema):
-        raise TypeError("schema must be a JointSchema")
-    entities = {spec.name: spec for spec in schema.entity_specs}
-    relations = {spec.name: spec for spec in schema.relation_specs}
+    if not isinstance(schema, Mapping):
+        if hasattr(schema, "to_dict"):
+            schema = schema.to_dict()
+        else:
+            raise TypeError(f"expected a joint schema dict, got {type(schema).__name__}")
+    entities = _entities_from_raw(schema.get("entities") or {})
+    relations, extras = _relations_from_raw(schema.get("relations") or {}, entities)
     model = {
         "json_structures": [],
         "classifications": [],
@@ -3055,7 +3151,10 @@ def _compile_joint(schema) -> CompiledJointSchema:
             name: spec.description for name, spec in entities.items() if spec.description is not None
         },
     }
-    constraints = list(schema.constraints)
+    constraints = [
+        _joint_from_dict(item) if isinstance(item, Mapping) and "type" in item else item
+        for item in list(schema.get("constraints") or []) + extras
+    ]
     if entities:
         if all(spec.allow_nested for spec in entities.values()):
             policy = "allow"
@@ -3100,18 +3199,12 @@ def _compile_joint(schema) -> CompiledJointSchema:
 def _coerce_joint_schema(schema):
     if isinstance(schema, CompiledJointSchema):
         return schema
-    if isinstance(schema, JointSchema):
-        return schema
     if isinstance(schema, Mapping) and ("entities" in schema or "relations" in schema or "constraints" in schema):
-        relations = schema.get("relations", {})
-        if not isinstance(relations, list):
-            return JointSchema.from_dict(schema)
-        if "constraints" in schema or "entities" in schema:
-            return JointSchema.from_dict(schema)
-    if hasattr(schema, "to_dict") and hasattr(schema, "entity_specs"):
+        return schema
+    if hasattr(schema, "to_dict"):
         payload = schema.to_dict()
         if isinstance(payload, Mapping):
-            return JointSchema.from_dict(payload)
+            return payload
     raise TypeError(f"expected a joint schema, got {type(schema).__name__}")
 
 
@@ -4301,181 +4394,28 @@ def _decode_joint_one(scores, schema, architecture, *, text="", config: JointIEC
     )
 
 
-def _confidence_key(value) -> float:
-    return float("-inf") if value is None else float(value)
-
-
-def _view_entity(item):
-    if isinstance(item, Mapping):
-        return SimpleNamespace(
-            id=str(item.get("id", "")),
-            type=str(item.get("type", item.get("label", ""))),
-            text=str(item.get("text", "")),
-            start=int(item.get("start", 0)),
-            end=int(item.get("end", 0)),
-            confidence=item.get("confidence"),
-            sentence_id=item.get("sentence_id"),
-            rescued=bool(item.get("rescued", False)),
-        )
-    return item
-
-
-def _view_relation(item):
-    if isinstance(item, Mapping):
-        return SimpleNamespace(
-            type=str(item.get("type", item.get("label", ""))),
-            head=str(item["head"]),
-            tail=str(item["tail"]),
-            confidence=item.get("confidence"),
-            derived=bool(item.get("derived", False)),
-        )
-    return item
-
-
-def merge_joint_chunks(text: str, fragments, *, include_confidence: bool = True, include_spans: bool = True) -> dict:
-    """Merge per-chunk joint results onto document character offsets.
-
-    Relations stay inside the chunk that produced both endpoints. Equal
-    confidences keep the earlier entity.
-    """
-    entity_by_key = {}
-    relation_rows = {}
-    for start_char, raw in fragments:
-        if isinstance(raw, Mapping):
-            entities = raw.get("entities", [])
-            relations = raw.get("relations", [])
-        else:
-            entities = raw.entities
-            relations = raw.relations
-        local_keys = {}
-        for entity in entities:
-            entity = _view_entity(entity)
-            start = entity.start + start_char
-            end = entity.end + start_char
-            key = (entity.type, start, end)
-            local_keys[entity.id] = key
-            previous = entity_by_key.get(key)
-            if previous is None or _confidence_key(entity.confidence) > _confidence_key(previous.confidence):
-                entity_by_key[key] = SimpleNamespace(
-                    type=entity.type,
-                    text=text[start:end],
-                    start=start,
-                    end=end,
-                    confidence=entity.confidence,
-                    sentence_id=entity.sentence_id,
-                    rescued=entity.rescued,
-                )
-        for relation in relations:
-            relation = _view_relation(relation)
-            if relation.head not in local_keys or relation.tail not in local_keys:
-                continue
-            head_key, tail_key = local_keys[relation.head], local_keys[relation.tail]
-            key = (relation.type, head_key, tail_key)
-            row = (relation.type, head_key, tail_key, relation.confidence, relation.derived)
-            previous = relation_rows.get(key)
-            if previous is None or _confidence_key(row[3]) > _confidence_key(previous[3]):
-                relation_rows[key] = row
-    ordered_keys = sorted(entity_by_key, key=lambda key: (key[1], key[2], key[0]))
-    key_to_id = {key: f"e{index + 1}" for index, key in enumerate(ordered_keys)}
-    entities = []
-    for key in ordered_keys:
-        item = entity_by_key[key]
-        payload = {"id": key_to_id[key], "type": item.type, "text": item.text}
-        if include_spans:
-            payload.update(start=item.start, end=item.end)
-            if item.sentence_id is not None:
-                payload["sentence_id"] = item.sentence_id
-        if include_confidence and item.confidence is not None:
-            payload["confidence"] = item.confidence
-        if item.rescued:
-            payload["rescued"] = True
-        entities.append(payload)
-    relations = []
-    for label, head, tail, confidence, derived in relation_rows.values():
-        payload = {"type": label, "head": key_to_id[head], "tail": key_to_id[tail]}
-        if include_confidence and confidence is not None:
-            payload["confidence"] = confidence
-        if derived:
-            payload["derived"] = True
-        relations.append(payload)
-    relations.sort(key=lambda item: (item["type"], item["head"], item["tail"]))
-    return {"entities": entities, "relations": relations}
-
-
 def _doc_axis(tensor, doc_len):
     if doc_len <= 0:
         return tensor[..., :0, :]
     return tensor[..., -doc_len:, :]
 
 
-def _schema_from_meta(meta) -> JointSchema:
+def _schema_from_meta(meta) -> dict:
+    """Joint dict taken from processor metadata."""
     source = meta.get("schema") or {}
-    schema = JointSchema()
-    entities = source.get("entities") or {}
-    if isinstance(entities, list):
-        schema.entities(entities)
-    elif isinstance(entities, Mapping):
-        for name, value in entities.items():
-            if isinstance(value, Mapping) and any(
-                key in value
-                for key in ("threshold", "candidate_threshold", "max_candidates", "allow_nested", "description")
-            ):
-                fields = {
-                    key: value[key]
-                    for key in ("description", "threshold", "candidate_threshold", "max_candidates", "allow_nested")
-                    if key in value
-                }
-                description = fields.pop("description", None)
-                schema.entity(name, description, **fields)
-            elif isinstance(value, str) and value:
-                schema.entity(name, value)
-            else:
-                schema.entity(name)
-    relations = source.get("relations") or []
-    if isinstance(relations, Mapping):
-        for name, value in relations.items():
-            schema.relation(name, **dict(value))
-    else:
-        for item in relations:
-            if "name" in item and "head" in item:
-                schema.relation(**dict(item))
-                continue
-            for name, fields in item.items():
-                head = fields.get("head")
-                tail = fields.get("tail")
-                if isinstance(head, Mapping):
-                    head = head.get("type") or head.get("entity")
-                if isinstance(tail, Mapping):
-                    tail = tail.get("type") or tail.get("entity")
-                options = {
-                    key: fields[key]
-                    for key in (
-                        "description",
-                        "threshold",
-                        "candidate_threshold",
-                        "directed",
-                        "symmetric",
-                        "inverse",
-                        "inverse_of",
-                        "allow_self",
-                        "allow_self_loops",
-                        "no_self_loops",
-                        "max_per_head",
-                        "max_per_tail",
-                        "unique_head",
-                        "unique_tail",
-                        "acyclic",
-                    )
-                    if key in fields
-                }
-                schema.relation(name, head, tail, **options)
-    for raw in list(meta.get("constraints") or []) + list(source.get("constraints") or []):
-        if isinstance(raw, Mapping) and raw.get("type") in _JOINT_FIELDS:
-            schema.constraint(raw)
-    return schema
+    constraints = [
+        raw
+        for raw in list(meta.get("constraints") or []) + list(source.get("constraints") or [])
+        if isinstance(raw, Mapping) and raw.get("type") in _JOINT_FIELDS
+    ]
+    return {
+        "entities": source.get("entities") or {},
+        "relations": source.get("relations") or [],
+        "constraints": constraints,
+    }
 
 
-def _span_scores_from_sample(sample, meta, schema: JointSchema):
+def _span_scores_from_sample(sample, meta, schema):
     groups = [group for group in (meta.get("groups") or []) if group["task_type"] != "classifications"]
     tensors = sample.get("span_logits")
     probabilities = False
@@ -4490,7 +4430,7 @@ def _span_scores_from_sample(sample, meta, schema: JointSchema):
     entity_logits = None
     entity_types = ()
     hypotheses = []
-    specs = {spec.name: spec for spec in schema.relation_specs}
+    specs = schema.relation_specs if isinstance(schema.relation_specs, Mapping) else {}
     for index, group in enumerate(groups):
         tensor = tensors[index]
         if not torch.is_tensor(tensor):
@@ -4556,7 +4496,7 @@ def _batch_joint(outputs, metadata, *, threshold, include_confidence, include_sp
         optimizer = "beam"
     decoded = []
     for sample, meta in zip(samples, rows):
-        schema = _schema_from_meta(meta)
+        schema = _compile_joint(_schema_from_meta(meta))
         architecture = meta.get("architecture") or ("boundary" if sample.get("candidates") is not None else "span")
         if architecture == "boundary":
             scores = _boundary_scores_from_sample(sample, meta)

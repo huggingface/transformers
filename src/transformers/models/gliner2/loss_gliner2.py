@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import torch
 import torch.nn.functional as F
 
-from ...utils.import_utils import requires_backends
+from .decoding_gliner2 import linear_sum_assignment
 
 
 ENTITY_TASK_ID = 1
@@ -69,23 +69,6 @@ def clamp_gold_count(count) -> int:
     if count < 0:
         raise ValueError(f"span count must be >= 0, got {count}")
     return min(count, MAX_SPAN_COUNT)
-
-
-def count_conditioned_scores(span_rep: torch.Tensor, projected: torch.Tensor) -> torch.Tensor:
-    """Score spans with count-conditioned field states.
-
-    Args:
-        span_rep: Span states `[words, width, hidden]`.
-        projected: Count embeddings `[count, fields, hidden]`.
-
-    Returns:
-        Logits `[count, fields, words, width]`.
-    """
-    if span_rep.dim() != 3 or projected.dim() != 3:
-        raise ValueError("span states and count embeddings must be rank 3")
-    if span_rep.shape[-1] != projected.shape[-1]:
-        raise ValueError("span states and count embeddings differ in width")
-    return torch.einsum("lkd,bpd->bplk", span_rep, projected)
 
 
 def invalid_span_mask(length: int, max_width: int, device) -> torch.Tensor:
@@ -251,37 +234,6 @@ def _anchor_zero(value) -> torch.Tensor:
     for item in value:
         return _anchor_zero(item)
     raise ValueError("cannot build a zero loss without tensors")
-
-
-def linear_sum_assignment(cost_matrix: torch.Tensor):
-    """Minimum-cost assignment using gliner2's SciPy cost tie-break."""
-    requires_backends(linear_sum_assignment, ["scipy"])
-    if cost_matrix.ndim != 2:
-        raise ValueError("cost_matrix must be 2-D")
-    cost = cost_matrix.detach().cpu().to(torch.float64)
-    if torch.isnan(cost).any():
-        raise ValueError("cost_matrix contains NaN")
-    if torch.isinf(cost).any():
-        finite = cost[torch.isfinite(cost)]
-        scale = float(finite.abs().max()) if finite.numel() else 1.0
-        big = 1e6 * (scale + 1.0)
-        cost = torch.nan_to_num(cost, posinf=big, neginf=-big)
-    rows, cols = cost.shape
-    if rows == 0 or cols == 0:
-        empty = torch.zeros(0, dtype=torch.long)
-        return empty, empty
-    from scipy.optimize import linear_sum_assignment as scipy_assignment
-
-    array = cost.numpy()
-    scale = max(float(abs(array).max()), 1.0)
-    epsilon = torch.finfo(torch.float64).eps * scale
-    tie = torch.arange(rows * cols, dtype=torch.float64).reshape(rows, cols).numpy()
-    row_ind, col_ind = scipy_assignment(array + epsilon * tie)
-    pairs = sorted(zip(row_ind.tolist(), col_ind.tolist()))
-    return (
-        torch.tensor([row for row, _ in pairs], dtype=torch.long),
-        torch.tensor([col for _, col in pairs], dtype=torch.long),
-    )
 
 
 def _to_query_candidate(tensor: torch.Tensor, query_axis: int, candidate_axis: int) -> torch.Tensor:
@@ -843,9 +795,7 @@ def sparse_relation_loss(
     selected_mask = gold_mask[safe_batch, safe_rel] & (valid_rel & valid_batch).unsqueeze(-1)
     labels = ((coords.unsqueeze(1) == selected_gold).all(-1) & selected_mask).any(-1).to(logits.dtype)
     if labels.shape != logits.shape:
-        if labels.numel() != logits.numel():
-            raise ValueError(f"relation labels {tuple(labels.shape)} != logits {tuple(logits.shape)}")
-        labels = labels.view_as(logits)
+        raise ValueError(f"relation labels {tuple(labels.shape)} != logits {tuple(logits.shape)}")
     pair_mask = pairs.pair_mask if pairs.pair_mask is not None else torch.ones_like(labels, dtype=torch.bool)
     pair_mask = pair_mask.to(logits.device) & valid_rel & valid_batch
     if pair_mask.shape != logits.shape:
@@ -1098,83 +1048,6 @@ def build_dense_record_matching_cost(
     return cost
 
 
-def dense_record_group_loss(
-    object_logits: torch.Tensor,
-    assign_logits: torch.Tensor,
-    gold_indicator: torch.Tensor,
-    scalar_fields: torch.Tensor,
-    instance_mask: torch.Tensor,
-    *,
-    mode: str,
-    anchor_field: int | None = None,
-) -> dict[str, torch.Tensor]:
-    """Dense shared-pool record loss for one group."""
-    zero = object_logits.new_zeros(())
-    available = int(instance_mask.detach().sum().cpu())
-    count = gold_indicator.shape[0]
-    if count == 0:
-        losses = F.binary_cross_entropy_with_logits(object_logits, torch.zeros_like(object_logits), reduction="none")
-        object_loss = (losses * instance_mask.to(losses.dtype)).sum() / instance_mask.sum().clamp_min(1)
-        return {"object_loss": object_loss, "field_loss": zero, "object_count": available, "field_count": 0}
-    if available < count:
-        raise TargetCapacityError(f"record group has {count} gold instances but only {available} hypotheses")
-    gold = gold_indicator.to(device=object_logits.device, dtype=torch.bool)
-    n_cands_logits = assign_logits.shape[-1] - 1
-    n_cands_gold = gold.shape[-1]
-    if n_cands_gold > n_cands_logits:
-        gold = gold[..., :n_cands_logits]
-    elif n_cands_gold < n_cands_logits:
-        gold = torch.cat([gold, gold.new_zeros(*gold.shape[:-1], n_cands_logits - n_cands_gold)], dim=-1)
-    present = gold.any(-1)
-    target = torch.cat(((~present).unsqueeze(-1), gold), -1)
-    logp = F.log_softmax(assign_logits, -1)
-    scalar_nll = -torch.logsumexp(logp[:, None].masked_fill(~target[None], MASK_LOGIT), -1)
-    list_nll = F.binary_cross_entropy_with_logits(
-        assign_logits[:, None, :, 1:].expand(-1, count, -1, -1),
-        gold[None].expand(object_logits.shape[0], -1, -1, -1).to(object_logits.dtype),
-        reduction="none",
-    ).mean(-1)
-    field_nll = torch.where(scalar_fields[None, None], scalar_nll, list_nll).mean(-1)
-    if mode == "natural":
-        if anchor_field is None:
-            raise ValueError("natural record loss requires anchor_field")
-        anchor_gold = gold[:, anchor_field]
-        anchor_present = anchor_gold.any(-1)
-        matched_cols = torch.arange(count, device=object_logits.device)[anchor_present]
-        matched_rows = anchor_gold[anchor_present].to(torch.long).argmax(-1)
-        object_loss = zero
-    else:
-        with torch.no_grad():
-            cost = build_dense_record_matching_cost(object_logits, assign_logits, gold, scalar_fields, instance_mask)
-        rows, cols = linear_sum_assignment(cost)
-        matched_rows = rows.to(object_logits.device)
-        matched_cols = cols.to(object_logits.device)
-        object_target = torch.zeros(object_logits.shape, device=object_logits.device, dtype=object_logits.dtype)
-        valid_rows = matched_rows[matched_rows < object_logits.shape[0]]
-        if valid_rows.numel() > 0:
-            object_target.scatter_(0, valid_rows, 1.0)
-        object_terms = F.binary_cross_entropy_with_logits(object_logits, object_target, reduction="none")
-        object_loss = (object_terms * instance_mask.to(object_terms.dtype)).sum() / instance_mask.sum().clamp_min(1)
-    valid_matches = (
-        (matched_rows >= 0)
-        & (matched_rows < field_nll.shape[0])
-        & (matched_cols >= 0)
-        & (matched_cols < field_nll.shape[1])
-    )
-    if valid_matches.any():
-        safe_rows = matched_rows.clamp(min=0, max=field_nll.shape[0] - 1)
-        valid_matches = valid_matches & instance_mask[safe_rows]
-    valid_rows = matched_rows[valid_matches]
-    valid_cols = matched_cols[valid_matches]
-    field_loss = field_nll[valid_rows, valid_cols].mean() if valid_rows.numel() else zero
-    return {
-        "object_loss": object_loss,
-        "field_loss": field_loss,
-        "object_count": available,
-        "field_count": int(matched_cols.numel()) * int(scalar_fields.shape[0]),
-    }
-
-
 def _filter_match_indices(indices, shape, instance_mask=None):
     if len(indices) != len(shape):
         raise ValueError(f"index rank {len(indices)} does not match tensor rank {len(shape)}")
@@ -1204,15 +1077,6 @@ def dense_record_batch_loss(output) -> dict[str, torch.Tensor]:
     device = output.object_logits.device
     record_mask = output.record_mask.to(device)
     gold_indicator = output.gold_indicator.to(device)
-    n_cands_logits = output.assign_logits.shape[-1] - 1
-    n_cands_gold = gold_indicator.shape[-1]
-    if n_cands_gold > n_cands_logits:
-        gold_indicator = gold_indicator[..., :n_cands_logits]
-    elif n_cands_gold < n_cands_logits:
-        gold_indicator = torch.cat(
-            [gold_indicator, gold_indicator.new_zeros(*gold_indicator.shape[:-1], n_cands_logits - n_cands_gold)],
-            dim=-1,
-        )
     present = gold_indicator.any(-1)
     target = torch.cat(((~present).unsqueeze(-1), gold_indicator), -1)
     logp = F.log_softmax(output.assign_logits, -1)

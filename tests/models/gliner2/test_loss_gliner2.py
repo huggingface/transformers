@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from transformers import AutoConfig, Gliner2Config, Gliner2ForSchemaExtraction
+from transformers.models.gliner2.decoding_gliner2 import linear_sum_assignment
 from transformers.models.gliner2.loss_gliner2 import (
     TargetCapacityError,
     abstention_loss,
@@ -26,17 +27,15 @@ from transformers.models.gliner2.loss_gliner2 import (
     balanced_multilabel_bce,
     clamp_gold_count,
     compute_record_group_loss,
-    count_conditioned_scores,
     count_log_rate_loss,
-    dense_record_group_loss,
     head_touch,
-    linear_sum_assignment,
     select_hard_negative_candidates,
     span_count_loss,
     span_structure_loss,
     sparse_relation_loss,
     supervises_count,
 )
+from transformers.models.gliner2.modeling_gliner2 import count_conditioned_scores
 
 
 def _encoder():
@@ -176,22 +175,6 @@ class LossMathTest(unittest.TestCase):
         group.object_logits = torch.zeros(1)
         with self.assertRaises(TargetCapacityError):
             compute_record_group_loss(group, [record, record])
-        object_logits = torch.tensor([1.0, -1.0], requires_grad=True)
-        assign = torch.zeros(2, 1, 3)
-        assign[0, 0, 2] = 4.0
-        assign.requires_grad_(True)
-        gold = torch.zeros(1, 1, 2, dtype=torch.bool)
-        gold[0, 0, 1] = True
-        dense = dense_record_group_loss(
-            object_logits,
-            assign,
-            gold,
-            torch.tensor([True]),
-            torch.ones(2, dtype=torch.bool),
-            mode="latent",
-        )
-        (dense["object_loss"] + dense["field_loss"]).backward()
-        self.assertIsNotNone(object_logits.grad)
         layer = nn.Linear(2, 2)
         touched = head_touch([layer])
         self.assertEqual(float(touched), 0.0)

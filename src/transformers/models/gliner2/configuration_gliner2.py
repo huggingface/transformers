@@ -17,7 +17,7 @@ from typing import Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...utils import auto_docstring, cached_file
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
@@ -28,171 +28,171 @@ class Gliner2BoundaryConfig(PreTrainedConfig):
     Boundary-head settings. Only fields that change parameters or decoding are stored.
 
     boundary_dim (`int`, *optional*, defaults to `128`):
-        Value for `boundary_dim`.
+        Width of the boundary-token states.
     pair_dim (`int`, *optional*, defaults to `128`):
-        Value for `pair_dim`.
+        Width of the start and end pair scorer.
     boundary_refinement_layers (`int`, *optional*, defaults to `1`):
-        Value for `boundary_refinement_layers`.
+        Number of boundary-state refinement blocks.
     boundary_ffn_multiplier (`float`, *optional*, defaults to `2.0`):
-        Value for `boundary_ffn_multiplier`.
+        Expansion ratio of the boundary feed-forward.
     start_top_k (`int`, *optional*, defaults to `16`):
-        Value for `start_top_k`.
+        Start positions kept per query before pairing.
     end_top_k (`int`, *optional*, defaults to `16`):
-        Value for `end_top_k`.
+        End positions kept per query before pairing.
     ends_per_start (`int`, *optional*, defaults to `8`):
-        Value for `ends_per_start`.
+        Ends retained for each start candidate.
     starts_per_end (`int`, *optional*, defaults to `8`):
-        Value for `starts_per_end`.
+        Starts retained for each end candidate.
     candidate_budget (`int`, *optional*, defaults to `128`):
-        Value for `candidate_budget`.
+        Maximum span candidates scored per query.
     training_candidate_budget (`int`, *optional*, defaults to `160`):
-        Value for `training_candidate_budget`.
+        Candidate cap used while training.
     max_gold_per_query (`int`, *optional*, defaults to `32`):
-        Value for `max_gold_per_query`.
+        Maximum gold spans packed per query.
     end_block_size (`int`, *optional*, defaults to `256`):
-        Value for `end_block_size`.
+        Token block size of the end-position scan.
     bidirectional_proposals (`bool`, *optional*, defaults to `True`):
-        Value for `bidirectional_proposals`.
+        Propose spans from both the start side and the end side.
     use_inside_evidence (`bool`, *optional*, defaults to `True`):
-        Value for `use_inside_evidence`.
+        Include inside-span features in the pair score.
     dropout (`float`, *optional*, defaults to `0.1`):
-        Value for `dropout`.
+        Dropout probability on boundary and pair layers.
     export_mode (`str`, *optional*, defaults to `'auto'`):
-        Value for `export_mode`.
+        Proposal path: `"auto"`, `"streaming"`, or `"vectorized"`.
     vectorized_pair_elements (`int`, *optional*, defaults to `16777216`):
-        Value for `vectorized_pair_elements`.
+        Pair elements scored in one vectorized step.
     enable_span_content (`bool`, *optional*, defaults to `False`):
-        Value for `enable_span_content`.
+        Add a pooled content vector to each candidate.
     content_dim (`int`, *optional*, defaults to `64`):
-        Value for `content_dim`.
+        Width of the span-content vector.
     content_soft_max_pool (`bool`, *optional*, defaults to `False`):
-        Value for `content_soft_max_pool`.
+        Use soft max-pooling for span content.
     enable_rotary_endpoints (`bool`, *optional*, defaults to `False`):
-        Value for `enable_rotary_endpoints`.
+        Add rotary features to the start and end states.
     rotary_base (`float`, *optional*, defaults to `10000.0`):
-        Value for `rotary_base`.
+        Base of the endpoint rotary embedding.
     boundary_attention_layers (`int`, *optional*, defaults to `0`):
-        Value for `boundary_attention_layers`.
+        Local attention layers applied to boundary states.
     boundary_attention_heads (`int`, *optional*, defaults to `4`):
-        Value for `boundary_attention_heads`.
+        Number of heads in the boundary attention layers.
     boundary_attention_window (`int`, *optional*, defaults to `0`):
-        Value for `boundary_attention_window`.
+        Window of boundary attention. `0` attends over the whole sequence.
     query_conditioned_inside_weight (`bool`, *optional*, defaults to `False`):
-        Value for `query_conditioned_inside_weight`.
+        Weight inside tokens with the query.
     endpoint_difference_features (`bool`, *optional*, defaults to `False`):
-        Value for `endpoint_difference_features`.
+        Add start-minus-end features to the pair representation.
     reranker_endpoint_compat (`bool`, *optional*, defaults to `True`):
-        Value for `reranker_endpoint_compat`.
+        Keep the published endpoint-feature layout.
     multihead_pair_compat_heads (`int`, *optional*, defaults to `8`):
-        Value for `multihead_pair_compat_heads`.
+        Heads in the pair compatibility projection.
     boundary_top_k_alpha (`float`, *optional*, defaults to `0.0`):
-        Value for `boundary_top_k_alpha`.
+        Extra starts and ends added as the sequence grows.
     boundary_top_k_max (`int`, *optional*, defaults to `128`):
-        Value for `boundary_top_k_max`.
+        Cap on the length-dependent boundary top-k.
     boundary_top_k_bucket (`int`, *optional*, defaults to `8`):
-        Value for `boundary_top_k_bucket`.
+        Rounding bucket for the length-dependent top-k.
     candidate_pool (`Literal['per_query', 'shared']`, *optional*, defaults to `'per_query'`):
-        Value for `candidate_pool`.
+        `"per_query"` proposals, or one shared document pool.
     pool_boundary_top_k (`int`, *optional*, defaults to `64`):
-        Value for `pool_boundary_top_k`.
+        Boundary positions admitted to the shared pool.
     pool_size (`int`, *optional*, defaults to `384`):
-        Value for `pool_size`.
+        Maximum candidates stored in the shared pool.
     min_pool_per_query (`int`, *optional*, defaults to `8`):
-        Value for `min_pool_per_query`.
+        Minimum shared-pool slots reserved for each query.
     candidate_attention_layers (`int`, *optional*, defaults to `2`):
-        Value for `candidate_attention_layers`.
+        Attention layers over candidates in the shared pool.
     candidate_attention_heads (`int`, *optional*, defaults to `4`):
-        Value for `candidate_attention_heads`.
+        Heads in the shared-pool candidate attention.
     query_attention_layers (`int`, *optional*, defaults to `1`):
-        Value for `query_attention_layers`.
+        Query-to-candidate attention layers.
     enable_abstention (`bool`, *optional*, defaults to `True`):
-        Value for `enable_abstention`.
+        Score a null class so a query can return nothing.
     enable_count_head (`bool`, *optional*, defaults to `True`):
-        Value for `enable_count_head`.
+        Predict how many spans each query has.
     enable_records (`bool`, *optional*, defaults to `False`):
-        Value for `enable_records`.
+        Score structured records on top of the candidates.
     enable_relations (`bool`, *optional*, defaults to `False`):
-        Value for `enable_relations`.
+        Score typed relations between candidate spans.
     record_dim (`int`, *optional*, defaults to `128`):
-        Value for `record_dim`.
+        Width of the record-head states.
     record_instance_queries (`int`, *optional*, defaults to `8`):
-        Value for `record_instance_queries`.
+        Latent record slots available to each structure.
     relation_heads_per_type (`int`, *optional*, defaults to `32`):
-        Value for `relation_heads_per_type`.
+        Head candidates kept for each relation type.
     relation_tails_per_type (`int`, *optional*, defaults to `32`):
-        Value for `relation_tails_per_type`.
+        Tail candidates kept for each relation type.
     relation_pair_cap (`int`, *optional*, defaults to `128`):
-        Value for `relation_pair_cap`.
+        Maximum typed pairs scored in one document.
     relation_argument_proposal_threshold (`float`, *optional*, defaults to `0.0`):
-        Value for `relation_argument_proposal_threshold`.
+        Minimum score for a span to be a relation argument.
     directional_relation_states (`bool`, *optional*, defaults to `False`):
-        Value for `directional_relation_states`.
+        Keep separate states for the relation head and tail.
     relation_biaffine_content (`bool`, *optional*, defaults to `False`):
-        Value for `relation_biaffine_content`.
+        Add a biaffine content term to the relation score.
     pair_temperature (`float`, *optional*, defaults to `1.0`):
-        Value for `pair_temperature`.
+        Divisor applied to span-pair logits before the activation.
     relation_temperature (`float`, *optional*, defaults to `1.0`):
-        Value for `relation_temperature`.
+        Divisor applied to relation logits before the activation.
     record_temperature (`float`, *optional*, defaults to `1.0`):
-        Value for `record_temperature`.
+        Divisor applied to record logits before the activation.
     overlap_policy (`str`, *optional*, defaults to `'flat'`):
-        Value for `overlap_policy`.
+        How overlapping spans are kept: `"flat"`, `"nested"`, or `"longest"`.
     abstention_threshold (`float`, *optional*, defaults to `0.5`):
-        Value for `abstention_threshold`.
+        Null-class score above which a query returns nothing.
     record_anchor_proposal_threshold (`float`, *optional*, defaults to `0.5`):
-        Value for `record_anchor_proposal_threshold`.
+        Score that can rescue a record anchor into the proposal set.
     record_anchor_threshold (`float`, *optional*, defaults to `0.5`):
-        Value for `record_anchor_threshold`.
+        Score required to keep a record anchor.
     record_field_threshold (`float`, *optional*, defaults to `0.5`):
-        Value for `record_field_threshold`.
+        Score cutoff for record fields.
     abstention_loss_weight (`float`, *optional*, defaults to `0.2`):
-        Value for `abstention_loss_weight`.
+        Weight of the abstention loss.
     adaptive_threshold (`bool`, *optional*, defaults to `False`):
-        Value for `adaptive_threshold`.
+        Adjust the span cutoff using the count head.
     boundary_focal_clip (`float`, *optional*, defaults to `0.05`):
-        Value for `boundary_focal_clip`.
+        Minimum probability used by the boundary focal loss.
     boundary_focal_gamma_negative (`float`, *optional*, defaults to `2.0`):
-        Value for `boundary_focal_gamma_negative`.
+        Focal gamma on negative boundary labels.
     boundary_focal_gamma_positive (`float`, *optional*, defaults to `0.0`):
-        Value for `boundary_focal_gamma_positive`.
+        Focal gamma on positive boundary labels.
     boundary_marginal_loss (`str`, *optional*, defaults to `"asymmetric_focal"`):
-        Value for `boundary_marginal_loss`.
+        Boundary objective, `"bce"` or `"asymmetric_focal"`.
     boundary_negative_weight (`float`, *optional*, defaults to `0.5`):
-        Value for `boundary_negative_weight`.
+        Weight of positions that are not a boundary.
     classification_loss_weight (`float`, *optional*, defaults to `1.0`):
-        Value for `classification_loss_weight`.
+        Weight of the classification loss.
     classification_temperature (`float`, *optional*, defaults to `1.0`):
-        Value for `classification_temperature`.
+        Divisor applied to classification logits before the activation.
     consistency_loss_weight (`float`, *optional*, defaults to `0.1`):
-        Value for `consistency_loss_weight`.
+        Weight of the proposal-consistency loss.
     consistency_warmup_steps (`int`, *optional*, defaults to `2000`):
-        Value for `consistency_warmup_steps`.
+        Steps before the consistency loss reaches its full weight.
     count_loss_weight (`float`, *optional*, defaults to `0.2`):
-        Value for `count_loss_weight`.
+        Weight of the count-head loss.
     hard_negative_keep_all_when_absent (`bool`, *optional*, defaults to `True`):
-        Value for `hard_negative_keep_all_when_absent`.
+        Keep every negative span when a query has no gold span.
     hard_negatives_per_positive (`int`, *optional*, defaults to `20`):
-        Value for `hard_negatives_per_positive`.
+        Hard negatives sampled for each gold span.
     loss_reduction (`str`, *optional*, defaults to `"sum"`):
-        Value for `loss_reduction`.
+        How boundary losses are reduced across the batch.
     max_negative_queries_per_batch (`int`, *optional*, defaults to `64`):
-        Value for `max_negative_queries_per_batch`.
+        Maximum queries in a batch that have no gold spans.
     minimum_hard_negatives (`int`, *optional*, defaults to `16`):
-        Value for `minimum_hard_negatives`.
+        Minimum hard negatives kept for each query.
     negative_query_ratio (`float`, *optional*, defaults to `1.0`):
-        Value for `negative_query_ratio`.
+        Fraction of the batch reserved for queries with no gold.
     proposal_loss_weight (`float`, *optional*, defaults to `0.3`):
-        Value for `proposal_loss_weight`.
+        Weight of the boundary-proposal loss.
     record_loss_weight (`float`, *optional*, defaults to `1.0`):
-        Value for `record_loss_weight`.
+        Weight of the record loss.
     relation_loss_weight (`float`, *optional*, defaults to `1.0`):
-        Value for `relation_loss_weight`.
+        Weight of the relation loss.
     rerank_listwise_weight (`float`, *optional*, defaults to `0.3`):
-        Value for `rerank_listwise_weight`.
+        Weight of the listwise reranking loss.
     soft_iou_anneal_steps (`int`, *optional*, defaults to `20000`):
-        Value for `soft_iou_anneal_steps`.
+        Steps over which the soft-IoU loss reaches its full weight.
     soft_iou_aux_weight (`float`, *optional*, defaults to `0.2`):
-        Value for `soft_iou_aux_weight`.
+        Weight of the soft-IoU auxiliary loss.
     """
 
     model_type = "gliner2_boundary"
@@ -282,9 +282,11 @@ class Gliner2BoundaryConfig(PreTrainedConfig):
     soft_iou_aux_weight: float = 0.2
 
     def __post_init__(self, **kwargs):
+        """Finish boundary-config initialization."""
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
+        """Reject an unknown candidate pool or a non-positive temperature."""
         if self.candidate_pool not in ("per_query", "shared"):
             raise ValueError(f"candidate_pool must be 'per_query' or 'shared', got {self.candidate_pool!r}")
         if self.pair_temperature <= 0 or self.relation_temperature <= 0 or self.record_temperature <= 0:
@@ -355,6 +357,7 @@ class Gliner2Config(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        """Accept published head aliases and reject mixture-of-experts checkpoints."""
         if kwargs.pop("use_moe", False):
             raise ValueError("CountLSTMoE checkpoints are not supported")
         for key in ("model_type", "architectures", "transformers_version", "_attn_implementation_autoset"):
@@ -371,55 +374,9 @@ class Gliner2Config(PreTrainedConfig):
         if self.architecture == "boundary" and self.boundary_config is None:
             self.boundary_config = {}
         super().__post_init__(**kwargs)
-        # Published configs request sdpa. This wrapper has no attention layers.
-        if self._attn_implementation not in (None, "eager"):
-            self._attn_implementation = "eager"
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        """Load a published config, including `encoder_config/config.json`."""
-        hub = {
-            key: kwargs[key]
-            for key in (
-                "cache_dir",
-                "force_download",
-                "proxies",
-                "token",
-                "local_files_only",
-                "revision",
-                "subfolder",
-            )
-            if key in kwargs
-        }
-        config_dict, _ = cls.get_config_dict(pretrained_model_name_or_path, **dict(kwargs))
-        has_encoder = isinstance(config_dict, dict) and config_dict.get("encoder_config") is not None
-        loaded = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        if has_encoder:
-            return loaded
-        sidecar = _encoder_sidecar(pretrained_model_name_or_path, hub)
-        if sidecar is None:
-            return loaded
-        config, unused = loaded if isinstance(loaded, tuple) else (loaded, None)
-        config.encoder_config = AutoConfig.from_pretrained(sidecar, local_files_only=True)
-        config.encoder_config._attn_implementation = "eager"
-        if isinstance(loaded, tuple):
-            return config, unused
-        return config
-
-    def to_dict(self) -> dict:
-        """Write the Transformers config and the gliner2 checkpoint views."""
-        output = super().to_dict()
-        if self.boundary_config is not None:
-            output["boundary_head"] = self.boundary_config.to_dict()
-        if self.architecture == "span":
-            output["span_head"] = self.span_head or {
-                "dropout": 0.1,
-                "max_width": self.max_width,
-                "span_mode": self.span_mode,
-            }
-        return output
 
     def validate_architecture(self):
+        """Reject an unsupported architecture, span mode, or temperature."""
         if self.architecture not in ("span", "boundary"):
             raise ValueError(f"architecture must be 'span' or 'boundary', got {self.architecture!r}")
         if self.counting_layer not in ("count_lstm", "count_lstm_v2"):
@@ -434,20 +391,6 @@ class Gliner2Config(PreTrainedConfig):
             raise ValueError("max_width must be >= 1")
         if self.max_len is not None and self.max_len < 1:
             raise ValueError("max_len must be null or >= 1")
-
-
-def _encoder_sidecar(pretrained_model_name_or_path, hub: dict) -> str | None:
-    """Resolve the sibling encoder config published next to `config.json`."""
-    try:
-        return cached_file(
-            pretrained_model_name_or_path,
-            "encoder_config/config.json",
-            _raise_exceptions_for_missing_entries=False,
-            _raise_exceptions_for_connection_errors=False,
-            **hub,
-        )
-    except OSError:
-        return None
 
 
 __all__ = ["Gliner2Config", "Gliner2BoundaryConfig"]

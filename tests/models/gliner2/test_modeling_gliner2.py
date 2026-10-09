@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import AutoConfig, Gliner2Config, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_tokenizers_available
 
 from ...test_configuration_common import ConfigTester
@@ -160,30 +160,6 @@ class Gliner2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.assertTrue(any(name.startswith("boundary_head.") for name in names))
         self.assertIsNone(model.record_decoder)
 
-    @unittest.skip("GLiNER2 has no training loss in this port")
-    def test_training(self):
-        pass
-
-    @unittest.skip("GLiNER2 has no training loss in this port")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("GLiNER2 has no training loss in this port")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip("GLiNER2 has no training loss in this port")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("GLiNER2 has no training loss in this port")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @slow
-    def test_decide_checkpoint(self):
-        self.skipTest("converted Decide weights are not published yet")
-
 
 @require_torch
 class Gliner2ConfigTest(unittest.TestCase):
@@ -213,7 +189,8 @@ class Gliner2ConfigTest(unittest.TestCase):
         self.assertEqual(config.boundary_config.pool_size, 16)
         self.assertEqual(config.boundary_config.abstention_loss_weight, 0.2)
         saved = config.to_dict()
-        self.assertIn("boundary_head", saved)
+        self.assertEqual(saved["boundary_config"]["pool_size"], 16)
+        self.assertEqual(saved["span_head"]["span_mode"], "markerV0")
         self.assertEqual(saved["model_type"], "gliner2")
         with self.assertRaises(ValueError):
             Gliner2Config(encoder_config=_tiny_encoder(), use_moe=True)
@@ -260,45 +237,6 @@ def _tiny_boundary_model(candidate_pool="per_query"):
 
 @require_torch
 class Gliner2ProposalRecallTest(unittest.TestCase):
-    def test_length_buckets_use_retained_candidates(self):
-        from types import SimpleNamespace
-
-        from transformers.models.gliner2.modeling_gliner2 import (
-            BoundaryProposals,
-            ProposalStats,
-            _proposal_diagnostic_metrics,
-        )
-
-        proposals = BoundaryProposals(
-            indices=torch.tensor([[[[0, 1], [0, 10]]]]),
-            logits=None,
-            valid_mask=torch.tensor([[[True, True]]]),
-            stats=ProposalStats(
-                boundary_score_elements=0,
-                conditional_pair_score_elements=0,
-                max_materialized_pair_elements=0,
-                retained_candidate_count=torch.tensor(2),
-                gold_hit_without_injection=torch.tensor(1),
-                gold_total=torch.tensor(3),
-                start_hit=torch.tensor(2),
-                end_hit=torch.tensor(2),
-                boundary_total=torch.tensor(3),
-                unique_candidates=torch.tensor(2),
-            ),
-        )
-        targets = SimpleNamespace(
-            mention_pairs=torch.tensor([[[[0, 1], [0, 9], [0, 10]]]]),
-            mention_mask=torch.tensor([[[True, True, True]]]),
-        )
-        metrics = _proposal_diagnostic_metrics(proposals, targets, torch.tensor([[True]]))
-        self.assertEqual(int(metrics["length_1_hit"]), 1)
-        self.assertEqual(int(metrics["length_1_total"]), 1)
-        self.assertEqual(int(metrics["length_9_plus_hit"]), 1)
-        self.assertEqual(int(metrics["length_9_plus_total"]), 2)
-        self.assertEqual(metrics["recall_length_9_plus"], 0.5)
-        self.assertEqual(metrics["proposal_oracle_recall"], 1 / 3)
-        self.assertIsNone(_proposal_diagnostic_metrics(proposals, None, torch.tensor([[True]])))
-
     def _assert_eval_labels_keep_inference_candidates(self, candidate_pool):
         torch.manual_seed(0)
         model = _tiny_boundary_model(candidate_pool).eval()
@@ -310,19 +248,10 @@ class Gliner2ProposalRecallTest(unittest.TestCase):
         bare = model(**batch)
         labeled = model(**batch, labels=labels)
         again = model(**batch)
-        self.assertIsNone(bare.boundary.metrics)
         self.assertIsNone(bare.loss)
         self.assertNotIn("metrics", bare)
         self.assertEqual(set(bare.keys()), set(again.keys()))
         self.assertTrue(set(labeled.keys()) <= set(bare.keys()) | {"loss", "losses"})
-        self.assertIsNotNone(labeled.boundary.metrics)
-        metrics = labeled.boundary.metrics
-        self.assertEqual(int(metrics["proposal_gold_total"]), 2)
-        self.assertEqual(int(metrics["length_1_total"]), 1)
-        self.assertEqual(int(metrics["length_2_total"]), 1)
-        self.assertEqual(int(metrics["length_9_plus_total"]), 0)
-        self.assertLessEqual(int(metrics["proposal_gold_hit"]), 2)
-        self.assertIn("proposal_oracle_recall", metrics)
         torch.testing.assert_close(bare.boundary.candidates.pair_logits, labeled.boundary.candidates.pair_logits)
         self.assertTrue(torch.equal(bare.boundary.candidates.indices, labeled.boundary.candidates.indices))
         self.assertTrue(torch.equal(bare.boundary.candidates.valid_mask, labeled.boundary.candidates.valid_mask))
@@ -332,34 +261,6 @@ class Gliner2ProposalRecallTest(unittest.TestCase):
 
     def test_shared_pool_eval_labels_do_not_change_candidates(self):
         self._assert_eval_labels_keep_inference_candidates("shared")
-
-    def test_recall_gate_thresholds(self):
-        import importlib.util
-        import sys
-        from pathlib import Path
-
-        path = Path(__file__).resolve().parents[3] / "examples/pytorch/schema-extraction/run_gliner2.py"
-        spec = importlib.util.spec_from_file_location("run_gliner2_example", path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        try:
-            spec.loader.exec_module(module)
-        except ImportError:
-            sys.modules.pop(spec.name, None)
-            self.skipTest("schema-extraction example dependencies are not installed")
-        rates = module.proposal_recall_rates(
-            {
-                "proposal_gold_hit": 97,
-                "proposal_gold_total": 100,
-                "length_9_plus_hit": 93,
-                "length_9_plus_total": 100,
-            }
-        )
-        self.assertEqual(module.recall_gate_exit_code(rates), 0)
-        self.assertEqual(module.recall_gate_exit_code({**rates, "dry_run_proposal_oracle_recall": 0.969}), 1)
-        self.assertEqual(module.recall_gate_exit_code({**rates, "dry_run_recall_length_9_plus": 0.929}), 1)
-        self.assertEqual(module.recall_gate_exit_code({"dry_run_proposal_oracle_recall": 1.0}), 0)
-        self.assertEqual(module.recall_gate_exit_code({}), 1)
 
 
 def _word_tokenizer():
