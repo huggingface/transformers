@@ -85,6 +85,10 @@ with torch.no_grad():
 
 [[autodoc]] WavTokenizerConfig
 
+## WavTokenizerEncoderConfig
+
+[[autodoc]] WavTokenizerEncoderConfig
+
 ## WavTokenizerFeatureExtractor
 
 [[autodoc]] WavTokenizerFeatureExtractor
