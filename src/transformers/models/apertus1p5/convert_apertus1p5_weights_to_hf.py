@@ -246,6 +246,8 @@ def build_config(
         )
     audio_config.pop("architectures", None)
     audio_config.pop("transformers_version", None)
+    # Apertus 1.5 embeds only the encoder and quantizer of the codec
+    audio_config["model_type"] = "wavtokenizer_encoder"
     # token ids and offsets: the Apertus1p5Config defaults are the verified values of the Apertus 1.5 tokenizer.
     # tie_word_embeddings must live on the composite's top-level config: it gates the lm_head <-> embed_tokens
     # tie, and tied backbones ship no `lm_head.weight` tensor.

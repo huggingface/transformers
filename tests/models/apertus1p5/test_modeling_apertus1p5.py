@@ -179,7 +179,7 @@ class Apertus1p5ModelTester:
             "resolution": self.image_size,
         }
         audio_config = {
-            "model_type": "wavtokenizer",
+            "model_type": "wavtokenizer_encoder",
             "num_filters": 8,
             "upsampling_ratios": [2, 2],  # hop_length = 4
             "hidden_size": 32,
