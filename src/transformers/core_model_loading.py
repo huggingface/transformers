@@ -1749,7 +1749,7 @@ def convert_and_load_state_dict_in_model(
     if prefetch_handles:
         from .integrations.safetensors_prefetch import attach_prefetch
 
-        prefetches = attach_prefetch(loads, prefetch_handles, copy_full=load_config.device_mesh is not None)
+        prefetches = attach_prefetch(loads, prefetch_handles)
 
     try:
         for load in loads:
