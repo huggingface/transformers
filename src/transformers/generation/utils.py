@@ -20,7 +20,7 @@ import warnings
 from collections import deque
 from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from itertools import accumulate
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -4005,15 +4005,8 @@ class GenerationMixin(ContinuousMixin):
         outputs = None
         n_matches = 0
 
-        # The number of tokens verified per step varies, as the assistant may stop early and the schedule adapts.
-        # The default `reduce-overhead` mode cannot be used here: it records a cudagraph, which needs a static shape
-        # and cannot contain the device-to-host syncs some layers do on a multi-token forward. `default` leaves
-        # dynamo's automatic dynamic shapes on, which settles on a handful of graphs. Prefill keeps running eagerly.
-        compile_config = generation_config.compile_config
-        if compile_config is None:
-            compile_config = replace(self._default_compile_config(), mode="default")
         model_forward = (
-            self.get_compiled_call(compile_config)
+            self.get_compiled_call(generation_config.compile_config)
             if self._valid_auto_compile_criteria(model_kwargs, generation_config)
             else self.__call__
         )
@@ -4067,8 +4060,15 @@ class GenerationMixin(ContinuousMixin):
             if candidate_generator.requires_model_outputs:
                 model_inputs |= candidate_generator.model_kwargs_overrides
 
-            # 2.2. Run a forward pass on the candidate sequence
-            outputs = (self.__call__ if is_first_iteration else model_forward)(**model_inputs)
+            # 2.2. Run a forward pass on the candidate sequence. Verification forwards are short, like the decode
+            # steps of `_sample`, so they want the same MoE experts kernel — `_optimize_model_for_decode` swaps
+            # `grouped_mm` for `batched_mm`. The prefill is exempt: it would materialize one expert weight per
+            # prompt token. This also keeps the forward capturable, as `grouped_mm` reads its offsets on the host.
+            if is_first_iteration:
+                outputs = self(**model_inputs)
+            else:
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs)
 
             # 2.3. The cache must be able to roll back the drafts we are about to reject. Some layers only know whether
             # they can once they hold states (e.g. linear attention, which cannot roll back a recurrent state), so this
