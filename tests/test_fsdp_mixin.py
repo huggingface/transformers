@@ -17,7 +17,6 @@
 import json
 import logging
 import os
-import socket
 import sys
 import tempfile
 import time
@@ -154,17 +153,22 @@ def _deterministic_init_model_dir(rank, config, dtype):
         yield model_dir
 
 
-def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_size, port, results_file):
+def _fsdp_global_wrapper(
+    rank, test_name, func, func_args, func_kwargs, world_size, store_host, store_port, results_file
+):
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["RANK"] = str(rank)
     os.environ["LOCAL_RANK"] = str(rank)
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(port)
+    os.environ["MASTER_ADDR"] = store_host
+    os.environ["MASTER_PORT"] = str(store_port)
 
     _set_determinism(SEED)
     # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank)
-    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
+    rendezvous_store = dist.TCPStore(store_host, store_port, world_size=None, is_master=False)
+    dist.init_process_group(
+        backend=_get_distributed_backend(), store=rendezvous_store, rank=rank, world_size=world_size
+    )
 
     if rank == 0:
         start_time = time.perf_counter()
@@ -662,21 +666,29 @@ class FSDPTesterMixin(ABC):
         func_args = (config_class, config_dict, *test_args)
 
         results_file = tempfile.mktemp(suffix=".json")
-        # port binding
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
-            port = s.getsockname()[1]
+        # Keep the rendezvous server alive while ranks start so another xdist worker cannot claim its port.
+        rendezvous_store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_for_workers=False)
 
         try:
             mp.spawn(
                 _fsdp_global_wrapper,
-                args=(test_name, test_impl, func_args, test_kwargs, world_size, port, results_file),
+                args=(
+                    test_name,
+                    test_impl,
+                    func_args,
+                    test_kwargs,
+                    world_size,
+                    rendezvous_store.host,
+                    rendezvous_store.port,
+                    results_file,
+                ),
                 nprocs=world_size,
             )
 
             with open(results_file, encoding="utf-8") as f:
                 result = json.load(f)
         finally:
+            del rendezvous_store
             if os.path.exists(results_file):
                 os.unlink(results_file)
 
