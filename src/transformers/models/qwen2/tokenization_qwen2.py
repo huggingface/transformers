@@ -47,6 +47,7 @@ class Qwen2Tokenizer(TokenizersBackend):
         eos_token: str = "<|endoftext|>",
         pad_token: str = "<|endoftext|>",
         add_prefix_space=None,
+        _pretokenizer_regex: str | None = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False
@@ -75,7 +76,7 @@ class Qwen2Tokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(
-                    Regex(PRETOKENIZE_REGEX),
+                    Regex(_pretokenizer_regex or PRETOKENIZE_REGEX),
                     behavior="isolated",
                     invert=False,
                 ),
@@ -92,6 +93,7 @@ class Qwen2Tokenizer(TokenizersBackend):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
+            _pretokenizer_regex=_pretokenizer_regex,
             **kwargs,
         )
 
