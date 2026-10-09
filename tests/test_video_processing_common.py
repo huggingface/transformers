@@ -15,6 +15,7 @@
 import inspect
 import json
 import os
+import sys
 import tempfile
 import warnings
 from copy import deepcopy
@@ -23,6 +24,7 @@ import numpy as np
 import pytest
 
 from transformers import AutoVideoProcessor
+from transformers.processing_utils import VideosKwargs
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -521,3 +523,16 @@ class VideoProcessingTestMixin:
         # check that the modified attributes of the first instance are not affected by the second instance
         self.assertEqual(video_processor_1.size, modified_copied_size_1)
         self.assertEqual(video_processor_1.image_mean, modified_copied_image_mean_1)
+
+    def test_valid_kwargs_set(self):
+        """Check that valid_kwargs is set to the correct class."""
+        for video_processing_class in self.video_processor_list:
+            processor = video_processing_class(**self.video_processor_dict)
+            processor_module = sys.modules[processor.__class__.__module__]
+            # Kwargs are either called <Model>VideoProcessorInitKwargs or <Model>VideoProcessorKwargs
+            expected_kwargs_class = getattr(
+                processor_module,
+                f"{processor.__class__.__name__}InitKwargs",
+                getattr(processor_module, f"{processor.__class__.__name__}Kwargs", VideosKwargs),
+            )
+            self.assertIs(processor.valid_kwargs, expected_kwargs_class)

@@ -33,6 +33,7 @@ from transformers.models.auto.image_processing_auto import (
     IMAGE_PROCESSOR_MAPPING_NAMES,
     get_image_processor_class_from_name,
 )
+from transformers.processing_utils import ImagesKwargs
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -997,6 +998,16 @@ class ImageProcessingTestMixin:
                         f"`{method_name}`, add the `{mixin_class.__name__}` inheritance instead."
                     ),
                 )
+
+    def test_valid_kwargs_set(self):
+        """Check that valid_kwargs is set to the correct class."""
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class(**self.image_processor_dict)
+            processor_module = sys.modules[processor.__class__.__module__]
+            expected_kwargs_class = getattr(
+                processor_module, f"{processor.__class__.__name__.removesuffix('Pil')}Kwargs", ImagesKwargs
+            )
+            self.assertIs(processor.valid_kwargs, expected_kwargs_class)
 
 
 class PostProcessSemanticSegmentationTestMixin:

@@ -1525,6 +1525,7 @@ class ProcessorMixin(PushToHubMixin):
     ) -> dict[str, dict]:
         """
         Method to merge dictionaries of kwargs cleanly separated by modality within a Processor instance.
+
         The order of operations is as follows:
             1) Deprecated in favor of 2): kwargs passed as before have highest priority to preserve BC.
                 ```python
@@ -1583,7 +1584,7 @@ class ProcessorMixin(PushToHubMixin):
 
         Returns:
             output_kwargs (`Dict`):
-                Dictionary of per-modality kwargs to be passed to each modality-specific processor.
+                ProcessingKwargs dictionary including per-modality kwargs to be passed to each modality-specific processor.
 
         """
         if ModelProcessorKwargs is None:
@@ -1601,13 +1602,6 @@ class ProcessorMixin(PushToHubMixin):
             "videos_kwargs": {},
         }
 
-        default_kwargs = {
-            "text_kwargs": {},
-            "images_kwargs": {},
-            "audio_kwargs": {},
-            "videos_kwargs": {},
-        }
-
         map_preprocessor_kwargs = {
             "text_kwargs": "tokenizer",
             "images_kwargs": "image_processor",
@@ -1615,116 +1609,76 @@ class ProcessorMixin(PushToHubMixin):
             "videos_kwargs": "video_processor",
         }
 
-        processor_kwargs_defaults = getattr(ModelProcessorKwargs, "_defaults", {})
         possible_modality_keywords = {"text", "audio", "videos", "images"}
-        used_keys = set()
+
+        modality_valid_kwargs = {}
+        for modality in map_preprocessor_kwargs:
+            # typed dict from e.g. ModelProcessorKwargs.images_kwargs
+            valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            # typed dict from modality-specific processor.valid_kwargs
+            # This is necessary because processor.valid_kwargs.images_kwargs == processor.image_processor.valid_kwargs
+            # is not always the case as the image processor (or any other modality) can be from a different model.
+            # E.g. when loading the image processor from a config.
+            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+            preprocessor_valid_kwargs = getattr(getattr(preprocessor, "valid_kwargs", None), "__annotations__", {})
+            modality_valid_kwargs[modality] = set(valid_kwargs).union(preprocessor_valid_kwargs)
+
+        valid_kwarg_to_modalities = {}
+        for modality, valid_kwargs in modality_valid_kwargs.items():
+            for key in valid_kwargs:
+                valid_kwarg_to_modalities.setdefault(key, []).append(modality)
 
         # 7): flat, not modality-specific processor attributes
         for key in ModelProcessorKwargs.__annotations__:
-            if key not in default_kwargs and hasattr(self, key):
-                default_kwargs[key] = copy.copy(getattr(self, key))
+            if key not in map_preprocessor_kwargs and hasattr(self, key):
+                output_kwargs[key] = copy.copy(getattr(self, key))
 
-        # get defaults from set model processor kwargs if they exist
+        processor_kwargs_defaults = getattr(ModelProcessorKwargs, "_defaults", {})
         for modality in map_preprocessor_kwargs:
             # 7): modality-specific processor attributes
-            default_kwargs[modality].update(getattr(self, modality, {}).copy())
+            output_kwargs[modality].update(getattr(self, modality, {}).copy())
 
-            # 6): _defaults overrides for BC
-            default_kwargs[modality].update(processor_kwargs_defaults.get(modality, {}).copy())
-            # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
-            # In those cases, we don’t declare a `ModalityKwargs` attribute in the TypedDict.
-            # Instead, we dynamically obtain the kwargs from the preprocessor and merge them
-            # with the general kwargs set. This ensures consistency between preprocessor and
-            # processor classes, and helps prevent accidental mismatches.
-            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
-            if modality in map_preprocessor_kwargs:
-                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-                preprocessor_valid_kwargs = (
-                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
-                )
-                modality_valid_kwargs.update(
-                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
-                )
-            # 5): update defaults with arguments from tokenizer init
-            for modality_key in modality_valid_kwargs:
-                # init with tokenizer init kwargs if necessary
-                if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
-                    value = (
-                        getattr(self.tokenizer, modality_key)
-                        if hasattr(self.tokenizer, modality_key)
-                        else tokenizer_init_kwargs[modality_key]
-                    )
-                    default_kwargs[modality][modality_key] = value
-        # now defaults kwargs are updated with the tokenizers defaults.
-        # pass defaults to output dictionary
-        output_kwargs.update(default_kwargs)
+            # 6): _defaults overrides (BC)
+            output_kwargs[modality].update(processor_kwargs_defaults.get(modality, {}).copy())
 
-        # 4): For `_defaults.common_kwargs` update all modality-specific kwargs with same key/values
+        # 5): update defaults with arguments from tokenizer init
+        if tokenizer_init_kwargs is not None:
+            for key in modality_valid_kwargs["text_kwargs"]:
+                if key in tokenizer_init_kwargs:
+                    output_kwargs["text_kwargs"][key] = getattr(self.tokenizer, key, tokenizer_init_kwargs[key])
+
+        # 4): `_defaults.common_kwargs` overrides (BC)
         common_kwargs = processor_kwargs_defaults.get("common_kwargs", {}).copy()
-        # 3): Explicit common_kwargs override
-        common_kwargs.update(kwargs.get("common_kwargs", {}))
-        if common_kwargs:
-            for modality in map_preprocessor_kwargs:
-                output_kwargs[modality].update(common_kwargs)
-
-        # update modality kwargs with passed kwargs
-        non_modality_kwargs = set(kwargs) - set(output_kwargs)
+        # 3): common_kwargs passed by user (BC)
+        common_kwargs.update(kwargs.pop("common_kwargs", {}))
         for modality in map_preprocessor_kwargs:
-            output_kwarg = output_kwargs[modality]
-            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
-            if modality in map_preprocessor_kwargs:
-                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-                preprocessor_valid_kwargs = (
-                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
-                )
-                modality_valid_kwargs.update(
-                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
-                )
-            for modality_key in modality_valid_kwargs:
-                # 2): check if we received a structured kwarg dict or not to handle it correctly
-                if modality in kwargs:
-                    kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
-                    # check if this key was passed as a flat kwarg.
-                    if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
+            output_kwargs[modality].update(common_kwargs)
+
+        # kwargs passed by user
+        for key, value in kwargs.items():
+            if key in modality_valid_kwargs:
+                # 2) key is modality-specific kwarg, e.g. "text_kwargs"
+                modality = key
+                for subkey, subvalue in value.items():
+                    if subkey in kwargs and subkey not in ModelProcessorKwargs.__annotations__:
                         raise ValueError(
-                            f"Keyword argument {modality_key} was passed two times:\n"
+                            f"Keyword argument {subkey} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
-                    # fall back to the flat kwarg when the modality dict is present but doesn't carry this key
-                    if kwarg_value == "__empty__" and modality_key in non_modality_kwargs:
-                        kwarg_value = kwargs[modality_key]
-                # 1): flat kwargs
-                elif modality_key in kwargs:
-                    # we get a modality_key instead of popping it because modality-specific processors
-                    # can have overlapping kwargs
-                    kwarg_value = kwargs.get(modality_key, "__empty__")
-                else:
-                    kwarg_value = "__empty__"
-                if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
-                    output_kwarg[modality_key] = kwarg_value
-                    used_keys.add(modality_key)
+                    output_kwargs[modality][subkey] = subvalue
+            elif key in ModelProcessorKwargs.__annotations__:
+                # 1) key is a processor kwarg, don't propagate to modality-specific kwargs
+                output_kwargs[key] = value
+            elif key in valid_kwarg_to_modalities:
+                # 1) key is a valid kwarg for one or more modality-specific kwargs (BC)
+                for modality in valid_kwarg_to_modalities[key]:
+                    output_kwargs[modality][key] = value
+            elif key not in possible_modality_keywords:
+                logger.warning_once(
+                    f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                )
 
-        # Determine if kwargs is a flat dictionary or contains nested dictionaries
-        if any(key in default_kwargs for key in kwargs):
-            # Preserve processor-level kwargs and merge nested modality kwargs.
-            for key, value in kwargs.items():
-                if key in map_preprocessor_kwargs:
-                    for subkey, subvalue in value.items():
-                        if subkey not in used_keys:
-                            output_kwargs[key][subkey] = subvalue
-                            used_keys.add(subkey)
-                elif key in default_kwargs:
-                    output_kwargs[key] = value
-                    used_keys.add(key)
-        else:
-            # kwargs is a flat dictionary
-            for key in kwargs:
-                if key not in used_keys and key not in possible_modality_keywords:
-                    logger.warning_once(
-                        f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
-                    )
-
-        # Validate flat kwargs
+        # Validate flat processor kwargs
         flat_kwargs = {
             key: value
             for key, value in output_kwargs.items()
@@ -1733,16 +1687,20 @@ class ProcessorMixin(PushToHubMixin):
         validate_typed_dict(ModelProcessorKwargs, flat_kwargs)
 
         # Validate modality-specific kwargs
-        for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
-            if key not in map_preprocessor_kwargs:
+        for modality, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
+            if modality not in map_preprocessor_kwargs:
                 continue
 
-            preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
+            # Same trick as for modality_valid_kwargs. Processor and preprocessor kwargs
+            # are not necessarily the same.
+            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
             if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
                 continue
             preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
             typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
-            validate_typed_dict(typed_dict_obj, output_kwargs[key])
+
+            validate_typed_dict(typed_dict_obj, output_kwargs[modality])
+
         return output_kwargs
 
     @classmethod

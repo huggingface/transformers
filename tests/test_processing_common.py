@@ -28,7 +28,7 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import ProcessorMixin
-from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
+from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING, ProcessingKwargs
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_librosa,
@@ -77,11 +77,13 @@ MODALITY_TEST_SPECS = {
         "component_key": "tokenizer",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
     "images": {
         "component_key": "image_processor",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
+        "valid_kwargs_key": "valid_kwargs",
     },
     "videos": {
         "component_key": "video_processor",
@@ -92,6 +94,7 @@ MODALITY_TEST_SPECS = {
             "do_rescale": True,
             "rescale_factor": -1.0,
         },
+        "valid_kwargs_key": "valid_kwargs",
     },
     "audio": {
         # Either a raw feature_extractor or an audio_processor attribute
@@ -99,6 +102,7 @@ MODALITY_TEST_SPECS = {
         "component_key": None,
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
 }
 
@@ -1866,13 +1870,13 @@ class ProcessorTesterMixin:
                 continue
 
             # Don't allow defaults if there is no subprocessor for that modality
-            subprocessor_class_name = self.get_subprocessor_name(modality, processor_class.get_attributes())
-            if not hasattr(processor, subprocessor_class_name):
+            subprocessor_attr_name = self.get_subprocessor_name(modality, processor_class.get_attributes())
+            if not hasattr(processor, subprocessor_attr_name):
                 raise ValueError(
-                    f"`{processor_class_name}` has default `{kwargs_name}` but no `{subprocessor_class_name}`"
+                    f"`{processor_class_name}` has default `{kwargs_name}` but no `{subprocessor_attr_name}`"
                 )
 
-            subprocessor = getattr(processor, subprocessor_class_name)
+            subprocessor = getattr(processor, subprocessor_attr_name)
             subprocessor_class_name = subprocessor.__class__.__name__
 
             # Defaults must not be identical to the subprocessor's defaults, otherwise they are redundant.
@@ -1904,3 +1908,10 @@ class ProcessorTesterMixin:
                             f"and remove the redundant default from `{processor_class_name}`."
                         ),
                     )
+
+    def test_valid_processor_kwargs_set(self):
+        """Check that processor.valid_processor_kwargs is set to the correct class."""
+        processor = self.get_processor()
+        processor_module = sys.modules[processor.__class__.__module__]
+        expected_kwargs_class = getattr(processor_module, f"{processor.__class__.__name__}Kwargs", ProcessingKwargs)
+        self.assertIs(processor.valid_processor_kwargs, expected_kwargs_class)

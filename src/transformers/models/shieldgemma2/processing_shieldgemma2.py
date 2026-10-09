@@ -32,17 +32,17 @@ logger = logging.get_logger(__name__)
 
 class ShieldGemma2ProcessorKwargs(ProcessingKwargs, total=False):
     r"""
-    policies (`Sequence[str]`, *optional*):
+    policies (`list[str]`, *optional*):
         Keys in the joint `self.policy_definitions | custom_policies` dictionary of specific interest
         for the provided images. If `None`, prompts will be generated for every key in the joint dictionary.
-    custom_policies (`Mapping[str, str]`, *optional*):
+    custom_policies (`dict[str, str]`, *optional*):
         Additional policy definitions that augment the `self.policy_definitions` passed
         into the constructor. Note that `custom_policies` that share a key with `self.policy_definitions`
         will override the policy description.
     """
 
-    policies: Sequence[str] | None
-    custom_policies: Mapping[str, str] | None
+    policies: list[str] | None
+    custom_policies: dict[str, str] | None
 
 
 DEFAULT_SHIELDGEMMA2_POLICIES = {
