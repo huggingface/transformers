@@ -155,6 +155,15 @@ class TensorParallelLayer:
     def transform_output_post_forward(self, module, output, mesh):
         return output
 
+    @staticmethod
+    def _from_local_last_dim_shard(local, mesh, placement, size):
+        """Wrap this rank's slice of a tensor split along its last dim. The full width ``size`` is passed explicitly:
+        `from_local` would otherwise assume even shards and keep the padding of an uneven last shard."""
+        shape = (*local.shape[:-1], size)
+        return DTensor.from_local(
+            local, mesh, [placement], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
+        )
+
     def install_forward(self, module, mesh):
         """Install pre / around / post transforms by replacing module.forward."""
         original_forward = module.forward
@@ -167,20 +176,6 @@ class TensorParallelLayer:
 
         module.forward = tp_forward
         return module
-
-
-def _from_local_last_dim_shard(local, mesh, placement, size):
-    """Wrap this rank's slice of a tensor split along its last dim, whose full width is ``size``.
-
-    DTensor handles uneven shards (the last rank's slice is shorter when ``size`` does not divide by
-    the world size): it pads before a collective and trims after, to the global shape. But
-    ``from_local`` only sees this rank's slice, so unless told the global shape it assumes every rank
-    holds the same width (``local width * world size``), and the trim then keeps the padding. The
-    shape is therefore passed explicitly."""
-    shape = (*local.shape[:-1], size)
-    return DTensor.from_local(
-        local, mesh, [placement], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
-    )
 
 
 class ColwiseParallel(TensorParallelLayer):
@@ -250,7 +245,7 @@ class ColwiseParallel(TensorParallelLayer):
                 else getattr(module, "out_features", None)
             )
             if size is not None:
-                output = _from_local_last_dim_shard(output, mesh, Shard(-1), size)
+                output = self._from_local_last_dim_shard(output, mesh, Shard(-1), size)
             else:
                 output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
         if output.placements != (self.output_layouts,):
@@ -303,7 +298,7 @@ class RowwiseParallel(TensorParallelLayer):
             # the input is this rank's slice of the module's declared `in_features`
             size = getattr(module, "in_features", None)
             if isinstance(self.input_layouts, Shard) and size is not None:
-                x = _from_local_last_dim_shard(x, mesh, self.input_layouts, size)
+                x = self._from_local_last_dim_shard(x, mesh, self.input_layouts, size)
             else:
                 x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
