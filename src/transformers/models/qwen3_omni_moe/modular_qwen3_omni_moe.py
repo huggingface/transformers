@@ -1262,6 +1262,10 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | MoeModelOutputWithPast:
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -1436,11 +1440,10 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             video_second_per_grid=video_second_per_grid,
             mm_encoder_outputs=mm_encoder_outputs,
             output_router_logits=output_router_logits,
-            return_dict=True,
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state
+        hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
 
         loss = None

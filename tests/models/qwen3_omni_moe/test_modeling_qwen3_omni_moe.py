@@ -28,6 +28,7 @@ from transformers import (
     Qwen3OmniMoeForConditionalGeneration,
     Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeThinkerForConditionalGeneration,
+    Qwen3OmniMoeThinkerModel,
     is_torch_available,
     is_vision_available,
 )
@@ -266,7 +267,14 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     Model tester for `Qwen3OmniMoeThinkerForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Qwen3OmniMoeThinkerModel,
+            Qwen3OmniMoeThinkerForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
     skip_test_audio_features_output_shape = True  # Qwen3OmniMoe merges batch_size and audio_output_lengths in index 0
     _is_composite = True
@@ -309,6 +317,12 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip(
+        reason="Qwen3-Omni's `get_rope_index` doesn't accept the forward inputs (e.g. `input_features`) the common test passes it"
+    )
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -326,22 +340,22 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.model.language_model._supports_sdpa else "eager"
-                audio_attn = "sdpa" if model.model.audio_tower._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.model.visual._supports_sdpa else "eager"
+                text_attn = "sdpa" if model.base_model.language_model._supports_sdpa else "eager"
+                audio_attn = "sdpa" if model.base_model.audio_tower._supports_sdpa else "eager"
+                vision_attn = "sdpa" if model.base_model.visual._supports_sdpa else "eager"
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.model.audio_tower.config._attn_implementation == audio_attn)
-                self.assertTrue(model.model.visual.config._attn_implementation == vision_attn)
+                self.assertTrue(model.base_model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(model.base_model.audio_tower.config._attn_implementation == audio_attn)
+                self.assertTrue(model.base_model.visual.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.model.language_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.model.audio_tower.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.model.visual.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.audio_tower.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.visual.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
@@ -459,10 +473,6 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
     @unittest.skip("We don't really care about this one, test is not that slow")
     def test_model_is_small(self):
-        pass
-
-    @unittest.skip("`base_model_prefix` locates the thinker in the Omni checkpoint, not the base model attribute")
-    def test_model_base_model_prefix(self):
         pass
 
     @unittest.skip("FIXME this is important, but in a rush to merge, cannot investigate now")

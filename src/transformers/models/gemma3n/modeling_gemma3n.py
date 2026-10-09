@@ -2229,6 +2229,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        per_layer_inputs: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nCausalLMOutputWithPast:
@@ -2240,6 +2241,12 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in
             `[0, ..., config.text_config.vocab_size]`.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from
+            `input_ids` via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds`
+            instead of `input_ids`, you should precompute them and forward them along `inputs_embeds`, otherwise the
+            token-identity component of the per-layer embeddings is omitted.
 
         Example:
 
@@ -2290,6 +2297,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
+            per_layer_inputs=per_layer_inputs,
             labels=labels,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,

@@ -60,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_moe": "qwen2_moe",
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
+    "qwen3_omni_moe_text": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
@@ -130,6 +131,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    "qwen2_5_omni_thinker": "Qwen2_5OmniThinkerForConditionalGeneration",
+    "Qwen3OmniMoeThinkerModel": "Qwen2_5OmniThinkerModel",
+    "Qwen3OmniMoeThinkerForConditionalGeneration": "Qwen2_5OmniThinkerForConditionalGeneration",
     "Tipsv2VisionBackbone": "Tipsv2VisionModel",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "ASTModel": "ViTModel",
@@ -829,16 +833,18 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
             ),
         ],
-        "qwen2_5_omni_thinker": [
-            WeightRenaming(source_patterns=r"^(thinker\.|)audio_tower", target_patterns=r"\1model.audio_tower"),
-            WeightRenaming(source_patterns=r"^(thinker\.|)visual", target_patterns=r"\1model.visual"),
-            WeightRenaming(
-                source_patterns=r"^(thinker\.|)model(?!\.(language_model|visual|audio_tower))",
-                target_patterns=r"\1model.model",
-            ),
-        ],
         "Qwen2_5OmniThinkerModel": [
-            WeightRenaming(source_patterns=r"^(thinker\.|)model", target_patterns=r"\1language_model"),
+            PrefixChange(prefix_to_remove="thinker"),
+            PrefixChange(prefix_to_add="language_model", model_prefix="model"),
+        ],
+        "Qwen2_5OmniThinkerForConditionalGeneration": [
+            PrefixChange(prefix_to_remove="thinker"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|visual|audio_tower))",
+                target_patterns="model.language_model",
+            ),
         ],
         "deepseek_ocr2": [
             WeightRenaming(
@@ -1880,8 +1886,6 @@ def _build_checkpoint_conversion_mapping():
     mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
 
     mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
-    mapping["qwen3_omni_moe_thinker"] = mapping["qwen2_5_omni_thinker"].copy() + mapping["qwen2_moe"].copy()
-    mapping["Qwen3OmniMoeThinkerModel"] = mapping["Qwen2_5OmniThinkerModel"].copy() + mapping["qwen2_moe"].copy()
 
     # The pp_doclayout_v4-specific reading order renames are defined in the mapping literal above; it also
     # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.

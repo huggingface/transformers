@@ -28,6 +28,7 @@ from transformers import (
     Qwen2_5OmniForConditionalGeneration,
     Qwen2_5OmniThinkerConfig,
     Qwen2_5OmniThinkerForConditionalGeneration,
+    Qwen2_5OmniThinkerModel,
     is_torch_available,
     is_vision_available,
 )
@@ -256,7 +257,14 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
     Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Qwen2_5OmniThinkerModel,
+            Qwen2_5OmniThinkerForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
     # pipeline_model_mapping = (
     #     {
@@ -305,8 +313,10 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip("`base_model_prefix` locates the thinker in the Omni checkpoint, not the base model attribute")
-    def test_model_base_model_prefix(self):
+    @unittest.skip(
+        reason="Qwen2.5-Omni's `get_rope_index` doesn't accept the forward inputs (e.g. `input_features`) the common test passes it"
+    )
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
@@ -326,22 +336,22 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.model.language_model._supports_sdpa else "eager"
-                audio_attn = "sdpa" if model.model.audio_tower._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.model.visual._supports_sdpa else "eager"
+                text_attn = "sdpa" if model.base_model.language_model._supports_sdpa else "eager"
+                audio_attn = "sdpa" if model.base_model.audio_tower._supports_sdpa else "eager"
+                vision_attn = "sdpa" if model.base_model.visual._supports_sdpa else "eager"
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.model.audio_tower.config._attn_implementation == audio_attn)
-                self.assertTrue(model.model.visual.config._attn_implementation == vision_attn)
+                self.assertTrue(model.base_model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(model.base_model.audio_tower.config._attn_implementation == audio_attn)
+                self.assertTrue(model.base_model.visual.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.model.language_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.model.audio_tower.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.model.visual.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.audio_tower.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.visual.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
