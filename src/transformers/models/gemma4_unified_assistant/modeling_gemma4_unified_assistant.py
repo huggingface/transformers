@@ -184,6 +184,11 @@ class Gemma4UnifiedAssistantForCausalLM(Gemma4UnifiedAssistantPreTrainedModel, G
         inputs_embeds = self.pre_projection(inputs_embeds)
         bidirectional_masks = self.create_attention_masks(inputs_embeds, attention_mask, shared_kv_states)
 
+        # The assistant always attends bidirectionally over `shared_kv_states` (see `create_attention_masks`). The
+        # backbone text layers are causal by default, so force `is_causal=False`: otherwise a skipped (`None`)
+        # bidirectional mask, e.g. when there is no padding, is reinterpreted as causal by SDPA / flash attention.
+        kwargs["is_causal"] = False
+
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=None,
             inputs_embeds=inputs_embeds,
