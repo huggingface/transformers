@@ -163,7 +163,7 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip("HiggsAudioV2TokenizerModel cannot be tested with meta device")
     def test_can_load_with_meta_device_context_manager(self):

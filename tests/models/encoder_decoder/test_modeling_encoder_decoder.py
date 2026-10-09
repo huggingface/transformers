@@ -561,7 +561,7 @@ class EncoderDecoderMixin:
 
         model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         model.to(torch_device)
-        model.gradient_checkpointing_enable()
+        model.activation_checkpointing_enable()
         model.train()
 
         model.config.decoder_start_token_id = 0
