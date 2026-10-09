@@ -749,9 +749,16 @@ class Trainer:
         if self.args.ddp_find_unused_parameters is not None:
             find_unused = self.args.ddp_find_unused_parameters
         elif isinstance(self.model, PreTrainedModel):
-            # find_unused_parameters breaks checkpointing as per
-            # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-            find_unused = not (self.model.is_gradient_checkpointing or self.args.gradient_checkpointing)
+            find_unused = not self.model.is_gradient_checkpointing
+            if self.args.gradient_checkpointing:
+                gc_kwargs = dict(self.args.gradient_checkpointing_kwargs or {})
+                gc_kwargs.pop("every_n_layers", None)
+                gc_kwargs.pop("offload", None)
+                use_reentrant = gc_kwargs.get("use_reentrant", True) is not False if gc_kwargs else False
+                uses_legacy_format = "value" in inspect.signature(self.model._set_gradient_checkpointing).parameters
+                # Only reentrant checkpointing conflicts with unused-parameter detection.
+                # Legacy models ignore gradient_checkpointing_kwargs, so keep their previous default.
+                find_unused = not (use_reentrant or uses_legacy_format)
         else:
             find_unused = True
 
