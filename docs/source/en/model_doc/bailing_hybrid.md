@@ -27,7 +27,7 @@ The native Transformers architecture is exposed as `BailingHybridForCausalLM` an
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-model_id = "inclusionAI/Ling-3.0-flash"
+model_id = "inclusionAI/Ling-3.0-Flash"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
 

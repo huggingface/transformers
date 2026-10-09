@@ -1883,6 +1883,17 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"self_attn\.f_b_proj\.", r"self_attn.forget_gate.f_b_proj."),
         WeightRenaming(r"self_attn\.dt_bias", r"self_attn.forget_gate.dt_bias"),
         WeightRenaming(r"self_attn\.A_log", r"self_attn.forget_gate.A_log"),
+        # Suffix-only patterns keep this converter reversible across the attention -> self_attn rename.
+        # Pack the official q/k/v kernels once at load time for a single runtime depthwise convolution.
+        WeightConverter(
+            source_patterns=[
+                "q_conv1d.weight",
+                "k_conv1d.weight",
+                "v_conv1d.weight",
+            ],
+            target_patterns="conv1d.weight",
+            operations=[Concatenate(dim=0)],
+        ),
         WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
         WeightRenaming(r"\.mlp\.gate\.expert_bias$", ".mlp.gate.e_score_correction_bias"),
     ]
