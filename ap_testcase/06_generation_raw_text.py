@@ -78,33 +78,42 @@ def case_3_audio_prompt(processor, model):
 def case_4_batch_parity(processor, model):
     """CASE 4: BATCH PARITY
 
-    Match batched and per-sample generations.
+    Match greedy and beam generations with uneven image/audio groups to per-sample runs.
     """
-    image = test_image()
-    audio = test_audio()
-    texts = ["<|image|> The image shows", "<|audio|> The audio contains"]
+    image = test_image().resize((64, 64))
+    audio = test_audio()[:2400]
+    texts = [
+        "The capital of France is",
+        "<|image|><|image|><|audio|><|audio|> Describe these inputs.",
+        "<|image|> The image shows",
+        "<|audio|> The audio contains",
+    ]
+    images = [[], [image, test_image().resize((64, 80))], [image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)], []]
+    audios = [[], [audio, audio[:1800]], [], [audio]]
+    processor_kwargs = {"images_kwargs": {"do_resize": False}, "return_tensors": "pt"}
     batched = processor(
         text=texts,
-        images=[[image], []],
-        audio=[[], [audio]],
+        images=images,
+        audio=audios,
         padding=True,
-        return_tensors="pt",
+        **processor_kwargs,
     )
-    with torch.no_grad():
-        output = model.generate(**batched, max_new_tokens=10, do_sample=False)
-    batched_completions = decode_new(processor, output, batched)
-
-    single_completions = []
-    for text, media in zip(texts, [{"images": [image]}, {"audio": [audio]}]):
-        inputs = processor(text=text, **media, return_tensors="pt")
+    for num_beams in (1, 2):
+        options = {"max_new_tokens": 2, "do_sample": False, "num_beams": num_beams}
         with torch.no_grad():
-            output = model.generate(**inputs, max_new_tokens=10, do_sample=False)
-        single_completions.append(decode_new(processor, output, inputs)[0])
+            output = model.generate(**batched, **options)
+        batched_tokens = output[:, batched["input_ids"].shape[1] :].tolist()
 
-    assert batched_completions == single_completions, (
-        f"batched {batched_completions} != per-sample {single_completions}"
-    )
-    return f"matched completions {batched_completions}"
+        single_tokens = []
+        for text, sample_images, sample_audio in zip(texts, images, audios):
+            inputs = processor(text=text, images=sample_images or None, audio=sample_audio or None, **processor_kwargs)
+            with torch.no_grad():
+                output = model.generate(**inputs, **options)
+            single_tokens.append(output[0, inputs["input_ids"].shape[1] :].tolist())
+        assert batched_tokens == single_tokens, (
+            f"num_beams={num_beams}: batched {batched_tokens} != per-sample {single_tokens}"
+        )
+    return "greedy and beam-2 match for text-only, image-only, audio-only and multiple-media prompts"
 
 
 def main():
