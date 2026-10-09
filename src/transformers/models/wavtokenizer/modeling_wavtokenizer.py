@@ -28,7 +28,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from .configuration_wavtokenizer import WavTokenizerConfig
+from .configuration_wavtokenizer import WavTokenizerConfig, WavTokenizerEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -539,12 +539,13 @@ class WavTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
 )
 class WavTokenizerEncoderModel(WavTokenizerPreTrainedModel):
+    config: WavTokenizerEncoderConfig
     _keys_to_ignore_on_load_unexpected = [
         r"^backbone\.",
         r"^head\.",
     ]
 
-    def __init__(self, config: WavTokenizerConfig):
+    def __init__(self, config: WavTokenizerEncoderConfig):
         super().__init__(config)
         self.hop_length = config.hop_length
         self.encoder = WavTokenizerEncoder(config)
@@ -612,7 +613,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         super().__init__(config)
         self.hop_length = config.hop_length
 
-        self.encoder_model = WavTokenizerEncoderModel(config)
+        self.encoder_model = WavTokenizerEncoderModel(config.encoder_config)
         self.backbone = WavTokenizerVocosBackbone(config)
         self.head = WavTokenizerISTFTHead(config)
 

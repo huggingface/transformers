@@ -174,6 +174,60 @@ class WavTokenizerConfig(PreTrainedConfig):
     def frame_rate(self) -> int:
         return math.ceil(self.sampling_rate / self.hop_length)
 
+    @property
+    def encoder_config(self):
+        config_dict = self.to_dict()
+        # `to_dict` stores the full codec's model type; the encoder config keeps its own
+        config_dict.pop("model_type")
+        return WavTokenizerEncoderConfig(**config_dict)
+
+
+@auto_docstring(
+    checkpoint="swiss-ai/wavtokenizer-large-unify-40token",
+    custom_intro="""
+    Configuration of [`WavTokenizerEncoderModel`]. It shares every field with [`WavTokenizerConfig`], so it can be
+    loaded from a full WavTokenizer checkpoint.
+    """,
+)
+@strict
+class WavTokenizerEncoderConfig(WavTokenizerConfig):
+    r"""
+    num_filters (`int`, *optional*, defaults to 32):
+        Number of convolution kernels of the first `WavTokenizerConv1d` down sampling layer.
+    upsampling_ratios (`list[int]`, *optional*, defaults to `[6, 5, 5, 4]`):
+        Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
+        will use the ratios in the reverse order to the ones specified here that must match the decoder order.
+        The product (600 by default) is the hop length: the number of audio samples represented by a single code.
+    num_residual_layers (`int`, *optional*, defaults to 1):
+        Number of residual layers in each encoder stage.
+    dilation_growth_rate (`int`, *optional*, defaults to 2):
+        How much to increase the dilation with each residual layer in the encoder.
+    compress (`int`, *optional*, defaults to 2):
+        Reduced dimensionality in residual branches.
+    use_conv_shortcut (`bool`, *optional*, defaults to `True`):
+        Whether to use a convolutional layer as the (skip) shortcut in the residual blocks. If False, an identity
+        function will be used, giving a generic residual connection.
+    use_causal_conv (`bool`, *optional*, defaults to `False`):
+        Whether to use fully causal convolution.
+    pad_mode (`str`, *optional*, defaults to `"reflect"`):
+        Padding mode for the convolutions.
+    norm_type (`str`, *optional*, defaults to `"weight_norm"`):
+        Normalization method for the encoder convolutions. Should be in `["weight_norm", "time_group_norm"]`.
+    last_kernel_size (`int`, *optional*, defaults to 7):
+        Kernel size for the last encoder convolution.
+    residual_kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size for the residual layers of the encoder.
+    num_lstm_layers (`int`, *optional*, defaults to 2):
+        Number of LSTM layers at the end of the encoder.
+    adanorm_num_embeddings (`int`, *optional*, defaults to 4):
+        Number of condition embeddings of the decoder's adaptive layer norms. Conditioning is a training-time
+        feature (one embedding per bandwidth); inference always uses embedding 0.
+    decoder_attention_num_groups (`int`, *optional*, defaults to 32):
+        Number of groups of the decoder GroupNorm layers.
+    """
+
+    model_type = "wavtokenizer_encoder"
+
 
 @auto_docstring
 @dataclass
@@ -398,12 +452,13 @@ class WavTokenizerPreTrainedModel(EncodecPreTrainedModel):
     """
 )
 class WavTokenizerEncoderModel(WavTokenizerPreTrainedModel):
+    config: WavTokenizerEncoderConfig
     _keys_to_ignore_on_load_unexpected = [
         r"^backbone\.",
         r"^head\.",
     ]
 
-    def __init__(self, config: WavTokenizerConfig):
+    def __init__(self, config: WavTokenizerEncoderConfig):
         super().__init__(config)
         self.hop_length = config.hop_length
         self.encoder = WavTokenizerEncoder(config)
@@ -471,7 +526,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         super().__init__(config)
         self.hop_length = config.hop_length
 
-        self.encoder_model = WavTokenizerEncoderModel(config)
+        self.encoder_model = WavTokenizerEncoderModel(config.encoder_config)
         self.backbone = WavTokenizerVocosBackbone(config)
         self.head = WavTokenizerISTFTHead(config)
 
@@ -542,6 +597,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
 
 __all__ = [
     "WavTokenizerConfig",
+    "WavTokenizerEncoderConfig",
     "WavTokenizerEncoderModel",
     "WavTokenizerModel",
     "WavTokenizerPreTrainedModel",
