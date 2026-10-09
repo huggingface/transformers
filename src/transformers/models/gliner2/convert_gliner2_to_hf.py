@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert a GLiNER2 checkpoint into a native Transformers checkpoint."""
-
 import argparse
 import json
 import shutil
 from pathlib import Path
 
 from transformers import AutoConfig, Gliner2Config
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.models.gliner2.configuration_gliner2 import Gliner2BoundaryConfig
 
 
@@ -51,15 +50,26 @@ print(extractor("Ada Lovelace wrote notes about the analytical engine.", schema=
 """
 
 
+def _config_from_payload(payload: dict):
+    """Build an encoder config from an inlined ``config.json`` object."""
+    model_type = payload.get("model_type")
+    if model_type not in CONFIG_MAPPING:
+        raise ValueError(f"unsupported encoder model_type {model_type!r}")
+    return CONFIG_MAPPING[model_type].from_dict(payload)
+
+
 def _encoder_config(source: Path, raw: dict):
-    """Load the encoder config shipped beside the checkpoint."""
+    """Inline ``encoder_config/config.json`` from the checkpoint directory."""
     nested = source / "encoder_config" / "config.json"
     if nested.is_file():
-        return AutoConfig.from_pretrained(nested.parent)
+        return _config_from_payload(json.loads(nested.read_text()))
+    inline = raw.get("encoder_config")
+    if isinstance(inline, dict) and inline.get("model_type"):
+        return _config_from_payload(inline)
     name = raw.get("model_name")
     if not name:
         raise ValueError(f"{source} has no encoder_config and no model_name")
-    return AutoConfig.from_pretrained(name)
+    return AutoConfig.from_pretrained(name, local_files_only=True)
 
 
 def _boundary_config(raw: dict):
@@ -71,6 +81,24 @@ def _boundary_config(raw: dict):
     return {key: value for key, value in head.items() if key in known}
 
 
+def _max_len(raw: dict):
+    """Keep a published null ``max_len`` instead of rewriting it to an int."""
+    if "max_len" not in raw:
+        return 2048
+    value = raw["max_len"]
+    return None if value is None else int(value)
+
+
+def _max_width(raw: dict) -> int:
+    """Read span width from the top-level config or the published span head."""
+    if raw.get("max_width") is not None:
+        return int(raw["max_width"])
+    span_head = raw.get("span_head") or {}
+    if isinstance(span_head, dict) and span_head.get("max_width") is not None:
+        return int(span_head["max_width"])
+    return 8
+
+
 def convert(source: Path, dest: Path) -> None:
     """Write a Transformers checkpoint. Tokenizer files are copied unchanged."""
     source = Path(source)
@@ -78,16 +106,20 @@ def convert(source: Path, dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     raw = json.loads((source / "config.json").read_text())
     encoder = _encoder_config(source, raw)
-    encoder._attn_implementation = "eager"
     boundary = _boundary_config(raw)
     architecture = raw.get("architecture", "boundary" if boundary else "span")
+    span_head = raw.get("span_head")
     config = Gliner2Config(
         encoder_config=encoder,
         architecture=architecture,
-        max_width=int(raw.get("max_width", 8)),
+        max_width=_max_width(raw),
         counting_layer=raw.get("counting_layer", "count_lstm"),
         token_pooling=raw.get("token_pooling", "first"),
-        max_len=int(raw.get("max_len", 2048)),
+        max_len=_max_len(raw),
+        model_name=raw.get("model_name"),
+        span_head=span_head if isinstance(span_head, dict) else None,
+        architecture_version=raw.get("architecture_version"),
+        config_version=raw.get("config_version"),
         boundary_config=boundary,
         classification_temperature=float(
             (raw.get("boundary_head") or {}).get(

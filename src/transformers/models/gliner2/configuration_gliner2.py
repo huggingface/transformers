@@ -17,7 +17,7 @@ from typing import Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...utils import auto_docstring
+from ...utils import auto_docstring, cached_file
 from ..auto import AutoConfig
 
 
@@ -145,6 +145,54 @@ class Gliner2BoundaryConfig(PreTrainedConfig):
         Value for `record_anchor_threshold`.
     record_field_threshold (`float`, *optional*, defaults to `0.5`):
         Value for `record_field_threshold`.
+    abstention_loss_weight (`float`, *optional*, defaults to `0.2`):
+        Value for `abstention_loss_weight`.
+    adaptive_threshold (`bool`, *optional*, defaults to `False`):
+        Value for `adaptive_threshold`.
+    boundary_focal_clip (`float`, *optional*, defaults to `0.05`):
+        Value for `boundary_focal_clip`.
+    boundary_focal_gamma_negative (`float`, *optional*, defaults to `2.0`):
+        Value for `boundary_focal_gamma_negative`.
+    boundary_focal_gamma_positive (`float`, *optional*, defaults to `0.0`):
+        Value for `boundary_focal_gamma_positive`.
+    boundary_marginal_loss (`str`, *optional*, defaults to `"asymmetric_focal"`):
+        Value for `boundary_marginal_loss`.
+    boundary_negative_weight (`float`, *optional*, defaults to `0.5`):
+        Value for `boundary_negative_weight`.
+    classification_loss_weight (`float`, *optional*, defaults to `1.0`):
+        Value for `classification_loss_weight`.
+    classification_temperature (`float`, *optional*, defaults to `1.0`):
+        Value for `classification_temperature`.
+    consistency_loss_weight (`float`, *optional*, defaults to `0.1`):
+        Value for `consistency_loss_weight`.
+    consistency_warmup_steps (`int`, *optional*, defaults to `2000`):
+        Value for `consistency_warmup_steps`.
+    count_loss_weight (`float`, *optional*, defaults to `0.2`):
+        Value for `count_loss_weight`.
+    hard_negative_keep_all_when_absent (`bool`, *optional*, defaults to `True`):
+        Value for `hard_negative_keep_all_when_absent`.
+    hard_negatives_per_positive (`int`, *optional*, defaults to `20`):
+        Value for `hard_negatives_per_positive`.
+    loss_reduction (`str`, *optional*, defaults to `"sum"`):
+        Value for `loss_reduction`.
+    max_negative_queries_per_batch (`int`, *optional*, defaults to `64`):
+        Value for `max_negative_queries_per_batch`.
+    minimum_hard_negatives (`int`, *optional*, defaults to `16`):
+        Value for `minimum_hard_negatives`.
+    negative_query_ratio (`float`, *optional*, defaults to `1.0`):
+        Value for `negative_query_ratio`.
+    proposal_loss_weight (`float`, *optional*, defaults to `0.3`):
+        Value for `proposal_loss_weight`.
+    record_loss_weight (`float`, *optional*, defaults to `1.0`):
+        Value for `record_loss_weight`.
+    relation_loss_weight (`float`, *optional*, defaults to `1.0`):
+        Value for `relation_loss_weight`.
+    rerank_listwise_weight (`float`, *optional*, defaults to `0.3`):
+        Value for `rerank_listwise_weight`.
+    soft_iou_anneal_steps (`int`, *optional*, defaults to `20000`):
+        Value for `soft_iou_anneal_steps`.
+    soft_iou_aux_weight (`float`, *optional*, defaults to `0.2`):
+        Value for `soft_iou_aux_weight`.
     """
 
     model_type = "gliner2_boundary"
@@ -208,6 +256,30 @@ class Gliner2BoundaryConfig(PreTrainedConfig):
     record_anchor_proposal_threshold: float = 0.5
     record_anchor_threshold: float = 0.5
     record_field_threshold: float = 0.5
+    abstention_loss_weight: float = 0.2
+    adaptive_threshold: bool = False
+    boundary_focal_clip: float = 0.05
+    boundary_focal_gamma_negative: float = 2.0
+    boundary_focal_gamma_positive: float = 0.0
+    boundary_marginal_loss: str = "asymmetric_focal"
+    boundary_negative_weight: float = 0.5
+    classification_loss_weight: float = 1.0
+    classification_temperature: float = 1.0
+    consistency_loss_weight: float = 0.1
+    consistency_warmup_steps: int = 2000
+    count_loss_weight: float = 0.2
+    hard_negative_keep_all_when_absent: bool = True
+    hard_negatives_per_positive: int = 20
+    loss_reduction: str = "sum"
+    max_negative_queries_per_batch: int = 64
+    minimum_hard_negatives: int = 16
+    negative_query_ratio: float = 1.0
+    proposal_loss_weight: float = 0.3
+    record_loss_weight: float = 1.0
+    relation_loss_weight: float = 1.0
+    rerank_listwise_weight: float = 0.3
+    soft_iou_anneal_steps: int = 20000
+    soft_iou_aux_weight: float = 0.2
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
@@ -234,7 +306,17 @@ class Gliner2Config(PreTrainedConfig):
     token_pooling (`str`, *optional*, defaults to `"first"`):
         Which subword of a word is gathered. Published checkpoints use `"first"`.
     max_len (`int`, *optional*, defaults to 2048):
-        Maximum token length of one window.
+        Maximum token length of one window. Published Decide checkpoints store `null`.
+    span_mode (`str`, *optional*, defaults to `"markerV0"`):
+        Span representation. Published checkpoints use marker prompts.
+    model_name (`str`, *optional*):
+        Encoder repository recorded by the original checkpoint.
+    span_head (`dict`, *optional*):
+        Legacy span-head view (`dropout`, `max_width`, `span_mode`).
+    architecture_version (`int`, *optional*):
+        Checkpoint architecture version.
+    config_version (`int`, *optional*):
+        Checkpoint config version.
     boundary_config (`Gliner2BoundaryConfig`, *optional*):
         Boundary-head settings. Required when `architecture="boundary"`.
     classification_temperature (`float`, *optional*, defaults to 1.0):
@@ -261,26 +343,111 @@ class Gliner2Config(PreTrainedConfig):
     architecture: Literal["span", "boundary"] = "span"
     max_width: int = 8
     counting_layer: Literal["count_lstm", "count_lstm_v2"] = "count_lstm"
-    token_pooling: Literal["first", "mean", "max"] = "first"
-    max_len: int = 2048
+    token_pooling: Literal["first"] = "first"
+    span_mode: Literal["markerV0"] = "markerV0"
+    max_len: int | None = 2048
+    model_name: str | None = None
+    span_head: dict | None = None
+    architecture_version: int | None = None
+    config_version: int | None = None
     boundary_config: Gliner2BoundaryConfig | dict | None = None
     classification_temperature: float = 1.0
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        if kwargs.pop("use_moe", False):
+            raise ValueError("CountLSTMoE checkpoints are not supported")
+        for key in ("model_type", "architectures", "transformers_version", "_attn_implementation_autoset"):
+            kwargs.pop(key, None)
+        head = kwargs.pop("boundary_head", None)
+        if head is not None and self.boundary_config is None:
+            self.boundary_config = head
+        span_head = self.span_head or {}
+        if isinstance(span_head, dict):
+            if "max_width" in span_head:
+                self.max_width = span_head["max_width"]
+            if span_head.get("span_mode"):
+                self.span_mode = span_head["span_mode"]
         if self.architecture == "boundary" and self.boundary_config is None:
             self.boundary_config = {}
         super().__post_init__(**kwargs)
+        # Published configs request sdpa. This wrapper has no attention layers.
+        if self._attn_implementation not in (None, "eager"):
+            self._attn_implementation = "eager"
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        """Load a published config, including `encoder_config/config.json`."""
+        hub = {
+            key: kwargs[key]
+            for key in (
+                "cache_dir",
+                "force_download",
+                "proxies",
+                "token",
+                "local_files_only",
+                "revision",
+                "subfolder",
+            )
+            if key in kwargs
+        }
+        config_dict, _ = cls.get_config_dict(pretrained_model_name_or_path, **dict(kwargs))
+        has_encoder = isinstance(config_dict, dict) and config_dict.get("encoder_config") is not None
+        loaded = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        if has_encoder:
+            return loaded
+        sidecar = _encoder_sidecar(pretrained_model_name_or_path, hub)
+        if sidecar is None:
+            return loaded
+        config, unused = loaded if isinstance(loaded, tuple) else (loaded, None)
+        config.encoder_config = AutoConfig.from_pretrained(sidecar, local_files_only=True)
+        config.encoder_config._attn_implementation = "eager"
+        if isinstance(loaded, tuple):
+            return config, unused
+        return config
+
+    def to_dict(self) -> dict:
+        """Write the Transformers config and the gliner2 checkpoint views."""
+        output = super().to_dict()
+        if self.boundary_config is not None:
+            output["boundary_head"] = self.boundary_config.to_dict()
+        if self.architecture == "span":
+            output["span_head"] = self.span_head or {
+                "dropout": 0.1,
+                "max_width": self.max_width,
+                "span_mode": self.span_mode,
+            }
+        return output
 
     def validate_architecture(self):
         if self.architecture not in ("span", "boundary"):
             raise ValueError(f"architecture must be 'span' or 'boundary', got {self.architecture!r}")
         if self.counting_layer not in ("count_lstm", "count_lstm_v2"):
             raise ValueError(f"counting_layer must be 'count_lstm' or 'count_lstm_v2', got {self.counting_layer!r}")
+        if self.span_mode != "markerV0":
+            raise ValueError(f"span_mode must be 'markerV0', got {self.span_mode!r}")
+        if self.token_pooling != "first":
+            raise ValueError(f"token_pooling must be 'first', got {self.token_pooling!r}")
         if self.classification_temperature <= 0:
             raise ValueError("classification_temperature must be > 0")
         if self.max_width < 1:
             raise ValueError("max_width must be >= 1")
+        if self.max_len is not None and self.max_len < 1:
+            raise ValueError("max_len must be null or >= 1")
+
+
+def _encoder_sidecar(pretrained_model_name_or_path, hub: dict) -> str | None:
+    """Resolve the sibling encoder config published next to `config.json`."""
+    try:
+        return cached_file(
+            pretrained_model_name_or_path,
+            "encoder_config/config.json",
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+            **hub,
+        )
+    except OSError:
+        return None
 
 
 __all__ = ["Gliner2Config", "Gliner2BoundaryConfig"]

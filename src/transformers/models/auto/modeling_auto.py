@@ -202,6 +202,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gemma4_unified_text", "Gemma4UnifiedTextModel"),
         ("gemma4_vision", "Gemma4VisionModel"),
         ("git", "GitModel"),
+        ("gliner2", "Gliner2Model"),
         ("glm", "GlmModel"),
         ("glm4", "Glm4Model"),
         ("glm46v", "Glm46VModel"),
@@ -224,7 +225,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm_ocr", "GlmOcrModel"),
         ("glm_ocr_text", "GlmOcrTextModel"),
         ("glm_ocr_vision", "GlmOcrVisionModel"),
-        ("gliner2", "Gliner2Model"),
         ("glmasr", "GlmAsrModel"),
         ("glmasr_encoder", "GlmAsrEncoder"),
         ("glmga", "Glm46VModel"),
@@ -2193,9 +2193,7 @@ MODEL_FOR_KEYPOINT_DETECTION_MAPPING = _LazyAutoMapping(
 
 MODEL_FOR_KEYPOINT_MATCHING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES)
 
-MODEL_FOR_SCHEMA_EXTRACTION_MAPPING = _LazyAutoMapping(
-    CONFIG_MAPPING_NAMES, MODEL_FOR_SCHEMA_EXTRACTION_MAPPING_NAMES
-)
+MODEL_FOR_SCHEMA_EXTRACTION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SCHEMA_EXTRACTION_MAPPING_NAMES)
 
 MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
 

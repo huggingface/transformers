@@ -200,6 +200,167 @@ class Gliner2ConfigTest(unittest.TestCase):
         self.assertEqual(config.boundary_config.pool_size, 32)
         self.assertEqual(config.boundary_config.model_type, "gliner2_boundary")
 
+    def test_published_keys(self):
+        config = Gliner2Config(
+            encoder_config=_tiny_encoder(),
+            architecture="boundary",
+            model_type="extractor",
+            max_len=None,
+            boundary_head={"pool_size": 16, "abstention_loss_weight": 0.2},
+            span_head={"span_mode": "markerV0", "max_width": 4},
+        )
+        self.assertIsNone(config.max_len)
+        self.assertEqual(config.boundary_config.pool_size, 16)
+        self.assertEqual(config.boundary_config.abstention_loss_weight, 0.2)
+        saved = config.to_dict()
+        self.assertIn("boundary_head", saved)
+        self.assertEqual(saved["model_type"], "gliner2")
+        with self.assertRaises(ValueError):
+            Gliner2Config(encoder_config=_tiny_encoder(), use_moe=True)
+
+
+def _boundary_batch():
+    return {
+        "input_ids": torch.randint(1, 50, (1, 8)),
+        "attention_mask": torch.ones(1, 8, dtype=torch.long),
+        "text_word_indices": torch.tensor([[1, 2, 3, 4]]),
+        "text_word_mask": torch.ones(1, 4, dtype=torch.bool),
+        "query_marker_indices": torch.tensor([[0]]),
+        "query_marker_mask": torch.ones(1, 1, dtype=torch.bool),
+        "query_group_index": torch.zeros(1, 1, dtype=torch.long),
+        "cls_marker_indices": torch.tensor([[5]]),
+        "cls_marker_mask": torch.ones(1, 1, dtype=torch.bool),
+        "cls_group_index": torch.zeros(1, 1, dtype=torch.long),
+        "task_type_ids": torch.tensor([[1]]),
+        "group_mask": torch.ones(1, 1, dtype=torch.bool),
+    }
+
+
+def _tiny_boundary_model(candidate_pool="per_query"):
+    boundary = {
+        "boundary_dim": 16,
+        "pair_dim": 16,
+        "boundary_attention_layers": 0,
+        "candidate_attention_layers": 0,
+        "query_attention_layers": 0,
+        "candidate_pool": candidate_pool,
+        "enable_records": False,
+        "enable_relations": False,
+        "pool_size": 4,
+        "candidate_budget": 4,
+        "training_candidate_budget": 4,
+        "start_top_k": 2,
+        "end_top_k": 2,
+        "ends_per_start": 2,
+        "starts_per_end": 2,
+    }
+    config = Gliner2Config(encoder_config=_tiny_encoder(), architecture="boundary", boundary_config=boundary)
+    return Gliner2ForSchemaExtraction(config)
+
+
+@require_torch
+class Gliner2ProposalRecallTest(unittest.TestCase):
+    def test_length_buckets_use_retained_candidates(self):
+        from types import SimpleNamespace
+
+        from transformers.models.gliner2.modeling_gliner2 import (
+            BoundaryProposals,
+            ProposalStats,
+            _proposal_diagnostic_metrics,
+        )
+
+        proposals = BoundaryProposals(
+            indices=torch.tensor([[[[0, 1], [0, 10]]]]),
+            logits=None,
+            valid_mask=torch.tensor([[[True, True]]]),
+            stats=ProposalStats(
+                boundary_score_elements=0,
+                conditional_pair_score_elements=0,
+                max_materialized_pair_elements=0,
+                retained_candidate_count=torch.tensor(2),
+                gold_hit_without_injection=torch.tensor(1),
+                gold_total=torch.tensor(3),
+                start_hit=torch.tensor(2),
+                end_hit=torch.tensor(2),
+                boundary_total=torch.tensor(3),
+                unique_candidates=torch.tensor(2),
+            ),
+        )
+        targets = SimpleNamespace(
+            mention_pairs=torch.tensor([[[[0, 1], [0, 9], [0, 10]]]]),
+            mention_mask=torch.tensor([[[True, True, True]]]),
+        )
+        metrics = _proposal_diagnostic_metrics(proposals, targets, torch.tensor([[True]]))
+        self.assertEqual(int(metrics["length_1_hit"]), 1)
+        self.assertEqual(int(metrics["length_1_total"]), 1)
+        self.assertEqual(int(metrics["length_9_plus_hit"]), 1)
+        self.assertEqual(int(metrics["length_9_plus_total"]), 2)
+        self.assertEqual(metrics["recall_length_9_plus"], 0.5)
+        self.assertEqual(metrics["proposal_oracle_recall"], 1 / 3)
+        self.assertIsNone(_proposal_diagnostic_metrics(proposals, None, torch.tensor([[True]])))
+
+    def _assert_eval_labels_keep_inference_candidates(self, candidate_pool):
+        torch.manual_seed(0)
+        model = _tiny_boundary_model(candidate_pool).eval()
+        batch = _boundary_batch()
+        labels = {
+            "mention_pairs": torch.tensor([[[[0, 1], [0, 2]]]]),
+            "mention_mask": torch.tensor([[[True, True]]]),
+        }
+        bare = model(**batch)
+        labeled = model(**batch, labels=labels)
+        again = model(**batch)
+        self.assertIsNone(bare.boundary.metrics)
+        self.assertIsNone(bare.loss)
+        self.assertNotIn("metrics", bare)
+        self.assertEqual(set(bare.keys()), set(again.keys()))
+        self.assertTrue(set(labeled.keys()) <= set(bare.keys()) | {"loss", "losses"})
+        self.assertIsNotNone(labeled.boundary.metrics)
+        metrics = labeled.boundary.metrics
+        self.assertEqual(int(metrics["proposal_gold_total"]), 2)
+        self.assertEqual(int(metrics["length_1_total"]), 1)
+        self.assertEqual(int(metrics["length_2_total"]), 1)
+        self.assertEqual(int(metrics["length_9_plus_total"]), 0)
+        self.assertLessEqual(int(metrics["proposal_gold_hit"]), 2)
+        self.assertIn("proposal_oracle_recall", metrics)
+        torch.testing.assert_close(bare.boundary.candidates.pair_logits, labeled.boundary.candidates.pair_logits)
+        self.assertTrue(torch.equal(bare.boundary.candidates.indices, labeled.boundary.candidates.indices))
+        self.assertTrue(torch.equal(bare.boundary.candidates.valid_mask, labeled.boundary.candidates.valid_mask))
+
+    def test_eval_labels_expose_recall_without_changing_candidates(self):
+        self._assert_eval_labels_keep_inference_candidates("per_query")
+
+    def test_shared_pool_eval_labels_do_not_change_candidates(self):
+        self._assert_eval_labels_keep_inference_candidates("shared")
+
+    def test_recall_gate_thresholds(self):
+        import importlib.util
+        import sys
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parents[3] / "examples/pytorch/schema-extraction/run_gliner2.py"
+        spec = importlib.util.spec_from_file_location("run_gliner2_example", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+        except ImportError:
+            sys.modules.pop(spec.name, None)
+            self.skipTest("schema-extraction example dependencies are not installed")
+        rates = module.proposal_recall_rates(
+            {
+                "proposal_gold_hit": 97,
+                "proposal_gold_total": 100,
+                "length_9_plus_hit": 93,
+                "length_9_plus_total": 100,
+            }
+        )
+        self.assertEqual(module.recall_gate_exit_code(rates), 0)
+        self.assertEqual(module.recall_gate_exit_code({**rates, "dry_run_proposal_oracle_recall": 0.969}), 1)
+        self.assertEqual(module.recall_gate_exit_code({**rates, "dry_run_recall_length_9_plus": 0.929}), 1)
+        self.assertEqual(module.recall_gate_exit_code({"dry_run_proposal_oracle_recall": 1.0}), 0)
+        self.assertEqual(module.recall_gate_exit_code({}), 1)
+
 
 def _word_tokenizer():
     if not is_tokenizers_available():

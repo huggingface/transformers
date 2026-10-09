@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published on 2025-09-01 and contributed to Hugging Face Transformers on 2026-10-08.*
+*This model was contributed to Hugging Face Transformers on 2026-10-08.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -30,10 +30,15 @@ Use [`pipeline`] with the `schema-extraction` task, or [`AutoModelForSchemaExtra
 ```python
 from transformers import pipeline
 
-extractor = pipeline("schema-extraction", model="fastino/GLiNER2.5-Decide")
+extractor = pipeline("schema-extraction", model="fastino/gliner2.5-base-v1")
 extractor(
-    "Ada Lovelace wrote notes about the analytical engine.",
-    schema={"entities": {"person": {}, "work": {}}},
+    "Ada Lovelace wrote notes about the analytical engine in London.",
+    schema={
+        "entities": {"person": {}, "work": {}, "location": {}},
+        "classifications": [{"task": "topic", "labels": ["person", "place", "other"]}],
+        "relations": [{"wrote": {"head": {}, "tail": {}}}],
+        "json_structures": [{"product": {"name": {"dtype": "str"}, "price": {"dtype": "str"}}}],
+    },
 )
 ```
 
