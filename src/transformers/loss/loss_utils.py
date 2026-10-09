@@ -25,7 +25,7 @@ from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
-from .loss_rt_detr import RTDetrForObjectDetectionLoss
+from .loss_rt_detr import RTDetrForObjectDetectionLoss, RTDetrForSegmentationLoss
 from .loss_tdt import ParakeetForTDTLoss
 
 
@@ -189,7 +189,9 @@ LOSS_MAPPING = {
     "MMGroundingDinoForObjectDetection": GroundingDinoForObjectDetectionLoss,
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
+    "RTDetrForSegmentation": RTDetrForSegmentationLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
+    "RTDetrV2ForSegmentation": RTDetrForSegmentationLoss,
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
     "Deimv2ForObjectDetection": Deimv2ForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,

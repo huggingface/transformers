@@ -96,6 +96,10 @@ class RTDetrConfig(PreTrainedConfig):
         Relative weight of the L1 bounding box loss in the object detection loss.
     weight_loss_giou (`float`, *optional*, defaults to 2.0):
         Relative weight of the generalized IoU loss in the object detection loss.
+    weight_loss_mask (`float`, *optional*, defaults to 1.0):
+        Relative weight of the sigmoid focal loss for segmentation masks.
+    weight_loss_dice (`float`, *optional*, defaults to 1.0):
+        Relative weight of the dice loss for segmentation masks.
 
     Examples:
 
@@ -175,6 +179,8 @@ class RTDetrConfig(PreTrainedConfig):
     weight_loss_vfl: float = 1.0
     weight_loss_bbox: float = 5.0
     weight_loss_giou: float = 2.0
+    weight_loss_mask: float = 1.0
+    weight_loss_dice: float = 1.0
     eos_coefficient: float = 1e-4
 
 
