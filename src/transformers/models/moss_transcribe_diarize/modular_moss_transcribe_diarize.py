@@ -26,7 +26,7 @@ from ...audio_utils import (
     make_list_of_audio_chat_template,
 )
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack, prepare_keyword_inputs, prepare_prompt_input
@@ -50,7 +50,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3MultiModalProjector,
     AudioFlamingo3PreTrainedModel,
 )
-from ..auto import CONFIG_MAPPING
+from ..auto import AutoConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEncoder, Qwen2AudioEncoderLayer
 from ..vibevoice_asr.processing_vibevoice_asr import VibeVoiceAsrProcessor, VibeVoiceAsrProcessorKwargs
 from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
@@ -242,35 +242,28 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
 
     model_type = "moss_transcribe_diarize"
     keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="moss_transcribe_diarize_audio"),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3",
+            init_kwargs={
+                "hidden_size": 1024,
+                "intermediate_size": 3072,
+                "num_hidden_layers": 28,
+                "num_attention_heads": 16,
+                "num_key_value_heads": 8,
+                "max_position_embeddings": 131_072,
+                "rope_parameters": {"rope_theta": 1_000_000.0, "rope_type": "default"},
+            },
+        ),
+    }
 
     audio_token_id: int = 151671
     audio_merge_size: int = 4
     projector_hidden_act: str = "silu"
     audio_chunk_size: int = 480_000
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "moss_transcribe_diarize_audio")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["moss_transcribe_diarize_audio"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                hidden_size=1024,
-                intermediate_size=3072,
-                num_hidden_layers=28,
-                num_attention_heads=16,
-                num_key_value_heads=8,
-                max_position_embeddings=131_072,
-                rope_parameters={"rope_theta": 1_000_000.0, "rope_type": "default"},
-            )
-
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
     @property
     def adaptor_input_dim(self) -> int:

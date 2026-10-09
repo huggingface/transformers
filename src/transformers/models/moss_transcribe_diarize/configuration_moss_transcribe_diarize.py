@@ -20,9 +20,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
@@ -93,7 +93,23 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "moss_transcribe_diarize"
-    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="moss_transcribe_diarize_audio"),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3",
+            init_kwargs={
+                "hidden_size": 1024,
+                "intermediate_size": 3072,
+                "num_hidden_layers": 28,
+                "num_attention_heads": 16,
+                "num_key_value_heads": 8,
+                "max_position_embeddings": 131_072,
+                "rope_parameters": {"rope_theta": 1_000_000.0, "rope_type": "default"},
+            },
+        ),
+    }
+
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
 
@@ -104,29 +120,6 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     audio_merge_size: int = 4
     audio_chunk_size: int = 480_000
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "moss_transcribe_diarize_audio")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["moss_transcribe_diarize_audio"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                hidden_size=1024,
-                intermediate_size=3072,
-                num_hidden_layers=28,
-                num_attention_heads=16,
-                num_key_value_heads=8,
-                max_position_embeddings=131_072,
-                rope_parameters={"rope_theta": 1_000_000.0, "rope_type": "default"},
-            )
-
-        super().__post_init__(**kwargs)
 
     @property
     def adaptor_input_dim(self) -> int:
