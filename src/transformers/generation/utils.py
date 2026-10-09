@@ -482,6 +482,7 @@ class DeferredStopCheck(StopCheck):
         return steps_to_undo
 
 
+# contracts proof: no-op change in shared generation code, selects every contract
 class GenerationMixin(ContinuousMixin):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
