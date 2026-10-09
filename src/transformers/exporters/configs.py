@@ -108,7 +108,7 @@ class DynamoConfig(ExportConfigMixin):
             [`~exporters.quantizers.NNCFTorchFXQuantizer`] on the FX graph for every backend,
             [`~exporters.quantizers.OnnxRuntimeQuantizer`] on the converted ONNX model, or
             [`~exporters.quantizers.NNCFOpenVINOQuantizer`] / [`~exporters.quantizers.NNCFOnnxQuantizer`] on the
-            converted OpenVINO / ONNX model. The quantizer holds its own `calibration_dataset`.
+            converted OpenVINO / ONNX model.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
