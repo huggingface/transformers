@@ -1188,6 +1188,14 @@ def is_torchcodec_available() -> bool:
 
 
 @lru_cache
+def is_torchcodec_greater_or_equal(library_version: str) -> bool:
+    if not is_torchcodec_available():
+        return False
+    _, torchcodec_version = _is_package_available("torchcodec", return_version=True)
+    return version.parse(torchcodec_version) >= version.parse(library_version)
+
+
+@lru_cache
 @_make_compile_constant
 def is_ninja_available() -> bool:
     r"""
