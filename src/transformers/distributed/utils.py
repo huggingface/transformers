@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections import defaultdict
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -394,3 +395,25 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
+
+
+def clip_grad_norm_(parameters, max_norm, norm_type=2.0, error_if_nonfinite=False, foreach=None):
+    """
+    Equivalent to torch.nn.utils.clip_grad_norm_ but supports a mixture of ordinary and DTensors parameters.
+    """
+    from torch.nn.utils import clip_grads_with_norm_, get_total_norm
+
+    params_by_mesh = defaultdict(list)
+    for param in parameters:
+        if param.grad is not None:
+            params_by_mesh[param.grad.device_mesh if is_dtensor(param.grad) else None].append(param)
+    norms = [
+        get_total_norm([p.grad for p in params], norm_type, foreach=foreach) for params in params_by_mesh.values()
+    ]
+    norms = torch.stack([n.full_tensor() if is_dtensor(n) else n for n in norms]) if norms else torch.zeros(1)
+    total_norm = norms.sum() if norm_type == 0 else torch.linalg.vector_norm(norms, norm_type)
+    # + error_if_nonfinite check
+    if max_norm != float("inf"):
+        for params in params_by_mesh.values():
+            clip_grads_with_norm_(params, max_norm, total_norm, foreach)
+    return total_norm
