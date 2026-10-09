@@ -595,20 +595,19 @@ def _get_backbone_map() -> dict[str, frozenset[str]]:
     return mapping
 
 
+def existing_backbone_files(model: str) -> list[str]:
+    # processors aren't used as backbones
+    paths = (PATH_TO_TRANSFORMERS / "models" / model / f"{kind}_{model}.py" for kind in ("configuration", "modeling"))
+    return [path.as_posix() for path in paths if (PATH_TO_REPO / path).is_file()]
+
+
 def create_backbone_edges() -> list[tuple[str, str]]:
-    models_dir = "src/transformers/models"
-
-    def existing_files(model: str) -> list[str]:
-        # processors aren't used as backbones
-        paths = (f"{models_dir}/{model}/{kind}_{model}.py" for kind in ("configuration", "modeling"))
-        return [path for path in paths if (PATH_TO_REPO / path).is_file()]
-
     return [
         (dep, target)
         for parent, children in _get_backbone_map().items()
-        for target in existing_files(parent)
+        for target in existing_backbone_files(parent)
         for child in children
-        for dep in existing_files(child)
+        for dep in existing_backbone_files(child)
     ]
 
 
@@ -939,19 +938,13 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     # Each key is a multimodal model name mapped to a set of its subconfigs (e.g. `llava: set(llama, clip)`)
     # We have to reverse the mapping so that a modification on `clip` triggers a test of `llava`
     for parent_model, children_models in _get_backbone_map().items():
+        # processors aren't used as backbones
         for kind in ("configuration", "modeling"):
             for child_model in children_models:
-                if (PATH_TO_REPO / f"src/transformers/models/{child_model}/{kind}_{child_model}.py").is_file():
-                    key = f"src/transformers/models/{child_model}/{kind}_{child_model}.py"
-                    reverse_map.setdefault(key, [])
-                    deps = [
-                        f"src/transformers/models/{parent_model}/{kind}_{parent_model}.py"
-                        for kind in ("configuration", "modeling")  # processors aren't used as backbones
-                        if (
-                            PATH_TO_REPO / f"src/transformers/models/{parent_model}/{kind}_{parent_model}.py"
-                        ).is_file()
-                    ]
-                    reverse_map[key].extend(deps)
+                child_file = PATH_TO_TRANSFORMERS / "models" / child_model / f"{kind}_{child_model}.py"
+                if (PATH_TO_REPO / child_file).is_file():
+                    reverse_map.setdefault(child_file.as_posix(), []).extend(existing_backbone_files(parent_model))
+
     return reverse_map
 
 

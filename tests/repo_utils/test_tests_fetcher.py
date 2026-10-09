@@ -710,38 +710,60 @@ src/transformers/configuration_utils.py
         as impacted file from reverse dependency
         """
         reverse_map = create_reverse_dependency_map()
+        models_dir = str(tests_fetcher.PATH_TO_TRANSFORMERS / "models")
 
         # impact of CLIP modeling file to all models where it is a backbone
         expected_clip_multimodals = {
-            "src/transformers/models/video_llava/configuration_video_llava.py",
-            "src/transformers/models/llava/modeling_llava.py",
-            "src/transformers/models/vipllava/configuration_vipllava.py",
-            "src/transformers/models/cosmos3_edge/modular_cosmos3_edge.py",
-            "src/transformers/models/granite4_vision/modeling_granite4_vision.py",
-            "src/transformers/models/llava/configuration_llava.py",
-            "src/transformers/models/sam3/configuration_sam3.py",
-            "src/transformers/models/vision_text_dual_encoder/modeling_vision_text_dual_encoder.py",
-            "src/transformers/models/minimax_m3_vl/modular_minimax_m3_vl.py",
-            "src/transformers/models/llava_next/configuration_llava_next.py",
-            "src/transformers/models/sam3/modeling_sam3.py",
-            "src/transformers/models/internvl/modular_internvl.py",
-            "src/transformers/models/llava_next/modeling_llava_next.py",
-            "src/transformers/models/llava_next_video/configuration_llava_next_video.py",
-            "src/transformers/models/llava_next_video/modeling_llava_next_video.py",
-            "src/transformers/models/vipllava/modeling_vipllava.py",
-            "src/transformers/models/video_llava/modeling_video_llava.py",
-            "src/transformers/models/granite4_vision/configuration_granite4_vision.py",
+            f"{models_dir}/video_llava/configuration_video_llava.py",
+            f"{models_dir}/llava/modeling_llava.py",
+            f"{models_dir}/vipllava/configuration_vipllava.py",
+            f"{models_dir}/granite4_vision/modeling_granite4_vision.py",
+            f"{models_dir}/llava/configuration_llava.py",
+            f"{models_dir}/sam3/configuration_sam3.py",
+            f"{models_dir}/llava_next/configuration_llava_next.py",
+            f"{models_dir}/sam3/modeling_sam3.py",
+            f"{models_dir}/llava_next/modeling_llava_next.py",
+            f"{models_dir}/llava_next_video/configuration_llava_next_video.py",
+            f"{models_dir}/llava_next_video/modeling_llava_next_video.py",
+            f"{models_dir}/vipllava/modeling_vipllava.py",
+            f"{models_dir}/video_llava/modeling_video_llava.py",
+            f"{models_dir}/granite4_vision/configuration_granite4_vision.py",
         }
-        assert expected_clip_multimodals.issubset(set(reverse_map["src/transformers/models/clip/modeling_clip.py"]))
-        assert expected_clip_multimodals.issubset(
-            set(reverse_map["src/transformers/models/clip/configuration_clip.py"])
-        )
+        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
+        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
 
         # reverse backbone mapping works only if modeling or configuration files are modified
         # because multimodals re-use only config/model of its backbone
-        assert expected_clip_multimodals.isdisjoint(
-            set(reverse_map["src/transformers/models/clip/image_processing_clip.py"])
-        )
+        assert expected_clip_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
+
+        # Also lets check with a random text backbone
+        expected_qwen2_multimodals = {
+            f"{models_dir}/got_ocr2/configuration_got_ocr2.py",
+            f"{models_dir}/qwen2_audio/modeling_qwen2_audio.py",
+            f"{models_dir}/musicflamingo/modeling_musicflamingo.py",
+            f"{models_dir}/video_llama_3/configuration_video_llama_3.py",
+            f"{models_dir}/vibevoice_asr/modeling_vibevoice_asr.py",
+            f"{models_dir}/qwen2_audio/configuration_qwen2_audio.py",
+            f"{models_dir}/got_ocr2/modeling_got_ocr2.py",
+            f"{models_dir}/vibevoice/configuration_vibevoice.py",
+            f"{models_dir}/musicflamingo/configuration_musicflamingo.py",
+            f"{models_dir}/fast_vlm/modeling_fast_vlm.py",
+            f"{models_dir}/audioflamingo3/modeling_audioflamingo3.py",
+            f"{models_dir}/pp_chart2table/configuration_pp_chart2table.py",
+            f"{models_dir}/video_llama_3/modeling_video_llama_3.py",
+            f"{models_dir}/fast_vlm/configuration_fast_vlm.py",
+            f"{models_dir}/internvl/configuration_internvl.py",
+            f"{models_dir}/llava_onevision/configuration_llava_onevision.py",
+            f"{models_dir}/audioflamingo3/configuration_audioflamingo3.py",
+            f"{models_dir}/vibevoice/modeling_vibevoice.py",
+            f"{models_dir}/internvl/modeling_internvl.py",
+            f"{models_dir}/vibevoice_asr/configuration_vibevoice_asr.py",
+            f"{models_dir}/ovis2/configuration_ovis2.py",
+            f"{models_dir}/ovis2/modeling_ovis2.py",
+            f"{models_dir}/llava_onevision/modeling_llava_onevision.py",
+        }
+        assert expected_qwen2_multimodals.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
+        assert expected_qwen2_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
 
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
