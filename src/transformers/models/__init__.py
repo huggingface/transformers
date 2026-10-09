@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .axk2 import *
     from .aya_vision import *
     from .bamba import *
+    from .beats import *
     from .bark import *
     from .bart import *
     from .barthez import *
