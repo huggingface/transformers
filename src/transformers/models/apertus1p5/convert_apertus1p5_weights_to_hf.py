@@ -65,7 +65,6 @@ from transformers.utils import (
 )
 
 
-logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 # The named media special-token attributes are expected to come from the backbone tokenizer itself
@@ -673,4 +672,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    logging.set_verbosity_info()
     main()
