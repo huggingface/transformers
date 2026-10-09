@@ -209,3 +209,5 @@ model = LlamaForCausalLM.from_pretrained("./path/to/local/directory", local_file
 ```
 
 Offline mode (or `local_files_only=True`) can still turn a branch or tag into a commit if an earlier online load saved that mapping in the cache. If the mapping was never saved, Transformers keeps the branch or tag you asked for and continues with the regular offline load. You get the same cache hits or missing-file errors as a normal offline load.
+
+<!-- contracts proof: docs-only change, selects no contract -->
