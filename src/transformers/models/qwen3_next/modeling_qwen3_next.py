@@ -341,18 +341,29 @@ def causal_conv1d_fn(
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
     activation: str | None = None,
+    seq_idx: torch.Tensor | None = None,
     **kwargs,
 ):
     _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
+    kernel_size = weight.shape[-1]
 
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
+    if seq_idx is None:
+        out = F.conv1d(
+            hidden_states.to(weight.dtype),
+            weight=weight.unsqueeze(1),
+            bias=bias,
+            padding=kernel_size - 1,
+            groups=hidden_size,
+        )[:, :, :seq_len]
+    else:
+        # Packed sequences: each position only reads the inputs of its own sequence, so the window is masked where
+        # `seq_idx` differs from the position's
+        windows = F.pad(hidden_states.to(weight.dtype), (kernel_size - 1, 0)).unfold(-1, kernel_size, 1)
+        window_seq_idx = F.pad(seq_idx, (kernel_size - 1, 0), value=-1).unfold(-1, kernel_size, 1)
+        same_sequence = (window_seq_idx == seq_idx.unsqueeze(-1)).unsqueeze(1)
+        out = (windows * same_sequence * weight[:, None, :]).sum(-1)
+        if bias is not None:
+            out = out + bias[:, None]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
@@ -377,6 +388,7 @@ def torch_chunk_gated_delta_rule(
     initial_state: torch.Tensor | None = None,
     output_final_state: bool = False,
     use_qk_l2norm_in_kernel: bool = False,
+    cu_seqlens: torch.LongTensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Computes the gated delta rule, by chunking along the sequence dimension.
@@ -392,10 +404,32 @@ def torch_chunk_gated_delta_rule(
         initial_state: The recurrent state, an optional tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
         output_final_state: Whether to output the new recurrent state along with the output.
         use_qk_l2norm_in_kernel: If this flag is set to True, query and key vectors are L2-normalized.
+        cu_seqlens: Cumulative lengths of the sequences packed in a batch of size 1, of shape [num_sequences + 1]. The
+            recurrent state then restarts at each sequence, and `initial_state` and the returned state have one entry
+            per sequence, like in flash_linear_attention.
     Returns:
         - The output tensor of shape [batch_size, sequence_length, num_v_heads, v_head_dim]
         - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
+    if cu_seqlens is not None:
+        # Packed sequences: run each one on its own so that the recurrent state doesn't flow across their boundaries
+        outputs, final_states = [], []
+        for i, (start, end) in enumerate(zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist())):
+            output, final_state = torch_chunk_gated_delta_rule(
+                query[:, start:end],
+                key[:, start:end],
+                value[:, start:end],
+                g=g[:, start:end],
+                beta=beta[:, start:end],
+                chunk_size=chunk_size,
+                initial_state=initial_state[i : i + 1] if initial_state is not None else None,
+                output_final_state=output_final_state,
+                use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+            )
+            outputs.append(output)
+            final_states.append(final_state)
+        return torch.cat(outputs, dim=1), torch.cat(final_states) if output_final_state else None
+
     initial_dtype = query.dtype
     batch_size, sequence_length, _, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]

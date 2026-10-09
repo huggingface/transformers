@@ -39,6 +39,7 @@ if is_torch_available():
         Qwen3NextModel,
     )
     from transformers.models.qwen3_next.modeling_qwen3_next import (
+        causal_conv1d_fn,
         torch_chunk_gated_delta_rule,
         torch_recurrent_gated_delta_rule,
     )
@@ -325,6 +326,57 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         )
         torch.testing.assert_close(chunk_out, recurrent_out, rtol=1e-4, atol=1e-5)
         torch.testing.assert_close(chunk_state, recurrent_state, rtol=1e-4, atol=1e-5)
+
+    def test_gdn_chunked_with_cu_seqlens_matches_each_sequence(self):
+        """With `cu_seqlens`, the recurrent state restarts at each packed sequence, as if each was run on its own."""
+        torch.manual_seed(0)
+        num_heads, k_head_dim, v_head_dim, lengths = 3, 8, 16, [5, 9, 3]
+        cu_seqlens = torch.tensor([0, 5, 14, 17], device=torch_device)
+        query = torch.randn(1, sum(lengths), num_heads, k_head_dim, device=torch_device)
+        key = torch.randn(1, sum(lengths), num_heads, k_head_dim, device=torch_device)
+        value = torch.randn(1, sum(lengths), num_heads, v_head_dim, device=torch_device)
+        g = -torch.rand(1, sum(lengths), num_heads, device=torch_device)  # log-decays, must be <= 0
+        beta = torch.rand(1, sum(lengths), num_heads, device=torch_device)
+        initial_state = torch.randn(len(lengths), num_heads, k_head_dim, v_head_dim, device=torch_device)
+
+        packed_out, packed_state = torch_chunk_gated_delta_rule(
+            query,
+            key,
+            value,
+            g,
+            beta,
+            chunk_size=4,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+            cu_seqlens=cu_seqlens,
+        )
+        for i, (start, end) in enumerate(zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist())):
+            out, state = torch_chunk_gated_delta_rule(
+                query[:, start:end],
+                key[:, start:end],
+                value[:, start:end],
+                g[:, start:end],
+                beta[:, start:end],
+                chunk_size=4,
+                initial_state=initial_state[i : i + 1],
+                output_final_state=True,
+                use_qk_l2norm_in_kernel=True,
+            )
+            torch.testing.assert_close(packed_out[:, start:end], out)
+            torch.testing.assert_close(packed_state[i : i + 1], state)
+
+    def test_causal_conv1d_with_seq_idx_matches_each_sequence(self):
+        """With `seq_idx`, the convolution doesn't read across packed sequences, as if each was run on its own."""
+        torch.manual_seed(0)
+        hidden_states = torch.randn(1, 6, 17, device=torch_device)
+        weight, bias = torch.randn(6, 4, device=torch_device), torch.randn(6, device=torch_device)
+        seq_idx = torch.tensor([[0] * 5 + [1] * 9 + [2] * 3], dtype=torch.int32, device=torch_device)
+
+        packed = causal_conv1d_fn(hidden_states, weight, bias, activation="silu", seq_idx=seq_idx)
+        for start, end in [(0, 5), (5, 14), (14, 17)]:
+            out = causal_conv1d_fn(hidden_states[..., start:end], weight, bias, activation="silu")
+            torch.testing.assert_close(packed[..., start:end], out)
 
 
 @slow

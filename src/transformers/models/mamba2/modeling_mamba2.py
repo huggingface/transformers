@@ -146,18 +146,29 @@ def causal_conv1d_fn(
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
     activation: str | None = None,
+    seq_idx: torch.Tensor | None = None,
     **kwargs,
 ):
     _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
+    kernel_size = weight.shape[-1]
 
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
+    if seq_idx is None:
+        out = F.conv1d(
+            hidden_states.to(weight.dtype),
+            weight=weight.unsqueeze(1),
+            bias=bias,
+            padding=kernel_size - 1,
+            groups=hidden_size,
+        )[:, :, :seq_len]
+    else:
+        # Packed sequences: each position only reads the inputs of its own sequence, so the window is masked where
+        # `seq_idx` differs from the position's
+        windows = F.pad(hidden_states.to(weight.dtype), (kernel_size - 1, 0)).unfold(-1, kernel_size, 1)
+        window_seq_idx = F.pad(seq_idx, (kernel_size - 1, 0), value=-1).unfold(-1, kernel_size, 1)
+        same_sequence = (window_seq_idx == seq_idx.unsqueeze(-1)).unsqueeze(1)
+        out = (windows * same_sequence * weight[:, None, :]).sum(-1)
+        if bias is not None:
+            out = out + bias[:, None]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
@@ -264,8 +275,40 @@ def mamba2_chunk_scan(
     dt_softplus: bool = False,
     dt_limit: tuple[float, float] = (0.0, float("inf")),
     return_final_states: bool = False,
+    seq_idx: torch.Tensor | None = None,
     **kwargs,
 ):
+    if seq_idx is not None:
+        # Packed sequences: scan each one on its own so that the state doesn't flow across their boundaries. The
+        # initial state applies to the first sequence of each row and the final state comes from the last one
+        outputs, final_states = [], []
+        for row in range(hidden_states.shape[0]):
+            boundaries = (torch.nonzero(seq_idx[row, 1:] != seq_idx[row, :-1]).flatten() + 1).tolist()
+            row_outputs = []
+            for i, (start, end) in enumerate(zip([0, *boundaries], [*boundaries, hidden_states.shape[1]])):
+                result = mamba2_chunk_scan(
+                    hidden_states[row : row + 1, start:end],
+                    dt[row : row + 1, start:end],
+                    A,
+                    B[row : row + 1, start:end],
+                    C[row : row + 1, start:end],
+                    chunk_size,
+                    D=D,
+                    dt_bias=dt_bias,
+                    initial_states=initial_states[row : row + 1] if initial_states is not None and i == 0 else None,
+                    dt_softplus=dt_softplus,
+                    dt_limit=dt_limit,
+                    return_final_states=return_final_states,
+                )
+                if return_final_states:
+                    result, final_state = result
+                row_outputs.append(result)
+            outputs.append(torch.cat(row_outputs, dim=1))
+            if return_final_states:
+                final_states.append(final_state)
+        output = torch.cat(outputs)
+        return (output, torch.cat(final_states)) if return_final_states else output
+
     batch_size, sequence_length, num_heads, head_dim = hidden_states.shape
     num_groups = B.shape[2]
 
