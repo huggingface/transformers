@@ -1467,6 +1467,16 @@ class Cache:
         conv_states = self.layers[layer_idx].update_conv_state(conv_states, state_idx, **kwargs)
         return conv_states
 
+    def get_recurrent_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
+        """Returns the recurrent state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
+        Raises an error if the layer is not a linear attention layer."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+            raise ValueError(
+                f"Cannot get recurrent state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
+            )
+        return layer.recurrent_states[state_idx]
+
     def update_recurrent_state(
         self, recurrent_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
     ) -> torch.Tensor:

@@ -238,7 +238,7 @@ class ZayaCCAProjection(nn.Module):
         value_current = self.v_proj_current(hidden_states)
         delayed_v_state = self.v_proj_delayed(hidden_states)
         if use_precomputed_states:
-            recurrent_v_state = past_key_values.layers[self.layer_idx].recurrent_states[0].unsqueeze(1)
+            recurrent_v_state = past_key_values.get_recurrent_state(self.layer_idx, state_idx=0).unsqueeze(1)
         else:
             recurrent_v_state = self.v_proj_delayed(hidden_states.new_zeros(input_shape[0], 1, self.hidden_size))
         value_delayed = torch.cat([recurrent_v_state, delayed_v_state[:, :-1]], dim=1)
