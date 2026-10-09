@@ -41,9 +41,6 @@ class QianfanOCRProcessor(ProcessorMixin):
     images_kwargs = {
         "crop_to_patches": True,
     }
-    videos_kwargs = {
-        "return_tensors": "pt",
-    }
 
     def __init__(
         self,
