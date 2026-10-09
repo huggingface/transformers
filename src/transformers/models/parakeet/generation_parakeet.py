@@ -278,8 +278,7 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
     """
 
     def _update_model_kwargs_for_generation(self, outputs, *args, **kwargs):
-        # Skip ParakeetRNNTGenerationMixin's update (it counts per-frame symbols we don't use) and go
-        # straight to the base GenerationMixin bookkeeping.
+        # Bypass the RNN-T frame update; apply duration-aware advancement and limits below.
         model_kwargs = GenerationMixin._update_model_kwargs_for_generation(self, outputs, *args, **kwargs)
 
         # Advance encoder frame pointer by the predicted duration
@@ -287,9 +286,19 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
         tokens = logits[:, : self.config.vocab_size].argmax(dim=-1)
         durations = logits[:, self.config.vocab_size :].argmax(dim=-1)
 
-        # Only force forward progress (duration >= 1) for blank predictions;
+        # Blank predictions must advance by at least one frame.
         blank_mask = tokens == self.config.blank_token_id
         durations = torch.where(blank_mask & (durations == 0), torch.ones_like(durations), durations)
+
+        # Limit consecutive non-blank, zero-duration emissions at this frame.
+        if self._symbols_at_frame is None:
+            self._symbols_at_frame = torch.zeros_like(tokens)
+        stalled = ~blank_mask & (durations == 0)
+        symbols = torch.where(stalled, self._symbols_at_frame + 1, torch.zeros_like(self._symbols_at_frame))
+        force_advance = symbols >= self.max_symbols_per_step
+        durations = torch.where(force_advance, torch.ones_like(durations), durations)
+        self._symbols_at_frame = torch.where(force_advance, torch.zeros_like(symbols), symbols)
+
         model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + durations
         self._step_durations.append(durations)
 
