@@ -368,7 +368,8 @@ class HunYuanMoEV1PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         # DynamicNTKAlphaRotary - unique to this model
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
+            # `module.rope_type` is downgraded to "default" by the rotary embedding, so read the config instead
+            if module.config.rope_parameters["rope_type"] == "dynamic" and module.config.rope_parameters.get("alpha"):
                 dim = module.config.head_dim
                 rope_theta = module.config.rope_parameters["rope_theta"]
                 alpha = module.config.rope_parameters["alpha"]
@@ -403,6 +404,8 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
             )
             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.config.head_dim))
             self.attention_scaling = 1.0
+            # `inv_freq` is derived from `alpha` alone, so it never needs the dynamic update
+            self.rope_type = "default"
         else:
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type != "default":

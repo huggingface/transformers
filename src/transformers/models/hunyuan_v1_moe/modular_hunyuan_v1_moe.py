@@ -175,7 +175,8 @@ class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         # DynamicNTKAlphaRotary - unique to this model
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
+            # `module.rope_type` is downgraded to "default" by the rotary embedding, so read the config instead
+            if module.config.rope_parameters["rope_type"] == "dynamic" and module.config.rope_parameters.get("alpha"):
                 dim = module.config.head_dim
                 rope_theta = module.config.rope_parameters["rope_theta"]
                 alpha = module.config.rope_parameters["alpha"]
