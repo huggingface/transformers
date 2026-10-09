@@ -1268,7 +1268,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         )
         extend_image_masks = create_bidirectional_mask(
             config=self.config,
-            inputs_embeds=cross_modal_image,
+            inputs_embeds=cross_modal_image[:, 0:1, :],  # weird case where the mask always wants q_len == 1
             attention_mask=pixel_mask,
         )
 
