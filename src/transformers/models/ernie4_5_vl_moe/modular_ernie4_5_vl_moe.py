@@ -82,6 +82,8 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     model_type = "ernie4_5_vl_moe_vision"
 
     base_model_tp_plan = {
+        "blocks.*.attn.qkv": "colwise",
+        "blocks.*.attn.proj": "rowwise",
         "blocks.*.mlp.fc1": "colwise",
         "blocks.*.mlp.fc2": "rowwise",
     }
@@ -122,26 +124,12 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.text_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
-        "layers.*.mlp.vision_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.vision_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_ep_plan = {
-        "layers.*.mlp.text_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.text_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.text_moe.experts": "ep_dispatch_experts",
-        "layers.*.mlp.vision_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.vision_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.vision_moe.experts": "ep_dispatch_experts",
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
 
