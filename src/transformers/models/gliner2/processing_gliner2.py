@@ -2522,6 +2522,10 @@ class Gliner2Processor(ProcessorMixin):
                 raise ValueError(f"outputs length ({len(outputs)}) != metadata length ({batch_size})")
             return list(outputs)
         boundary = getattr(outputs, "boundary", None)
+        relation_scorer = getattr(outputs, "relation_scorer", None)
+        relation_pair_generator = getattr(outputs, "relation_pair_generator", None)
+        relation_temperature = getattr(outputs, "relation_temperature", None)
+        directional_relation_states = getattr(outputs, "directional_relation_states", None)
         if not isinstance(outputs, Mapping):
             outputs = dict(outputs.items()) if hasattr(outputs, "items") else dict(outputs)
         if boundary is not None and getattr(boundary, "candidates", None) is not None:
@@ -2551,6 +2555,17 @@ class Gliner2Processor(ProcessorMixin):
                 }
                 if outputs.get("classification_logits") is not None:
                     sample["classification_logits"] = outputs["classification_logits"][index]
+                text_states = outputs.get("text_states")
+                query_states = outputs.get("query_states")
+                if text_states is not None:
+                    sample["text_states"] = text_states[index : index + 1]
+                if query_states is not None:
+                    sample["query_states"] = query_states[index : index + 1]
+                if relation_scorer is not None and relation_pair_generator is not None:
+                    sample["relation_scorer"] = relation_scorer
+                    sample["relation_pair_generator"] = relation_pair_generator
+                    sample["relation_temperature"] = relation_temperature
+                    sample["directional_relation_states"] = directional_relation_states
                 samples.append(sample)
             return samples
         keys = (

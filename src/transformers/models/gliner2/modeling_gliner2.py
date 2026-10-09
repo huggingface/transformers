@@ -4709,7 +4709,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 soft_iou_scale,
                 consistency_scale,
             )
-        return Gliner2SchemaExtractionOutput(
+        output = Gliner2SchemaExtractionOutput(
             last_hidden_state=hidden,
             hidden_states=encoded.hidden_states,
             attentions=encoded.attentions,
@@ -4722,6 +4722,12 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             loss=loss,
             losses=losses,
         )
+        if self.relation_scorer is not None and self.relation_pair_generator is not None:
+            output.relation_scorer = self.relation_scorer
+            output.relation_pair_generator = self.relation_pair_generator
+            output.relation_temperature = float(self._boundary_extras["relation_temperature"])
+            output.directional_relation_states = bool(self._boundary_extras["directional_relation_states"])
+        return output
 
     def _boundary_loss(
         self,
