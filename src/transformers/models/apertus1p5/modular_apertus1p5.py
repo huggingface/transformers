@@ -85,15 +85,29 @@ class Apertus1p5ImageProcessor(TorchvisionBackend):
     def __init__(self, **kwargs: Unpack[Apertus1p5ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def _validate_preprocess_kwargs(self, **kwargs):
-        size = kwargs["size"]
-        if size is not None and set(dict(size)) != {"min_pixels", "max_pixels"}:
-            raise ValueError("size must contain exactly min_pixels and max_pixels.")
-        return super()._validate_preprocess_kwargs(**kwargs)
-
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Apertus1p5ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
+
+    def resize(
+        self,
+        image: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        spatial_factor: int,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize to the closest `spatial_factor` multiples within the `size` pixel budget."""
+        if size.min_pixels is None or size.max_pixels is None:
+            raise ValueError(f"`size` dict must contain 'min_pixels' and 'max_pixels' keys but got {size}.")
+
+        height, width = image.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height, width, factor=spatial_factor, min_pixels=size.min_pixels, max_pixels=size.max_pixels
+        )
+        return super().resize(
+            image=image, size=SizeDict(height=resized_height, width=resized_width), resample=resample, **kwargs
+        )
 
     def _preprocess(
         self,
@@ -116,15 +130,7 @@ class Apertus1p5ImageProcessor(TorchvisionBackend):
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                height, width = stacked_images.shape[-2:]
-                resized_height, resized_width = smart_resize(
-                    height, width, factor=spatial_factor, min_pixels=size.min_pixels, max_pixels=size.max_pixels
-                )
-                stacked_images = self.resize(
-                    image=stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
-                    resample=resample,
-                )
+                stacked_images = self.resize(stacked_images, size, resample, spatial_factor=spatial_factor)
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
