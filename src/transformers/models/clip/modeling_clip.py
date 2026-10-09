@@ -648,6 +648,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
 
 @auto_docstring
+# contracts proof: no-op change in CLIP, selects only the CLIP contract
 class CLIPModel(CLIPPreTrainedModel):
     def __init__(self, config: CLIPConfig):
         super().__init__(config)
