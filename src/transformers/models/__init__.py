@@ -349,6 +349,8 @@ if TYPE_CHECKING:
     from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
+    from .omniasr import *
+    from .omniasr_ctc import *
     from .oneformer import *
     from .openai import *
     from .openai_privacy_filter import *

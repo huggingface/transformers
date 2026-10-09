@@ -1185,6 +1185,10 @@
         title: Nemotron ASR Streaming
       - local: model_doc/neucodec
         title: NeuCodec
+      - local: model_doc/omniasr
+        title: Omnilingual ASR
+      - local: model_doc/omniasr_ctc
+        title: Omnilingual ASR CTC
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
