@@ -35,6 +35,7 @@ from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
     BaseHandler,
+    CBGenerateManager,
     GenerationState,
     Modality,
     ToolCall,
@@ -1937,6 +1938,42 @@ class TestCBWorkerDeadServerIntegration(unittest.TestCase):
         self.assertEqual(resp.status_code, 503)
         # Body carries the original cause so the client knows why the server is broken.
         self.assertIn("CUDA illegal memory access", resp.json()["error"])
+
+
+class TestCBRequestIds(unittest.TestCase):
+    def test_non_streaming_uses_unique_scheduler_ids(self):
+        manager = CBGenerateManager()
+        manager._cb = MagicMock()
+        manager._cb.background_thread_status.fatal_error = None
+        callbacks = {}
+        manager._cb.register_result_handler.side_effect = callbacks.__setitem__
+
+        result = MagicMock(error=None, generated_tokens=[4, 5])
+
+        def add_request(*_args, request_id, **_kwargs):
+            callbacks[request_id](result)
+
+        manager._cb.add_request.side_effect = add_request
+        processor = MagicMock()
+        processor.decode.return_value = "ok"
+        gen_config = MagicMock(max_new_tokens=2, eos_token_id=3)
+
+        async def run_once():
+            return await manager.generate_non_streaming(
+                MagicMock(),
+                processor,
+                {"input_ids": [1, 2, 3]},
+                gen_config,
+                request_id="client-controlled",
+            )
+
+        asyncio.run(run_once())
+        first_id = manager._cb.add_request.call_args.kwargs["request_id"]
+        asyncio.run(run_once())
+        second_id = manager._cb.add_request.call_args.kwargs["request_id"]
+
+        self.assertNotEqual(first_id, second_id)
+        self.assertTrue(first_id.startswith("client-controlled:"))
 
 
 class _TestToolCallBase:
