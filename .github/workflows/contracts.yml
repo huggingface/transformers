@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - contracts-proof
+      - proof-*  # demo changes on top of contracts-proof, selected as a PR would be
 
 permissions:
   contents: read
@@ -63,9 +64,13 @@ jobs:
           if [[ "${{ github.event_name }}" == pull_request ]]; then
             git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
+          elif [[ "${{ github.ref_name }}" == proof-* ]]; then
+            git diff --name-only origin/contracts-proof...HEAD > /tmp/changed-files.txt
+            selection=(--changed-files /tmp/changed-files.txt)
           else
             selection=()  # pushes to the proof branch run every contract
           fi
+          echo "Changed files: $(wc -l < /tmp/changed-files.txt 2>/dev/null || echo all)"; cat /tmp/changed-files.txt 2>/dev/null | head -20
           start=$SECONDS
           python utils/contracts/run.py --framework transformers --fixtures-only --lock "$LOCK" --require-all \
             "${selection[@]}" --output /tmp/results.jsonl 2> /tmp/run.log | python -c '
