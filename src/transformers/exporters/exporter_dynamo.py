@@ -171,8 +171,8 @@ def _traced_inputs(sample: MutableMapping[str, Any], traced_names: list[str]) ->
     if missing:
         raise ValueError(
             f"A calibration sample lacks the traced inputs {missing} (it has {sorted(sample)}). Calibration samples "
-            "are the exported forward's kwargs; only `export_for_generation` with a single config takes generate "
-            "kwargs, captured into each component's inputs."
+            "are the exported forward's kwargs (`export_for_generation` with a single config is the exception: it "
+            "takes generate kwargs)."
         )
     return copy.deepcopy({name: sample[name] for name in traced_names})
 

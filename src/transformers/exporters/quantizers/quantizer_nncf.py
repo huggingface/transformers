@@ -61,8 +61,7 @@ class _NNCFQuantizer(ExportQuantizer):
 
 class NNCFOpenVINOQuantizer(_NNCFQuantizer):
     """
-    Quantize the converted OpenVINO model with [NNCF](https://github.com/openvinotoolkit/nncf), OpenVINO's own
-    optimizer, through its OpenVINO backend.
+    Quantize the converted OpenVINO model with [NNCF](https://github.com/openvinotoolkit/nncf).
 
     By default it runs `nncf.quantize` (int8 activations and weights, calibrated on `calibration_dataset`, with
     `model_type=nncf.ModelType.TRANSFORMER` unless given); with `weights_only=True` it runs `nncf.compress_weights`

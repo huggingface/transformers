@@ -823,8 +823,8 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 ## Quantization
 
-Every export config takes a `quantizer`, which holds its own `calibration_dataset`. The quantizers live in
-`transformers.exporters.quantizers`, and each one runs at a fixed point of the export:
+Every export config takes a `quantizer`. The quantizers live in `transformers.exporters.quantizers`, and each one runs
+at a fixed point of the export:
 
 | Quantizer | Quantizes | Backends |
 | --- | --- | --- |
@@ -865,18 +865,16 @@ print(model.config.id2label[int(logits.argmax())])  # POSITIVE
 ### PT2E
 
 [`~exporters.quantizers.PT2EQuantizer`] wraps a torchao PT2E quantizer and runs it on the FX graph
-(`prepare_pt2e` → calibrate → `convert_pt2e`), so it works with every backend and needs no per-model handling. Each
-torchao quantizer injects its own quantize/dequantize ops, so pick the one your runtime supports:
+(`prepare_pt2e` → calibrate → `convert_pt2e`), so it works with every backend. Each torchao quantizer injects its own quantize/dequantize ops, so pick the one your runtime supports:
 
 | Where you'll run | torchao quantizer | Import from |
 | --- | --- | --- |
 | PyTorch inductor, ONNX Runtime (QDQ), OpenVINO | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
 | ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
 
-Quantize generative models through [`~HfExporter.export_for_generation`]. There the quantizer's `calibration_dataset`
-holds generate kwargs, like the sample inputs: each sample runs through a short `generate`, and every component (`prefill`, `decode`,
-vision or audio encoders) is calibrated on the inputs captured for it. This works for multimodal models too, with
-`pixel_values` or `input_features` in the samples.
+Quantize generative models through [`~HfExporter.export_for_generation`]. Here `calibration_dataset` holds generate
+kwargs, like `inputs`, and each component (`prefill`, `decode`, vision or audio encoders) calibrates on the inputs
+captured for it, multimodal models included.
 
 ```python
 from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
@@ -915,13 +913,10 @@ config = OnnxConfig(quantizer=OnnxRuntimeQuantizer(dynamic=True))
 
 ### NNCF
 
-NNCF quantizes the converted model through the backend matching its type: [`~exporters.quantizers.NNCFOpenVINOQuantizer`]
-for OpenVINO exports and [`~exporters.quantizers.NNCFOnnxQuantizer`] for ONNX exports. [`~exporters.quantizers.NNCFTorchFXQuantizer`]
-quantizes the FX graph through NNCF's TorchFX backend instead, like PT2E, so every backend takes its result; ExecuTorch
-lowers only its weight-only result. All three run `nncf.quantize` by
-default (int8 activations and weights, calibrated on `calibration_dataset`, with `model_type=nncf.ModelType.TRANSFORMER`
-unless you pass another). With `weights_only=True` they run `nncf.compress_weights`. Other keyword arguments go to that
-function.
+The three NNCF quantizers in the table above run `nncf.quantize` by default (int8 activations and weights, calibrated
+on `calibration_dataset`, with `model_type=nncf.ModelType.TRANSFORMER` unless you pass another); with
+`weights_only=True` they run `nncf.compress_weights`. Other keyword arguments go to that function. ExecuTorch lowers only
+[`~exporters.quantizers.NNCFTorchFXQuantizer`]'s weight-only result.
 
 ```python
 import nncf
@@ -954,9 +949,9 @@ expect lower accuracy there. Weight-only compression keeps the matmuls in floati
 ### Calibration
 
 A quantizer's `calibration_dataset` is an iterable of input dicts, such as a list or a `DataLoader` whose batches
-collate to model inputs. Each sample is handed to the quantizer one at a time. Omit it and a quantizer that needs data
-calibrates on the export's own sample inputs, with a warning, because one sample can skew the observed ranges.
-Quantizers that need no data (dynamic ONNX Runtime quantization, int8 weight compression) just ignore it.
+collate to model inputs. Omit it and a quantizer that needs data calibrates on the export's own sample inputs, with a
+warning, because one sample can skew the observed ranges. Quantizers that need no data (dynamic ONNX Runtime
+quantization, int8 weight compression) ignore it.
 
 ### A different recipe per component
 
@@ -975,8 +970,8 @@ components = DynamoExporter().export_for_generation(model, inputs, config)
 
 The dict must name every component [`~exporters.utils.decompose_for_generation`] produces (a multimodal model adds its
 encoders, and may split out `language_model` and `lm_head`). A component whose config sets no quantizer stays in full
-precision. A quantizer in the dict calibrates on that component's own forward kwargs: its `calibration_dataset` holds
-those, not generate kwargs.
+precision. In this dict, a quantizer's `calibration_dataset` holds the component's forward kwargs, not generate
+kwargs.
 
 ## Limitations and workarounds
 

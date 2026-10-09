@@ -30,8 +30,7 @@ if TYPE_CHECKING:
 
 class OnnxRuntimeQuantizer(ExportQuantizer):
     """
-    Quantize the converted ONNX model with ONNX Runtime's own tools (`onnxruntime.quantization`), which work on the
-    ONNX graph rather than the PyTorch one.
+    Quantize the converted ONNX model with ONNX Runtime's own tools (`onnxruntime.quantization`).
 
     By default it runs `quantize_static` (int8 QDQ activations and weights, calibrated on the config's
     `calibration_dataset`); with `dynamic=True` it runs `quantize_dynamic` (int8 weights, activations quantized at

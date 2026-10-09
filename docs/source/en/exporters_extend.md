@@ -85,9 +85,8 @@ Quantizers live in `transformers.exporters.quantizers`, one class per toolchain 
 - `required_packages`: what it imports. The export checks they're installed before tracing.
 
 Then implement `_quantize(model, calibration, export_format)`. `model` is the FX graph or backend model for the stage,
-and `calibration` is a [`~exporters.quantizers.CalibrationSet`] that yields the model's own inputs one sample at a
-time, built from the quantizer's `calibration_dataset` with the exporter's input mapping, so the quantizer never maps
-inputs itself.
+and `calibration` (a [`~exporters.quantizers.CalibrationSet`]) yields the model's own inputs, already mapped by the
+exporter.
 
 ```python
 from transformers.exporters import ExportFormat
