@@ -59,6 +59,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mellum": "qwen2_moe",
     "qwen3_moe": "qwen2_moe",
     "qwen3_omni_moe": "qwen2_moe",
+    "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
@@ -832,7 +833,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^(thinker\.|)audio_tower", target_patterns=r"\1model.audio_tower"),
             WeightRenaming(source_patterns=r"^(thinker\.|)visual", target_patterns=r"\1model.visual"),
             WeightRenaming(
-                source_patterns=r"^(thinker\.|)model(?!\.(language_model|visual|audio_tower|model))",
+                source_patterns=r"^(thinker\.|)model(?!\.(language_model|visual|audio_tower))",
                 target_patterns=r"\1model.model",
             ),
         ],

@@ -1383,6 +1383,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
+    @auto_docstring
+    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        return super().get_image_features(**super_kwargs)
+
+    @auto_docstring
+    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        return super().get_video_features(**super_kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1407,19 +1415,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
-        r"""
-        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-            The length of feature shape of each audio in LLM.
-        use_audio_in_video (`bool`, *optional*):
-            Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
-        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
-            Number of seconds per grid for each video, used for temporal feature mapping.
-        """
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )

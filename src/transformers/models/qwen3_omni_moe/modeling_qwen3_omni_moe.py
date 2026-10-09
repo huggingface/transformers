@@ -1991,39 +1991,7 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
             Number of seconds per grid for each video, used for temporal feature mapping.
-
-        Example:
-
-        ```python
-        >>> from io import BytesIO
-        >>> from urllib.request import urlopen
-        >>> import librosa
-        >>> from qwen_vl_utils import process_vision_info
-        >>> from transformers import Qwen3OmniMoeProcessor, Qwen3OmniMoeThinkerForConditionalGeneration
-
-        >>> thinker = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-        >>> processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-
-        >>> conversations = [
-        >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
-        >>>         {"role": "user", "content": [
-        >>>             {"type": "image", "image_url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-        >>>             {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
-        >>>         ]},
-        >>> ]
-
-        >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-        >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
-        >>> images, videos = process_vision_info(conversations)
-        >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
-
-        >>> # Generate
-        >>> inputs['use_audio_in_video'] = `True` or `False`
-        >>> generation = thinker.generate(**inputs, max_new_tokens=2048)
-        >>> generate_ids = generation[:, inputs.input_ids.size(1):]
-
-        >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        ```"""
+        """
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -2232,6 +2200,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
+
     def get_decoder(self):
         return self.model.get_decoder()
 
@@ -2241,7 +2212,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
@@ -2254,7 +2225,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -2315,7 +2286,39 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
             Number of seconds per grid for each video, used for temporal feature mapping.
-        """
+
+        Example:
+
+        ```python
+        >>> from io import BytesIO
+        >>> from urllib.request import urlopen
+        >>> import librosa
+        >>> from qwen_vl_utils import process_vision_info
+        >>> from transformers import Qwen3OmniMoeProcessor, Qwen3OmniMoeThinkerForConditionalGeneration
+
+        >>> thinker = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        >>> processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+
+        >>> conversations = [
+        >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
+        >>>         {"role": "user", "content": [
+        >>>             {"type": "image", "image_url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+        >>>             {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
+        >>>         ]},
+        >>> ]
+
+        >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
+        >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
+        >>> images, videos = process_vision_info(conversations)
+        >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
+
+        >>> # Generate
+        >>> inputs['use_audio_in_video'] = `True` or `False`
+        >>> generation = thinker.generate(**inputs, max_new_tokens=2048)
+        >>> generate_ids = generation[:, inputs.input_ids.size(1):]
+
+        >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        ```"""
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
