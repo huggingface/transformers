@@ -58,6 +58,13 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm4vMoeTextConfig": ["n_routed_experts"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
+    "BailingHybridConfig": [
+        "layer_group_size",  # consumed in __post_init__ to derive layer_types
+        "short_conv_kernel_size",  # consumed in __post_init__ to derive linear_conv_kernel_dim
+        "number_of_conv_states",  # consumed by DynamicCache
+        "num_nextn_predict_layers",  # metadata for training-only MTP layers in released checkpoints
+        "mtp_loss_scaling_factor",  # metadata for the training-only MTP loss
+    ],
     "FunAsrNanoEncoderConfig": [
         "num_mel_bins",
         "num_stacked_frames",
