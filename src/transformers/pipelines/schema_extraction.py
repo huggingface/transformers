@@ -18,6 +18,9 @@ from typing import Any
 from .base import ChunkPipeline
 
 
+_WINDOW_BATCH = 8
+
+
 def _setting(config: Any, name: str, default: Any) -> Any:
     """Read one config field from a mapping or an object."""
     if config is None:
@@ -96,7 +99,7 @@ class SchemaExtractionPipeline(ChunkPipeline):
         return preprocess_params, {}, postprocess_params
 
     def preprocess(self, inputs, schema=None, max_len=None, chunk_size=384, chunk_overlap=64):
-        """Encode one word window at a time and mark the last window.
+        """Encode word windows eight at a time and mark the last batch.
 
         Args:
             inputs (`str`):
@@ -104,7 +107,7 @@ class SchemaExtractionPipeline(ChunkPipeline):
             schema (`dict`):
                 Extraction schema.
             max_len (`int`, *optional*):
-                Maximum document words encoded in each window.
+                Maximum document words encoded in each window. Defaults to `chunk_size` for multi-window text.
             chunk_size (`int`, *optional*, defaults to 384):
                 Word window length.
             chunk_overlap (`int`, *optional*, defaults to 64):
@@ -112,46 +115,36 @@ class SchemaExtractionPipeline(ChunkPipeline):
         """
         if schema is None:
             raise ValueError("schema-extraction requires a schema dict.")
-        architecture = self.model.config.architecture
         document = inputs if isinstance(inputs, str) else str(inputs)
         chunks = self.processor.windows(document, chunk_size, chunk_overlap)
-        last = len(chunks) - 1
-        for index, chunk in enumerate(chunks):
+        if len(chunks) > 1 and max_len is None:
+            max_len = chunk_size
+        for start in range(0, len(chunks), _WINDOW_BATCH):
+            batch = chunks[start : start + _WINDOW_BATCH]
             encoding = self.processor(
-                chunk.text,
+                [chunk.text for chunk in batch] if len(chunks) > 1 else batch[0].text,
                 schema=schema,
                 return_tensors="pt",
                 max_len=max_len,
-                architecture=architecture,
+                architecture=self.model.config.architecture,
             )
-            metadata = encoding.pop("metadata")
             yield {
                 "model_inputs": encoding,
-                "metadata": metadata,
-                "chunk": chunk,
+                "metadata": encoding.pop("metadata"),
+                "chunks": batch,
                 "document_text": document,
-                "is_last": index == last,
+                "is_last": start + _WINDOW_BATCH >= len(chunks),
             }
 
     def _forward(self, model_inputs):
-        """Run one window and forward is_last so chunks regroup.
+        """Run one window batch and forward is_last so batches regroup.
 
         Args:
             model_inputs (`dict`):
                 One preprocess yield, including `model_inputs` and `is_last`.
         """
-        metadata = model_inputs.pop("metadata")
-        chunk = model_inputs.pop("chunk")
-        document_text = model_inputs.pop("document_text", "")
-        is_last = model_inputs.pop("is_last")
-        outputs = self.model(**model_inputs["model_inputs"])
-        return {
-            "outputs": outputs,
-            "metadata": metadata,
-            "chunk": chunk,
-            "document_text": document_text,
-            "is_last": is_last,
-        }
+        inputs = model_inputs.pop("model_inputs")
+        return {"outputs": self.model(**inputs), **model_inputs}
 
     def _classification_temperature(self) -> float:
         """Read the boundary temperature, otherwise the span temperature."""
@@ -197,18 +190,18 @@ class SchemaExtractionPipeline(ChunkPipeline):
                 `decoder` and `optimizer` flags for those wrappers.
         """
         windows = model_outputs if isinstance(model_outputs, list) else [model_outputs]
-        multiple = len(windows) > 1
+        chunks = [chunk for window in windows for chunk in window["chunks"]]
+        multiple = len(chunks) > 1
         temperature = self._classification_temperature()
         overlap_policy = self._overlap_policy()
         decoded = []
         for window in windows:
-            outputs = window["outputs"] if isinstance(window, Mapping) else window
-            metadata = window.get("metadata") if isinstance(window, Mapping) else None
+            outputs, metadata = window["outputs"], window["metadata"]
             rescore = self.processor.can_rescore_attributes(outputs, metadata, self.model)
             use_spans = include_spans or multiple or rescore
             use_confidence = include_confidence or multiple or rescore
             if constraints is not None:
-                piece = self.processor.post_process_constrained_classification(
+                pieces = self.processor.post_process_constrained_classification(
                     outputs,
                     metadata,
                     threshold=threshold,
@@ -217,7 +210,7 @@ class SchemaExtractionPipeline(ChunkPipeline):
                     decoder=kwargs.get("decoder", "auto"),
                 )
             elif joint:
-                piece = self.processor.post_process_joint_extraction(
+                pieces = self.processor.post_process_joint_extraction(
                     outputs,
                     metadata,
                     threshold=threshold,
@@ -227,7 +220,7 @@ class SchemaExtractionPipeline(ChunkPipeline):
                     overlap_policy=overlap_policy,
                 )
             else:
-                piece = self.processor.post_process_extraction(
+                pieces = self.processor.post_process_extraction(
                     outputs,
                     metadata,
                     threshold=threshold,
@@ -236,19 +229,16 @@ class SchemaExtractionPipeline(ChunkPipeline):
                     overlap_policy=overlap_policy,
                     temperature=temperature,
                 )
-            piece = piece[0]
-            if rescore:
-                piece = self.processor.rescore_attributes(piece, self.model, outputs, metadata)
-            decoded.append(piece)
-        first = windows[0]
+            for index, piece in enumerate(pieces):
+                if rescore:
+                    piece = self.processor.rescore_attributes(piece, self.model, outputs, metadata, index)
+                decoded.append(piece)
         return self.processor.merge_chunk_results(
-            first.get("document_text", "") if isinstance(first, Mapping) else "",
-            [window.get("chunk") if isinstance(window, Mapping) else window for window in windows],
+            windows[0]["document_text"],
+            chunks,
             decoded,
             include_confidence=include_confidence,
             include_spans=include_spans,
-            scalar_entity_labels=self.processor.scalar_entity_labels(
-                first.get("metadata") if isinstance(first, Mapping) else None
-            ),
+            scalar_entity_labels=self.processor.scalar_entity_labels(windows[0]["metadata"]),
             overlap_policy=overlap_policy,
         )

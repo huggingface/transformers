@@ -17,13 +17,11 @@ from __future__ import annotations
 import bisect
 import logging
 import math
-from collections import OrderedDict, defaultdict
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections import defaultdict
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from enum import Enum
 from itertools import combinations, product
-from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Any
 
 import torch
 
@@ -46,15 +44,6 @@ _RESERVED = (
 )
 _ACTIVATIONS = ("auto", "sigmoid", "softmax")
 _ON_INFEASIBLE = ("relax", "min_violations", "raise")
-_MODEL_KEYS = (
-    "json_structures",
-    "classifications",
-    "entities",
-    "relations",
-    "json_descriptions",
-    "entity_descriptions",
-)
-_L = "[L]"
 _OVERLAP_ALIASES = {
     "allow": "allow",
     "all": "allow",
@@ -98,14 +87,24 @@ _JOINT_FIELDS = {
     "AcyclicRelation": ("relation",),
 }
 _DECODERS = ("auto", "independent", "exact", "beam", "min_violations")
-
-
-class _LatticeTag(str, Enum):
-    """Labels that still serialize as count-choice, derived, and rescue."""
-
-    COUNT_CHOICE = "count-choice"
-    DERIVED = "derived"
-    RESCUE = "rescue"
+_RELATION_OPTIONS = (
+    "description",
+    "threshold",
+    "candidate_threshold",
+    "directed",
+    "symmetric",
+    "inverse",
+    "inverse_of",
+    "allow_self",
+    "allow_self_loops",
+    "no_self_loops",
+    "max_per_head",
+    "max_per_tail",
+    "unique_head",
+    "unique_tail",
+    "unique_pair",
+    "acyclic",
+)
 
 
 def linear_sum_assignment(cost_matrix: torch.Tensor):
@@ -139,6 +138,48 @@ def linear_sum_assignment(cost_matrix: torch.Tensor):
     )
 
 
+@dataclass(frozen=True)
+class RecordField:
+    """One record field and its boundary query id."""
+
+    query_id: int
+    name: str = ""
+    cardinality: str = "zero_or_more"
+    is_anchor: bool = False
+    exclusive: bool = False
+
+    @property
+    def is_scalar(self) -> bool:
+        return self.cardinality in ("optional_one", "required_one")
+
+    @property
+    def allows_absent(self) -> bool:
+        return self.cardinality in ("optional_one", "zero_or_more")
+
+
+@dataclass(frozen=True)
+class GroupRecord:
+    """Record head configuration for one structure group."""
+
+    mode: str
+    fields: tuple[RecordField, ...]
+    anchor_query_id: int | None = None
+    anchor: str | None = None
+    occurrence_policy: str = "latent_all"
+    task_index: int = 0
+
+
+@dataclass(frozen=True)
+class DecodeOptions:
+    """Cutoffs and payload switches shared by the span, record, and label decoders."""
+
+    threshold: float = 0.5
+    include_confidence: bool = False
+    include_spans: bool = False
+    overlap: str | None = None
+    temperature: float = 1.0
+
+
 @dataclass
 class DecodedRecord:
     """One decoded record."""
@@ -150,44 +191,21 @@ class DecodedRecord:
 
 
 def _dedup_key(record: DecodedRecord) -> tuple:
-    """Return a span key that identifies duplicate decoded records."""
     return tuple((qid, tuple(sorted(spans))) for qid, spans in sorted(record.fields.items()))
 
 
 def _select_record_instances(group, anchor_threshold, object_threshold, temperature):
-    """Instances that clear the object or anchor threshold, best score first.
-
-    Args:
-        group: Record group with object logits and a spec mode.
-        anchor_threshold: Minimum probability for anchored modes.
-        object_threshold: Minimum probability for anchorless groups.
-        temperature: Positive divisor applied to object logits.
-
-    Returns:
-        Selected instance indexes and their object probabilities.
-    """
-    count = int(group.num_instances)
+    """Instance indexes above the object or anchor threshold, best first, and all probabilities."""
     if temperature <= 0:
         raise ValueError("temperature must be > 0")
     obj_prob = torch.sigmoid(group.object_logits.detach() / temperature)
     select_thr = object_threshold if group.spec.mode == "anchorless" else anchor_threshold
-    order = sorted(range(count), key=lambda index: (-float(obj_prob[index]), index))
-    selected = [inst for inst in order if float(obj_prob[inst]) >= select_thr]
-    return selected, obj_prob
+    order = sorted(range(int(group.num_instances)), key=lambda index: (-float(obj_prob[index]), index))
+    return [inst for inst in order if float(obj_prob[inst]) >= select_thr], obj_prob
 
 
 def _exclusive_field_choices(group, selected_instances, field_threshold, temperature):
-    """Exclusive scalar assignments and list owners for the selected instances.
-
-    Args:
-        group: Record group whose exclusive fields are assigned jointly.
-        selected_instances: Instance indexes already above the object threshold.
-        field_threshold: Minimum probability kept for an assigned span.
-        temperature: Positive divisor applied to assignment logits.
-
-    Returns:
-        Scalar ``(candidate, probability)`` choices and list-field owners.
-    """
+    """Hungarian scalar choices and list-candidate owners for exclusive fields."""
     scalar_choices: dict[tuple[int, int], tuple[int, float] | None] = {}
     list_owners: dict[tuple[int, int], tuple[int, float]] = {}
     for f_idx, fspec in enumerate(group.field_specs):
@@ -195,29 +213,23 @@ def _exclusive_field_choices(group, selected_instances, field_threshold, tempera
             continue
         logits = torch.stack([group.assign_logits[f_idx][inst].detach() / temperature for inst in selected_instances])
         candidate_count = max(int(logits.shape[-1]) - 1, 0)
-        if fspec.cardinality.is_scalar:
+        if fspec.is_scalar:
             _assign_exclusive_scalar(
                 scalar_choices, f_idx, fspec, logits, selected_instances, candidate_count, field_threshold
             )
         elif candidate_count:
-            _assign_exclusive_list(list_owners, f_idx, logits, selected_instances, candidate_count, field_threshold)
+            probabilities = torch.sigmoid(logits[:, 1:])
+            for cand_idx in range(candidate_count):
+                probability, row = probabilities[:, cand_idx].max(dim=0)
+                if float(probability) >= field_threshold:
+                    list_owners[(f_idx, cand_idx)] = (selected_instances[int(row)], float(probability))
     return scalar_choices, list_owners
 
 
 def _assign_exclusive_scalar(
     scalar_choices, f_idx, fspec, logits, selected_instances, candidate_count, field_threshold
 ):
-    """Hungarian assignment of one exclusive scalar field.
-
-    Args:
-        scalar_choices: Destination map keyed by instance and field index.
-        f_idx: Field index inside the record group.
-        fspec: Field spec, including whether absence is allowed.
-        logits: Assignment logits for the selected instances.
-        selected_instances: Instance indexes corresponding to logit rows.
-        candidate_count: Number of real spans, excluding the absent column.
-        field_threshold: Minimum probability kept when absence is allowed.
-    """
+    """Assign one exclusive scalar field with an absent column per instance."""
     if candidate_count == 0:
         for inst in selected_instances:
             scalar_choices[(inst, f_idx)] = None
@@ -239,97 +251,40 @@ def _assign_exclusive_scalar(
     assignments = {int(row): int(col) for row, col in zip(rows, cols)}
     for row, inst in enumerate(selected_instances):
         col = assignments.get(row, candidate_count + row)
-        if col >= candidate_count:
+        probability = float(candidate_probs[row, col]) if col < candidate_count else 0.0
+        if col >= candidate_count or (probability < field_threshold and fspec.allows_absent):
             scalar_choices[(inst, f_idx)] = None
-            continue
-        probability = float(candidate_probs[row, col])
-        if probability < field_threshold and fspec.allows_absent:
-            scalar_choices[(inst, f_idx)] = None
-            continue
-        scalar_choices[(inst, f_idx)] = (col, probability)
+        else:
+            scalar_choices[(inst, f_idx)] = (col, probability)
 
 
-def _assign_exclusive_list(list_owners, f_idx, logits, selected_instances, candidate_count, field_threshold):
-    """Give each list candidate to the selected instance with the highest score.
-
-    Args:
-        list_owners: Destination map keyed by field and candidate index.
-        f_idx: Field index inside the record group.
-        logits: Assignment logits for the selected instances.
-        selected_instances: Instance indexes corresponding to logit rows.
-        candidate_count: Number of real spans, excluding the absent column.
-        field_threshold: Minimum probability required to claim a candidate.
-    """
-    probabilities = torch.sigmoid(logits[:, 1:])
-    for cand_idx in range(candidate_count):
-        probability, row = probabilities[:, cand_idx].max(dim=0)
-        if float(probability) >= field_threshold:
-            list_owners[(f_idx, cand_idx)] = (selected_instances[int(row)], float(probability))
+def _append_span(rec, qid, spans_tensor, cand_idx, probability):
+    rec.fields.setdefault(qid, []).append((int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1])))
+    rec.field_scores.setdefault(qid, []).append(probability)
 
 
 def _append_scalar_span(rec, fspec, spans_tensor, logits_row, choice, field_threshold):
-    """Append one scalar span chosen independently or by the exclusive assignment.
-
-    Args:
-        rec: Record receiving the span.
-        fspec: Field spec for this column.
-        spans_tensor: Candidate ``(start, end)`` rows.
-        logits_row: Assignment logits for this instance, used when not exclusive.
-        choice: Exclusive ``(candidate, probability)``, or ``None`` when absent.
-        field_threshold: Minimum probability kept when absence is allowed.
-
-    Returns:
-        Nothing. The record is updated in place.
-    """
-    qid = fspec.query_id
+    """Add the exclusive choice, or the best non-absent column above the threshold."""
     if fspec.exclusive:
-        if choice is None:
-            return
-        cand_idx, probability = choice
-        span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
-        rec.fields.setdefault(qid, []).append(span)
-        rec.field_scores.setdefault(qid, []).append(probability)
+        if choice is not None:
+            _append_span(rec, fspec.query_id, spans_tensor, choice[0], choice[1])
         return
     probs = torch.softmax(logits_row, dim=-1)
     chosen = None
     for col in torch.argsort(probs, descending=True).tolist():
-        if col == 0:
-            if fspec.allows_absent:
-                chosen = 0
-                break
+        if col == 0 and not fspec.allows_absent:
             continue
         chosen = col
         break
-    if chosen is None or chosen == 0:
+    if not chosen or (float(probs[chosen]) < field_threshold and fspec.allows_absent):
         return
-    if float(probs[chosen]) < field_threshold and fspec.allows_absent:
-        return
-    cand_idx = chosen - 1
-    span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
-    rec.fields.setdefault(qid, []).append(span)
-    rec.field_scores.setdefault(qid, []).append(float(probs[chosen]))
+    _append_span(rec, fspec.query_id, spans_tensor, chosen - 1, float(probs[chosen]))
 
 
 def _append_list_spans(rec, fspec, f_idx, spans_tensor, logits_row, list_owners, inst, field_threshold):
-    """Append list spans this instance owns or that clear the field threshold.
-
-    Args:
-        rec: Record receiving the spans.
-        fspec: Field spec for this column.
-        f_idx: Field index used to look up exclusive owners.
-        spans_tensor: Candidate ``(start, end)`` rows.
-        logits_row: Assignment logits for this instance.
-        list_owners: Exclusive owners keyed by field and candidate.
-        inst: Instance index being filled.
-        field_threshold: Minimum probability for a non-exclusive span.
-    """
-    cand_logits = logits_row[1:]
-    if cand_logits.numel() == 0:
-        return
-    probs = torch.sigmoid(cand_logits)
-    selected: list[tuple[int, int]] = []
-    selected_scores: list[float] = []
-    for cand_idx in range(cand_logits.shape[0]):
+    """Add the list spans this instance owns, or that clear the threshold when not exclusive."""
+    probs = torch.sigmoid(logits_row[1:])
+    for cand_idx in range(probs.shape[0]):
         if fspec.exclusive:
             owner = list_owners.get((f_idx, cand_idx))
             if owner is None or owner[0] != inst:
@@ -339,30 +294,11 @@ def _append_list_spans(rec, fspec, f_idx, spans_tensor, logits_row, list_owners,
             probability = float(probs[cand_idx])
             if probability < field_threshold:
                 continue
-        span = (int(spans_tensor[cand_idx, 0]), int(spans_tensor[cand_idx, 1]))
-        selected.append(span)
-        selected_scores.append(probability)
-    if selected:
-        qid = fspec.query_id
-        rec.fields.setdefault(qid, []).extend(selected)
-        rec.field_scores.setdefault(qid, []).extend(selected_scores)
+        _append_span(rec, fspec.query_id, spans_tensor, cand_idx, probability)
 
 
 def _record_from_instance(group, inst, obj_prob, scalar_choices, list_owners, field_threshold, temperature):
-    """Build one record from exclusive choices and per-instance logits.
-
-    Args:
-        group: Record group supplying field specs and spans.
-        inst: Selected instance index.
-        obj_prob: Object probabilities indexed by instance.
-        scalar_choices: Exclusive scalar assignments.
-        list_owners: Exclusive list-candidate owners.
-        field_threshold: Minimum probability for a kept span.
-        temperature: Positive divisor applied to assignment logits.
-
-    Returns:
-        The record when it has at least one field, otherwise ``None``.
-    """
+    """One record for a selected instance, or `None` when no field was filled."""
     rec = DecodedRecord(score=float(obj_prob[inst]))
     anchor_field_idx = None
     if group.spec.mode == "natural":
@@ -372,61 +308,16 @@ def _record_from_instance(group, inst, obj_prob, scalar_choices, list_owners, fi
     for f_idx, fspec in enumerate(group.field_specs):
         spans_tensor = group.field_spans[f_idx]
         logits_row = group.assign_logits[f_idx][inst].detach() / temperature
-        if anchor_field_idx is not None and f_idx == anchor_field_idx:
+        if f_idx == anchor_field_idx:
             if rec.anchor_span is not None:
                 rec.fields.setdefault(fspec.query_id, []).append(rec.anchor_span)
                 rec.field_scores.setdefault(fspec.query_id, []).append(rec.score)
-            continue
-        if fspec.cardinality.is_scalar:
-            _append_scalar_span(
-                rec, fspec, spans_tensor, logits_row, scalar_choices.get((inst, f_idx)), field_threshold
-            )
+        elif fspec.is_scalar:
+            choice = scalar_choices.get((inst, f_idx))
+            _append_scalar_span(rec, fspec, spans_tensor, logits_row, choice, field_threshold)
         else:
             _append_list_spans(rec, fspec, f_idx, spans_tensor, logits_row, list_owners, inst, field_threshold)
     return rec if rec.fields else None
-
-
-def _collapse_records(group, records):
-    """Deduplicate latent records or sort natural records by anchor span.
-
-    Args:
-        group: Record group whose spec mode selects the collapse.
-        records: Records that already contain at least one field.
-
-    Returns:
-        The collapsed record list.
-    """
-    if group.spec.mode in ("latent", "anchorless"):
-        best: dict[tuple, DecodedRecord] = {}
-        for rec in records:
-            key = _dedup_key(rec)
-            if key not in best or rec.score > best[key].score:
-                best[key] = rec
-        return list(best.values())
-    if group.spec.mode == "natural":
-        records.sort(key=lambda record: (record.anchor_span is None, record.anchor_span or (0, 0)))
-    return records
-
-
-def _decode_group(
-    group,
-    *,
-    anchor_threshold: float = 0.5,
-    field_threshold: float = 0.5,
-    object_threshold: float = 0.5,
-    temperature: float = 1.0,
-) -> list[DecodedRecord]:
-    """Assign field spans for one record group."""
-    if int(group.num_instances) == 0:
-        return []
-    selected_instances, obj_prob = _select_record_instances(group, anchor_threshold, object_threshold, temperature)
-    scalar_choices, list_owners = _exclusive_field_choices(group, selected_instances, field_threshold, temperature)
-    records = []
-    for inst in selected_instances:
-        rec = _record_from_instance(group, inst, obj_prob, scalar_choices, list_owners, field_threshold, temperature)
-        if rec is not None:
-            records.append(rec)
-    return _collapse_records(group, records)
 
 
 def decode_group(
@@ -437,14 +328,42 @@ def decode_group(
     object_threshold: float = 0.5,
     temperature: float = 1.0,
 ) -> list[DecodedRecord]:
-    """Decode one record group into selected field spans."""
-    return _decode_group(
-        group,
-        anchor_threshold=anchor_threshold,
-        field_threshold=field_threshold,
-        object_threshold=object_threshold,
-        temperature=temperature,
-    )
+    """Decode one record-head group into field spans.
+
+    Latent and anchorless records keep the best copy of identical field spans.
+    Natural records are sorted by anchor span.
+
+    Args:
+        group:
+            `RecordGroupOutput` whose `spec` and `field_specs` are a `GroupRecord` and its fields.
+        anchor_threshold (`float`, *optional*, defaults to 0.5):
+            Object probability needed by natural and latent instances.
+        field_threshold (`float`, *optional*, defaults to 0.5):
+            Probability needed to keep a field span.
+        object_threshold (`float`, *optional*, defaults to 0.5):
+            Object probability needed by anchorless instances.
+        temperature (`float`, *optional*, defaults to 1.0):
+            Divisor applied to object and assignment logits.
+    """
+    if int(group.num_instances) == 0:
+        return []
+    selected, obj_prob = _select_record_instances(group, anchor_threshold, object_threshold, temperature)
+    scalar_choices, list_owners = _exclusive_field_choices(group, selected, field_threshold, temperature)
+    records = []
+    for inst in selected:
+        rec = _record_from_instance(group, inst, obj_prob, scalar_choices, list_owners, field_threshold, temperature)
+        if rec is not None:
+            records.append(rec)
+    if group.spec.mode in ("latent", "anchorless"):
+        best: dict[tuple, DecodedRecord] = {}
+        for rec in records:
+            key = _dedup_key(rec)
+            if key not in best or rec.score > best[key].score:
+                best[key] = rec
+        return list(best.values())
+    if group.spec.mode == "natural":
+        records.sort(key=lambda record: (record.anchor_span is None, record.anchor_span or (0, 0)))
+    return records
 
 
 class SchemaError(ValueError):
@@ -499,66 +418,6 @@ def _softmax(values: Sequence[float]) -> list:
     """Max-subtracted softmax in float64, materialized once."""
     tensor = torch.tensor([float(value) for value in values], dtype=torch.float64)
     return torch.softmax(tensor, dim=0).tolist()
-
-
-def _coerce_logits(value: Any, *, n_rows: int | None = None, as_shape: bool = False):
-    """Coerce logits to a float, a vector, row slices, or a shape.
-
-    Args:
-        value: Scalar, sequence, matrix, or nested logits.
-        n_rows: Split a matrix into this many rows.
-        as_shape: Return the shape instead of the values.
-
-    Returns:
-        A Python float, a list of values, a list of rows, or a shape tuple.
-        Callers trim a longer all-non-finite tail themselves.
-
-    Raises:
-        SchemaError: If a label vector or row block has the wrong kind.
-    """
-    if as_shape:
-        shape = getattr(value, "shape", None)
-        if shape is not None:
-            return tuple(int(item) for item in shape)
-        result: list[int] = []
-        current = value
-        while isinstance(current, (list, tuple)):
-            result.append(len(current))
-            if not current:
-                break
-            current = current[0]
-        return tuple(result)
-    if n_rows is not None:
-        shape = getattr(value, "shape", None)
-        if shape is not None and len(tuple(shape)) == 2:
-            if int(shape[0]) != n_rows:
-                raise SchemaError(f"expected {n_rows} task rows, got {int(shape[0])}")
-            return [value[index] for index in range(n_rows)]
-        if isinstance(value, (list, tuple)):
-            if len(value) != n_rows:
-                raise SchemaError(f"expected {n_rows} task logit rows, got {len(value)}")
-            return list(value)
-        raise SchemaError("logits must be a task mapping or one row per task")
-    if isinstance(value, (str, bytes)):
-        raise SchemaError("label logits must be a mapping or a sequence")
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "ndim") and int(value.ndim) == 0:
-        return float(value.item())
-    if hasattr(value, "shape"):
-        shape = tuple(int(dim) for dim in value.shape)
-        if len(shape) == 0:
-            return float(value.item())
-        listed = value.tolist()
-        return listed if isinstance(listed, list) else float(listed)
-    if hasattr(value, "tolist") and not isinstance(value, (str, bytes, Mapping)):
-        listed = value.tolist()
-        return listed if isinstance(listed, list) else float(listed)
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    if hasattr(value, "item"):
-        return float(value.item())
-    return float(value)
 
 
 def _geometric_mean(values) -> float | None:
@@ -643,17 +502,7 @@ def _greedy_overlaps(spans, score_fn, start_fn, end_fn):
 
 
 def _distinct_ranked(spans, score_fn, start_fn, end_fn):
-    """Rank spans and drop later copies of the same boundaries.
-
-    Args:
-        spans: Half-open spans in input order.
-        score_fn: Score used as the primary rank, higher first.
-        start_fn: Inclusive start offset.
-        end_fn: Exclusive end offset.
-
-    Returns:
-        Distinct ``(index, span)`` rows and the rank key used to order them.
-    """
+    """Rank spans and drop later copies of the same boundaries."""
 
     def rank_key(row):
         index, item = row
@@ -672,16 +521,7 @@ def _distinct_ranked(spans, score_fn, start_fn, end_fn):
 
 
 def _keep_nested(distinct, start_fn, end_fn):
-    """Keep spans that nest inside earlier picks instead of crossing them.
-
-    Args:
-        distinct: Ranked ``(index, span)`` rows with unique boundaries.
-        start_fn: Inclusive start offset.
-        end_fn: Exclusive end offset.
-
-    Returns:
-        Spans whose overlaps are proper containment.
-    """
+    """Keep spans that nest inside earlier picks instead of crossing them."""
     kept = []
     for row in distinct:
         candidate = row[1]
@@ -704,16 +544,7 @@ def _keep_nested(distinct, start_fn, end_fn):
 
 
 def _keep_longest(distinct, start_fn, end_fn):
-    """Drop spans strictly contained in any other distinct span.
-
-    Args:
-        distinct: Ranked ``(index, span)`` rows with unique boundaries.
-        start_fn: Inclusive start offset.
-        end_fn: Exclusive end offset.
-
-    Returns:
-        Spans that are not strictly inside another candidate.
-    """
+    """Drop spans strictly contained in any other distinct span."""
     kept = []
     for row in distinct:
         candidate = row[1]
@@ -731,18 +562,7 @@ def _keep_longest(distinct, start_fn, end_fn):
 
 
 def _keep_flat(distinct, score_fn, start_fn, end_fn, rank_key):
-    """Weighted interval selection. Equal scores prefer more spans, then rank.
-
-    Args:
-        distinct: Ranked ``(index, span)`` rows with unique boundaries.
-        score_fn: Additive span score.
-        start_fn: Inclusive start offset.
-        end_fn: Exclusive end offset.
-        rank_key: Tie-break used when score and span count match.
-
-    Returns:
-        A non-overlapping subset ordered by ``rank_key``.
-    """
+    """Weighted interval selection. Equal scores prefer more spans, then rank."""
     by_end = sorted(
         distinct,
         key=lambda row: (int(end_fn(row[1])), int(start_fn(row[1])), -float(score_fn(row[1])), row[0]),
@@ -820,7 +640,7 @@ def resolve_overlaps(
 
 
 def _char_span(start, end, offset, start_map, end_map, text):
-    """Map a half-open word span onto the normalized text."""
+    """Map a half-open word span onto `(surface, char_start, char_end)` in the text."""
     token_start, token_end = start - offset, end - offset
     if not (0 <= token_start < token_end <= len(end_map)):
         return None
@@ -832,59 +652,32 @@ def _char_span(start, end, offset, start_map, end_map, text):
     return surface, char_start, char_end
 
 
-def _query_specs(meta):
-    """Extractive fields in marker order, which is the candidate query axis."""
-    specs = []
-    for group in meta.get("groups") or []:
-        if group["task_type"] == "classifications":
-            continue
-        for field_name in group["fields"]:
-            specs.append(
-                {
-                    "task_type": group["task_type"],
-                    "task_name": group["name"],
-                    "field_name": field_name,
-                }
-            )
-    return specs
+def _query_specs(groups):
+    """Extractive fields in marker order, which is the boundary candidate query axis."""
+    return [
+        {"task_type": group.task, "task_name": group.name, "field_name": item.name, "field": item}
+        for group in groups
+        if group.task != "classifications"
+        for item in group.fields
+    ]
 
 
 def _group_candidates(candidates, threshold, temperature):
-    """Threshold pair logits into per-query (score, start, end) lists."""
+    """Threshold pair logits into per-query `(score, start, end)` lists."""
     probs = torch.sigmoid(candidates.pair_logits / temperature)
-    eligible = candidates.valid_mask & candidates.query_mask.unsqueeze(-1)
-    keep = eligible & (probs >= threshold)
+    keep = candidates.valid_mask & candidates.query_mask.unsqueeze(-1) & (probs >= threshold)
     grouped = [[[] for _ in range(candidates.indices.shape[1])] for _ in range(candidates.indices.shape[0])]
-    batch, query, candidate = keep.nonzero(as_tuple=True)
-    for index in range(batch.shape[0]):
-        b = int(batch[index])
-        q = int(query[index])
-        c = int(candidate[index])
-        grouped[b][q].append(
-            (
-                float(probs[b, q, c]),
-                int(candidates.indices[b, q, c, 0]),
-                int(candidates.indices[b, q, c, 1]),
-            )
-        )
+    for b, q, c in keep.nonzero().tolist():
+        start, end = candidates.indices[b, q, c].tolist()
+        grouped[b][q].append((float(probs[b, q, c]), int(start), int(end)))
     for sample in grouped:
         for scored in sample:
             scored.sort(key=lambda item: (-item[0], item[1], item[2]))
     return grouped
 
 
-def _kept_spans(scored, policy):
-    return resolve_overlaps(
-        scored,
-        policy,
-        score=lambda item: item[0],
-        start=lambda item: item[1],
-        end=lambda item: item[2],
-    )
-
-
 def format_span(surface, score, char_start, char_end, include_confidence, include_spans):
-    """Public span payload."""
+    """Public span payload: the text alone, or a dict with confidence and offsets."""
     if include_spans and include_confidence:
         return {"text": surface, "confidence": score, "start": char_start, "end": char_end}
     if include_spans:
@@ -895,10 +688,7 @@ def format_span(surface, score, char_start, char_end, include_confidence, includ
 
 
 def _passes_text(surface: str, validators) -> bool:
-    for validator in validators or []:
-        if hasattr(validator, "validate") and not validator.validate(surface):
-            return False
-    return True
+    return all(not hasattr(validator, "validate") or validator.validate(surface) for validator in validators)
 
 
 def _matrix_spans(scores: torch.Tensor, threshold: float, text: str, start_map, end_map) -> list:
@@ -910,93 +700,63 @@ def _matrix_spans(scores: torch.Tensor, threshold: float, text: str, start_map, 
         end = start + int(width) + 1
         if not (0 <= start < doc_len and end <= doc_len):
             continue
-        try:
-            char_start, char_end = start_map[start], end_map[end - 1]
-            span_text = text[char_start:char_end].strip()
-        except (IndexError, KeyError):
-            continue
+        char_start, char_end = start_map[start], end_map[end - 1]
+        span_text = text[char_start:char_end].strip()
         if span_text:
             found.append((span_text, float(scores[start, width].item()), int(char_start), int(char_end)))
     return found
 
 
-def decode_spans(scores, group, text, maps, threshold, overlap):
-    """Threshold, resolve overlaps, and format one field."""
-    include_confidence = bool(group.get("include_confidence", False))
-    include_spans = bool(group.get("include_spans", False))
-    dtype = group.get("dtype") or "list"
-    validators = group.get("validators") or []
-    field_threshold = group.get("threshold", threshold)
-    if field_threshold is None:
-        field_threshold = threshold
-    if isinstance(maps, Mapping):
-        start_map, end_map = maps.get("start") or [], maps.get("end") or []
-        offset = int(maps.get("offset") or 0)
-    else:
-        start_map, end_map = maps[0], maps[1]
-        offset = int(maps[2]) if len(maps) > 2 else 0
-    raw = []
-    extras = dict(group.get("extras") or {})
+def decode_spans(scores, row, options, *, dtype="list", threshold=None, validators=(), blank=False):
+    """Threshold, resolve overlaps, and format one field.
+
+    Args:
+        scores:
+            `(words, width)` probabilities on the document axis, or scored
+            `(score, start, end)` word spans that include the choice prefix.
+        row (`dict`):
+            Processor metadata with `text`, `start`, `end`, and `prefix_len`.
+        options (`DecodeOptions`):
+            Shared cutoff, overlap policy, and payload switches.
+        dtype (`str`, *optional*, defaults to `"list"`):
+            `"list"` keeps every span. Any other value keeps the best one.
+        threshold (`float`, *optional*):
+            Field cutoff for probability matrices. Defaults to `options.threshold`.
+        validators (`tuple`, *optional*):
+            Objects whose `validate(text)` must accept the span text.
+        blank (`bool`, *optional*, defaults to `False`):
+            Return `""` instead of `None` for an empty scalar without payload options.
+    """
+    text, start_map, end_map = row["text"], row["start"], row["end"]
     if torch.is_tensor(scores):
-        for surface, score, char_start, char_end in _matrix_spans(
-            scores, float(field_threshold), text, start_map, end_map
-        ):
-            if _passes_text(surface, validators):
-                raw.append((surface, score, char_start, char_end))
+        cutoff = options.threshold if threshold is None else threshold
+        found = _matrix_spans(scores, float(cutoff), text, start_map, end_map)
+        found = [span for span in found if _passes_text(span[0], validators)]
         selected = resolve_overlaps(
-            raw,
-            overlap,
-            score=lambda span: span[1],
-            start=lambda span: span[2],
-            end=lambda span: span[3],
+            found, options.overlap, score=lambda span: span[1], start=lambda span: span[2], end=lambda span: span[3]
         )
     else:
-        token_rows = []
-        char_rows = []
-        for item in scores or []:
-            if len(item) >= 4 and isinstance(item[0], str):
-                surface, score, char_start, char_end = item[0], item[1], item[2], item[3]
-                if surface and _passes_text(surface, validators):
-                    char_rows.append((surface, float(score), int(char_start), int(char_end)))
-            else:
-                token_rows.append((float(item[0]), int(item[1]), int(item[2])))
-        if token_rows:
-            kept = resolve_overlaps(
-                token_rows,
-                overlap,
-                score=lambda span: span[0],
-                start=lambda span: span[1],
-                end=lambda span: span[2],
-            )
-            for score, start, end in kept:
-                mapped = _char_span(start, end, offset, start_map, end_map, text)
-                if mapped is not None and _passes_text(mapped[0], validators):
-                    char_rows.append((mapped[0], score, mapped[1], mapped[2]))
-        elif char_rows:
-            char_rows = resolve_overlaps(
-                char_rows,
-                overlap,
-                score=lambda span: span[1],
-                start=lambda span: span[2],
-                end=lambda span: span[3],
-            )
-        selected = char_rows
-    if dtype != "list":
-        selected = selected[:1]
-    formatted = []
-    for surface, score, char_start, char_end in selected:
-        payload = format_span(surface, score, char_start, char_end, include_confidence, include_spans)
-        extra = extras.get((char_start, char_end))
-        if extra:
-            payload = {"text": surface, **extra} if not isinstance(payload, dict) else {**payload, **extra}
-        formatted.append(payload)
+        kept = resolve_overlaps(
+            list(scores),
+            options.overlap,
+            score=lambda span: span[0],
+            start=lambda span: span[1],
+            end=lambda span: span[2],
+        )
+        selected = []
+        for score, start, end in kept:
+            mapped = _char_span(start, end, row["prefix_len"], start_map, end_map, text)
+            if mapped is not None and _passes_text(mapped[0], validators):
+                selected.append((mapped[0], score, mapped[1], mapped[2]))
+    formatted = [
+        format_span(surface, score, char_start, char_end, options.include_confidence, options.include_spans)
+        for surface, score, char_start, char_end in selected
+    ]
     if dtype == "list":
         return formatted
     if formatted:
         return formatted[0]
-    if group.get("empty") == "blank":
-        return "" if not include_spans and not include_confidence else None
-    return None
+    return "" if blank and not (options.include_confidence or options.include_spans) else None
 
 
 def _deduplicate_relation_edges(edges):
@@ -1007,12 +767,11 @@ def _deduplicate_relation_edges(edges):
     def canonical_mentions(side):
         mentions = {(edge[side][1], edge[side][2]): edge[side] for edge in edges}
         canonical = {}
-        for coordinates in mentions:
-            start, end = coordinates
+        for start, end in mentions:
             containing = [
                 candidate for candidate in mentions.values() if candidate[1] <= start and candidate[2] >= end
             ]
-            canonical[coordinates] = max(
+            canonical[(start, end)] = max(
                 containing, key=lambda candidate: (candidate[2] - candidate[1], -candidate[1])
             )
         return canonical
@@ -1023,13 +782,11 @@ def _deduplicate_relation_edges(edges):
     for edge in edges:
         head = head_canonical[(edge["head"][1], edge["head"][2])]
         tail = tail_canonical[(edge["tail"][1], edge["tail"][2])]
-        normalized = {**edge, "head": head, "tail": tail}
         key = (head[1], head[2], tail[1], tail[2])
-        previous = exact.get(key)
-        if previous is None or edge["score"] > previous["score"]:
-            exact[key] = normalized
+        if key not in exact or edge["score"] > exact[key]["score"]:
+            exact[key] = {**edge, "head": head, "tail": tail}
 
-    def semantic_text(value):
+    def words(value):
         return " ".join(value.casefold().split())
 
     def rank(candidate):
@@ -1040,28 +797,19 @@ def _deduplicate_relation_edges(edges):
 
     semantic = {}
     for edge in exact.values():
-        key = (semantic_text(edge["head"][0]), semantic_text(edge["tail"][0]))
-        previous = semantic.get(key)
-        if previous is None or rank(edge) < rank(previous):
+        key = (words(edge["head"][0]), words(edge["tail"][0]))
+        if key not in semantic or rank(edge) < rank(semantic[key]):
             semantic[key] = edge
     values = list(semantic.values())
-    kept = []
-    for edge in values:
-        head_tokens = set(semantic_text(edge["head"][0]).split())
-        tail_tokens = set(semantic_text(edge["tail"][0]).split())
-        dominated = False
-        for other in values:
-            if other is edge:
-                continue
-            other_head = set(semantic_text(other["head"][0]).split())
-            other_tail = set(semantic_text(other["tail"][0]).split())
-            if (head_tokens < other_head and tail_tokens == other_tail) or (
-                tail_tokens < other_tail and head_tokens == other_head
-            ):
-                dominated = True
-                break
-        if not dominated:
-            kept.append(edge)
+    tokens = [(set(words(edge["head"][0]).split()), set(words(edge["tail"][0]).split())) for edge in values]
+    kept = [
+        edge
+        for (head, tail), edge in zip(tokens, values)
+        if not any(
+            (head < other_head and tail == other_tail) or (tail < other_tail and head == other_head)
+            for other_head, other_tail in tokens
+        )
+    ]
     return sorted(kept, key=lambda edge: (edge["head"][1], edge["tail"][1], -edge["score"]))
 
 
@@ -1080,305 +828,153 @@ def format_relation(edge, include_confidence, include_spans):
             value["tail"]["confidence"] = score
         return value
     if include_confidence:
-        return {
-            "head": {"text": head, "confidence": score},
-            "tail": {"text": tail, "confidence": score},
-        }
+        return {"head": {"text": head, "confidence": score}, "tail": {"text": tail, "confidence": score}}
     return (head, tail)
 
 
-def _decode_relations(sample_out, meta, threshold, include_confidence, include_spans):
-    """Map forward relation pairs and logits onto character offsets."""
-    pairs = sample_out.get("relation_pairs")
-    logits = sample_out.get("relation_logits")
+def decode_relations(sample, groups, row, options):
+    """Map forward's typed relation pairs onto character offsets, keyed by relation name.
+
+    Args:
+        sample (`dict`):
+            One row of model output with `relation_pairs` `[pairs, 6]` and `relation_logits`.
+        groups (`Sequence[FieldGroup]`):
+            Compiled schema groups. Relation groups are indexed in order.
+        row (`dict`):
+            Processor metadata with `text`, `start`, `end`, and `prefix_len`.
+        options (`DecodeOptions`):
+            Cutoff and payload switches. Relation groups may override the cutoff.
+    """
+    pairs, logits = sample.get("relation_pairs"), sample.get("relation_logits")
     if pairs is None or logits is None or pairs.numel() == 0:
         return {}
-    temperature = float(sample_out.get("relation_temperature") or 1.0)
-    probabilities = torch.sigmoid(logits.detach().float().cpu() / temperature)
-    relation_groups = [group for group in (meta.get("groups") or []) if group.get("task_type") == "relations"]
-    aliases = {
-        f"{name}: {description}": name for name, description in (meta.get("relation_descriptions") or {}).items()
-    }
-    relation_metadata = meta.get("relation_metadata") or {}
-    offset = int(meta.get("prefix_len") or 0)
-    start_map = list(meta.get("start") or [])
-    end_map = list(meta.get("end") or [])
-    text = meta.get("text") or ""
+    temperature = float(sample.get("relation_temperature") or 1.0)
+    probabilities = torch.sigmoid(logits.detach().float().cpu() / temperature).tolist()
+    relations = [group for group in groups if group.task == "relations"]
     edges = {}
-    for pair_index, probability in enumerate(probabilities):
-        relation_index = int(pairs[pair_index, 1])
-        if relation_index < 0 or relation_index >= len(relation_groups):
+    for pair, score in zip(pairs.tolist(), probabilities):
+        if not 0 <= pair[1] < len(relations):
             continue
-        relation_name = relation_groups[relation_index]["name"]
-        relation_type = aliases.get(relation_name, relation_name)
-        relation_threshold = relation_metadata.get(relation_type, {}).get("threshold", threshold)
-        if relation_threshold is None:
-            relation_threshold = threshold
-        score = float(probability.detach())
-        if score < relation_threshold:
+        group = relations[pair[1]]
+        if score < (options.threshold if group.threshold is None else group.threshold):
             continue
-        head = _char_span(
-            int(pairs[pair_index, 2]),
-            int(pairs[pair_index, 3]),
-            offset,
-            start_map,
-            end_map,
-            text,
-        )
-        tail = _char_span(
-            int(pairs[pair_index, 4]),
-            int(pairs[pair_index, 5]),
-            offset,
-            start_map,
-            end_map,
-            text,
-        )
-        if head is None or tail is None:
-            continue
-        edges.setdefault(relation_type, []).append({"score": score, "head": head, "tail": tail})
-    formatted = {}
-    for relation_type, relation_edges in edges.items():
-        formatted[relation_type] = [
-            format_relation(edge, include_confidence, include_spans)
-            for edge in _deduplicate_relation_edges(relation_edges)
+        head = _char_span(pair[2], pair[3], row["prefix_len"], row["start"], row["end"], row["text"])
+        tail = _char_span(pair[4], pair[5], row["prefix_len"], row["start"], row["end"], row["text"])
+        if head is not None and tail is not None:
+            edges.setdefault(group.name, []).append({"score": score, "head": head, "tail": tail})
+    return {
+        name: [
+            format_relation(edge, options.include_confidence, options.include_spans)
+            for edge in _deduplicate_relation_edges(found)
         ]
-    return formatted
+        for name, found in edges.items()
+    }
 
 
-def decode_boundary(
-    sample_out,
-    meta,
-    *,
-    threshold=0.5,
-    include_confidence=False,
-    include_spans=False,
-    overlap_policy="disallow",
-    temperature=1.0,
-):
-    """Decode one boundary sample into the pre-format result dict."""
-    specs = _query_specs(meta)
-    if sample_out.get("grouped_candidates") is not None:
-        grouped = sample_out["grouped_candidates"]
-    else:
-        candidates = sample_out["candidates"]
-        grouped = _group_candidates(candidates, threshold, temperature)[0]
-    offset = int(meta.get("prefix_len") or 0)
-    start_map = list(meta.get("start") or [])
-    end_map = list(meta.get("end") or [])
-    text = meta.get("text") or ""
-    null_logits = sample_out.get("null_logits")
-    abstain = float(meta.get("abstention_threshold") or 0.5)
-    maps = {"start": start_map, "end": end_map, "offset": offset}
-    entities = OrderedDict()
-    structures = OrderedDict()
-    field_options = {}
-    for group in meta.get("groups") or []:
-        stored = (group.get("options") or {}).get("fields") or {}
-        for field_name, options in stored.items():
-            field_options[(group.get("name"), field_name)] = options
-    for query_id, spec in enumerate(specs):
-        if query_id >= len(grouped):
-            break
-        if null_logits is not None and float(torch.sigmoid(null_logits[query_id])) > abstain:
-            scored = []
-        else:
-            scored = grouped[query_id]
-        options = field_options.get((spec["task_name"], spec["field_name"]), {})
-        dtype = "list" if spec["task_type"] == "entities" else "str"
-        decoded = decode_spans(
-            scored,
-            {
-                "dtype": dtype,
-                "threshold": options.get("threshold", threshold),
-                "validators": options.get("validators") or [],
-                "include_confidence": include_confidence,
-                "include_spans": include_spans,
-                "empty": "blank" if spec["task_type"] == "entities" else None,
-            },
-            text,
-            maps,
-            threshold,
-            overlap_policy,
-        )
+def decode_boundary(sample, groups, row, options):
+    """Decode one boundary row into entities, structures, relations, and records.
+
+    Args:
+        sample (`dict`):
+            One row of model output with `candidates`.
+        groups (`Sequence[FieldGroup]`):
+            Compiled schema groups.
+        row (`dict`):
+            Processor metadata with `text`, `start`, `end`, and `prefix_len`.
+        options (`DecodeOptions`):
+            Cutoff, overlap policy, pair temperature, and payload switches.
+    """
+    grouped = _group_candidates(sample["candidates"], options.threshold, options.temperature)[0]
+    null_logits = sample.get("null_logits")
+    entities, structures = {}, {}
+    for query_id, spec in enumerate(_query_specs(groups)[: len(grouped)]):
+        abstained = null_logits is not None and float(torch.sigmoid(null_logits[query_id])) > 0.5
+        scored = [] if abstained else grouped[query_id]
+        validators = spec["field"].validators
         if spec["task_type"] == "entities":
-            entities[spec["field_name"]] = decoded
+            entities[spec["field_name"]] = decode_spans(scored, row, options, validators=validators, blank=True)
         elif spec["task_type"] == "json_structures":
-            structures.setdefault(spec["task_name"], OrderedDict())[spec["field_name"]] = decoded
-    result = {}
-    if entities:
-        result["entities"] = [entities]
+            decoded = decode_spans(scored, row, options, dtype="str", validators=validators)
+            structures.setdefault(spec["task_name"], {})[spec["field_name"]] = decoded
+    result = {"entities": [entities]} if entities else {}
     for name, instance in structures.items():
         if any(value is not None and value != [] for value in instance.values()):
             result[name] = [instance]
-    result.update(_decode_relations(sample_out, meta, threshold, include_confidence, include_spans))
-    for group in meta.get("groups") or []:
-        if group["task_type"] == "relations" and group["name"] not in result:
-            result[group["name"]] = []
-    recorded = decode_records(
-        sample_out,
-        meta,
-        threshold=threshold,
-        include_confidence=include_confidence,
-        include_spans=include_spans,
-        overlap_policy=overlap_policy,
-    )
-    result.update(recorded)
+    result.update(decode_relations(sample, groups, row, options))
+    for group in groups:
+        if group.task == "relations":
+            result.setdefault(group.name, [])
+    result.update(decode_records(sample, groups, row, options))
     return result
 
 
-def _records_enabled(sample_out, meta) -> bool:
-    """False when records are off or the checkpoint predates config version 3."""
-    version = sample_out.get("config_version", meta.get("config_version"))
-    if version is not None and int(version) < 3:
-        return False
-    enabled = sample_out.get("enable_records", meta.get("enable_records"))
-    if enabled is None:
-        return sample_out.get("record_logits") is not None
-    return bool(enabled)
-
-
-def _query_spans(candidates, query_id: int) -> torch.Tensor:
-    """Valid `(start, end)` rows for one boundary query."""
-    if candidates is None or query_id < 0 or query_id >= int(candidates.indices.shape[1]):
-        return torch.zeros((0, 2), dtype=torch.long)
-    mask = candidates.valid_mask[0, query_id]
-    keep = torch.nonzero(mask, as_tuple=False).flatten()
-    return candidates.indices[0, query_id][keep].to(torch.long)
-
-
-@dataclass
-class RecordGroupView:
-    """Record group whose spans line up with forward's `record_logits`."""
-
-    spec: object
-    object_logits: torch.Tensor
-    assign_logits: list
-    field_query_ids: list[int]
-    field_specs: list
-    field_spans: list
-    instance_seed: list
-    instance_spans: list
-    num_instances: int
-
-
-def _record_group(spec, logits, candidates):
-    """Record group whose spans line up with forward's `record_logits`."""
-    from .processing_gliner2 import FieldCardinality, RecordFieldSpec, RecordSpec
-
-    object_logits, assign_logits = logits
-    if not torch.is_tensor(object_logits):
-        object_logits = torch.tensor(object_logits, dtype=torch.float)
-    fields = []
-    spans = []
-    for field_spec in spec.get("fields") or []:
-        card = str(field_spec.get("cardinality") or "zero_or_more")
-        fields.append(
-            RecordFieldSpec(
-                query_id=int(field_spec["query_id"]),
-                name=field_spec.get("name"),
-                exclusive=bool(field_spec.get("exclusive", False)),
-                allows_absent=card in ("optional_one", "zero_or_more"),
-                cardinality=FieldCardinality(is_scalar=card in ("optional_one", "required_one")),
-            )
-        )
-        spans.append(_query_spans(candidates, int(field_spec["query_id"])))
-    mode = spec.get("mode")
-    seeds: list = []
-    instance_spans: list = []
-    if mode == "natural":
-        anchor_id = spec.get("anchor_query_id")
-        anchor_index = next(index for index, field in enumerate(fields) if field.query_id == anchor_id)
-        anchor_spans = spans[anchor_index]
-        for cand_idx in range(int(anchor_spans.shape[0])):
-            seeds.append((anchor_index, cand_idx))
-            instance_spans.append((int(anchor_spans[cand_idx, 0]), int(anchor_spans[cand_idx, 1])))
-    elif mode == "latent":
-        for field_index, field_spans in enumerate(spans):
-            for cand_idx in range(int(field_spans.shape[0])):
-                seeds.append((field_index, cand_idx))
-                instance_spans.append((int(field_spans[cand_idx, 0]), int(field_spans[cand_idx, 1])))
-    else:
-        count = int(object_logits.shape[0])
-        seeds = [None] * count
-        instance_spans = [None] * count
-    return RecordGroupView(
-        spec=RecordSpec(
-            mode=mode,
-            fields=tuple(fields),
-            anchor_query_id=spec.get("anchor_query_id"),
-            task_index=int(spec.get("task_index", 0)),
-        ),
-        object_logits=object_logits,
-        assign_logits=list(assign_logits),
-        field_query_ids=[field.query_id for field in fields],
-        field_specs=fields,
-        field_spans=spans,
-        instance_seed=seeds,
-        instance_spans=instance_spans,
-        num_instances=int(object_logits.shape[0]),
-    )
-
-
-def decode_records(
-    sample_out,
-    meta,
-    *,
-    threshold=0.5,
-    include_confidence=False,
-    include_spans=False,
-    overlap_policy=None,
-):
-    """Assign `record_logits` with `decode_group` when records are enabled."""
-    if not _records_enabled(sample_out, meta):
-        return {}
-    groups = sample_out.get("record_logits")
-    specs = list(meta.get("record_specs") or [])
-    if not groups or not specs:
-        return dict(sample_out.get("records") or {})
-    candidates = sample_out.get("candidates")
-    text = meta.get("text") or ""
-    maps = {
-        "start": list(meta.get("start") or []),
-        "end": list(meta.get("end") or []),
-        "offset": int(meta.get("prefix_len") or 0),
-    }
-    temperature = float(sample_out.get("record_temperature") or meta.get("record_temperature") or 1.0)
-    out = OrderedDict()
-    for spec, logits in zip(specs, groups):
-        group = _record_group(spec, logits, candidates)
-        if group.num_instances != len(group.instance_seed):
+def _record_field_spans(record, item, field, candidates, row, options):
+    """Score a record field's spans by the lower of candidate and assignment probability."""
+    kept = []
+    spans = record.fields.get(item.query_id, [])
+    for (start, end), assigned in zip(spans, record.field_scores.get(item.query_id, [])):
+        candidate = 0.0
+        if item.query_id < candidates.indices.shape[1]:
+            target = candidates.indices.new_tensor([start, end])
+            exact = candidates.valid_mask[0, item.query_id] & (candidates.indices[0, item.query_id] == target).all(-1)
+            if bool(exact.any()):
+                logits = candidates.pair_logits[0, item.query_id, exact] / options.temperature
+                candidate = float(torch.sigmoid(logits).max())
+        probability = min(candidate, float(assigned))
+        mapped = _char_span(start, end, row["prefix_len"], row["start"], row["end"], row["text"])
+        if (
+            mapped is None
+            or (item.allows_absent and candidate < options.threshold)
+            or (field.threshold is not None and probability < float(field.threshold))
+            or not _passes_text(mapped[0], field.validators)
+        ):
             continue
-        decoded = decode_group(
-            group,
-            anchor_threshold=threshold,
-            field_threshold=threshold,
-            object_threshold=threshold,
-            temperature=temperature,
-        )
+        kept.append((probability, start, end))
+    return kept
+
+
+def decode_records(sample, groups, row, options):
+    """Assign forward's `record_logits` groups to field spans, keyed by structure name.
+
+    Args:
+        sample (`dict`):
+            One row of model output. `record_logits` holds one `RecordGroupOutput`
+            per group with a `record`, in group order.
+        groups (`Sequence[FieldGroup]`):
+            Compiled schema groups.
+        row (`dict`):
+            Processor metadata with `text`, `start`, `end`, and `prefix_len`.
+        options (`DecodeOptions`):
+            Cutoff, overlap policy, and payload switches.
+    """
+    scored_groups = sample.get("record_logits")
+    records = [group for group in groups if group.record is not None]
+    if not scored_groups or not records:
+        return {}
+    temperature = float(sample.get("record_temperature") or 1.0)
+    result = {}
+    for group, scored in zip(records, scored_groups):
+        scored = replace(scored, spec=group.record, field_specs=list(group.record.fields))
+        fields = {item.name: item for item in group.fields}
         instances = []
-        for record in decoded:
-            instance = OrderedDict()
-            for field_spec in group.field_specs:
-                spans = record.fields.get(field_spec.query_id, [])
-                scores = record.field_scores.get(field_spec.query_id, [])
-                raw = [(score, start, end) for (start, end), score in zip(spans, scores)]
-                instance[field_spec.name] = decode_spans(
-                    raw,
-                    {
-                        "dtype": "str" if field_spec.cardinality.is_scalar else "list",
-                        "include_confidence": include_confidence,
-                        "include_spans": include_spans,
-                    },
-                    text,
-                    maps,
-                    threshold,
-                    overlap_policy,
-                )
+        for record in decode_group(
+            scored,
+            anchor_threshold=options.threshold,
+            field_threshold=options.threshold,
+            object_threshold=options.threshold,
+            temperature=temperature,
+        ):
+            instance = {}
+            for item in group.record.fields:
+                field = fields[item.name]
+                raw = _record_field_spans(record, item, field, sample["candidates"], row, options)
+                scalar = item.is_scalar or field.dtype == "str"
+                instance[item.name] = decode_spans(raw, row, options, dtype="str" if scalar else "list")
             if any(value is not None and value != [] for value in instance.values()):
                 instances.append(instance)
         if instances:
-            out[spec.get("task_name") or spec.get("name")] = instances
-    return dict(out)
+            result[group.name] = instances
+    return result
 
 
 class Expr:
@@ -1419,9 +1015,6 @@ def _walk(expr: Expr, schema=None):
         counts.update(child_counts)
 
     def spec_of(task):
-        getter = getattr(schema, "task_spec", None)
-        if getter is not None:
-            return getter(task)
         return schema.task(task)
 
     if kind == "LabelRef":
@@ -1608,19 +1201,6 @@ def _expr_from_dict(data: Mapping) -> Expr:
 
 
 @dataclass(frozen=True)
-class LabelSpec:
-    """One classification label."""
-
-    name: str
-    description: str | None = None
-
-    def __post_init__(self) -> None:
-        _clean(self.name, "label name")
-        if self.description is not None:
-            _clean(self.description, f"description of label {self.name!r}")
-
-
-@dataclass(frozen=True)
 class TaskSpec:
     """Cardinality, order, and calibration for one classification task."""
 
@@ -1634,38 +1214,26 @@ class TaskSpec:
     activation: str = "auto"
     temperature: float = 1.0
     default: str | None = None
-    instruction: str | None = None
-    examples: tuple = ()
 
     def __post_init__(self) -> None:
         _clean(self.name, "task name")
-        object.__setattr__(self, "labels", tuple(self.labels))
-        object.__setattr__(self, "examples", tuple(tuple(pair) for pair in self.examples))
-        if not self.labels:
-            raise SchemaError(f"task {self.name!r} must declare at least one label")
-        names = [item.name for item in self.labels]
-        if len(set(names)) != len(names):
-            raise SchemaError(f"task {self.name!r} has duplicate label names")
+        labels = tuple(_clean(label, "label name") for label in self.labels)
+        object.__setattr__(self, "labels", labels)
+        if not labels or len(set(labels)) != len(labels):
+            raise SchemaError(f"task {self.name!r} needs at least one label and no duplicates")
         if not isinstance(self.min_labels, int) or self.min_labels < 0:
             raise SchemaError(f"task {self.name!r}: min_labels must be a non-negative int")
-        if self.max_labels is not None:
-            if not isinstance(self.max_labels, int) or self.max_labels < 0:
-                raise SchemaError(f"task {self.name!r}: max_labels must be a non-negative int")
-            if self.max_labels > len(self.labels):
-                raise SchemaError(
-                    f"task {self.name!r}: max_labels ({self.max_labels}) exceeds the "
-                    f"number of labels ({len(self.labels)})"
-                )
+        if self.max_labels is not None and not (
+            isinstance(self.max_labels, int) and 0 <= self.max_labels <= len(labels)
+        ):
+            raise SchemaError(f"task {self.name!r}: max_labels must be an int in [0, {len(labels)}]")
         if self.default is not None:
-            if self.default not in names:
+            if self.default not in labels:
                 raise SchemaError(f"task {self.name!r}: default {self.default!r} is not one of its labels")
-            if self.min_labels < 1:
-                object.__setattr__(self, "min_labels", 1)
+            object.__setattr__(self, "min_labels", max(self.min_labels, 1))
         if self.max_labels is not None and self.min_labels > self.max_labels:
-            raise SchemaError(
-                f"task {self.name!r}: min_labels ({self.min_labels}) exceeds max_labels ({self.max_labels})"
-            )
-        if self.ordered and len(self.labels) < 2:
+            raise SchemaError(f"task {self.name!r}: min_labels exceeds max_labels")
+        if self.ordered and len(labels) < 2:
             raise SchemaError(f"ordered task {self.name!r} requires at least two labels")
         if not isinstance(self.threshold, (int, float)) or not 0 < self.threshold < 1:
             raise SchemaError(f"task {self.name!r}: threshold must be in (0, 1)")
@@ -1674,18 +1242,10 @@ class TaskSpec:
             raise SchemaError(f"task {self.name!r}: activation must be one of {_ACTIVATIONS}")
         if not isinstance(self.temperature, (int, float)) or self.temperature <= 0:
             raise SchemaError(f"task {self.name!r}: temperature must be positive")
-        if self.instruction is not None:
-            _clean(self.instruction, f"instruction of task {self.name!r}")
-        for pair in self.examples:
-            if len(pair) != 2:
-                raise SchemaError(f"task {self.name!r}: each example must be a (text, label) pair")
-            _, label_name = pair
-            if label_name not in names:
-                raise SchemaError(f"task {self.name!r}: example label {label_name!r} is not one of its labels")
 
     @property
     def label_names(self) -> tuple:
-        return tuple(item.name for item in self.labels)
+        return self.labels
 
     @property
     def is_exclusive(self) -> bool:
@@ -1693,22 +1253,6 @@ class TaskSpec:
 
     def effective_max_labels(self) -> int:
         return len(self.labels) if self.max_labels is None else self.max_labels
-
-
-def _coerce_labels(labels: Any) -> tuple:
-    if isinstance(labels, Mapping):
-        return tuple(LabelSpec(name, desc) for name, desc in labels.items())
-    if isinstance(labels, str):
-        raise SchemaError("labels must be a list or a {label: description} mapping, not a str")
-    coerced = []
-    for item in labels:
-        if isinstance(item, LabelSpec):
-            coerced.append(item)
-        elif isinstance(item, str):
-            coerced.append(LabelSpec(item))
-        else:
-            raise SchemaError(f"invalid label entry {item!r}")
-    return tuple(coerced)
 
 
 class Assignment:
@@ -1766,9 +1310,8 @@ def _spec_map(task_specs) -> dict:
 
 @dataclass(frozen=True)
 class CompiledClassificationSchema:
-    """Model schema dict plus the constraint set the decoder searches."""
+    """Task specs plus the constraint set the decoder searches."""
 
-    model_schema: dict
     task_specs: tuple
     constraints: tuple
     task_order: tuple
@@ -1778,78 +1321,6 @@ class CompiledClassificationSchema:
             if spec.name == name:
                 return spec
         raise SchemaError(f"unknown task {name!r}")
-
-    def task_spec(self, name) -> TaskSpec:
-        return self.task(name)
-
-    def build(self) -> dict:
-        return self.model_schema
-
-
-def _classification_entry(spec: TaskSpec) -> dict:
-    entry = {
-        "task": spec.name,
-        "labels": list(spec.label_names),
-        "multi_label": not spec.is_exclusive,
-        "cls_threshold": spec.threshold,
-        "class_act": spec.activation,
-    }
-    if spec.instruction:
-        entry["prompt"] = spec.instruction
-    descs = {item.name: item.description for item in spec.labels if item.description}
-    if descs:
-        entry["label_descriptions"] = descs
-    if spec.examples:
-        entry["examples"] = [list(pair) for pair in spec.examples]
-    return entry
-
-
-def _has_reserved(value: str) -> bool:
-    return any(token in value for token in _RESERVED)
-
-
-def _assert_model_schema(model: dict) -> None:
-    for key in _MODEL_KEYS:
-        if key not in model:
-            raise SchemaError(f"compiled model schema is missing key {key!r}")
-    if not isinstance(model["classifications"], list):
-        raise SchemaError("compiled 'classifications' must be a list")
-    for entry in model["classifications"]:
-        task = entry.get("task")
-        if not isinstance(task, str) or not task:
-            raise SchemaError("classification entry has an invalid 'task'")
-        for required in ("labels", "multi_label", "cls_threshold", "class_act"):
-            if required not in entry:
-                raise SchemaError(f"classification task {task!r} is missing {required!r}")
-        if not isinstance(entry["labels"], list) or not entry["labels"]:
-            raise SchemaError(f"classification task {task!r} has invalid 'labels'")
-        if not isinstance(entry["multi_label"], bool):
-            raise SchemaError(f"classification task {task!r} has non-bool 'multi_label'")
-        strings = [task] + list(entry["labels"])
-        if "prompt" in entry:
-            strings.append(entry["prompt"])
-        strings += list(entry.get("label_descriptions", {}).keys())
-        strings += list(entry.get("label_descriptions", {}).values())
-        for pair in entry.get("examples", []):
-            strings += [str(item) for item in pair]
-        for value in strings:
-            if isinstance(value, str) and _has_reserved(value):
-                raise SchemaError(
-                    f"classification task {task!r} emitted a reserved marker token in "
-                    f"{value!r}; this would corrupt logit-to-label alignment"
-                )
-
-
-def _check_prefix_collisions(task_order) -> None:
-    for left in task_order:
-        for right in task_order:
-            if left == right:
-                continue
-            if right.startswith(left) and len(right) > len(left) and right[len(left)] in (":", " "):
-                raise SchemaError(
-                    f"task name {left!r} is a boundary-prefix of {right!r}; the prompt "
-                    f"resolver could confuse them. Rename one."
-                )
 
 
 def _static_feasibility(constraints, task_specs) -> None:
@@ -1893,22 +1364,6 @@ def _lower_defaults(constraints, task_specs) -> tuple:
     return tuple(constraints)
 
 
-class _TaskIndex:
-    """Task lookup used while checking constraint references."""
-
-    def __init__(self, specs):
-        self._specs = {spec.name: spec for spec in specs}
-
-    def task_spec(self, name):
-        try:
-            return self._specs[name]
-        except KeyError:
-            raise SchemaError(f"unknown task {name!r}") from None
-
-    def task(self, name):
-        return self.task_spec(name)
-
-
 def _constraint_list(raw) -> tuple:
     constraints = []
     for item in raw or ():
@@ -1923,28 +1378,17 @@ def _task_spec_from_body(name, body) -> TaskSpec:
     """Build one task record from a tasks-dict or classifications entry."""
     body = dict(body or {})
     labels = body.pop("labels", None)
-    descriptions = body.pop("label_descriptions", None) or {}
-    if descriptions and not isinstance(labels, Mapping):
-        labels = {label: descriptions.get(label) for label in labels}
-    examples = tuple(tuple(pair) for pair in (body.pop("examples", ()) or ()))
-    if "multi_label" in body or "cls_threshold" in body or "class_act" in body or "task" in body:
+    if isinstance(labels, str) or labels is None:
+        raise SchemaError("labels must be a list or a {label: description} mapping")
+    for key in ("label_descriptions", "examples", "prompt", "instruction", "task"):
+        body.pop(key, None)
+    if "multi_label" in body or "cls_threshold" in body or "class_act" in body:
         multi = bool(body.pop("multi_label", False))
-        body.pop("task", None)
-        return TaskSpec(
-            name=name,
-            labels=_coerce_labels(labels),
-            min_labels=int(body.pop("min_labels", 0 if multi else 1)),
-            max_labels=body.pop("max_labels", None if multi else 1),
-            ordered=bool(body.pop("ordered", False)),
-            threshold=body.pop("cls_threshold", body.pop("threshold", 0.5)),
-            candidate_threshold=body.pop("candidate_threshold", None),
-            activation=body.pop("class_act", body.pop("activation", "auto")),
-            temperature=body.pop("temperature", 1.0),
-            default=body.pop("default", None),
-            instruction=body.pop("prompt", body.pop("instruction", None)),
-            examples=examples,
-        )
-    return TaskSpec(name=name, labels=_coerce_labels(labels), examples=examples, **body)
+        body.setdefault("min_labels", 0 if multi else 1)
+        body.setdefault("max_labels", None if multi else 1)
+        body["threshold"] = body.pop("cls_threshold", body.get("threshold", 0.5))
+        body["activation"] = body.pop("class_act", body.get("activation", "auto"))
+    return TaskSpec(name=name, labels=tuple(labels), **body)
 
 
 def _specs_from_schema(schema: Mapping) -> tuple:
@@ -1959,37 +1403,18 @@ def _specs_from_schema(schema: Mapping) -> tuple:
 
 
 def _compile_classification(schema) -> CompiledClassificationSchema:
-    if isinstance(schema, CompiledClassificationSchema):
-        return schema
-    if not isinstance(schema, Mapping):
-        if hasattr(schema, "to_dict"):
-            schema = schema.to_dict()
-        else:
-            raise SchemaError(f"expected a classification schema dict, got {type(schema).__name__}")
     task_specs, constraints = _specs_from_schema(schema)
     if not task_specs:
         raise SchemaError("cannot compile a schema with no tasks")
-    index = _TaskIndex(task_specs)
-    for constraint in constraints:
-        _walk(constraint, index)
-    order = tuple(spec.name for spec in task_specs)
-    _check_prefix_collisions(order)
-    _static_feasibility(constraints, task_specs)
-    model = {
-        "json_structures": [],
-        "classifications": [_classification_entry(spec) for spec in task_specs],
-        "entities": {},
-        "relations": [],
-        "json_descriptions": {},
-        "entity_descriptions": {},
-    }
-    _assert_model_schema(model)
-    return CompiledClassificationSchema(
-        model_schema=model,
+    compiled = CompiledClassificationSchema(
         task_specs=tuple(task_specs),
         constraints=_lower_defaults(constraints, task_specs),
-        task_order=order,
+        task_order=tuple(spec.name for spec in task_specs),
     )
+    for constraint in constraints:
+        _walk(constraint, compiled)
+    _static_feasibility(constraints, task_specs)
+    return compiled
 
 
 def task_utilities(spec, logits) -> dict:
@@ -2276,16 +1701,7 @@ def _signature(chosen, order):
 
 
 def _search_beam(problem, order, beam_size: int) -> Solution | None:
-    """Keep the highest-utility accepting locals within the beam.
-
-    Args:
-        problem: Decode problem whose locals are expanded one task at a time.
-        order: Task order already sorted for search.
-        beam_size: Maximum distinct partial assignments retained.
-
-    Returns:
-        The best beam assignment, or ``None`` when every branch is rejected.
-    """
+    """Keep the highest-utility accepting locals within the beam."""
     beams = [(0.0, {})]
     for index, task in enumerate(order):
         expanded = []
@@ -2319,14 +1735,7 @@ def _search_beam(problem, order, beam_size: int) -> Solution | None:
 
 
 def _independent_solution(problem) -> Solution:
-    """Pick each task's best local. Only that task is treated as decided.
-
-    Args:
-        problem: Locals in task order. Each task falls back to ``locals[0]``.
-
-    Returns:
-        An independent solution. Acceptance never sees other tasks as decided.
-    """
+    """Pick each task's best local. Only that task is treated as decided."""
     chosen: dict = {}
     for task in problem.task_order:
         picked = None
@@ -2347,22 +1756,7 @@ def _independent_solution(problem) -> Solution:
 
 
 def _search(problem, *, mode: str, budget: int, beam_size: int = 16) -> tuple[Solution | None, bool]:
-    """Exact, beam, independent, and min-violations over the same locals.
-
-    Independent mode keeps the per-task ``locals[0]`` fallback and decides one
-    task at a time. Exact search returns a budget flag instead of raising;
-    callers fall back to beam when that flag is set.
-
-    Args:
-        problem: Compiled locals and the constraints that touch them.
-        mode: ``independent``, ``exact``, ``beam``, or ``min_violations``.
-        budget: Maximum nodes expanded by exact and min-violations search.
-        beam_size: Width used when ``mode`` is ``beam``.
-
-    Returns:
-        The solution, if search finished, and whether the node budget stopped
-        exact search before a complete assignment.
-    """
+    """Exact, beam, independent, and min-violations over the same locals."""
     if mode == "independent":
         return _independent_solution(problem), False
     order = _search_order(problem)
@@ -2570,176 +1964,30 @@ class ClassificationConfig:
             raise ValueError("max_candidates_per_task must be positive")
 
 
-def _coerce_schema(schema):
-    if isinstance(schema, CompiledClassificationSchema):
-        return schema
-    if isinstance(schema, Mapping) and ("tasks" in schema or "classifications" in schema):
-        return schema
-    if hasattr(schema, "to_dict"):
-        payload = schema.to_dict()
-        if isinstance(payload, Mapping) and ("tasks" in payload or "classifications" in payload):
-            return payload
-    raise SchemaError(f"expected a classification schema, got {type(schema).__name__}")
-
-
-def _effective_temperature(spec: TaskSpec, temperature) -> float:
-    if isinstance(temperature, Mapping):
-        value = float(temperature.get(spec.name, spec.temperature))
-    else:
-        value = float(spec.temperature) * float(temperature)
-    if not value > 0:
-        raise ValueError("temperature must be positive")
-    return value
-
-
-def _label_logit_map(values, names) -> dict:
-    """Align one logit row to label names, trimming a non-finite tail.
-
-    Args:
-        values: Mapping or sequence of label logits.
-        names: Label names in schema order.
-
-    Returns:
-        Logits keyed by ``names``. A tail longer than ``names`` is dropped
-        only when every extra value is non-finite.
-    """
-    if isinstance(values, Mapping):
-        missing = [name for name in names if name not in values]
-        if missing:
-            raise SchemaError(f"logits missing labels {missing}")
-        unknown = [name for name in values if name not in names]
-        if unknown:
-            raise SchemaError(f"logits have unknown labels {unknown}")
-        return {name: _coerce_logits(values[name]) for name in names}
-    row = _coerce_logits(values)
-    finite_tail = row
-    if len(row) > len(names) and all(not math.isfinite(_coerce_logits(item)) for item in row[len(names) :]):
-        finite_tail = row[: len(names)]
-    if len(finite_tail) != len(names):
-        raise SchemaError(f"expected {len(names)} label logits, got {len(row)}")
-    return {name: _coerce_logits(value) for name, value in zip(names, finite_tail)}
-
-
-def label_names_from_tokens(schema_tokens: Sequence[str]) -> tuple:
-    """Recover label order from the ``[L]`` tokens that were encoded."""
-    return tuple(schema_tokens[i + 1] for i in range(len(schema_tokens) - 1) if schema_tokens[i] == _L)
-
-
-def _task_name(schema_tokens: Sequence[str], known: Sequence[str]) -> str:
-    """Resolve a task with the processor's boundary-aware prompt match.
-
-    Args:
-        schema_tokens: Encoded prompt tokens. The task text is token 2.
-        known: Task names in schema order.
-
-    Returns:
-        The longest task name that matches the prompt boundary, else the bare
-        name before a description or colon.
-    """
-    prompt_str = str(schema_tokens[2] if len(schema_tokens) > 2 else "")
-    best = None
-    for name in known:
-        if not name or not prompt_str.startswith(name):
-            continue
-        rest = prompt_str[len(name) :]
-        if rest == "" or rest[0] in (":", " "):
-            if best is None or len(name) > len(best):
-                best = name
-    if best is not None:
-        return best
-    bare = prompt_str.split(" [DESCRIPTION] ", 1)[0].split(":", 1)[0]
-    if bare in known:
-        return bare
-    for name in known:
-        if name and prompt_str.startswith(name):
-            return name
-    return bare
-
-
-def _align_encoded(payload, compiled) -> dict:
-    tokens = payload.get("schema_tokens_list", payload.get("schema_tokens"))
-    raw = payload["logits"]
-    if not tokens:
-        raise SchemaError("schema_tokens is empty")
-    if isinstance(tokens[0], str):
-        groups = [tokens]
-        rows = [raw]
-    else:
-        groups = list(tokens)
-        rows = _coerce_logits(raw, n_rows=len(groups))
-    known = compiled.task_order
-    found = {task: {} for task in known}
-    for group, row in zip(groups, rows):
-        names = label_names_from_tokens(group)
-        task = _task_name(group, known)
-        if task not in known:
-            raise SchemaError(f"encoded tokens name unknown task {task!r}")
-        spec = compiled.task(task)
-        mapped = _label_logit_map(row, names)
-        unknown = [name for name in mapped if name not in spec.label_names]
-        if unknown:
-            raise SchemaError(f"task {task!r} logits recovered unknown labels {unknown}")
-        found[task].update(mapped)
-    out = {}
-    for spec in compiled.task_specs:
-        if not found[spec.name]:
-            raise SchemaError(f"logits missing task {spec.name!r}")
-        out[spec.name] = {
-            label_name: found[spec.name].get(label_name, float("-inf")) for label_name in spec.label_names
-        }
-    return out
-
-
 def _align_logits(logits, compiled) -> dict:
-    if isinstance(logits, Mapping) and ("schema_tokens" in logits or "schema_tokens_list" in logits):
-        return _align_encoded(logits, compiled)
-    payload = logits
-    if (
-        isinstance(payload, Mapping)
-        and "tasks" in payload
-        and not any(task in payload for task in compiled.task_order)
-    ):
-        payload = payload["tasks"]
-    if isinstance(payload, Mapping):
-        missing = [task for task in compiled.task_order if task not in payload]
-        if missing:
-            raise SchemaError(f"logits missing tasks {missing}")
-        return {task: _label_logit_map(payload[task], compiled.task(task).label_names) for task in compiled.task_order}
-    if len(compiled.task_order) == 1:
-        shape = getattr(payload, "shape", None)
-        if shape is None or len(tuple(shape)) == 1:
-            names = compiled.task(compiled.task_order[0]).label_names
-            return {compiled.task_order[0]: _label_logit_map(payload, names)}
-    rows = _coerce_logits(payload, n_rows=len(compiled.task_order))
-    return {
-        task: _label_logit_map(row, compiled.task(task).label_names) for task, row in zip(compiled.task_order, rows)
-    }
+    """Read `{task: {label: logit}}` into schema order."""
+    aligned = {}
+    for task in compiled.task_order:
+        names = compiled.task(task).label_names
+        values = logits.get(task)
+        if values is None or set(values) != set(names):
+            raise SchemaError(f"logits for task {task!r} must cover exactly the labels {list(names)}")
+        aligned[task] = {name: float(values[name]) for name in names}
+    return aligned
 
 
 def _with_temperature(compiled, temperature):
-    """Scale every task temperature by the call temperature before search."""
+    """Scale task temperatures by the call temperature, or read them from a per-task mapping."""
     specs = []
-    changed = False
     for spec in compiled.task_specs:
-        temp = _effective_temperature(spec, temperature)
-        if temp == spec.temperature:
-            specs.append(spec)
+        if isinstance(temperature, Mapping):
+            value = float(temperature.get(spec.name, spec.temperature))
         else:
-            specs.append(replace(spec, temperature=temp))
-            changed = True
-    if not changed:
-        return compiled
+            value = float(spec.temperature) * float(temperature)
+        if not value > 0:
+            raise ValueError("temperature must be positive")
+        specs.append(spec if value == spec.temperature else replace(spec, temperature=value))
     return replace(compiled, task_specs=tuple(specs))
-
-
-def _scores_from_logits(logits, compiled, text: str) -> ClassificationScores:
-    if hasattr(logits, "probability") and hasattr(logits, "utility") and hasattr(logits, "tasks"):
-        return logits
-    return ClassificationScores(
-        text=text,
-        tasks=_align_logits(logits, compiled),
-        specs={spec.name: spec for spec in compiled.task_specs},
-    )
 
 
 def decode_constrained_classification(
@@ -2773,11 +2021,10 @@ def decode_constrained_classification(
         include_confidence=include_confidence,
         on_infeasible=on_infeasible,
     )
-    compiled = _compile_classification(_coerce_schema(schema))
-    prebuilt = hasattr(logits, "probability") and hasattr(logits, "utility") and hasattr(logits, "tasks")
-    if not prebuilt:
-        compiled = _with_temperature(compiled, temperature)
-    scores = _scores_from_logits(logits, compiled, text)
+    compiled = _with_temperature(_compile_classification(schema), temperature)
+    scores = ClassificationScores(
+        text=text, tasks=_align_logits(logits, compiled), specs={spec.name: spec for spec in compiled.task_specs}
+    )
     problem = build_problem(compiled, scores, config, active=active)
 
     def widen():
@@ -2799,448 +2046,83 @@ def decode_constrained_classification(
     )
 
 
-def _batch_rows(metadata):
-    """Normalize processor metadata into one dict per example."""
-    if isinstance(metadata, Mapping):
-        if "metadata" in metadata and "schema_meta" not in metadata and "groups" not in metadata:
-            metadata = metadata["metadata"]
-        else:
-            metadata = [metadata]
-    rows = []
-    for item in metadata:
-        if isinstance(item, Mapping) and "schema_meta" in item:
-            meta = dict(item["schema_meta"])
-            meta["words"] = list(item.get("words", meta.get("words", [])))
-        else:
-            meta = dict(item)
-            meta["words"] = list(meta.get("words", []))
-        rows.append(meta)
-    return rows
-
-
-def _sample_outputs(outputs, batch_size):
-    """Split a batched model output into one mapping per row."""
-    if isinstance(outputs, (list, tuple)):
-        if len(outputs) != batch_size:
-            raise ValueError(f"outputs length ({len(outputs)}) != metadata length ({batch_size})")
-        return list(outputs)
-    boundary = getattr(outputs, "boundary", None)
-    if not isinstance(outputs, Mapping):
-        outputs = dict(outputs.items()) if hasattr(outputs, "items") else dict(outputs)
-    if boundary is not None and getattr(boundary, "candidates", None) is not None:
-        samples = []
-        candidates = boundary.candidates
-        for index in range(batch_size):
-            sample = {
-                "candidates": type(candidates)(
-                    indices=candidates.indices[index : index + 1],
-                    proposal_logits=(
-                        None if candidates.proposal_logits is None else candidates.proposal_logits[index : index + 1]
-                    ),
-                    pair_logits=candidates.pair_logits[index : index + 1],
-                    valid_mask=candidates.valid_mask[index : index + 1],
-                    query_mask=candidates.query_mask[index : index + 1],
-                    candidate_states=(
-                        None if candidates.candidate_states is None else candidates.candidate_states[index : index + 1]
-                    ),
-                ),
-                "pair_logits": candidates.pair_logits[index],
-                "null_logits": None if boundary.null_logits is None else boundary.null_logits[index],
-                "count_log_rates": None if boundary.count_log_rates is None else boundary.count_log_rates[index],
-            }
-            if outputs.get("classification_logits") is not None:
-                sample["classification_logits"] = outputs["classification_logits"][index]
-            text_states = outputs.get("text_states")
-            query_states = outputs.get("query_states")
-            if text_states is not None:
-                sample["text_states"] = text_states[index : index + 1]
-            if query_states is not None:
-                sample["query_states"] = query_states[index : index + 1]
-            relation_pairs = outputs.get("relation_pairs")
-            relation_logits = outputs.get("relation_logits")
-            if relation_pairs is not None and relation_logits is not None and relation_pairs.numel():
-                keep = relation_pairs[:, 0] == index
-                sample["relation_pairs"] = relation_pairs[keep]
-                sample["relation_logits"] = relation_logits[keep]
-                sample["relation_temperature"] = outputs.get("relation_temperature")
-            if outputs.get("record_logits") is not None:
-                sample["record_logits"] = outputs["record_logits"][index]
-            samples.append(sample)
-        return samples
-    keys = (
-        "span_logits",
-        "counts",
-        "classification_logits",
-        "record_logits",
-        "relation_pairs",
-        "relation_logits",
-        "pair_logits",
-        "grouped_candidates",
-    )
-    present = [key for key in keys if key in outputs and outputs[key] is not None]
-    if not present:
-        raise ValueError(
-            "outputs need span_logits (count, fields, words, width) "
-            "and/or classification_logits (num_labels,). "
-            "Boundary pair_logits require candidates on the forward output."
-        )
-    return [{key: outputs[key][index] for key in present} for index in range(batch_size)]
-
-
-def _classification_schema_from_row(meta, threshold):
-    entries = []
-    for entry in meta.get("classifications") or []:
-        row = dict(entry)
-        row.setdefault("cls_threshold", threshold)
-        entries.append(row)
-    return {"classifications": entries, "constraints": list(meta.get("constraints") or [])}
-
-
-def _task_logits(sample, classifications):
-    vectors = sample.get("classification_logits")
-    if vectors is None:
-        vectors = sample.get("classification_probs")
-    if isinstance(vectors, Mapping):
-        return vectors
-    if torch.is_tensor(vectors) and vectors.ndim == 1:
-        grouped = [vectors]
-    elif torch.is_tensor(vectors) and vectors.ndim == 2:
-        grouped = [vectors[index] for index in range(vectors.shape[0])]
-    else:
-        grouped = list(vectors or [])
-    if len(grouped) != len(classifications):
-        raise SchemaError(f"expected {len(classifications)} classification rows, got {len(grouped)}")
-    logits = {}
-    for entry, vector in zip(classifications, grouped):
-        logits[entry["task"]] = _label_logit_map(vector, list(entry["labels"]))
-    return logits
-
-
-def _batch_classification(outputs, rows, temperature, **kwargs):
-    if temperature is None:
-        temperature = kwargs.pop("temperature", 1.0)
-    else:
-        kwargs.pop("temperature", None)
-    threshold = kwargs.pop("threshold", 0.5)
-    include_confidence = kwargs.pop("include_confidence", False)
-    decoder = kwargs.pop("decoder", "auto")
-    text = kwargs.pop("text", "")
-    rows = _batch_rows(rows)
-    if not rows:
-        return []
-    samples = _sample_outputs(outputs, len(rows))
-    decoded = []
-    for sample, row in zip(samples, rows):
-        meta = row
-        classifications = list(meta.get("classifications") or [])
-        schema = _classification_schema_from_row(meta, threshold)
-        decoded.append(
-            decode_constrained_classification(
-                _task_logits(sample, classifications),
-                schema,
-                temperature,
-                text=meta.get("text") or text,
-                decoder=decoder,
-                include_confidence=include_confidence,
-                candidate_threshold=threshold,
-                **kwargs,
-            )
-        )
-    return decoded
-
-
-def decode_classification(logits, schema, temperature=None, **kwargs):
-    """Decode classification logits, including a batch of processor rows.
-
-    A list of metadata rows uses ``threshold``, ``include_confidence``,
-    ``temperature``, and ``decoder`` from the processor. A schema uses the
-    single-example constrained decoder.
-    """
-    if isinstance(schema, (list, tuple)):
-        return _batch_classification(logits, schema, temperature, **kwargs)
-    if temperature is None:
-        raise TypeError("decode_classification() missing required argument: 'temperature'")
-    return decode_constrained_classification(logits, schema, temperature, **kwargs)
-
-
-def _joint_prob(value, field_name) -> None:
-    if value is not None and not 0 <= value <= 1:
-        raise ValueError(f"{field_name} must be in [0, 1]")
-
-
-def _joint_name(value: str, kind: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{kind} name must be a non-empty string")
-    return value
-
-
-def _joint_types(value, side: str) -> tuple:
-    values = (value,) if isinstance(value, str) else tuple(value)
-    if not values:
-        raise ValueError(f"relation {side} must contain at least one entity type")
-    if any(not isinstance(item, str) or not item.strip() for item in values):
-        raise ValueError(f"relation {side} contains an invalid entity type")
-    if len(set(values)) != len(values):
-        raise ValueError(f"relation {side} entity types must be unique")
-    return values
+_JOINT_DEFAULTS = {"directed": True, "slot": "head", "policy": "disallow"}
+_BEAM_SIZE, _TOP_K_ENTITIES, _TOP_K_ROLES, _PAIR_CAP, _MAX_EDGES_PER_TYPE = 32, 32, 12, 128, 256
 
 
 def _joint_constraint(kind: str, **fields) -> dict:
-    """One joint constraint record. Operators share ``_joint_check``."""
+    """One joint constraint record with defaults filled in."""
     if kind not in _JOINT_FIELDS:
         raise ValueError(f"unknown constraint type {kind!r}")
-    data = {"type": kind}
-    for name in _JOINT_FIELDS[kind]:
-        if name in fields:
-            data[name] = fields[name]
-        elif name == "directed":
-            data[name] = True
-        elif name == "slot":
-            data[name] = "head"
-        elif name == "policy":
-            data[name] = "disallow"
-        else:
-            data[name] = None
+    data = {"type": kind, **{name: fields.get(name, _JOINT_DEFAULTS.get(name)) for name in _JOINT_FIELDS[kind]}}
     if kind == "TypedEndpoints":
-        data["head_types"] = tuple(data["head_types"] or ())
-        data["tail_types"] = tuple(data["tail_types"] or ())
-    if kind == "EntityOverlapPolicy" and data["policy"] not in {"allow", "disallow", "nested"}:
+        data["head_types"], data["tail_types"] = tuple(data["head_types"] or ()), tuple(data["tail_types"] or ())
+    if data.get("policy", "allow") not in ("allow", "disallow", "nested"):
         raise ValueError("policy must be 'allow', 'disallow', or 'nested'")
-    if kind == "UniqueRelationSlot" and data["slot"] not in {"head", "tail", "slot"}:
-        raise ValueError("slot must be 'head', 'tail', or 'slot'")
-    if kind in {"MaxRelationsPerHead", "MaxRelationsPerTail"} and data["limit"] < 0:
-        raise ValueError("limit must be non-negative")
+    if data.get("slot", "head") not in ("head", "tail", "slot") or data.get("limit", 0) < 0:
+        raise ValueError(f"invalid {kind} constraint")
     return data
 
 
-def _joint_from_dict(data: Mapping) -> dict:
-    values = dict(data)
-    kind = values.pop("type", None)
-    return _joint_constraint(kind, **values)
-
-
-def _label_of(value: Any) -> Any:
-    """Entity type of a node, or relation type of a resolved edge."""
-    if isinstance(value, NodeCandidate):
-        return value.entity_type
-    relation_type = getattr(value, "relation_type", None)
-    if relation_type is not None:
-        return relation_type
-    return getattr(value, "type", None)
-
-
-def _endpoint_of(relation: Any, side: str) -> Any:
-    """Return the head or tail node stored on a resolved edge."""
-    return getattr(relation, side)
-
-
-def _identity_of(value: Any) -> Any:
-    """Stable id for a node. Raw endpoint ids are returned unchanged."""
-    if value is None:
-        return None
-    if isinstance(value, NodeCandidate):
-        return value.candidate_id
-    candidate_id = getattr(value, "candidate_id", None)
-    if candidate_id is not None:
-        return candidate_id
-    start = getattr(value, "start", None)
-    end = getattr(value, "end", None)
-    if start is not None and end is not None:
-        return (start, end, _label_of(value))
-    return value
-
-
-def _relation_key(value: Any) -> tuple:
-    return (_label_of(value), _identity_of(_endpoint_of(value, "head")), _identity_of(_endpoint_of(value, "tail")))
-
-
-def _matches(relation: Any, relation_type: str | None) -> bool:
-    return relation_type is None or _label_of(relation) == relation_type
-
-
-def _node_overlap_ok(constraint, candidate, nodes) -> bool:
-    """Apply an entity overlap policy to one node against those already kept.
-
-    Args:
-        constraint: Joint constraint record. Non-overlap kinds allow the node.
-        candidate: Node being considered. Uses ``start`` and ``end``.
-        nodes: Nodes already accepted, including ``candidate`` when checking it.
-
-    Returns:
-        Whether the node satisfies the overlap policy.
-    """
-    if constraint["type"] != "EntityOverlapPolicy":
-        return True
-    policy = constraint["policy"]
-    if policy == "allow":
-        return True
-    start, end = candidate.start, candidate.end
-    for old in nodes:
-        if old is candidate:
+def _node_allowed(problem, node, nodes) -> bool:
+    """Apply the entity overlap policies to `node` against `nodes`."""
+    for constraint in problem.constraints:
+        if constraint["type"] != "EntityOverlapPolicy" or constraint["policy"] == "allow":
             continue
-        old_start, old_end = old.start, old.end
-        if end <= old_start or old_end <= start:
-            continue
-        nested = (start >= old_start and end <= old_end) or (old_start >= start and old_end <= end)
-        if policy == "disallow" or not nested:
-            return False
-    return True
-
-
-def _graph_constraints_ok(constraint, relations) -> bool:
-    """Check symmetric and inverse relations on a finished edge list.
-
-    Args:
-        constraint: ``SymmetricRelation`` or ``InverseRelation`` record.
-        relations: Resolved edges already selected.
-
-    Returns:
-        Whether every required reverse edge is present.
-    """
-    kind = constraint["type"]
-    keys = {_relation_key(item) for item in relations}
-    if kind == "SymmetricRelation":
-        return all(
-            _label_of(item) != constraint["relation"]
-            or (
-                constraint["relation"],
-                _identity_of(_endpoint_of(item, "tail")),
-                _identity_of(_endpoint_of(item, "head")),
-            )
-            in keys
-            for item in relations
-        )
-    for item in relations:
-        label_name = _label_of(item)
-        reverse = (_identity_of(_endpoint_of(item, "tail")), _identity_of(_endpoint_of(item, "head")))
-        if label_name == constraint["relation"] and (constraint["inverse"], *reverse) not in keys:
-            return False
-        if label_name == constraint["inverse"] and (constraint["relation"], *reverse) not in keys:
-            return False
-    return True
-
-
-def _pair_constraints_ok(constraint, candidate, relations) -> bool:
-    """Typed endpoints, self-loops, and unique pair or slot rules.
-
-    Args:
-        constraint: One edge constraint record.
-        candidate: Resolved edge being added.
-        relations: Resolved edges already accepted.
-
-    Returns:
-        Whether this constraint allows ``candidate``, or ``None`` if another
-        checker owns the constraint kind.
-    """
-    kind = constraint["type"]
-    if kind == "TypedEndpoints":
-        if not _matches(candidate, constraint["relation"]):
-            return True
-        head = _label_of(_endpoint_of(candidate, "head"))
-        tail = _label_of(_endpoint_of(candidate, "tail"))
-        heads, tails = constraint["head_types"], constraint["tail_types"]
-        return (not heads or head in heads) and (not tails or tail in tails)
-    if kind == "NoSelfLoops":
-        if not _matches(candidate, constraint["relation"]):
-            return True
-        return _identity_of(_endpoint_of(candidate, "head")) != _identity_of(_endpoint_of(candidate, "tail"))
-    if kind == "UniqueRelationPair":
-        if not _matches(candidate, constraint["relation"]):
-            return True
-        head = _identity_of(_endpoint_of(candidate, "head"))
-        tail = _identity_of(_endpoint_of(candidate, "tail"))
-        for existing in relations:
-            if _label_of(existing) != _label_of(candidate):
+        for old in nodes:
+            if old is node or node.end <= old.start or old.end <= node.start:
                 continue
-            old_head = _identity_of(_endpoint_of(existing, "head"))
-            old_tail = _identity_of(_endpoint_of(existing, "tail"))
-            if (head, tail) == (old_head, old_tail) or (
-                not constraint["directed"] and (head, tail) == (old_tail, old_head)
-            ):
+            nested = (node.start >= old.start and node.end <= old.end) or (
+                old.start >= node.start and old.end <= node.end
+            )
+            if constraint["policy"] == "disallow" or not nested:
                 return False
-        return True
-    if kind == "UniqueRelationSlot":
-        if not _matches(candidate, constraint["relation"]):
-            return True
-        value = _identity_of(_endpoint_of(candidate, constraint["slot"]))
-        return all(
-            _label_of(old) != _label_of(candidate) or _identity_of(_endpoint_of(old, constraint["slot"])) != value
-            for old in relations
-        )
-    return None
-
-
-def _count_constraints_ok(constraint, candidate, relations) -> bool:
-    """Per-head, per-tail, and acyclic limits for one candidate edge.
-
-    Args:
-        constraint: Cardinality or acyclic constraint record.
-        candidate: Resolved edge being added.
-        relations: Resolved edges already accepted.
-
-    Returns:
-        Whether this constraint allows ``candidate``. Unrelated kinds allow it.
-    """
-    kind = constraint["type"]
-    if kind == "MaxRelationsPerHead":
-        if not _matches(candidate, constraint["relation"]):
-            return True
-        key = _identity_of(_endpoint_of(candidate, "head"))
-        used = sum(
-            _matches(old, constraint["relation"]) and _identity_of(_endpoint_of(old, "head")) == key
-            for old in relations
-        )
-        return used < constraint["limit"]
-    if kind == "MaxRelationsPerTail":
-        if not _matches(candidate, constraint["relation"]):
-            return True
-        key = _identity_of(_endpoint_of(candidate, "tail"))
-        used = sum(
-            _matches(old, constraint["relation"]) and _identity_of(_endpoint_of(old, "tail")) == key
-            for old in relations
-        )
-        return used < constraint["limit"]
-    if kind == "AcyclicRelation":
-        if not _matches(candidate, constraint["relation"]):
-            return True
-        head = _identity_of(_endpoint_of(candidate, "head"))
-        tail = _identity_of(_endpoint_of(candidate, "tail"))
-        if head == tail:
-            return False
-        graph: dict = defaultdict(list)
-        for old in relations:
-            if _matches(old, constraint["relation"]):
-                graph[_identity_of(_endpoint_of(old, "head"))].append(_identity_of(_endpoint_of(old, "tail")))
-        stack, seen = [tail], set()
-        while stack:
-            node = stack.pop()
-            if node == head:
-                return False
-            if node not in seen:
-                seen.add(node)
-                stack.extend(graph[node])
-        return True
     return True
 
 
-def _joint_check(constraint: Mapping, candidate, relations=(), nodes=(), mode: str = "edge") -> bool:
-    """True when one joint constraint allows an edge, a node, or a full graph."""
-    kind = constraint["type"]
-    if mode == "node":
-        return _node_overlap_ok(constraint, candidate, nodes)
-    if mode == "validate" and kind in {"SymmetricRelation", "InverseRelation"}:
-        return _graph_constraints_ok(constraint, relations)
-    if mode == "validate":
-        accepted = []
-        for item in relations:
-            if not _joint_check(constraint, item, accepted, nodes, "edge"):
-                return False
-            accepted.append(item)
-        return True
-    pair = _pair_constraints_ok(constraint, candidate, relations)
-    if pair is not None:
-        return pair
-    return _count_constraints_ok(constraint, candidate, relations)
+def _edge_allowed(problem, edge, accepted) -> bool:
+    """True when every constraint admits `edge` next to the accepted edges."""
+    for constraint in problem.constraints:
+        kind, relation = constraint["type"], constraint.get("relation")
+        if relation is not None and edge.relation_type != relation:
+            continue
+        same = [old for old in accepted if old.relation_type == edge.relation_type]
+        matching = [old for old in accepted if relation is None or old.relation_type == relation]
+        if kind == "TypedEndpoints":
+            nodes, heads, tails = problem.node_by_id, constraint["head_types"], constraint["tail_types"]
+            allowed = (not heads or nodes[edge.head].entity_type in heads) and (
+                not tails or nodes[edge.tail].entity_type in tails
+            )
+        elif kind == "NoSelfLoops":
+            allowed = edge.head != edge.tail
+        elif kind == "UniqueRelationPair":
+            allowed = all(
+                (edge.head, edge.tail) != (old.head, old.tail)
+                and (constraint["directed"] or (edge.head, edge.tail) != (old.tail, old.head))
+                for old in same
+            )
+        elif kind == "UniqueRelationSlot":
+            slot = constraint["slot"]
+            allowed = all(getattr(old, slot) != getattr(edge, slot) for old in same)
+        elif kind in ("MaxRelationsPerHead", "MaxRelationsPerTail"):
+            side = "head" if kind == "MaxRelationsPerHead" else "tail"
+            allowed = sum(getattr(old, side) == getattr(edge, side) for old in matching) < constraint["limit"]
+        elif kind == "AcyclicRelation":
+            graph = defaultdict(list)
+            for old in matching:
+                graph[old.head].append(old.tail)
+            stack, seen, allowed = [edge.tail], set(), edge.head != edge.tail
+            while stack and allowed:
+                node = stack.pop()
+                allowed = node != edge.head
+                if node not in seen:
+                    seen.add(node)
+                    stack.extend(graph[node])
+        else:
+            allowed = True
+        if not allowed:
+            return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -3248,18 +2130,10 @@ class EntitySpec:
     """One entity type and its candidate limits."""
 
     name: str
-    description: str | None = None
     threshold: float | None = None
     candidate_threshold: float | None = None
     max_candidates: int | None = None
     allow_nested: bool | None = None
-
-    def __post_init__(self):
-        _joint_name(self.name, "entity")
-        _joint_prob(self.threshold, "threshold")
-        _joint_prob(self.candidate_threshold, "candidate_threshold")
-        if self.max_candidates is not None and self.max_candidates <= 0:
-            raise ValueError("max_candidates must be positive")
 
 
 @dataclass(frozen=True)
@@ -3269,7 +2143,6 @@ class RelationSpec:
     name: str
     head: tuple
     tail: tuple
-    description: str | None = None
     threshold: float | None = None
     candidate_threshold: float | None = None
     directed: bool = True
@@ -3279,277 +2152,140 @@ class RelationSpec:
     max_per_head: int | None = None
     max_per_tail: int | None = None
 
-    def __post_init__(self):
-        _joint_name(self.name, "relation")
-        object.__setattr__(self, "head", _joint_types(self.head, "head"))
-        object.__setattr__(self, "tail", _joint_types(self.tail, "tail"))
-        _joint_prob(self.threshold, "threshold")
-        _joint_prob(self.candidate_threshold, "candidate_threshold")
-        if self.inverse is not None:
-            _joint_name(self.inverse, "inverse relation")
-        if self.symmetric and self.inverse:
-            raise ValueError("a relation cannot be both symmetric and inverse")
-        if self.symmetric and set(self.head) != set(self.tail):
-            raise ValueError("symmetric relations require compatible head and tail types")
-        if self.symmetric and self.directed:
-            object.__setattr__(self, "directed", False)
-        for attr in ("max_per_head", "max_per_tail"):
-            value = getattr(self, attr)
-            if value is not None and value < 0:
-                raise ValueError(f"{attr} must be non-negative")
 
-
-def _entity_spec(name, value=None) -> EntitySpec:
-    """One entity record from a string, a field dict, or a bare name."""
-    if isinstance(value, Mapping):
-        fields = {
-            key: value[key]
-            for key in ("description", "threshold", "candidate_threshold", "max_candidates", "allow_nested")
-            if key in value
-        }
-        description = fields.pop("description", None)
-        return EntitySpec(
-            name,
-            description,
-            fields.get("threshold"),
-            fields.get("candidate_threshold"),
-            fields.get("max_candidates"),
-            fields.get("allow_nested"),
-        )
-    if isinstance(value, str) and value:
-        return EntitySpec(name, value)
-    return EntitySpec(name)
+def _joint_types(value, side: str) -> tuple:
+    values = (value,) if isinstance(value, str) else tuple(value)
+    if not values or len(set(values)) != len(values) or any(not isinstance(v, str) or not v.strip() for v in values):
+        raise ValueError(f"relation {side} needs unique, non-empty entity type names")
+    return values
 
 
 def _entities_from_raw(raw) -> dict:
-    entities = {}
-    if isinstance(raw, Mapping):
-        for name, value in raw.items():
-            entities[name] = _entity_spec(name, value)
-        return entities
-    for value in raw or ():
-        if isinstance(value, str):
-            entities[value] = EntitySpec(value)
-        elif isinstance(value, Mapping) and "name" in value:
-            entities[value["name"]] = _entity_spec(value["name"], value)
-        else:
-            raise ValueError(f"invalid entity entry {value!r}")
-    return entities
+    keys = ("threshold", "candidate_threshold", "max_candidates", "allow_nested")
+    if not isinstance(raw, Mapping):
+        raw = {value if isinstance(value, str) else value["name"]: value for value in raw or ()}
+    return {
+        name: EntitySpec(name, **{key: value[key] for key in keys if key in value})
+        if isinstance(value, Mapping)
+        else EntitySpec(name)
+        for name, value in raw.items()
+    }
 
 
-def _relation_spec(name, head, tail, description=None, **aliases):
-    """One relation record plus constraints implied by aliases such as acyclic."""
-    inverse = aliases.pop("inverse", None)
-    inverse_of = aliases.pop("inverse_of", None)
-    allow_self = aliases.pop("allow_self", False)
-    allow_self_loops = aliases.pop("allow_self_loops", None)
-    no_self = aliases.pop("no_self_loops", None)
-    unique_head = aliases.pop("unique_head", False)
-    unique_tail = aliases.pop("unique_tail", False)
-    aliases.pop("unique_pair", None)
-    acyclic = aliases.pop("acyclic", False)
-    threshold = aliases.pop("threshold", None)
-    candidate_threshold = aliases.pop("candidate_threshold", None)
-    directed = aliases.pop("directed", True)
-    symmetric = aliases.pop("symmetric", False)
-    max_per_head = aliases.pop("max_per_head", None)
-    max_per_tail = aliases.pop("max_per_tail", None)
-    if aliases:
-        raise TypeError(f"unknown relation options: {sorted(aliases)}")
+def _relation_spec(name, head, tail, options) -> RelationSpec:
+    """One relation record from the schema's relation options and their aliases."""
+    unknown = set(options) - set(_RELATION_OPTIONS)
+    if unknown:
+        raise TypeError(f"unknown relation options: {sorted(unknown)}")
+    inverse, inverse_of = options.get("inverse"), options.get("inverse_of")
     if inverse is not None and inverse_of is not None and inverse != inverse_of:
         raise ValueError("inverse and inverse_of disagree")
-    inverse = inverse or inverse_of
-    if allow_self_loops is not None:
-        allow_self = allow_self_loops
-    if no_self is not None:
-        allow_self = not no_self
-    if unique_head and max_per_head is None:
-        max_per_head = 1
-    if unique_tail and max_per_tail is None:
-        max_per_tail = 1
-    spec = RelationSpec(
+    allow_self = options.get("allow_self", False)
+    if options.get("allow_self_loops") is not None:
+        allow_self = options["allow_self_loops"]
+    if options.get("no_self_loops") is not None:
+        allow_self = not options["no_self_loops"]
+    limits = {}
+    for side in ("head", "tail"):
+        limit = options.get(f"max_per_{side}")
+        limits[side] = 1 if limit is None and options.get(f"unique_{side}") else limit
+    head, tail = _joint_types(head, "head"), _joint_types(tail, "tail")
+    symmetric, inverse = options.get("symmetric", False), inverse or inverse_of
+    if symmetric and (inverse or set(head) != set(tail)):
+        raise ValueError("symmetric relations need matching endpoint types and no inverse")
+    if any(value is not None and value < 0 for value in limits.values()):
+        raise ValueError("relation limits must be non-negative")
+    directed = options.get("directed", True) and not symmetric
+    return RelationSpec(
         name,
-        _joint_types(head, "head"),
-        _joint_types(tail, "tail"),
-        description,
-        threshold,
-        candidate_threshold,
+        head,
+        tail,
+        options.get("threshold"),
+        options.get("candidate_threshold"),
         directed,
         symmetric,
         inverse,
         allow_self,
-        max_per_head,
-        max_per_tail,
+        limits["head"],
+        limits["tail"],
     )
-    extras = [_joint_constraint("AcyclicRelation", relation=name)] if acyclic else []
-    return spec, extras
 
 
-def _unwrap_endpoint(value):
-    if isinstance(value, Mapping):
-        return value.get("type") or value.get("entity")
-    return value
+def _endpoint(value):
+    return value.get("type") or value.get("entity") if isinstance(value, Mapping) else value
 
 
 def _relations_from_raw(raw, entities) -> tuple:
-    relations = {}
-    extras = []
-
-    def add(spec, more):
-        unknown = (set(spec.head) | set(spec.tail)) - set(entities)
-        if unknown:
-            raise ValueError(f"relation {spec.name!r} references unknown entity types: {sorted(unknown)}")
-        if spec.name in relations:
-            raise ValueError(f"relation {spec.name!r} is already defined")
-        relations[spec.name] = spec
-        extras.extend(more)
-
     if isinstance(raw, Mapping):
-        for name, value in raw.items():
-            body = dict(value)
-            add(*_relation_spec(name, body.pop("head"), body.pop("tail"), body.pop("description", None), **body))
-        return relations, extras
-    for item in raw or ():
-        if isinstance(item, Mapping) and "name" in item and "head" in item:
-            body = dict(item)
-            add(
-                *_relation_spec(
-                    body.pop("name"), body.pop("head"), body.pop("tail"), body.pop("description", None), **body
-                )
-            )
-            continue
-        for name, fields in item.items():
-            head = _unwrap_endpoint(fields.get("head"))
-            tail = _unwrap_endpoint(fields.get("tail"))
-            options = {
-                key: fields[key]
-                for key in (
-                    "description",
-                    "threshold",
-                    "candidate_threshold",
-                    "directed",
-                    "symmetric",
-                    "inverse",
-                    "inverse_of",
-                    "allow_self",
-                    "allow_self_loops",
-                    "no_self_loops",
-                    "max_per_head",
-                    "max_per_tail",
-                    "unique_head",
-                    "unique_tail",
-                    "acyclic",
-                )
-                if key in fields
-            }
-            add(*_relation_spec(name, head, tail, **options))
+        items = [(name, dict(body)) for name, body in raw.items()]
+    else:
+        items = []
+        for item in raw or ():
+            if "name" in item and "head" in item:
+                body = dict(item)
+                items.append((body.pop("name"), body))
+                continue
+            keep = (*_RELATION_OPTIONS, "head", "tail")
+            items += [
+                (name, {key: value for key, value in fields.items() if key in keep}) for name, fields in item.items()
+            ]
+    relations, extras = {}, []
+    for name, body in items:
+        head, tail = _endpoint(body.pop("head", None)), _endpoint(body.pop("tail", None))
+        spec = _relation_spec(name, head, tail, body)
+        unknown = (set(spec.head) | set(spec.tail)) - set(entities)
+        if unknown or spec.name in relations:
+            raise ValueError(f"relation {spec.name!r} is duplicated or references unknown types {sorted(unknown)}")
+        relations[spec.name] = spec
+        if body.get("acyclic"):
+            extras.append(_joint_constraint("AcyclicRelation", relation=name))
     return relations, extras
 
 
 @dataclass(frozen=True)
 class CompiledJointSchema:
-    """Model schema dict plus the constraints the optimizer enforces."""
+    """Entity and relation specs plus the constraints the optimizer enforces."""
 
-    model_schema: dict
     entity_specs: dict
     relation_specs: dict
     constraints: tuple
     entity_order: tuple
-    relation_order: tuple
-
-    def build(self):
-        return self.model_schema
-
-
-def _add_constraint(values, constraint):
-    if constraint not in values:
-        values.append(constraint)
 
 
 def _compile_joint(schema) -> CompiledJointSchema:
     """Lower relation flags into concrete constraints."""
-    if isinstance(schema, CompiledJointSchema):
-        return schema
-    if not isinstance(schema, Mapping):
-        if hasattr(schema, "to_dict"):
-            schema = schema.to_dict()
-        else:
-            raise TypeError(f"expected a joint schema dict, got {type(schema).__name__}")
     entities = _entities_from_raw(schema.get("entities") or {})
     relations, extras = _relations_from_raw(schema.get("relations") or {}, entities)
-    model = {
-        "json_structures": [],
-        "classifications": [],
-        "entities": dict.fromkeys(entities, ""),
-        "relations": [{name: {"head": "", "tail": ""}} for name in relations],
-        "json_descriptions": {},
-        "entity_descriptions": {
-            name: spec.description for name, spec in entities.items() if spec.description is not None
-        },
-    }
-    constraints = [
-        _joint_from_dict(item) if isinstance(item, Mapping) and "type" in item else item
-        for item in list(schema.get("constraints") or []) + extras
-    ]
+    constraints = []
+
+    def add(kind, **fields):
+        constraint = _joint_constraint(kind, **fields)
+        if constraint not in constraints:
+            constraints.append(constraint)
+
+    for item in list(schema.get("constraints") or []) + extras:
+        add(item["type"], **{key: value for key, value in item.items() if key != "type"})
     if entities:
-        if all(spec.allow_nested for spec in entities.values()):
-            policy = "allow"
-        elif any(spec.allow_nested for spec in entities.values()):
-            policy = "nested"
-        else:
-            policy = "disallow"
-        _add_constraint(constraints, _joint_constraint("EntityOverlapPolicy", policy=policy))
+        nested = [bool(spec.allow_nested) for spec in entities.values()]
+        add("EntityOverlapPolicy", policy="allow" if all(nested) else "nested" if any(nested) else "disallow")
     for spec in relations.values():
-        _add_constraint(
-            constraints,
-            _joint_constraint("TypedEndpoints", relation=spec.name, head_types=spec.head, tail_types=spec.tail),
-        )
+        add("TypedEndpoints", relation=spec.name, head_types=spec.head, tail_types=spec.tail)
         if not spec.allow_self:
-            _add_constraint(constraints, _joint_constraint("NoSelfLoops", relation=spec.name))
-        _add_constraint(
-            constraints, _joint_constraint("UniqueRelationPair", relation=spec.name, directed=spec.directed)
-        )
-        _add_constraint(constraints, _joint_constraint("UniqueRelationSlot", relation=spec.name, slot="slot"))
+            add("NoSelfLoops", relation=spec.name)
+        add("UniqueRelationPair", relation=spec.name, directed=spec.directed)
+        add("UniqueRelationSlot", relation=spec.name, slot="slot")
         if spec.max_per_head is not None:
-            _add_constraint(
-                constraints, _joint_constraint("MaxRelationsPerHead", limit=spec.max_per_head, relation=spec.name)
-            )
+            add("MaxRelationsPerHead", limit=spec.max_per_head, relation=spec.name)
         if spec.max_per_tail is not None:
-            _add_constraint(
-                constraints, _joint_constraint("MaxRelationsPerTail", limit=spec.max_per_tail, relation=spec.name)
-            )
+            add("MaxRelationsPerTail", limit=spec.max_per_tail, relation=spec.name)
         if spec.symmetric:
-            _add_constraint(constraints, _joint_constraint("SymmetricRelation", relation=spec.name))
+            add("SymmetricRelation", relation=spec.name)
         if spec.inverse:
-            if spec.inverse not in relations:
-                raise ValueError(f"relation {spec.name!r} has unknown inverse {spec.inverse!r}")
-            other = relations[spec.inverse]
-            if set(spec.head) != set(other.tail) or set(spec.tail) != set(other.head):
-                raise ValueError(f"inverse endpoint types for {spec.name!r} and {spec.inverse!r} are incompatible")
-            _add_constraint(
-                constraints, _joint_constraint("InverseRelation", relation=spec.name, inverse=spec.inverse)
-            )
-    return CompiledJointSchema(model, entities, relations, tuple(constraints), tuple(entities), tuple(relations))
-
-
-def _coerce_joint_schema(schema):
-    if isinstance(schema, CompiledJointSchema):
-        return schema
-    if isinstance(schema, Mapping) and ("entities" in schema or "relations" in schema or "constraints" in schema):
-        return schema
-    if hasattr(schema, "to_dict"):
-        payload = schema.to_dict()
-        if isinstance(payload, Mapping):
-            return payload
-    raise TypeError(f"expected a joint schema, got {type(schema).__name__}")
-
-
-class CandidateSource(str, Enum):
-    """How a node entered the joint lattice."""
-
-    ENTITY = "entity"
-    RELATION_RESCUE = "relation_rescue"
-    PROVIDED = "provided"
+            other = relations.get(spec.inverse)
+            if other is None or set(spec.head) != set(other.tail) or set(spec.tail) != set(other.head):
+                raise ValueError(f"relation {spec.name!r} has an unknown or incompatible inverse {spec.inverse!r}")
+            add("InverseRelation", relation=spec.name, inverse=spec.inverse)
+    return CompiledJointSchema(entities, relations, tuple(constraints), tuple(entities))
 
 
 @dataclass(frozen=True)
@@ -3560,32 +2296,23 @@ class NodeCandidate:
     start: int
     end: int
     score: float
-    probability: float | None = None
-    source: CandidateSource = CandidateSource.ENTITY
-    candidate_id: Hashable | None = None
-
-    def __post_init__(self) -> None:
-        if self.start < 0 or self.end <= self.start:
-            raise ValueError("node spans must be non-empty and non-negative")
-        if self.probability is None:
-            object.__setattr__(self, "probability", sigmoid(self.score))
-        if not isinstance(self.source, CandidateSource):
-            object.__setattr__(self, "source", CandidateSource(self.source))
-        if self.candidate_id is None:
-            object.__setattr__(self, "candidate_id", (self.entity_type, self.start, self.end))
+    probability: float
+    rescued: bool = False
 
     @property
     def key(self) -> tuple:
         return (self.entity_type, self.start, self.end)
 
+    candidate_id = key
+
 
 @dataclass(frozen=True)
 class EdgeCandidate:
-    """A typed directed relation between two nodes."""
+    """A typed directed relation between two node ids."""
 
     relation_type: str
-    head: Hashable
-    tail: Hashable
+    head: tuple
+    tail: tuple
     score: float
     head_probability: float | None = None
     tail_probability: float | None = None
@@ -3593,10 +2320,10 @@ class EdgeCandidate:
     tail_entity_probability: float | None = None
     count_probability: float | None = None
     derived: bool = False
-    slot: Hashable | None = None
-    hypothesis: Hashable | None = None
-    count_alternative: Hashable | None = None
-    candidate_id: Hashable | None = None
+    slot: int | None = None
+    hypothesis: str | None = None
+    count_alternative: int | None = None
+    candidate_id: tuple | None = None
 
     def __post_init__(self) -> None:
         if self.candidate_id is None:
@@ -3606,22 +2333,10 @@ class EdgeCandidate:
     def key(self) -> tuple:
         return (self.relation_type, self.head, self.tail, self.slot, self.count_alternative)
 
-    @property
-    def exclusion_keys(self) -> tuple:
-        if self.slot is None:
-            return ()
-        return (("slot", self.hypothesis, self.count_alternative, self.slot),)
-
-    @property
-    def count_choice(self):
-        if self.count_alternative is None or self.hypothesis is None:
-            return None
-        return (self.hypothesis, self.count_alternative)
-
 
 @dataclass(frozen=True)
 class RelationHypothesis:
-    """One relation lattice with shape ``[count_slots, 2, L, W]``."""
+    """One relation lattice with shape `[count_slots, 2, L, W]`."""
 
     relation_type: str
     role_logits: Any
@@ -3629,14 +2344,6 @@ class RelationHypothesis:
     tail_types: tuple = ()
     threshold: float | None = None
     candidate_threshold: float | None = None
-    count_probability: float = 1.0
-    count_utility: float = 0.0
-    count_alternative: Hashable | None = None
-    hypothesis_id: Hashable | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "head_types", tuple(self.head_types))
-        object.__setattr__(self, "tail_types", tuple(self.tail_types))
 
 
 @dataclass(frozen=True)
@@ -3646,15 +2353,6 @@ class JointProblem:
     nodes: tuple
     edges: tuple
     constraints: tuple = ()
-
-    def __post_init__(self) -> None:
-        ids = [node.candidate_id for node in self.nodes]
-        if len(ids) != len(set(ids)):
-            raise ValueError("node candidate ids must be unique")
-        known = set(ids)
-        for edge in self.edges:
-            if edge.head not in known or edge.tail not in known:
-                raise ValueError("edge endpoints must refer to nodes in the problem")
 
     @property
     def node_by_id(self) -> dict:
@@ -3670,37 +2368,20 @@ class JointSolution:
     score: float
     feasible: bool = True
 
-    @property
-    def node_ids(self):
-        return frozenset(node.candidate_id for node in self.nodes)
-
 
 def _span_entries(lattice) -> list:
-    """Cells of one ``[L, W]`` logit lattice as ``(logit, start, end)``.
-
-    Args:
-        lattice: Span scores indexed by start and width.
-
-    Returns:
-        Entries whose end still falls inside the sequence.
-    """
-    shape = _coerce_logits(lattice, as_shape=True)
-    if len(shape) != 2:
-        raise ValueError(f"span lattice must have shape [L, W], got {shape}")
-    length, widths = shape
-    entries = []
-    for start in range(length):
-        row = lattice[start]
-        for width in range(widths):
-            end = start + width + 1
-            if end <= length:
-                entries.append((_coerce_logits(row[width]), start, end))
-    return entries
+    """Cells of one `[L, W]` logit lattice as `(logit, start, end)`."""
+    rows = lattice.tolist()
+    return [
+        (row[width], start, start + width + 1)
+        for start, row in enumerate(rows)
+        for width in range(len(row))
+        if start + width < len(rows)
+    ]
 
 
 def _node_rank(node: NodeCandidate):
-    source_rank = 0 if node.source == CandidateSource.ENTITY else 1
-    return (-node.score, node.start, node.end, node.entity_type, source_rank)
+    return (-node.score, node.start, node.end, node.entity_type, int(node.rescued))
 
 
 def _edge_rank(edge: EdgeCandidate):
@@ -3715,169 +2396,57 @@ def _edge_rank(edge: EdgeCandidate):
     )
 
 
-def _collect_span_nodes(
-    entity_logits,
-    entity_types,
-    thresholds,
-    candidate_thresholds,
-    maxima,
-    entity_threshold,
-    top_k_entities,
-    entity_weight,
-):
-    """Keep the top entity spans and the raw score of every finite cell.
-
-    Args:
-        entity_logits: Dense scores shaped ``[types, L, W]``.
-        entity_types: Type name per leading axis entry.
-        thresholds: Decision threshold by entity type.
-        candidate_thresholds: Retention floor by entity type.
-        maxima: Optional cap by entity type.
-        entity_threshold: Floor used when a type has no candidate threshold.
-        top_k_entities: Default cap per type.
-        entity_weight: Multiplier on the centered entity logit.
-
-    Returns:
-        Selected nodes keyed by ``(type, start, end)``, and raw scores for
-        every finite cell so relation rescue can still see dropped spans.
-    """
-    node_map: dict = {}
-    raw_entity_scores: dict = {}
-    for type_index, entity_type in enumerate(entity_types):
-        threshold = thresholds.get(entity_type) or 0.5
-        floor = candidate_thresholds.get(entity_type)
-        if floor is None:
-            floor = entity_threshold
-        candidates = []
-        for raw, start, end in _span_entries(entity_logits[type_index]):
-            if not math.isfinite(raw):
-                continue
-            score = center_logit(raw, threshold) * entity_weight
-            probability = sigmoid(raw)
-            raw_entity_scores[(entity_type, start, end)] = (score, probability)
-            if probability >= floor:
-                candidates.append(NodeCandidate(entity_type, start, end, score, probability))
-        cap = maxima.get(entity_type, top_k_entities)
-        for node in sorted(candidates, key=_node_rank)[:cap]:
-            node_map[node.key] = node
-    return node_map, raw_entity_scores
-
-
-def _rescue_role_spans(
-    node_map, raw_entity_scores, role_options, types, rescue_per_role, relation_offset, role_weight
-):
-    """Bind one role's spans to nodes, rescuing missing endpoints in rank order.
-
-    Args:
-        node_map: Nodes already kept, updated with rescued endpoints.
-        raw_entity_scores: Centered score and probability for finite entity cells.
-        role_options: ``(logit, start, end)`` rows, highest logit first.
-        types: Entity types allowed for this role.
-        rescue_per_role: Maximum new nodes added for this role.
-        relation_offset: Log-odds of the relation decision threshold.
-        role_weight: Multiplier on the centered role logit.
-
-    Returns:
-        ``(centered role score, node, role probability)`` rows.
-    """
-    bound = []
-    rescued = 0
-    for raw_role_score, start, end in role_options:
+def _bind_role(node_map, raw_scores, entries, types, offset) -> list:
+    """Bind one role's spans to nodes, rescuing missing endpoints in rank order."""
+    bound, rescued = [], 0
+    for raw, start, end in entries:
         for entity_type in types:
             key = (entity_type, start, end)
-            node = node_map.get(key)
-            if node is None:
-                if rescued >= rescue_per_role:
+            if key not in node_map:
+                if rescued >= _TOP_K_ROLES:
                     continue
-                node_score, node_probability = raw_entity_scores.get(key, (float("-inf"), 0.0))
-                node = NodeCandidate(
-                    entity_type,
-                    start,
-                    end,
-                    node_score,
-                    node_probability,
-                    source=CandidateSource.RELATION_RESCUE,
-                )
-                node_map[key] = node
+                score, probability = raw_scores.get(key, (float("-inf"), 0.0))
+                node_map[key] = NodeCandidate(entity_type, start, end, score, probability, rescued=True)
                 rescued += 1
-            bound.append(((raw_role_score - relation_offset) * role_weight, node, sigmoid(raw_role_score)))
+            bound.append((raw - offset, node_map[key], sigmoid(raw)))
     return bound
 
 
-def _edges_for_hypothesis(
-    hypothesis,
-    index,
-    node_map,
-    raw_entity_scores,
-    *,
-    relation_role_threshold,
-    top_k_roles,
-    rescue_per_role,
-    relation_pair_cap,
-    role_weight,
-    count_weight,
-):
-    """Edges for one relation hypothesis, including rescued endpoints.
-
-    Args:
-        hypothesis: Relation lattice with role logits shaped ``[count, 2, L, W]``.
-        index: Position used when the hypothesis has no id.
-        node_map: Entity nodes, mutated when an endpoint is rescued.
-        raw_entity_scores: Scores for cells that missed the entity cap.
-        relation_role_threshold: Default role retention floor.
-        top_k_roles: Role spans kept before pairing.
-        rescue_per_role: New nodes allowed per role.
-        relation_pair_cap: Pairs kept after sorting by score.
-        role_weight: Multiplier on centered role logits.
-        count_weight: Multiplier on the hypothesis count utility.
-
-    Returns:
-        Edge candidates for this hypothesis, not yet deduplicated across slots.
-    """
-    if not isinstance(hypothesis, RelationHypothesis):
-        raise TypeError("relation hypotheses must be RelationHypothesis values")
-    role_shape = _coerce_logits(hypothesis.role_logits, as_shape=True)
-    if len(role_shape) != 4 or role_shape[1] != 2:
-        raise ValueError(f"relation role logits must have shape [count_slots, 2, L, W], got {role_shape}")
-    hypothesis_id = hypothesis.hypothesis_id
-    if hypothesis_id is None:
-        hypothesis_id = (hypothesis.relation_type, index)
-    final_threshold = hypothesis.threshold if hypothesis.threshold is not None else 0.5
-    floor = hypothesis.candidate_threshold
-    if floor is None:
-        floor = relation_role_threshold
-    relation_offset = probability_to_logit(final_threshold)
-    edges = []
-    for count_slot in range(role_shape[0]):
-        role_options = []
-        for role in range(2):
-            entries = [
-                (raw, start, end)
-                for raw, start, end in _span_entries(hypothesis.role_logits[count_slot][role])
-                if math.isfinite(raw) and sigmoid(raw) >= floor
-            ]
-            entries.sort(key=lambda item: (-item[0], item[1], item[2]))
-            role_options.append(entries[:top_k_roles])
-        typed_roles = [
-            _rescue_role_spans(
-                node_map, raw_entity_scores, role_options[role], types, rescue_per_role, relation_offset, role_weight
-            )
-            for role, types in enumerate((hypothesis.head_types, hypothesis.tail_types))
-        ]
-        pairs = []
-        for (head_score, head, head_prob), (tail_score, tail, tail_prob) in product(*typed_roles):
-            pairs.append(
-                (
-                    head_score + tail_score + hypothesis.count_utility * count_weight,
-                    head,
-                    tail,
-                    head_prob,
-                    tail_prob,
-                )
-            )
-        pairs.sort(key=lambda item: (-item[0], str(item[1].candidate_id), str(item[2].candidate_id)))
-        for score, head, tail, head_prob, tail_prob in pairs[:relation_pair_cap]:
-            edges.append(
+def _span_problem(scores, schema: CompiledJointSchema, threshold: float) -> JointProblem:
+    """Build nodes from the dense span lattice and rescue relation endpoints."""
+    entity_types = tuple(scores["entity_types"] or schema.entity_order)
+    if scores["entity_logits"].shape[0] != len(entity_types):
+        raise ValueError(f"entity logits must have shape [types, L, W] for {len(entity_types)} types")
+    node_map, raw_scores = {}, {}
+    for type_index, entity_type in enumerate(entity_types):
+        spec = schema.entity_specs.get(entity_type) or EntitySpec(entity_type)
+        floor = threshold if spec.candidate_threshold is None else spec.candidate_threshold
+        candidates = []
+        for raw, start, end in _span_entries(scores["entity_logits"][type_index]):
+            if math.isfinite(raw):
+                score, probability = center_logit(raw, spec.threshold or 0.5), sigmoid(raw)
+                raw_scores[(entity_type, start, end)] = (score, probability)
+                if probability >= floor:
+                    candidates.append(NodeCandidate(entity_type, start, end, score, probability))
+        cap = _TOP_K_ENTITIES if spec.max_candidates is None else spec.max_candidates
+        node_map.update((node.key, node) for node in sorted(candidates, key=_node_rank)[:cap])
+    edge_groups: dict = {}
+    for hypothesis in scores["relation_hypotheses"]:
+        floor = threshold if hypothesis.candidate_threshold is None else hypothesis.candidate_threshold
+        offset = probability_to_logit(0.5 if hypothesis.threshold is None else hypothesis.threshold)
+        for count_slot, roles in enumerate(hypothesis.role_logits):
+            typed_roles = []
+            for role, types in enumerate((hypothesis.head_types, hypothesis.tail_types)):
+                entries = [
+                    entry
+                    for entry in _span_entries(roles[role])
+                    if math.isfinite(entry[0]) and sigmoid(entry[0]) >= floor
+                ]
+                entries.sort(key=lambda item: (-item[0], item[1], item[2]))
+                typed_roles.append(_bind_role(node_map, raw_scores, entries[:_TOP_K_ROLES], types, offset))
+            pairs = [(hs + ts, head, tail, hp, tp) for (hs, head, hp), (ts, tail, tp) in product(*typed_roles)]
+            pairs.sort(key=lambda item: (-item[0], str(item[1].candidate_id), str(item[2].candidate_id)))
+            edge_groups.setdefault(hypothesis.relation_type, []).extend(
                 EdgeCandidate(
                     hypothesis.relation_type,
                     head.candidate_id,
@@ -3887,423 +2456,106 @@ def _edges_for_hypothesis(
                     tail_probability=tail_prob,
                     head_entity_probability=head.probability,
                     tail_entity_probability=tail.probability,
-                    count_probability=hypothesis.count_probability,
+                    count_probability=1.0,
                     slot=count_slot,
-                    hypothesis=hypothesis_id,
-                    count_alternative=hypothesis.count_alternative,
+                    hypothesis=hypothesis.relation_type,
+                    count_alternative=0,
                 )
+                for score, head, tail, head_prob, tail_prob in pairs[:_PAIR_CAP]
             )
-    return edges
-
-
-def _cap_span_edges(edge_groups, max_edges_per_type):
-    """Dedup edges by key, keeping the higher score, then apply the type cap.
-
-    Args:
-        edge_groups: Edges grouped by relation type.
-        max_edges_per_type: Maximum edges retained for each relation.
-
-    Returns:
-        Edges ordered by ``_edge_rank``.
-    """
     edges = []
     for relation_type in sorted(edge_groups):
         unique = {}
         for edge in sorted(edge_groups[relation_type], key=_edge_rank):
-            previous = unique.get(edge.key)
-            if previous is None or edge.score > previous.score:
+            if edge.key not in unique or edge.score > unique[edge.key].score:
                 unique[edge.key] = edge
-        edges.extend(sorted(unique.values(), key=_edge_rank)[:max_edges_per_type])
-    return edges
-
-
-def _build_span_problem(
-    entity_logits,
-    entity_types,
-    relation_hypotheses=(),
-    *,
-    entity_thresholds=None,
-    entity_candidate_thresholds=None,
-    entity_max_candidates=None,
-    constraints=(),
-    candidate_threshold=0.05,
-    relation_role_threshold=0.05,
-    top_k_entities=32,
-    top_k_roles=12,
-    relation_pair_cap=128,
-    max_edges_per_type=256,
-    rescue_per_role=None,
-    entity_weight=1.0,
-    role_weight=1.0,
-    count_weight=1.0,
-    entity_threshold=None,
-) -> JointProblem:
-    """Build nodes from a dense span lattice and rescue relation endpoints."""
-    entity_threshold = candidate_threshold if entity_threshold is None else entity_threshold
-    rescue_per_role = top_k_roles if rescue_per_role is None else rescue_per_role
-    shape = _coerce_logits(entity_logits, as_shape=True)
-    if len(shape) != 3 or shape[0] != len(entity_types):
-        raise ValueError(f"entity logits must have shape [types, L, W], got {shape} for {len(entity_types)} types")
-    node_map, raw_entity_scores = _collect_span_nodes(
-        entity_logits,
-        entity_types,
-        dict(entity_thresholds or {}),
-        dict(entity_candidate_thresholds or {}),
-        dict(entity_max_candidates or {}),
-        entity_threshold,
-        top_k_entities,
-        entity_weight,
-    )
-    edge_groups: dict = {}
-    for index, hypothesis in enumerate(relation_hypotheses):
-        for edge in _edges_for_hypothesis(
-            hypothesis,
-            index,
-            node_map,
-            raw_entity_scores,
-            relation_role_threshold=relation_role_threshold,
-            top_k_roles=top_k_roles,
-            rescue_per_role=rescue_per_role,
-            relation_pair_cap=relation_pair_cap,
-            role_weight=role_weight,
-            count_weight=count_weight,
-        ):
-            edge_groups.setdefault(hypothesis.relation_type, []).append(edge)
-    edges = _cap_span_edges(edge_groups, max_edges_per_type)
+        edges.extend(sorted(unique.values(), key=_edge_rank)[:_MAX_EDGES_PER_TYPE])
     nodes = tuple(sorted(node_map.values(), key=lambda node: (node.entity_type, node.start, node.end, -node.score)))
-    return JointProblem(nodes, tuple(sorted(edges, key=_edge_rank)), tuple(constraints))
+    return JointProblem(nodes, tuple(sorted(edges, key=_edge_rank)), schema.constraints)
 
 
-def _boundary_mentions(
-    text,
-    candidates,
-    query_specs,
-    *,
-    sample_index=0,
-    token_offset=0,
-    text_length=None,
-    pair_temperature=1.0,
-):
-    """Turn one boundary candidate row into nodes whose scores are logits.
-
-    Args:
-        text: Document text. Offsets are checked against ``text_length``.
-        candidates: Candidate batch with indices, pair logits, and masks.
-        query_specs: Extractive fields in marker order.
-        sample_index: Row of the candidate batch to read.
-        token_offset: Prefix tokens subtracted from candidate indexes.
-        text_length: Number of document tokens. Missing lengths keep nothing.
-        pair_temperature: Positive divisor applied to pair logits.
-
-    Returns:
-        One ``NodeCandidate`` per mention key. ``score`` is the logit and the
-        higher logit wins a duplicate span. Order is type, start, end, logit.
-    """
-    del text
-    if pair_temperature <= 0:
-        raise ValueError("pair_temperature must be positive")
-    if text_length is None:
-        text_length = 0
-    indices = candidates.indices
-    pair_logits = candidates.pair_logits
-    valid_mask = candidates.valid_mask
-    query_mask = candidates.query_mask
-    best = {}
-    for query_id, spec in enumerate(query_specs):
-        if spec["task_type"] != "entities" or query_id >= indices.shape[1]:
+def _boundary_problem(sample, row, schema: CompiledJointSchema, threshold: float) -> JointProblem:
+    """Build entity nodes from one boundary row's candidates."""
+    candidates, best = sample["candidates"], {}
+    for query_id, spec in enumerate(_query_specs(row["groups"])):
+        if spec["task_type"] != "entities" or query_id >= candidates.indices.shape[1]:
             continue
-        entity_type = str(spec["field_name"])
-        valid = valid_mask[sample_index, query_id] & query_mask[sample_index, query_id]
+        valid = candidates.valid_mask[0, query_id] & candidates.query_mask[0, query_id]
         for candidate_id in valid.nonzero(as_tuple=False).flatten().tolist():
-            start = int(indices[sample_index, query_id, candidate_id, 0]) - token_offset
-            end = int(indices[sample_index, query_id, candidate_id, 1]) - token_offset
-            if not (0 <= start < end <= int(text_length)):
-                continue
-            logit = float(pair_logits[sample_index, query_id, candidate_id].detach().float()) / pair_temperature
-            node = NodeCandidate(entity_type, start, end, logit, sigmoid(logit))
-            previous = best.get(node.key)
-            if previous is None or node.score > previous.score:
-                best[node.key] = node
-    return tuple(sorted(best.values(), key=lambda item: (item.entity_type, item.start, item.end, -item.score)))
-
-
-def _retain_logit_edges(edges, edge_candidate_threshold, max_edges_per_type):
-    """Dedup logit edges and cap each relation type.
-
-    Args:
-        edges: Edges whose ``score`` is a logit.
-        edge_candidate_threshold: Minimum sigmoid probability.
-        max_edges_per_type: Cap after sorting by relation, logit, and endpoints.
-
-    Returns:
-        ``(edge, probability)`` rows in rescue order.
-    """
-    edge_by_key = {}
-    for edge in edges:
-        if not isinstance(edge, EdgeCandidate):
-            raise TypeError("boundary edges must be EdgeCandidate values")
-        probability = sigmoid(edge.score)
-        if probability < edge_candidate_threshold:
-            continue
-        key = (edge.relation_type, edge.head, edge.tail)
-        previous = edge_by_key.get(key)
-        if previous is None or edge.score > previous.score:
-            edge_by_key[key] = (edge, probability)
-    retained = []
-    counts: dict = {}
-    ranked = sorted(
-        edge_by_key.values(),
-        key=lambda item: (item[0].relation_type, -item[0].score, str(item[0].head), str(item[0].tail)),
+            start, end = (int(value) - row["prefix_len"] for value in candidates.indices[0, query_id, candidate_id])
+            logit = float(candidates.pair_logits[0, query_id, candidate_id].detach().float())
+            key = (str(spec["field_name"]), start, end)
+            if 0 <= start < end <= len(row["start"]) and (key not in best or logit > best[key]):
+                best[key] = logit
+    mentions = sorted(
+        ((key, logit, sigmoid(logit)) for key, logit in best.items()), key=lambda m: (m[0][0], -m[2], *m[0][1:])
     )
-    for edge, probability in ranked:
-        if max_edges_per_type is not None and counts.get(edge.relation_type, 0) >= max_edges_per_type:
-            continue
-        retained.append((edge, probability))
-        counts[edge.relation_type] = counts.get(edge.relation_type, 0) + 1
-    return retained
+    nodes, per_type = [], defaultdict(int)
+    for (entity_type, start, end), logit, probability in mentions:
+        spec = schema.entity_specs.get(entity_type) or EntitySpec(entity_type)
+        floor = threshold if spec.candidate_threshold is None else spec.candidate_threshold
+        limit = _TOP_K_ENTITIES if spec.max_candidates is None else spec.max_candidates
+        if probability >= floor and per_type[entity_type] < limit:
+            per_type[entity_type] += 1
+            decision = 0.5 if spec.threshold is None else float(spec.threshold)
+            nodes.append(NodeCandidate(entity_type, start, end, center_logit(logit, decision), probability))
+    return JointProblem(tuple(nodes), (), schema.constraints)
 
 
-def _select_rescued_mentions(mentions, rescue_ids, floors, mention_threshold, max_mentions_per_type, type_limits):
-    """Keep mentions above the floor, plus rescued endpoints within the cap.
-
-    Args:
-        mentions: Nodes whose ``score`` is still a logit.
-        rescue_ids: Endpoint keys that bypass the probability floor and the cap.
-        floors: Candidate threshold by entity type. ``None`` uses the default.
-        mention_threshold: Default retention floor.
-        max_mentions_per_type: Cap used when a type has no specific limit.
-        type_limits: Cap by entity type.
-
-    Returns:
-        ``(mention, floor)`` rows in type, probability, start, end order.
-    """
-    selected = []
-    per_type: dict = {}
-    ordered = sorted(mentions, key=lambda item: (item.entity_type, -item.probability, item.start, item.end))
-    for mention in ordered:
-        floor = floors.get(mention.entity_type, mention_threshold)
-        if floor is None:
-            floor = mention_threshold
-        if mention.probability < floor and mention.key not in rescue_ids:
-            continue
-        type_limit = type_limits.get(mention.entity_type, max_mentions_per_type)
-        if (
-            type_limit is not None
-            and per_type.get(mention.entity_type, 0) >= type_limit
-            and mention.key not in rescue_ids
-        ):
-            continue
-        selected.append((mention, floor))
-        per_type[mention.entity_type] = per_type.get(mention.entity_type, 0) + 1
-    return selected
-
-
-def _mentions_to_problem(
-    mentions,
-    edges,
-    *,
-    constraints=(),
-    mention_threshold=0.5,
-    decision_threshold=0.5,
-    max_mentions_per_type=None,
-    max_mentions_by_type=None,
-    rescue_relation_endpoints=False,
-    edge_candidate_threshold=0.0,
-    max_edges_per_type=None,
-    entity_weight=1.0,
-    relation_weight=1.0,
-    entity_thresholds=None,
-    entity_candidate_thresholds=None,
-) -> JointProblem:
-    """Center boundary logits into nodes and edges, rescuing relation endpoints.
-
-    Args:
-        mentions: Nodes whose ``score`` is still a logit.
-        edges: Edges whose ``score`` is still a logit and whose ends are node keys.
-        constraints: Joint constraints copied onto the problem.
-        mention_threshold: Retention floor when a type has no candidate threshold.
-        decision_threshold: Centering threshold when a type has no decision threshold.
-        max_mentions_per_type: Default cap applied after the rescue set is known.
-        max_mentions_by_type: Per-type cap.
-        rescue_relation_endpoints: Keep edge endpoints that miss the mention floor.
-        edge_candidate_threshold: Minimum edge probability.
-        max_edges_per_type: Cap applied after edges are sorted by logit.
-        entity_weight: Multiplier on the centered entity logit.
-        relation_weight: Multiplier on the centered edge logit.
-        entity_thresholds: Decision threshold by entity type.
-        entity_candidate_thresholds: Retention floor by entity type.
-
-    Returns:
-        A joint problem. Mention order is type, descending probability, start, end.
-        Edges keep that same rescue order, then higher logit, then endpoint ids.
-    """
-    retained_edges = _retain_logit_edges(edges, edge_candidate_threshold, max_edges_per_type)
-    rescue_ids = (
-        {endpoint for edge, _ in retained_edges for endpoint in (edge.head, edge.tail)}
-        if rescue_relation_endpoints
-        else set()
-    )
-    selected = _select_rescued_mentions(
-        mentions,
-        rescue_ids,
-        dict(entity_candidate_thresholds or {}),
-        mention_threshold,
-        max_mentions_per_type,
-        dict(max_mentions_by_type or {}),
-    )
-    thresholds = dict(entity_thresholds or {})
-    nodes = []
-    keep_ids = set()
-    for mention, floor in selected:
-        decision = thresholds.get(mention.entity_type)
-        decision = decision_threshold if decision is None else float(decision)
-        node = NodeCandidate(
-            mention.entity_type,
-            mention.start,
-            mention.end,
-            entity_weight * center_logit(mention.score, decision),
-            mention.probability,
-            source=(
-                CandidateSource.RELATION_RESCUE
-                if mention.key in rescue_ids and mention.probability < floor
-                else CandidateSource.ENTITY
-            ),
-            candidate_id=mention.key,
-        )
-        nodes.append(node)
-        keep_ids.add(mention.key)
-    edge_cands = []
-    for edge_slot, (edge, probability) in enumerate(retained_edges):
-        if edge.head not in keep_ids or edge.tail not in keep_ids:
-            continue
-        edge_cands.append(
-            EdgeCandidate(
-                edge.relation_type,
-                edge.head,
-                edge.tail,
-                relation_weight * center_logit(edge.score, decision_threshold),
-                head_probability=probability,
-                tail_probability=probability,
-                slot=edge_slot,
-                hypothesis=edge.relation_type,
-            )
-        )
-    return JointProblem(tuple(nodes), tuple(edge_cands), tuple(constraints))
-
-
-def _resolve_edge(problem: JointProblem, edge: EdgeCandidate):
-    node_by_id = problem.node_by_id
-    return SimpleNamespace(
-        relation_type=edge.relation_type,
-        type=edge.relation_type,
-        head=node_by_id.get(edge.head, edge.head),
-        tail=node_by_id.get(edge.tail, edge.tail),
-        slot=edge.slot,
-        candidate_id=edge.candidate_id,
-    )
-
-
-def _allow_node(problem, node, nodes, edges) -> bool:
-    del edges
-    return all(_joint_check(constraint, node, (), nodes, "node") for constraint in problem.constraints)
-
-
-def _allow_edge(problem, edge, nodes, edges) -> bool:
-    candidate = _resolve_edge(problem, edge)
-    accepted = tuple(_resolve_edge(problem, value) for value in edges)
-    return all(_joint_check(constraint, candidate, accepted, nodes, "edge") for constraint in problem.constraints)
-
-
-def _edge_conflicts(edge: EdgeCandidate, used) -> bool:
-    used_set = set(used)
-    if any(key in used_set for key in edge.exclusion_keys):
-        return True
-    choice = edge.count_choice
-    if choice is None:
-        return False
-    group, alternative = choice
-    return any(
-        isinstance(key, tuple)
-        and len(key) == 3
-        and key[0] == _LatticeTag.COUNT_CHOICE.value
-        and key[1] == group
-        and key[2] != alternative
-        for key in used_set
-    )
-
-
-def _edge_usage(edge: EdgeCandidate):
-    keys = set(edge.exclusion_keys)
-    if edge.count_choice is not None:
-        keys.add((_LatticeTag.COUNT_CHOICE.value,) + edge.count_choice)
-    return frozenset(keys)
+def _edge_usage(edge: EdgeCandidate) -> set:
+    return set() if edge.slot is None else {("slot", edge.hypothesis, edge.count_alternative, edge.slot)}
 
 
 def _try_edge(problem, selected, edges, used, score, edge):
     """Shared greedy and beam expansion. Head==tail is listed twice."""
-    if _edge_conflicts(edge, used):
+    if _edge_usage(edge) & used:
         return None
     node_by_id = problem.node_by_id
     new_ids = [value for value in (edge.head, edge.tail) if value not in selected]
     proposed = [node_by_id[value] for value in new_ids]
-    current = [node_by_id[value] for value in selected]
-    proposed_nodes = current + proposed
-    if not all(_allow_node(problem, node, proposed_nodes, edges) for node in proposed):
+    proposed_nodes = [node_by_id[value] for value in selected] + proposed
+    if not all(_node_allowed(problem, node, proposed_nodes) for node in proposed):
         return None
-    if not _allow_edge(problem, edge, proposed_nodes, edges):
+    if not _edge_allowed(problem, edge, edges):
         return None
     gain = edge.score + sum(node.score for node in proposed)
     if gain < 0.0:
         return None
-    new_selected = set(selected)
-    new_selected.update(new_ids)
-    new_used = set(used)
-    new_used.update(_edge_usage(edge))
-    return new_selected, list(edges) + [edge], new_used, score + gain
+    return set(selected) | set(new_ids), list(edges) + [edge], used | _edge_usage(edge), score + gain
 
 
 def _add_positive_nodes(problem, selected, edges, score):
-    node_by_id = problem.node_by_id
-    selected = set(selected)
+    node_by_id, selected = problem.node_by_id, set(selected)
     for node in sorted(problem.nodes, key=lambda item: (-item.score, item.entity_type, item.start, item.end)):
         if node.candidate_id in selected or node.score <= 0.0:
             continue
-        current = [node_by_id[value] for value in selected]
-        if _allow_node(problem, node, current + [node], edges):
+        if _node_allowed(problem, node, [node_by_id[value] for value in selected] + [node]):
             selected.add(node.candidate_id)
             score += node.score
     return selected, score
 
 
-def _companions(problem, edges):
+def _make_solution(problem, node_ids, edges, score) -> JointSolution:
+    """Selected nodes plus edges, completed with symmetric and inverse companions."""
     chosen = list(edges)
     keys = {(edge.relation_type, edge.head, edge.tail) for edge in chosen}
-    companions = []
     for constraint in problem.constraints:
-        if constraint["type"] == "SymmetricRelation":
-            pairs = [
-                (constraint["relation"], edge.tail, edge.head, edge)
-                for edge in chosen
-                if edge.relation_type == constraint["relation"]
-            ]
-        elif constraint["type"] == "InverseRelation":
-            pairs = []
-            for edge in chosen:
-                if edge.relation_type == constraint["relation"]:
-                    pairs.append((constraint["inverse"], edge.tail, edge.head, edge))
-                elif edge.relation_type == constraint["inverse"]:
-                    pairs.append((constraint["relation"], edge.tail, edge.head, edge))
-        else:
+        if constraint["type"] not in ("SymmetricRelation", "InverseRelation"):
             continue
-        for relation, head, tail, source in pairs:
-            key = (relation, head, tail)
-            if key in keys:
+        relation = constraint["relation"]
+        inverse = constraint.get("inverse", relation)
+        for source in list(chosen):
+            if source.derived or source.relation_type not in (relation, inverse):
                 continue
-            companions.append(
+            label = inverse if source.relation_type == relation else relation
+            if (label, source.tail, source.head) in keys:
+                continue
+            keys.add((label, source.tail, source.head))
+            chosen.append(
                 EdgeCandidate(
-                    relation,
-                    head,
-                    tail,
+                    label,
+                    source.tail,
+                    source.head,
                     0.0,
                     head_probability=source.tail_probability,
                     tail_probability=source.head_probability,
@@ -4311,665 +2563,257 @@ def _companions(problem, edges):
                     tail_entity_probability=source.head_entity_probability,
                     count_probability=source.count_probability,
                     derived=True,
-                    candidate_id=(_LatticeTag.DERIVED.value, relation, head, tail),
+                    candidate_id=("derived", label, source.tail, source.head),
                 )
             )
-            keys.add(key)
-    return tuple(
-        sorted(
-            chosen + companions, key=lambda edge: (edge.relation_type, str(edge.head), str(edge.tail), edge.derived)
-        )
-    )
-
-
-def _make_solution(problem, node_ids, edges, score) -> JointSolution:
-    selected = set(node_ids)
-    nodes = tuple(node for node in problem.nodes if node.candidate_id in selected)
-    return JointSolution(nodes, _companions(problem, edges), float(score))
+    chosen.sort(key=lambda edge: (edge.relation_type, str(edge.head), str(edge.tail), edge.derived))
+    node_ids = set(node_ids)
+    nodes = tuple(node for node in problem.nodes if node.candidate_id in node_ids)
+    return JointSolution(nodes, tuple(chosen), float(score))
 
 
 def _valid_solution(problem, solution: JointSolution) -> bool:
-    accepted_nodes = []
+    nodes, edges = [], []
     for node in solution.nodes:
-        if not _allow_node(problem, node, accepted_nodes + [node], solution.edges):
+        if not _node_allowed(problem, node, nodes + [node]):
             return False
-        accepted_nodes.append(node)
-    accepted_edges = []
+        nodes.append(node)
     for edge in solution.edges:
-        if not _allow_edge(problem, edge, list(solution.nodes), accepted_edges):
+        if not _edge_allowed(problem, edge, edges):
             return False
-        accepted_edges.append(edge)
-    resolved = tuple(_resolve_edge(problem, edge) for edge in solution.edges)
+        edges.append(edge)
+    keys = {(edge.relation_type, edge.head, edge.tail) for edge in solution.edges}
     for constraint in problem.constraints:
-        if not _joint_check(constraint, None, resolved, list(solution.nodes), "validate"):
-            return False
+        if constraint["type"] in ("SymmetricRelation", "InverseRelation"):
+            relation = constraint["relation"]
+            inverse = constraint.get("inverse", relation)
+            for edge in solution.edges:
+                if edge.relation_type == relation and (inverse, edge.tail, edge.head) not in keys:
+                    return False
+                if edge.relation_type == inverse and (relation, edge.tail, edge.head) not in keys:
+                    return False
     return True
 
 
-def edge_rank(edge: EdgeCandidate, nodes: Mapping, *, mode: Literal["greedy", "beam"]) -> tuple:
-    """Rank an edge for greedy or beam expansion.
-
-    Args:
-        edge: Relation edge to order.
-        nodes: Candidate id mapped to the node that supplies the endpoint score.
-        mode: ``greedy`` omits the tail score when ``head == tail``, then breaks
-            ties with ``-edge.score``. ``beam`` adds both endpoint scores and
-            has no second score key.
-
-    Returns:
-        A sort key. Smaller values are expanded first.
-    """
-    head_score = nodes[edge.head].score
-    if mode == "greedy":
-        endpoint = head_score
-        if edge.tail != edge.head:
-            endpoint += nodes[edge.tail].score
-        return (
-            -(edge.score + endpoint),
-            -edge.score,
-            edge.relation_type,
-            str(edge.hypothesis),
-            str(edge.slot),
-            str(edge.head),
-            str(edge.tail),
-        )
-    if mode != "beam":
-        raise ValueError("mode must be 'greedy' or 'beam'")
-    return (
-        -(edge.score + head_score + nodes[edge.tail].score),
-        edge.relation_type,
-        str(edge.hypothesis),
-        str(edge.slot),
-        str(edge.head),
-        str(edge.tail),
-    )
-
-
-def _empty_solution() -> JointSolution:
-    return JointSolution((), (), 0.0, feasible=False)
+def _expansion_order(edge: EdgeCandidate, nodes: Mapping, greedy: bool) -> tuple:
+    """Greedy counts a self-loop endpoint once and breaks ties on `-edge.score`."""
+    head, tail = nodes[edge.head].score, nodes[edge.tail].score
+    ties = (edge.relation_type, str(edge.hypothesis), str(edge.slot), str(edge.head), str(edge.tail))
+    if greedy:
+        return (-(edge.score + (head if edge.tail == edge.head else head + tail)), -edge.score, *ties)
+    return (-(edge.score + head + tail), *ties)
 
 
 def _optimize_greedy(problem: JointProblem) -> JointSolution:
     node_by_id = problem.node_by_id
     selected, edges, used, score = set(), [], set(), 0.0
-    for edge in sorted(problem.edges, key=lambda item: edge_rank(item, node_by_id, mode="greedy")):
+    for edge in sorted(problem.edges, key=lambda item: _expansion_order(item, node_by_id, True)):
         expanded = _try_edge(problem, selected, edges, used, score, edge)
-        if expanded is None:
-            continue
-        selected, edges, used, score = expanded
+        if expanded is not None:
+            selected, edges, used, score = expanded
     selected, score = _add_positive_nodes(problem, selected, edges, score)
     result = _make_solution(problem, selected, edges, score)
     if _valid_solution(problem, result):
         return result
-    logger.warning(
-        "greedy joint-IE decoding produced a constraint-violating assignment; returning empty solution",
-    )
-    return _empty_solution()
-
-
-def _state_signature(node_ids, edges):
-    return (tuple(sorted(map(str, node_ids))), tuple(str(edge.candidate_id) for edge in edges))
+    logger.warning("greedy joint-IE decoding produced a constraint-violating assignment; returning empty solution")
+    return JointSolution((), (), 0.0, feasible=False)
 
 
 def _solution_key(solution: JointSolution):
-    return (
-        solution.score,
-        tuple(sorted(map(str, solution.node_ids))),
-        tuple(str(edge.candidate_id) for edge in solution.edges),
-    )
+    ids = tuple(sorted(str(node.candidate_id) for node in solution.nodes))
+    return (solution.score, ids, tuple(str(edge.candidate_id) for edge in solution.edges))
 
 
-def _optimize_beam(problem: JointProblem, beam_width: int) -> JointSolution:
+def _state_order(state) -> tuple:
+    selected, edges, _, score = state
+    return (-score, tuple(sorted(map(str, selected))), tuple(str(edge.candidate_id) for edge in edges))
+
+
+def _optimize_beam(problem: JointProblem) -> JointSolution:
     """Beam over the same edge expansion greedy uses, without a suffix bound."""
-    if beam_width <= 0:
-        raise ValueError("beam_width must be positive")
     node_by_id = problem.node_by_id
-    ordered = sorted(problem.edges, key=lambda item: edge_rank(item, node_by_id, mode="beam"))
     beam = [(set(), [], set(), 0.0)]
-    for edge in ordered:
-        expanded = list(beam)
-        for selected, edges, used, score in beam:
-            trial = _try_edge(problem, selected, edges, used, score, edge)
-            if trial is not None:
-                expanded.append(trial)
+    for edge in sorted(problem.edges, key=lambda item: _expansion_order(item, node_by_id, False)):
         unique = {}
-        for selected, edges, used, score in expanded:
+        for state in beam + [_try_edge(problem, *state, edge) for state in beam]:
+            if state is None:
+                continue
+            selected, edges, used, score = state
             key = (frozenset(selected), frozenset(edge.candidate_id for edge in edges), frozenset(used))
-            old = unique.get(key)
-            if old is None or score > old[3]:
-                unique[key] = (selected, edges, used, score)
-        beam = sorted(unique.values(), key=lambda state: (-state[3], _state_signature(state[0], state[1])))[
-            :beam_width
-        ]
+            if key not in unique or score > unique[key][3]:
+                unique[key] = state
+        beam = sorted(unique.values(), key=_state_order)[:_BEAM_SIZE]
     candidates = []
-    for selected, edges, used, score in beam:
-        del used
+    for selected, edges, _, score in beam:
         selected, score = _add_positive_nodes(problem, selected, edges, score)
         candidates.append(_make_solution(problem, selected, edges, score))
     candidates.append(_optimize_greedy(problem))
     feasible = [solution for solution in candidates if _valid_solution(problem, solution)]
     if feasible:
         return max(feasible, key=_solution_key)
-    logger.warning(
-        "joint-IE decoding found no constraint-satisfying assignment among %d candidates; returning empty solution",
-        len(candidates),
-    )
-    return _empty_solution()
+    logger.warning("joint-IE decoding found no constraint-satisfying assignment among %d candidates", len(candidates))
+    return JointSolution((), (), 0.0, feasible=False)
 
 
-def _component_scores(value, include_count: bool) -> list:
-    """Probabilities that make up one entity or relation confidence.
-
-    Args:
-        value: Selected node or edge.
-        include_count: Include the edge count probability when it is present.
-
-    Returns:
-        Component probabilities in the historical field order.
-    """
+def _component_scores(value) -> list:
+    """Probabilities that make up one entity or relation confidence."""
     if isinstance(value, NodeCandidate):
-        if value.probability is None:
-            return []
-        return [float(value.probability)]
-    scores = []
-    for score in (
+        return [] if value.probability is None else [float(value.probability)]
+    parts = (
         value.head_probability,
         value.tail_probability,
         value.head_entity_probability,
         value.tail_entity_probability,
-    ):
-        if score is not None:
-            scores.append(float(score))
-    if include_count and value.count_probability is not None:
-        scores.append(float(value.count_probability))
-    return scores
+        value.count_probability,
+    )
+    return [float(score) for score in parts if score is not None]
 
 
-def _project_span(node, text, starts, ends):
-    token_start, token_end = int(node.start), int(node.end)
-    if starts is not None:
-        char_start = int(starts[token_start])
-        char_end = int(ends[max(token_start, token_end - 1)])
-    else:
-        char_start, char_end = token_start, token_end
-    surface = text[char_start:char_end]
-    return char_start, char_end, surface
-
-
-def _joint_result_dict(solution, problem, text, starts, ends, *, include_confidence, include_spans) -> dict:
+def _joint_result_dict(solution, text, starts, ends, include_confidence, include_spans) -> dict:
     rows = []
     for node in solution.nodes:
-        char_start, char_end, surface = _project_span(node, text, starts, ends)
-        rows.append(
-            (
-                node,
-                char_start,
-                char_end,
-                surface,
-                _component_scores(node, True),
-                _LatticeTag.RESCUE.value in str(node.source).lower(),
-            )
-        )
+        char_start, char_end = node.start, node.end
+        if starts is not None:
+            char_start, char_end = int(starts[node.start]), int(ends[max(node.start, node.end - 1)])
+        rows.append((node, char_start, char_end, text[char_start:char_end]))
     rows.sort(key=lambda item: (item[1], item[2], item[0].entity_type, item[3]))
-    id_of = {}
-    entities = []
-    for index, (node, char_start, char_end, surface, scores, rescued) in enumerate(rows):
-        entity_id = f"e{index + 1}"
-        id_of[("value", node.candidate_id)] = entity_id
-        payload = {"id": entity_id, "type": node.entity_type, "text": surface}
+    id_of, entities = {}, []
+    for index, (node, char_start, char_end, surface) in enumerate(rows):
+        id_of[node.candidate_id] = f"e{index + 1}"
+        payload = {"id": id_of[node.candidate_id], "type": node.entity_type, "text": surface}
         if include_spans:
             payload.update(start=char_start, end=char_end)
-        if include_confidence:
-            confidence = _geometric_mean(scores)
-            if confidence is not None:
-                payload["confidence"] = confidence
-        if rescued:
+        confidence = _geometric_mean(_component_scores(node)) if include_confidence else None
+        if confidence is not None:
+            payload["confidence"] = confidence
+        if node.rescued:
             payload["rescued"] = True
         entities.append(payload)
     relations = []
     for edge in solution.edges:
-        head = id_of.get(("value", edge.head))
-        tail = id_of.get(("value", edge.tail))
-        if head is None or tail is None:
+        if edge.head not in id_of or edge.tail not in id_of:
             raise ValueError("relation endpoint does not identify a selected entity")
-        payload = {"type": edge.relation_type, "head": head, "tail": tail}
-        if include_confidence:
-            confidence = _geometric_mean(_component_scores(edge, True))
-            if confidence is not None:
-                payload["confidence"] = confidence
+        payload = {"type": edge.relation_type, "head": id_of[edge.head], "tail": id_of[edge.tail]}
+        confidence = _geometric_mean(_component_scores(edge)) if include_confidence else None
+        if confidence is not None:
+            payload["confidence"] = confidence
         if edge.derived:
-            payload[_LatticeTag.DERIVED.value] = True
+            payload["derived"] = True
         relations.append(payload)
     relations.sort(key=lambda item: (item["type"], item["head"], item["tail"]))
     return {"entities": entities, "relations": relations}
 
 
-def _problem_from_span(scores, compiled: CompiledJointSchema, config) -> JointProblem:
-    """Build a span problem from entity logits and relation hypotheses.
-
-    Args:
-        scores: Mapping with ``entity_logits`` shaped ``[types, L, W]``.
-            Optional ``entity_types`` and ``relation_hypotheses`` use the
-            schema order and compiled relation specs when omitted.
-        compiled: Joint schema whose entity specs set thresholds and caps.
-        config: Candidate caps and loss weights.
-
-    Returns:
-        Nodes and edges for greedy or beam search.
-
-    Raises:
-        TypeError: If ``entity_logits`` is missing or a hypothesis is not a
-            ``RelationHypothesis``.
-    """
-    if not isinstance(scores, Mapping) or scores.get("entity_logits") is None:
-        raise TypeError("span scores need entity_logits [types, L, W]")
-    entity_logits = scores["entity_logits"]
-    entity_types = tuple(scores.get("entity_types") or compiled.entity_order)
-    hypotheses = []
-    for raw in scores.get("relation_hypotheses") or ():
-        if not isinstance(raw, RelationHypothesis):
-            raise TypeError("relation_hypotheses entries must be RelationHypothesis")
-        hypotheses.append(raw)
-    specs = compiled.entity_specs
-    return _build_span_problem(
-        entity_logits,
-        entity_types,
-        hypotheses,
-        entity_thresholds={name: spec.threshold for name, spec in specs.items()},
-        entity_candidate_thresholds={name: spec.candidate_threshold for name, spec in specs.items()},
-        entity_max_candidates={
-            name: spec.max_candidates for name, spec in specs.items() if spec.max_candidates is not None
-        },
-        constraints=compiled.constraints,
-        candidate_threshold=config.candidate_threshold,
-        relation_role_threshold=config.relation_role_threshold,
-        top_k_entities=config.top_k_entities,
-        top_k_roles=config.top_k_roles,
-        relation_pair_cap=config.relation_pair_cap,
-        max_edges_per_type=config.max_edges_per_type,
-        rescue_per_role=config.rescue_per_role,
-        entity_weight=config.entity_weight,
-        role_weight=config.role_weight,
-        count_weight=config.count_weight,
-        entity_threshold=config.entity_threshold,
-    )
-
-
-def _sparse_problem(scores, compiled: CompiledJointSchema, config) -> JointProblem:
-    """Build a boundary problem from candidate tensors.
-
-    Args:
-        scores: Mapping with ``candidates`` and ``query_specs``. Optional
-            ``edges`` are ``EdgeCandidate`` values whose scores are logits.
-        compiled: Joint schema supplying thresholds and constraints.
-        config: Candidate caps and loss weights.
-
-    Returns:
-        Centered nodes and edges. Relation endpoints below the floor are rescued.
-
-    Raises:
-        TypeError: If the candidate tensors or query specs are missing.
-    """
-    if not isinstance(scores, Mapping):
-        raise TypeError("boundary scores need candidates with pair_logits")
-    candidates = scores.get("candidates")
-    query_specs = scores.get("query_specs")
-    if candidates is None or query_specs is None or getattr(candidates, "pair_logits", None) is None:
-        raise TypeError("boundary scores need candidates with pair_logits")
-    text_length = scores.get("text_length")
-    if text_length is None:
-        text_length = len(scores.get("start_mappings") or ())
-    specs = compiled.entity_specs
-    mentions = _boundary_mentions(
-        str(scores.get("text") or ""),
-        candidates,
-        query_specs,
-        sample_index=int(scores.get("sample_index") or 0),
-        token_offset=int(scores.get("token_offset") or 0),
-        text_length=text_length,
-        pair_temperature=float(scores.get("pair_temperature") or 1.0),
-    )
-    return _mentions_to_problem(
-        mentions,
-        tuple(scores.get("edges") or ()),
-        constraints=compiled.constraints,
-        mention_threshold=(
-            config.entity_threshold if config.entity_threshold is not None else config.candidate_threshold
-        ),
-        max_mentions_per_type=config.top_k_entities,
-        max_mentions_by_type={
-            name: spec.max_candidates for name, spec in specs.items() if spec.max_candidates is not None
-        },
-        rescue_relation_endpoints=True,
-        edge_candidate_threshold=config.relation_role_threshold,
-        max_edges_per_type=min(config.relation_pair_cap, config.max_edges_per_type),
-        entity_weight=config.entity_weight,
-        relation_weight=config.role_weight,
-        entity_thresholds={name: spec.threshold for name, spec in specs.items()},
-        entity_candidate_thresholds={name: spec.candidate_threshold for name, spec in specs.items()},
-    )
-
-
-@dataclass(frozen=True)
-class JointIEConfig:
-    """Candidate caps and the choice of greedy or beam search."""
-
-    optimizer: str = "beam"
-    beam_size: int = 32
-    candidate_threshold: float = 0.05
-    relation_role_threshold: float = 0.05
-    top_k_entities: int = 32
-    top_k_roles: int = 12
-    count_top_k: int = 2
-    include_confidence: bool = True
-    include_spans: bool = True
-    entity_threshold: float | None = None
-    relation_pair_cap: int = 128
-    max_edges_per_type: int = 256
-    rescue_per_role: int | None = None
-    entity_weight: float = 1.0
-    role_weight: float = 1.0
-    count_weight: float = 1.0
-
-    def __post_init__(self) -> None:
-        if self.optimizer.lower() not in {"beam", "greedy", "auto"}:
-            raise ValueError("optimizer must be 'beam' or 'greedy'")
-        for name in (
-            "beam_size",
-            "top_k_entities",
-            "top_k_roles",
-            "count_top_k",
-            "relation_pair_cap",
-            "max_edges_per_type",
-        ):
-            if getattr(self, name) <= 0:
-                raise ValueError(f"{name} must be positive")
-        if self.rescue_per_role is not None and self.rescue_per_role <= 0:
-            raise ValueError("rescue_per_role must be positive")
-
-
-def _architecture(value: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError("architecture must be 'span' or 'boundary'")
-    key = value.strip().lower()
-    if key not in {"span", "boundary"}:
-        raise ValueError(f"Unknown extractor architecture {value!r}. Expected one of: 'span', 'boundary'.")
-    return key
-
-
-def _with_overlap(compiled: CompiledJointSchema, policy: str | None):
-    if policy is None:
-        return compiled, None
-    canonical = normalize_overlap_policy(policy)
-    constraints = [item for item in compiled.constraints if item["type"] != "EntityOverlapPolicy"]
-    if canonical == "longest":
-        return replace(compiled, constraints=tuple(constraints)), "longest"
-    mapped = "allow" if canonical == "allow" else "nested" if canonical == "nested" else "disallow"
-    constraints.append(_joint_constraint("EntityOverlapPolicy", policy=mapped))
-    return replace(compiled, constraints=tuple(constraints)), None
-
-
-def _filter_longest(problem, solution: JointSolution) -> JointSolution:
-    kept = resolve_overlaps(
-        list(solution.nodes),
-        "longest",
-        score=lambda node: node.score,
-        start=lambda node: node.start,
-        end=lambda node: node.end,
-    )
-    ids = {node.candidate_id for node in kept}
-    edges = tuple(edge for edge in solution.edges if edge.head in ids and edge.tail in ids and not edge.derived)
-    return _make_solution(problem, ids, edges, solution.score)
-
-
-def _optimize(problem: JointProblem, config: JointIEConfig) -> JointSolution:
-    if config.optimizer.lower() in {"auto", "greedy"}:
-        return _optimize_greedy(problem)
-    return _optimize_beam(problem, config.beam_size)
-
-
-def _char_maps(scores):
-    """Return start and end maps, or ``None`` when the document has no offsets.
-
-    Args:
-        scores: Span or boundary score mapping.
-
-    Returns:
-        ``(starts, ends)``. Empty maps become ``None``.
-    """
-    starts = scores.get("start_mappings") if isinstance(scores, Mapping) else None
-    ends = scores.get("end_mappings") if isinstance(scores, Mapping) else None
-    if starts is None or len(starts) == 0:
-        return None, None
-    return starts, ends
-
-
-def _decode_joint_one(scores, schema, architecture, *, text="", config: JointIEConfig, overlap_policy=None) -> dict:
-    """Decode one span matrix or one boundary candidate list."""
-    compiled = _compile_joint(_coerce_joint_schema(schema))
-    compiled, longest = _with_overlap(compiled, overlap_policy)
-    kind = _architecture(architecture)
-    if not isinstance(scores, Mapping):
-        raise TypeError("span scores need entity_logits [types, L, W] or boundary candidates")
-    document = text or str(scores.get("text") or "")
-    starts, ends = _char_maps(scores)
-    if kind == "span":
-        problem = _problem_from_span(scores, compiled, config)
-    else:
-        problem = _sparse_problem(scores, compiled, config)
-    solution = _optimize(problem, config)
-    if longest == "longest":
-        solution = _filter_longest(problem, solution)
-    return _joint_result_dict(
-        solution,
-        problem,
-        document,
-        starts,
-        ends,
-        include_confidence=config.include_confidence,
-        include_spans=config.include_spans,
-    )
-
-
 def _doc_axis(tensor, doc_len):
+    """Drop the choice prefix from the word axis of `(..., words, width)` scores."""
     if doc_len <= 0:
         return tensor[..., :0, :]
     return tensor[..., -doc_len:, :]
 
 
-def _schema_from_meta(meta) -> dict:
-    """Joint dict taken from processor metadata."""
-    source = meta.get("schema") or {}
-    constraints = [
-        raw
-        for raw in list(meta.get("constraints") or []) + list(source.get("constraints") or [])
-        if isinstance(raw, Mapping) and raw.get("type") in _JOINT_FIELDS
-    ]
-    return {
-        "entities": source.get("entities") or {},
-        "relations": source.get("relations") or [],
-        "constraints": constraints,
-    }
-
-
-def _span_scores_from_sample(sample, meta, schema):
-    groups = [group for group in (meta.get("groups") or []) if group["task_type"] != "classifications"]
+def _span_scores_from_sample(sample, row, schema):
+    """Entity matrix and relation hypotheses for the span-architecture joint decoder."""
+    groups = [group for group in row["groups"] if group.task != "classifications"]
     tensors = sample.get("span_logits")
-    probabilities = False
     if tensors is None:
-        raise TypeError("span scores need entity_logits [types, L, W] or a task lattice")
+        raise TypeError("span joint decoding needs span_logits")
     if torch.is_tensor(tensors):
         tensors = [tensors]
     counts = sample.get("counts")
     if torch.is_tensor(counts):
         counts = counts.detach().cpu().tolist()
-    doc_len = len(meta.get("start") or [])
-    entity_logits = None
-    entity_types = ()
-    hypotheses = []
-    specs = schema.relation_specs if isinstance(schema.relation_specs, Mapping) else {}
+    doc_len = len(row["start"])
+    entity_logits, entity_types, hypotheses = None, (), []
     for index, group in enumerate(groups):
-        tensor = tensors[index]
-        if not torch.is_tensor(tensor):
-            tensor = torch.tensor(tensor, dtype=torch.float)
-        tensor = tensor.detach().float().cpu()
+        tensor = torch.as_tensor(tensors[index], dtype=torch.float).detach().cpu()
         if tensor.ndim != 4:
             raise ValueError("span logits must have shape (count, fields, words, width)")
         count = int(counts[index]) if counts is not None else int(tensor.shape[0])
-        tensor = tensor[: max(count, 0)]
-        if probabilities:
-            tensor = torch.special.logit(tensor.clamp(1e-6, 1 - 1e-6))
-        tensor = _doc_axis(tensor, doc_len)
-        if group["task_type"] == "entities":
-            entity_types = tuple(group["fields"])
-            entity_logits = (
-                tensor[0]
-                if tensor.shape[0]
-                else tensor.new_zeros((len(entity_types), doc_len, tensor.shape[-1] if tensor.ndim == 4 else 1))
-            )
-        elif group["task_type"] == "relations" and tensor.shape[0] > 0 and tensor.shape[1] >= 2:
-            spec = specs.get(group["name"])
+        tensor = _doc_axis(tensor[: max(count, 0)], doc_len)
+        if group.task == "entities":
+            entity_types = tuple(item.name for item in group.fields)
+            empty = tensor.new_zeros((len(entity_types), doc_len, tensor.shape[-1]))
+            entity_logits = tensor[0] if tensor.shape[0] else empty
+        elif group.task == "relations" and tensor.shape[0] > 0 and tensor.shape[1] >= 2:
+            spec = schema.relation_specs.get(group.name)
             hypotheses.append(
                 RelationHypothesis(
-                    group["name"],
+                    group.name,
                     tensor[:, :2],
                     getattr(spec, "head", ()),
                     getattr(spec, "tail", ()),
                     getattr(spec, "threshold", None),
                     getattr(spec, "candidate_threshold", None),
-                    count_alternative=0,
-                    hypothesis_id=group["name"],
                 )
             )
     return {
-        "text": meta.get("text") or "",
         "entity_logits": entity_logits if entity_logits is not None else torch.empty((0, doc_len, 1)),
         "entity_types": entity_types,
         "relation_hypotheses": hypotheses,
-        "start_mappings": tuple(meta.get("start") or ()),
-        "end_mappings": tuple(meta.get("end") or ()),
     }
 
 
-def _boundary_scores_from_sample(sample, meta):
-    return {
-        "text": meta.get("text") or "",
-        "candidates": sample.get("candidates"),
-        "query_specs": _query_specs(meta),
-        "token_offset": int(meta.get("prefix_len") or 0),
-        "text_length": len(meta.get("start") or []),
-        "start_mappings": tuple(meta.get("start") or ()),
-        "end_mappings": tuple(meta.get("end") or ()),
-        "edges": sample.get("edges") or (),
-    }
-
-
-def _batch_joint(outputs, metadata, *, threshold, include_confidence, include_spans, optimizer, overlap_policy):
-    rows = _batch_rows(metadata)
-    if not rows:
-        return []
-    samples = _sample_outputs(outputs, len(rows))
-    if optimizer == "exact":
-        optimizer = "beam"
-    decoded = []
-    for sample, meta in zip(samples, rows):
-        schema = _compile_joint(_schema_from_meta(meta))
-        architecture = meta.get("architecture") or ("boundary" if sample.get("candidates") is not None else "span")
-        if architecture == "boundary":
-            scores = _boundary_scores_from_sample(sample, meta)
-        else:
-            scores = _span_scores_from_sample(sample, meta, schema)
-        config = JointIEConfig(
-            optimizer=optimizer,
-            candidate_threshold=threshold,
-            relation_role_threshold=threshold,
-            include_confidence=include_confidence,
-            include_spans=include_spans,
-            entity_threshold=threshold,
-        )
-        decoded.append(
-            _decode_joint_one(
-                scores, schema, architecture, text=meta.get("text") or "", config=config, overlap_policy=overlap_policy
-            )
-        )
-    return decoded
-
-
-def decode_joint(
-    span_or_boundary_scores,
-    schema,
-    architecture=None,
+def decode_joint_sample(
+    sample,
+    row,
     *,
-    text: str = "",
+    threshold: float = 0.5,
+    include_confidence: bool = False,
+    include_spans: bool = False,
     optimizer: str = "beam",
-    beam_size: int = 32,
-    candidate_threshold: float = 0.05,
-    relation_role_threshold: float = 0.05,
-    top_k_entities: int = 32,
-    top_k_roles: int = 12,
-    count_top_k: int = 2,
-    include_confidence: bool = True,
-    include_spans: bool = True,
-    entity_threshold: float | None = None,
-    relation_pair_cap: int = 128,
-    max_edges_per_type: int = 256,
-    rescue_per_role: int | None = None,
-    entity_weight: float = 1.0,
-    role_weight: float = 1.0,
-    count_weight: float = 1.0,
-    threshold: float | None = None,
     overlap_policy: str | None = None,
-) -> dict | list:
-    """Decode span or boundary scores into entities and relations.
-
-    Span scores provide ``entity_logits`` shaped ``[types, L, W]``. Boundary
-    scores provide candidate tensors and ``query_specs``. ``architecture`` is
-    ``"span"`` or ``"boundary"``. ``optimizer`` is ``"beam"`` or ``"greedy"``.
-    Processor calls omit ``architecture`` and pass metadata plus ``threshold``
-    and ``overlap_policy``; ``exact`` uses beam.
+) -> dict:
+    """Decode one processor row with the joint entity and relation optimizer.
 
     Args:
-        span_or_boundary_scores: One example's scores, or a model output when
-            ``architecture`` is omitted and ``schema`` is processor metadata.
-        schema: Joint schema, or processor metadata for a batch.
-        architecture: ``"span"`` or ``"boundary"``. Omitted for processor batches.
-
-    Returns:
-        An entity/relation dict, or a list of those dicts for a batch.
+        sample (`dict`):
+            One row of model output: `span_logits` for span checkpoints, or
+            boundary `candidates`.
+        row (`dict`):
+            Processor metadata with `groups`, `schema`, `text`, and word offsets.
+        threshold (`float`, *optional*, defaults to 0.5):
+            Candidate, role, and entity cutoff.
+        include_confidence (`bool`, *optional*, defaults to `False`):
+            Keep scores.
+        include_spans (`bool`, *optional*, defaults to `False`):
+            Keep character offsets.
+        optimizer (`str`, *optional*, defaults to `"beam"`):
+            `beam`, `greedy`, `auto`, or `exact`, which runs beam search.
+        overlap_policy (`str`, *optional*):
+            Entity overlap rule added as a constraint.
     """
-    if architecture is None:
-        return _batch_joint(
-            span_or_boundary_scores,
-            schema,
-            threshold=0.5 if threshold is None else threshold,
-            include_confidence=include_confidence,
-            include_spans=include_spans,
-            optimizer=optimizer,
-            overlap_policy=overlap_policy,
+    source = row.get("schema") or {}
+    constraints = [
+        raw for raw in source.get("constraints") or [] if isinstance(raw, Mapping) and raw.get("type") in _JOINT_FIELDS
+    ]
+    schema = _compile_joint(
+        {
+            "entities": source.get("entities") or {},
+            "relations": source.get("relations") or [],
+            "constraints": constraints,
+        }
+    )
+    policy = None if overlap_policy is None else normalize_overlap_policy(overlap_policy)
+    if policy is not None:
+        kept = [item for item in schema.constraints if item["type"] != "EntityOverlapPolicy"]
+        if policy != "longest":
+            kept.append(_joint_constraint("EntityOverlapPolicy", policy=policy))
+        schema = replace(schema, constraints=tuple(kept))
+    if row["architecture"] == "boundary":
+        problem = _boundary_problem(sample, row, schema, threshold)
+    else:
+        problem = _span_problem(_span_scores_from_sample(sample, row, schema), schema, threshold)
+    solution = _optimize_greedy(problem) if optimizer.lower() in ("auto", "greedy") else _optimize_beam(problem)
+    if policy == "longest":
+        kept = resolve_overlaps(
+            list(solution.nodes),
+            "longest",
+            score=lambda node: node.score,
+            start=lambda node: node.start,
+            end=lambda node: node.end,
         )
-    config = JointIEConfig(
-        optimizer=optimizer,
-        beam_size=beam_size,
-        candidate_threshold=candidate_threshold,
-        relation_role_threshold=relation_role_threshold,
-        top_k_entities=top_k_entities,
-        top_k_roles=top_k_roles,
-        count_top_k=count_top_k,
-        include_confidence=include_confidence,
-        include_spans=include_spans,
-        entity_threshold=entity_threshold,
-        relation_pair_cap=relation_pair_cap,
-        max_edges_per_type=max_edges_per_type,
-        rescue_per_role=rescue_per_role,
-        entity_weight=entity_weight,
-        role_weight=role_weight,
-        count_weight=count_weight,
-    )
-    return _decode_joint_one(
-        span_or_boundary_scores,
-        schema,
-        architecture,
-        text=text,
-        config=config,
-        overlap_policy=overlap_policy,
-    )
+        ids = {node.candidate_id for node in kept}
+        edges = [edge for edge in solution.edges if edge.head in ids and edge.tail in ids and not edge.derived]
+        solution = _make_solution(problem, ids, edges, solution.score)
+    starts = tuple(row["start"]) or None
+    return _joint_result_dict(solution, row["text"], starts, tuple(row["end"]), include_confidence, include_spans)

@@ -24,20 +24,19 @@ from transformers.loss.loss_gliner2 import (
     abstention_loss,
     aggregate_record_losses,
     asymmetric_focal_loss,
-    balanced_multilabel_bce,
     clamp_gold_count,
+    classification_bce,
     compute_record_group_loss,
     count_log_rate_loss,
-    mean_classification_loss,
+    masked_bce,
     select_hard_negative_candidates,
     span_count_loss,
     span_structure_loss,
     sparse_relation_loss,
-    summed_classification_loss,
     supervises_count,
 )
 from transformers.models.gliner2.configuration_gliner2 import classification_temperature_of
-from transformers.models.gliner2.decoding_gliner2 import linear_sum_assignment
+from transformers.models.gliner2.decoding_gliner2 import GroupRecord, RecordField, linear_sum_assignment
 from transformers.models.gliner2.modeling_gliner2 import count_conditioned_scores
 
 
@@ -131,7 +130,7 @@ class LossMathTest(unittest.TestCase):
         logits = torch.tensor([[0.0, 2.0]])
         targets = torch.tensor([[1.0, 0.0]])
         keep = torch.ones(1, 2, dtype=torch.bool)
-        bce = balanced_multilabel_bce(logits, targets, keep, negative_weight=0.5)
+        bce = masked_bce(logits, targets, keep, negative_weight=0.5)
         focal = asymmetric_focal_loss(logits, targets, keep, negative_weight=0.5)
         self.assertTrue(torch.isfinite(bce) and torch.isfinite(focal))
         self.assertNotAlmostEqual(float(bce), float(focal), places=4)
@@ -154,19 +153,14 @@ class LossMathTest(unittest.TestCase):
 
     def test_record_assignment(self):
         spans = [torch.tensor([[0, 2]])]
-        spec = type("Spec", (), {"mode": "latent", "task_index": 0, "anchor_query_id": None})()
-        field = type("Field", (), {"query_id": 0, "cardinality": type("Card", (), {"is_scalar": True})()})()
-        record = type(
-            "Record",
-            (),
-            {"field_for_query": lambda self, query_id: type("T", (), {"values": [[(0, 2)]]})()},
-        )()
+        spec = GroupRecord(mode="latent", fields=(RecordField(query_id=0, cardinality="required_one"),))
+        record = {0: [[(0, 2)]]}
         group = type("Group", (), {})()
         group.object_logits = torch.tensor([1.5, -1.0], requires_grad=True)
         group.assign_logits = [torch.tensor([[0.0, 2.0], [0.0, -2.0]], requires_grad=True)]
         group.field_spans = spans
         group.field_query_ids = [0]
-        group.field_specs = [field]
+        group.field_specs = list(spec.fields)
         group.spec = spec
         group.instance_seed = [(0, 0), (0, 0)]
         group.num_instances = 2
@@ -283,10 +277,10 @@ class ForwardLossTest(unittest.TestCase):
             "record_groups": [
                 [
                     {
-                        "mode": "anchorless",
-                        "field_query_ids": [0],
-                        "field_scalar": [True],
-                        "records": [{"fields": {0: [[(0, 1)]]}}],
+                        "spec": GroupRecord(
+                            mode="anchorless", fields=(RecordField(query_id=0, cardinality="required_one"),)
+                        ),
+                        "targets": [{0: [[(0, 1)]]}],
                     }
                 ]
             ],
@@ -318,7 +312,7 @@ class SchemaLossContractTest(unittest.TestCase):
             structure_loss=structure,
             count_loss=count,
         )
-        classification = summed_classification_loss(logits, targets)
+        classification = classification_bce(logits, targets)
         expected = classification + structure + count
         self.assertTrue(torch.allclose(total, expected))
         self.assertTrue(torch.allclose(parts["loss"], expected))
@@ -352,7 +346,7 @@ class SchemaLossContractTest(unittest.TestCase):
             record_part_losses=[record],
             relation_loss=relation,
         )
-        classification = mean_classification_loss(logits, targets, config.boundary_config.classification_loss_weight)
+        classification = classification_bce(logits, targets, config.boundary_config.classification_loss_weight)
         packed = aggregate_record_losses([record], config.boundary_config.record_loss_weight)
         expected = anchor + boundary_terms["loss"] + classification + packed["total"] + relation
         self.assertTrue(torch.allclose(total, expected))
@@ -364,9 +358,9 @@ class SchemaLossContractTest(unittest.TestCase):
         targets = torch.tensor([[1.0, 0.0]])
         keep = torch.ones_like(logits, dtype=torch.bool)
         with self.assertRaises(ValueError):
-            summed_classification_loss(logits, targets)
+            classification_bce(logits, targets)
         with self.assertRaises(ValueError):
-            balanced_multilabel_bce(logits, targets, keep)
+            masked_bce(logits, targets, keep)
 
     def test_classification_temperature_follows_architecture(self):
         span = Gliner2Config(encoder_config=_encoder(), classification_temperature=1.5)

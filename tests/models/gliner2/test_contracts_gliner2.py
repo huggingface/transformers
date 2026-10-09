@@ -182,9 +182,6 @@ class ContractBranchTest(unittest.TestCase):
             "relation_gold_mask",
             "relation_routing",
             "record_groups",
-            "start_targets",
-            "end_targets",
-            "inside_targets",
             "classification_targets",
         ):
             self.assertIn(key, targets)
@@ -195,8 +192,6 @@ class ContractBranchTest(unittest.TestCase):
         entity = next(group for group in groups if group.task == "entities")
         person = next(field for field in entity.fields if field.name == "person")
         self.assertEqual(person.threshold, 0.4)
-        relation = next(group for group in groups if group.task == "relations")
-        self.assertEqual(relation.endpoints, ("head", "tail"))
         note = next(group for group in groups if group.name.startswith("note"))
         self.assertEqual(note.record.mode, "anchorless")
         title = next(field for field in note.fields if field.name == "title")
@@ -220,7 +215,7 @@ class ContractBranchTest(unittest.TestCase):
         self.assertEqual(output.relation_pairs.shape[-1], 6)
         self.assertIsInstance(output.record_logits, list)
         self.assertTrue(output.record_logits[0])
-        self.assertTrue(torch.is_tensor(output.record_logits[0][0][0]))
+        self.assertTrue(torch.is_tensor(output.record_logits[0][0].object_logits))
         model.train()
         trained = model(**batch)
         self.assertTrue(torch.isfinite(trained.loss))
@@ -289,28 +284,30 @@ class ContractDecodeTest(unittest.TestCase):
             self.assertLessEqual(len(kept), len(spans))
 
     def test_joint_optimizers(self):
-        from transformers.models.gliner2.decoding_gliner2 import decode_joint
+        from transformers.models.gliner2.decoding_gliner2 import decode_joint_sample
+        from transformers.models.gliner2.processing_gliner2 import Field, FieldGroup
 
         schema = {
             "entities": {"person": {}},
             "relations": {"wrote": {"head": "person", "tail": "person"}},
         }
-        scores = {"entity_logits": torch.zeros(1, 3, 2), "text": "Ada wrote notes"}
+        row = {
+            "groups": (FieldGroup(task="entities", name="entities", fields=(Field(name="person"),)),),
+            "schema": schema,
+            "text": "Ada wrote notes",
+            "start": [0, 4, 10],
+            "end": [3, 9, 15],
+            "prefix_len": 0,
+            "architecture": "span",
+        }
+        sample = {"span_logits": [torch.zeros(1, 1, 3, 2)], "counts": [1]}
         for optimizer in ("greedy", "beam"):
-            decoded = decode_joint(scores, schema, "span", text="Ada wrote notes", optimizer=optimizer, beam_size=2)
+            decoded = decode_joint_sample(sample, row, optimizer=optimizer)
             self.assertIsInstance(decoded, dict)
 
-    def test_long_text_aggregation(self):
-        from transformers.models.gliner2.processing_gliner2 import (
-            aggregate_classification_logits,
-            merge_chunk_results,
-        )
+    def test_long_text_merge(self):
+        from transformers.models.gliner2.processing_gliner2 import merge_chunk_results
 
-        schema = {"tasks": {"topic": {"labels": ["math", "art"], "min_labels": 1, "max_labels": 1}}}
-        chunks = [{"topic": {"math": 1.0, "art": 0.0}}, {"topic": {"math": 0.0, "art": 2.0}}]
-        self.assertEqual(aggregate_classification_logits(chunks, schema, "max")["topic"]["art"], 2.0)
-        self.assertEqual(aggregate_classification_logits(chunks, schema, "mean")["topic"]["math"], 0.5)
-        self.assertEqual(aggregate_classification_logits(chunks, schema, "first")["topic"]["math"], 1.0)
         text = "Ada wrote notes."
         merged = merge_chunk_results(
             text,
@@ -324,81 +321,13 @@ class ContractDecodeTest(unittest.TestCase):
         )
         self.assertIn("entities", merged)
 
-    def test_typed_fields_and_schema_group_access(self):
-        import dataclasses
-
-        from transformers.models.gliner2.processing_gliner2 import Field, FieldGroup, GroupRecord, RecordField
-
-        span = Field(name="person", kind="span", dtype="str", threshold=0.2)
-        choice = Field(name="title", kind="choice", choices=("notes",))
-        label = Field(name="math", kind="label")
-        self.assertEqual(span.kind, "span")
-        self.assertEqual(choice.kind, "choice")
-        self.assertEqual(label.kind, "label")
-        self.assertEqual(choice.choices, ("notes",))
-        entities = FieldGroup(task="entities", name="entities", fields=(span,), tokens=("[P]", "entities", "person"))
-        self.assertEqual(entities.task, "entities")
-        self.assertEqual(entities.fields[0].dtype, "str")
-        self.assertEqual(entities.fields[0].threshold, 0.2)
-        topic = FieldGroup(
-            task="classifications",
-            name="topic",
-            fields=(label,),
-            tokens=(),
-            multi_label=False,
-            activation="softmax",
-            threshold=0.5,
-        )
-        self.assertEqual(topic.activation, "softmax")
-        self.assertFalse(topic.multi_label)
-        wrote = FieldGroup(
-            task="relations",
-            name="wrote",
-            fields=(Field(name="head", kind="span"), Field(name="tail", kind="span")),
-            tokens=(),
-            threshold=0.4,
-            endpoints=("head", "tail"),
-        )
-        self.assertEqual(wrote.endpoints, ("head", "tail"))
-        self.assertEqual(wrote.threshold, 0.4)
-        note = FieldGroup(
-            task="json_structures",
-            name="note",
-            fields=(choice,),
-            tokens=(),
-            record=GroupRecord(
-                mode="natural",
-                anchor="title",
-                occurrence_policy="latent_all",
-                fields=(RecordField(name="title", query_id=0, cardinality="one", is_anchor=True, exclusive=True),),
-                anchor_query_id=0,
-                task_index=0,
-            ),
-        )
-        self.assertEqual(note.record.mode, "natural")
-        self.assertEqual(note.record.anchor, "title")
-        self.assertEqual(note.record.occurrence_policy, "latent_all")
-        self.assertTrue(dataclasses.is_dataclass(type(span)))
-        self.assertFalse(isinstance(entities, SimpleNamespace))
-
 
 @require_torch
 class ContractTypeTest(unittest.TestCase):
-    def test_record_head_and_boundary_types(self):
-        import dataclasses
-
+    def test_loss_registration(self):
         from transformers.loss.loss_gliner2 import ForSchemaExtractionLoss
         from transformers.loss.loss_utils import LOSS_MAPPING
-        from transformers.models.gliner2.modeling_gliner2 import BoundaryHeadOutput, HeadTargets, RecordSpec
-        from transformers.utils import ModelOutput
 
-        self.assertTrue(dataclasses.is_dataclass(RecordSpec))
-        self.assertTrue(dataclasses.is_dataclass(HeadTargets))
-        self.assertTrue(dataclasses.is_dataclass(BoundaryHeadOutput))
-        self.assertTrue(issubclass(BoundaryHeadOutput, ModelOutput))
-        self.assertFalse(issubclass(RecordSpec, SimpleNamespace))
-        self.assertFalse(issubclass(HeadTargets, SimpleNamespace))
-        self.assertFalse(issubclass(BoundaryHeadOutput, SimpleNamespace))
         self.assertIs(LOSS_MAPPING["ForSchemaExtraction"], ForSchemaExtractionLoss)
         model = Gliner2ForSchemaExtraction(Gliner2Config(encoder_config=_encoder()))
         bound = model.loss_function

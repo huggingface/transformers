@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Literal
 
@@ -40,6 +40,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_gliner2 import Gliner2Config
+from .decoding_gliner2 import GroupRecord, RecordField
 
 
 class TaskId(int, Enum):
@@ -47,22 +48,6 @@ class TaskId(int, Enum):
 
     ENTITY = 1
     CLASSIFICATION = 4
-
-
-class RecordModeId(int, Enum):
-    """Integer record modes on `record_mode_ids`."""
-
-    NATURAL = 1
-    LATENT = 2
-    ANCHORLESS = 3
-
-
-class RecordMode(str, Enum):
-    """Record decoder modes."""
-
-    NATURAL = "natural"
-    LATENT = "latent"
-    ANCHORLESS = "anchorless"
 
 
 class ExportMode(str, Enum):
@@ -80,11 +65,7 @@ class CandidatePool(str, Enum):
     SHARED = "shared"
 
 
-_RECORD_ID_TO_MODE = {
-    RecordModeId.NATURAL: RecordMode.NATURAL,
-    RecordModeId.LATENT: RecordMode.LATENT,
-    RecordModeId.ANCHORLESS: RecordMode.ANCHORLESS,
-}
+_RECORD_MODES = {1: "natural", 2: "latent", 3: "anchorless"}
 
 MASK_LOGIT = -1.0e4
 
@@ -129,24 +110,7 @@ def mask_invalid_logits(logits: torch.Tensor, valid_mask: torch.Tensor) -> torch
 
 
 def _resolved_boundary_value(value, settings, name, *, lower, upper=None):
-    """Resolve an annealed boundary hyperparameter.
-
-    `None` reads `name` from `settings` when that field exists, otherwise 1.0.
-    An explicit number is used as given.
-
-    Args:
-        value: Caller override, or None.
-        settings: Boundary config.
-        name: Config field name.
-        lower: Inclusive minimum.
-        upper: Inclusive maximum, if any.
-
-    Returns:
-        The resolved float.
-
-    Raises:
-        ValueError: If the resolved value is out of range.
-    """
+    """Resolve an annealed boundary hyperparameter."""
     if value is None:
         value = getattr(settings, name, 1.0)
     value = float(value)
@@ -158,16 +122,7 @@ def _resolved_boundary_value(value, settings, name, *, lower, upper=None):
 
 
 def _mask_selects(mask: torch.Tensor | None) -> bool:
-    """Return whether `mask` has any selected entry.
-
-    An empty tensor is unselected from its shape alone.
-
-    Args:
-        mask: Boolean selection, or None.
-
-    Returns:
-        True when at least one entry is selected.
-    """
+    """Return whether `mask` has any selected entry."""
     if mask is None or mask.numel() == 0:
         return False
     return bool(mask.any())
@@ -239,16 +194,7 @@ class DownscaledTransformer(nn.Module):
 
 
 def _count_hidden(module, field_emb, count):
-    """Run the count GRU and broadcast the field state.
-
-    Args:
-        module: Count module with `pos_embedding`, `gru`, and `max_count`.
-        field_emb: Field states `[fields, hidden]`.
-        count: Requested count steps.
-
-    Returns:
-        GRU outputs and the broadcast field state, both `[count, fields, hidden]`.
-    """
+    """Run the count GRU and broadcast the field state."""
     fields, hidden = field_emb.shape
     count = min(count, module.max_count)
     indices = torch.arange(count, device=field_emb.device)
@@ -392,14 +338,7 @@ def gather_prefix(prefix: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
 
 
 class SpanContentPooler(nn.Module):
-    """Pool token states over half-open spans with prefix sums.
-
-    Args:
-        hidden_size: Token state width.
-        content_dim: Projected content width.
-        dropout: Dropout probability.
-        use_soft_max_pool: Also pool a smooth maximum of token values.
-    """
+    """Pool token states over half-open spans with prefix sums."""
 
     def __init__(
         self,
@@ -421,15 +360,7 @@ class SpanContentPooler(nn.Module):
         text_states: torch.Tensor,
         text_mask: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Build mean and optional log-sum-exp prefixes.
-
-        Args:
-            text_states: Token states `[B, L, H]`.
-            text_mask: Valid-token mask `[B, L]`.
-
-        Returns:
-            Mean prefix `[B, L + 1, C]` and an optional log-sum-exp prefix.
-        """
+        """Build mean and optional log-sum-exp prefixes."""
         values = self.value_projection(text_states)
         values = values * text_mask.unsqueeze(-1).to(values.dtype)
         values32 = values.float()
@@ -457,18 +388,7 @@ class SpanContentPooler(nn.Module):
         ends: torch.Tensor,
         out_dtype: torch.dtype,
     ) -> torch.Tensor:
-        """Pool `[start, end)` spans from precomputed prefixes.
-
-        Args:
-            mean_prefix: Cumulative value prefix.
-            lse_prefix: Optional log-sum-exp prefix.
-            starts: Inclusive start positions.
-            ends: Exclusive end positions.
-            out_dtype: Dtype of the normalized pool.
-
-        Returns:
-            Normalized span content.
-        """
+        """Pool `[start, end)` spans from precomputed prefixes."""
         length = (ends - starts).clamp_min(1).unsqueeze(-1).float()
         span_sum = gather_prefix(mean_prefix, ends) - gather_prefix(mean_prefix, starts)
         pooled = span_sum / length
@@ -484,12 +404,7 @@ class SpanContentPooler(nn.Module):
 
 
 class RotaryBoundaryEmbedding(nn.Module):
-    """Rotate endpoint channels so their dot product depends on distance.
-
-    Args:
-        dim: Even feature width to rotate.
-        base: Geometric period of the rotary frequencies.
-    """
+    """Rotate endpoint channels so their dot product depends on distance."""
 
     def __init__(self, dim: int, base: float = 10000.0) -> None:
         super().__init__()
@@ -499,15 +414,7 @@ class RotaryBoundaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)  # trf-ignore: TRF058
 
     def forward(self, states: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
-        """Apply rotary mixing at integer boundary positions.
-
-        Args:
-            states: Endpoint states `[..., dim]`.
-            positions: Integer positions broadcastable to the leading axes.
-
-        Returns:
-            Rotated states in the input dtype.
-        """
+        """Apply rotary mixing at integer boundary positions."""
         angle = positions.unsqueeze(-1).float() * self.inv_freq
         cos, sin = torch.cos(angle), torch.sin(angle)
         even = states[..., 0::2].float()
@@ -518,12 +425,7 @@ class RotaryBoundaryEmbedding(nn.Module):
 
 @dataclass
 class BoundaryEncoding:
-    """Encoded boundary states and their validity mask.
-
-    Attributes:
-        states: Boundary states `[B, L + 1, D]`.
-        mask: True where boundary `i` satisfies `i <= n`.
-    """
+    """Encoded boundary states and their validity mask."""
 
     states: torch.Tensor
     mask: torch.Tensor
@@ -531,15 +433,7 @@ class BoundaryEncoding:
 
 @dataclass
 class BoundaryMarginals:
-    """Query-conditioned start, end, and inside scores.
-
-    Attributes:
-        start_logits: Start scores `[B, Q, L + 1]`.
-        end_logits: End scores `[B, Q, L + 1]`.
-        inside_logits: Token-inside scores `[B, Q, L]`.
-        inside_prefix: Centered cumulative inside scores `[B, Q, L + 1]`.
-        inside_prefix_mean: Per-query mean restored by interval scoring.
-    """
+    """Query-conditioned start, end, and inside scores."""
 
     start_logits: torch.Tensor
     end_logits: torch.Tensor
@@ -606,13 +500,7 @@ def shift_right_with_eos(
 
 
 class ResidualSwiGLU(GradientCheckpointingLayer):
-    """Pre-norm residual SwiGLU block.
-
-    Args:
-        dim: Feature width.
-        multiplier: Hidden-size multiplier.
-        dropout: Dropout probability.
-    """
+    """Pre-norm residual SwiGLU block."""
 
     def __init__(self, dim: int, multiplier: float = 2.0, dropout: float = 0.1):
         super().__init__()
@@ -623,14 +511,7 @@ class ResidualSwiGLU(GradientCheckpointingLayer):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, states: torch.Tensor) -> torch.Tensor:
-        """Apply the residual SwiGLU update.
-
-        Args:
-            states: Boundary states.
-
-        Returns:
-            Updated states of the same shape.
-        """
+        """Apply the residual SwiGLU update."""
         value, gate = self.input_projection(self.norm(states)).chunk(2, dim=-1)
         update = value * F.silu(gate)
         update = self.dropout(update)
@@ -639,14 +520,7 @@ class ResidualSwiGLU(GradientCheckpointingLayer):
 
 
 class BoundaryAttentionBlock(GradientCheckpointingLayer):
-    """Pre-norm self-attention over valid boundary positions.
-
-    Args:
-        dim: Feature width.
-        num_heads: Attention heads.
-        window: Local window, or 0 for full attention.
-        dropout: Attention and residual dropout probability.
-    """
+    """Pre-norm self-attention over valid boundary positions."""
 
     def __init__(
         self,
@@ -668,15 +542,7 @@ class BoundaryAttentionBlock(GradientCheckpointingLayer):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, states: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        """Attend over boundaries that `mask` marks as valid.
-
-        Args:
-            states: Boundary states `[B, N, D]`.
-            mask: Valid-boundary mask `[B, N]`.
-
-        Returns:
-            Residual states with padding positions cleared.
-        """
+        """Attend over boundaries that `mask` marks as valid."""
         batch, length, dim = states.shape
         qkv = self.qkv_projection(self.norm(states)).view(batch, length, 3, self.num_heads, self.head_dim)
         query, key, value = qkv.permute(2, 0, 3, 1, 4)
@@ -704,21 +570,7 @@ class BoundaryAttentionBlock(GradientCheckpointingLayer):
 
 
 class BoundaryEncoder(nn.Module):
-    """Project left and right token states into one vector per boundary.
-
-    Boundary `i` sits between token `i - 1` and token `i`. Boundary 0 uses a
-    learned BOS left state and boundary `n` uses a learned EOS right state.
-
-    Args:
-        hidden_size: Token hidden size.
-        boundary_dim: Boundary state width.
-        dropout: Dropout probability.
-        refinement_layers: Number of residual SwiGLU blocks.
-        ffn_multiplier: SwiGLU hidden multiplier.
-        attention_layers: Number of boundary self-attention blocks.
-        attention_heads: Heads in each attention block.
-        attention_window: Local attention window, or 0 for full attention.
-    """
+    """Project left and right token states into one vector per boundary."""
 
     def __init__(
         self,
@@ -756,15 +608,7 @@ class BoundaryEncoder(nn.Module):
         nn.init.normal_(self.eos_state, std=0.02)  # trf-ignore: TRF049
 
     def forward(self, text_states: torch.Tensor, text_mask: torch.Tensor) -> BoundaryEncoding:
-        """Encode token states as masked boundary states.
-
-        Args:
-            text_states: Token states `[B, L, H]`.
-            text_mask: Valid-token mask `[B, L]`.
-
-        Returns:
-            Boundary states and mask.
-        """
+        """Encode token states as masked boundary states."""
         _batch, length, _hidden = text_states.shape
         text_lengths = text_mask.sum(dim=1).long()
         left = shift_left_with_bos(text_states, self.bos_state)
@@ -784,14 +628,7 @@ class BoundaryEncoder(nn.Module):
 
 
 class BoundaryQueryHead(nn.Module):
-    """Score start, end, and inside positions for every query.
-
-    Args:
-        hidden_size: Token hidden size.
-        boundary_dim: Boundary and score width.
-        query_dim: Query state width. Defaults to `hidden_size`.
-        dropout: Dropout on projected boundary and token states.
-    """
+    """Score start, end, and inside positions for every query."""
 
     def __init__(
         self,
@@ -820,19 +657,7 @@ class BoundaryQueryHead(nn.Module):
         query_states: torch.Tensor,
         query_mask: torch.Tensor,
     ) -> BoundaryMarginals:
-        """Dot-product start, end, and inside logits.
-
-        Args:
-            boundary_states: Encoded boundaries `[B, L + 1, D]`.
-            boundary_mask: Valid-boundary mask `[B, L + 1]`.
-            text_states: Token states `[B, L, H]`.
-            text_mask: Valid-token mask `[B, L]`.
-            query_states: Query states `[B, Q, H]`.
-            query_mask: Valid-query mask `[B, Q]`.
-
-        Returns:
-            Masked marginals and a centered inside prefix.
-        """
+        """Dot-product start, end, and inside logits."""
         scale = 1.0 / math.sqrt(self.boundary_dim)
         start_b = self.dropout(self.start_boundary_projection(boundary_states))
         start_q = self.start_query_projection(query_states)
@@ -875,17 +700,7 @@ class BoundaryQueryHead(nn.Module):
 
 @dataclass
 class BoundaryProposals:
-    """Padded start/end candidates for one query axis.
-
-    Attributes:
-        indices: Half-open `[start, end)` pairs `[B, Q, C, 2]`.
-        logits: Full prior, or None when proposal logits were not requested.
-        valid_mask: True for real candidates `[B, Q, C]`.
-        gold_mask: True where a training candidate was injected.
-        compat_logits: Marginal-free endpoint compatibility `[B, Q, C]`.
-        score_start_states: Gathered reranker start states.
-        score_end_states: Gathered reranker end states.
-    """
+    """Padded start/end candidates for one query axis."""
 
     indices: torch.Tensor
     logits: torch.Tensor | None
@@ -898,16 +713,7 @@ class BoundaryProposals:
 
 @dataclass
 class CandidateTensorBatch:
-    """Per-query candidates consumed by decoding.
-
-    Attributes:
-        indices: Half-open spans `[B, Q, C, 2]`.
-        proposal_logits: Proposal prior `[B, Q, C]`, if retained.
-        pair_logits: Reranked pair logits `[B, Q, C]`.
-        valid_mask: Real-candidate mask `[B, Q, C]`.
-        query_mask: Real-query mask `[B, Q]`.
-        candidate_states: Optional endpoint states `[B, Q, C, H]`.
-    """
+    """Per-query candidates consumed by decoding."""
 
     indices: torch.Tensor
     proposal_logits: torch.Tensor | None
@@ -1230,15 +1036,7 @@ class SparseBoundaryProposer(nn.Module):
     def _project(
         self, boundary_states: torch.Tensor, query_states: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Project endpoints and the query gate.
-
-        Args:
-            boundary_states: Boundary states `[B, N, D]`.
-            query_states: Query states `[B, Q, H]`.
-
-        Returns:
-            Start states, end states, and the query gate.
-        """
+        """Project endpoints and the query gate."""
         start_all = self.start_pair_projection(boundary_states)
         end_all = self.end_key_projection(boundary_states)
         if self.rotary is not None:
@@ -1257,17 +1055,7 @@ class SparseBoundaryProposer(nn.Module):
         indices: torch.Tensor,
         valid_mask: torch.Tensor,
     ) -> torch.Tensor:
-        """Score the marginal-free prior at caller-provided spans.
-
-        Args:
-            boundary_states: Boundary states `[B, N, D]`.
-            query_states: Query states `[B, Q, H]`.
-            indices: Half-open spans `[B, Q, C, 2]`.
-            valid_mask: Spans that receive a finite prior `[B, Q, C]`.
-
-        Returns:
-            Compatibility logits `[B, Q, C]`, zero where invalid.
-        """
+        """Score the marginal-free prior at caller-provided spans."""
         if indices.dim() != 4 or indices.shape[-1] != 2:
             raise ValueError(f"indices must be [B, Q, C, 2], got {tuple(indices.shape)}")
         if valid_mask.shape != indices.shape[:-1]:
@@ -1308,28 +1096,7 @@ class SparseBoundaryProposer(nn.Module):
         queries,
         settings,
     ):
-        """Build forward and optional backward pair lists.
-
-        Args:
-            select_start: Detached start states used for proposal search.
-            select_end: Detached end states used for proposal search.
-            select_gate: Detached query gate.
-            select_start_logits: Detached start logits.
-            select_end_logits: Detached end logits.
-            boundary_mask: Valid boundary positions.
-            query_mask: Valid queries.
-            b_valid: Positions eligible for top-k selection.
-            start_k: Starts kept per query.
-            end_k: Ends kept per query.
-            end_block: Block size for the pair scan.
-            scale: Compatibility scale.
-            batch: Batch size.
-            queries: Query count.
-            settings: Boundary proposal settings.
-
-        Returns:
-            Lists of start indices, end indices, scores, and validity masks.
-        """
+        """Build forward and optional backward pair lists."""
         with torch.no_grad():
             st_scores, st_idx, st_valid = select_top_boundaries(select_start_logits, b_valid, start_k)
             sq = gather_token_states(select_start, st_idx) * select_gate.unsqueeze(2)
@@ -1423,34 +1190,7 @@ class SparseBoundaryProposer(nn.Module):
         end_logits,
         return_proposal_logits,
     ):
-        """Deduplicate pair lists and score the kept spans.
-
-        Args:
-            pair_starts: Start-index lists.
-            pair_ends: End-index lists.
-            pair_scores: Proposal-score lists.
-            pair_valid: Validity-mask lists.
-            query_mask: Valid queries.
-            capacity: Candidate budget.
-            n_boundaries: Boundary count.
-            gold_pairs: Optional gold spans.
-            gold_mask: Mask for `gold_pairs`.
-            gold_injection_prob: Gold injection probability.
-            generator: Optional RNG.
-            training: Whether gold injection is active.
-            start_proj_all: Start projections.
-            end_proj_all: End projections.
-            scorer_start_states: Optional scorer start states.
-            scorer_end_states: Optional scorer end states.
-            gate: Query gate.
-            scale: Compatibility scale.
-            start_logits: Start marginals.
-            end_logits: End marginals.
-            return_proposal_logits: Keep proposal logits on the result.
-
-        Returns:
-            Assembled boundary proposals.
-        """
+        """Deduplicate pair lists and score the kept spans."""
         all_s = torch.cat(pair_starts, dim=-1)
         all_e = torch.cat(pair_ends, dim=-1)
         all_sc = torch.cat(pair_scores, dim=-1).detach()
@@ -1663,28 +1403,7 @@ def continuous_length_features(
 
 
 class SparseBoundaryPairScorer(nn.Module):
-    """Rerank each proposed span with marginals, content, and length.
-
-    The added prior is marginal-free endpoint compatibility, so start and end
-    marginals enter the logit once.
-
-    Args:
-        boundary_dim: Boundary state width.
-        query_dim: Query state width.
-        pair_dim: Endpoint compatibility width.
-        use_inside_evidence: Add normalized inside-prefix evidence.
-        dropout: Dropout probability.
-        enable_span_content: Pool token content into the score.
-        content_dim: Content projection width.
-        content_soft_max_pool: Also pool a smooth maximum.
-        enable_rotary_endpoints: Rotate reranker endpoints.
-        rotary_base: Rotary frequency base.
-        query_conditioned_inside_weight: Predict the inside coefficient.
-        endpoint_difference_features: Add a learned endpoint-difference term.
-        reranker_endpoint_compat: Add multi-head endpoint compatibility.
-        multihead_pair_compat_heads: Heads mixed into one compatibility logit.
-        content_hidden_size: Token width used by the content pooler.
-    """
+    """Rerank each proposed span with marginals, content, and length."""
 
     def __init__(
         self,
@@ -1750,14 +1469,7 @@ class SparseBoundaryPairScorer(nn.Module):
         torch.random.set_rng_state(rng_state)
 
     def project_endpoints(self, boundary_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Project every boundary before candidate gathering.
-
-        Args:
-            boundary_states: Boundary states `[B, N, D]`.
-
-        Returns:
-            Start and end projections `[B, N, P]`.
-        """
+        """Project every boundary before candidate gathering."""
         start = self.start_endpoint_projection(boundary_states)
         end = self.end_endpoint_projection(boundary_states)
         if self.rotary is not None:
@@ -1780,23 +1492,7 @@ class SparseBoundaryPairScorer(nn.Module):
         text_mask: torch.Tensor | None = None,
         inside_prefix_mean: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Score one logit per proposed candidate.
-
-        Args:
-            boundary_states: Boundary states `[B, N, D]`.
-            query_states: Query states `[B, Q, H]`.
-            proposals: Sparse candidates, including a compatibility prior.
-            start_logits: Start marginals `[B, Q, N]`.
-            end_logits: End marginals `[B, Q, N]`.
-            inside_prefix: Centered inside prefix, or None to skip it.
-            text_lengths: Token counts `[B]`.
-            text_states: Token states required when content pooling is enabled.
-            text_mask: Token mask required when content pooling is enabled.
-            inside_prefix_mean: Mean restored onto inside intervals.
-
-        Returns:
-            Masked pair logits `[B, Q, C]`.
-        """
+        """Score one logit per proposed candidate."""
         starts = proposals.indices[..., 0]
         ends = proposals.indices[..., 1]
         valid = proposals.valid_mask
@@ -1870,15 +1566,7 @@ NUM_OVERLAP_BUCKETS = 8
 
 @dataclass
 class PooledCandidates:
-    """One document-level span pool.
-
-    Attributes:
-        indices: Half-open spans `[B, C, 2]`.
-        mask: Real pool entries `[B, C]`.
-        proposal_logits: Query-agnostic proposal scores `[B, C]`.
-        gold_mask: Gold membership `[B, C, Q]`.
-        compat_logits: Marginal-free compatibility `[B, C]`.
-    """
+    """One document-level span pool."""
 
     indices: torch.Tensor
     mask: torch.Tensor
@@ -1892,16 +1580,7 @@ class PooledCandidates:
         query_mask: torch.Tensor,
         candidate_states: torch.Tensor | None = None,
     ) -> CandidateTensorBatch:
-        """Broadcast the document pool onto the per-query candidate layout.
-
-        Args:
-            pair_logits: Query scores in candidate-major order `[B, C, Q]`.
-            query_mask: Valid queries `[B, Q]`.
-            candidate_states: Optional pool states `[B, C, H]`.
-
-        Returns:
-            Candidates with query-major pair logits `[B, Q, C]`.
-        """
+        """Broadcast the document pool onto the per-query candidate layout."""
         batch, count, _ = self.indices.shape
         queries = query_mask.shape[1]
         indices = self.indices.unsqueeze(1).expand(batch, queries, count, 2)
@@ -1933,31 +1612,13 @@ def _deduplicate_pool(
     capacity: int,
     n_boundaries: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Keep the highest-priority copy of each document span key.
-
-    Args:
-        keys: Packed start/end keys `[B, P]`.
-        scores: Priority scores `[B, P]`.
-        valid: Real keys `[B, P]`.
-        capacity: Output width.
-        n_boundaries: Boundary count used to mark invalid keys.
-
-    Returns:
-        Selected keys and their validity mask, padded to `capacity`.
-    """
+    """Keep the highest-priority copy of each document span key."""
     invalid_key = n_boundaries * n_boundaries
     return dedup_packed_keys(keys, scores, valid, capacity, invalid_key)
 
 
 class DocumentCandidatePool(nn.Module):
-    """Build one deduplicated span pool per document.
-
-    Args:
-        boundary_dim: Boundary state width.
-        pool_boundary_top_k: Endpoints kept from the query-union marginals.
-        pool_size: Maximum spans retained per document.
-        min_pool_per_query: Spans reserved for each active query.
-    """
+    """Build one deduplicated span pool per document."""
 
     def __init__(
         self,
@@ -1993,29 +1654,7 @@ class DocumentCandidatePool(nn.Module):
         queries,
         device,
     ):
-        """Reserve a per-query quota, then append sampled gold spans.
-
-        Args:
-            pair_s: Cartesian start indices.
-            pair_e: Cartesian end indices.
-            pair_valid: Valid cartesian pairs.
-            compat: Pair compatibility.
-            union_pair_score: Document-level pair score.
-            start_logits: Start marginals.
-            end_logits: End marginals.
-            query_mask: Valid queries.
-            n_boundaries: Boundary count.
-            gold_pairs: Optional gold spans.
-            gold_mask: Mask for `gold_pairs`.
-            gold_injection_prob: Fraction of gold spans forced into the pool.
-            generator: Generator for partial gold injection.
-            batch: Batch size.
-            queries: Query count.
-            device: Device for the rank bonus.
-
-        Returns:
-            Packed keys, scores, and a validity mask.
-        """
+        """Reserve a per-query quota, then append sampled gold spans."""
         quota = min(self.min_pool_per_query, pair_s.shape[-1])
         quota_keys = pair_s.new_zeros((batch, 0))
         quota_scores = union_pair_score.new_zeros((batch, 0))
@@ -2077,24 +1716,7 @@ class DocumentCandidatePool(nn.Module):
         gold_pairs,
         gold_mask,
     ):
-        """Deduplicate packed keys and score the kept spans.
-
-        Args:
-            all_keys: Packed span keys.
-            all_scores: Scores aligned with `all_keys`.
-            all_valid: Validity aligned with `all_keys`.
-            start_all: Start projections.
-            end_all: End projections.
-            union_start: Query-union start marginals.
-            union_end: Query-union end marginals.
-            n_boundaries: Boundary count.
-            dim: Boundary width.
-            gold_pairs: Optional gold spans.
-            gold_mask: Mask for `gold_pairs`.
-
-        Returns:
-            A padded document pool.
-        """
+        """Deduplicate packed keys and score the kept spans."""
         with torch.no_grad():
             selected_keys, selected_valid = _deduplicate_pool(
                 all_keys, all_scores, all_valid, self.pool_size, n_boundaries
@@ -2143,22 +1765,7 @@ class DocumentCandidatePool(nn.Module):
         gold_injection_prob: float = 1.0,
         generator: torch.Generator | None = None,
     ) -> PooledCandidates:
-        """Pair union endpoints once and keep a capped document pool.
-
-        Args:
-            boundary_states: Boundary states `[B, N, D]`.
-            boundary_mask: Valid boundaries `[B, N]`.
-            query_mask: Valid queries `[B, Q]`.
-            start_logits: Start marginals `[B, Q, N]`.
-            end_logits: End marginals `[B, Q, N]`.
-            gold_pairs: Optional gold spans `[B, Q, G, 2]`.
-            gold_mask: Mask for `gold_pairs`.
-            gold_injection_prob: Fraction of gold spans forced into the pool.
-            generator: Generator for partial gold injection.
-
-        Returns:
-            A padded document pool.
-        """
+        """Pair union endpoints once and keep a capped document pool."""
         batch, n_boundaries, dim = boundary_states.shape
         queries = query_mask.shape[1]
         floor = torch.full_like(start_logits, MASK_LOGIT)
@@ -2263,13 +1870,7 @@ def classify_overlap_buckets(indices: torch.Tensor) -> torch.Tensor:
 
 
 class OverlapBiasedCandidateAttention(nn.Module):
-    """Candidate self-attention biased by span overlap geometry.
-
-    Args:
-        dim: Candidate feature width.
-        heads: Attention heads.
-        dropout: Residual dropout probability.
-    """
+    """Candidate self-attention biased by span overlap geometry."""
 
     def __init__(self, dim: int, heads: int, dropout: float) -> None:
         super().__init__()
@@ -2289,16 +1890,7 @@ class OverlapBiasedCandidateAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, states: torch.Tensor, indices: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        """Attend across pool spans and clear padding rows.
-
-        Args:
-            states: Candidate states `[B, C, D]`.
-            indices: Half-open spans `[B, C, 2]`.
-            mask: Real candidates `[B, C]`.
-
-        Returns:
-            Updated candidate states.
-        """
+        """Attend across pool spans and clear padding rows."""
         batch, count, dim = states.shape
         qkv = self.qkv(self.norm1(states)).reshape(batch, count, 3, self.heads, self.head_dim).permute(2, 0, 3, 1, 4)
         query, key, value = qkv.unbind(0)
@@ -2316,14 +1908,7 @@ class OverlapBiasedCandidateAttention(nn.Module):
 
 
 class EvidenceConditionedQueryAttention(nn.Module):
-    """Update queries after adding a pool-evidence residual.
-
-    Args:
-        query_dim: Incoming query width.
-        model_dim: Attention width.
-        heads: Attention heads.
-        dropout: Feed-forward and attention dropout.
-    """
+    """Update queries after adding a pool-evidence residual."""
 
     def __init__(self, query_dim: int, model_dim: int, heads: int, dropout: float):
         super().__init__()
@@ -2345,16 +1930,7 @@ class EvidenceConditionedQueryAttention(nn.Module):
         evidence: torch.Tensor,
         query_mask: torch.Tensor,
     ) -> torch.Tensor:
-        """Run query self-attention conditioned on pooled evidence.
-
-        Args:
-            query_states: Projected queries `[B, Q, D]`.
-            evidence: Evidence summarized from the pool `[B, Q, D]`.
-            query_mask: Valid queries `[B, Q]`.
-
-        Returns:
-            Updated queries, with padding rows cleared.
-        """
+        """Run query self-attention conditioned on pooled evidence."""
         states = self.query_in(query_states) + self.evidence_in(evidence)
         safe_query_mask = query_mask.clone()
         safe_query_mask[:, 0] |= ~query_mask.any(-1)
@@ -2371,21 +1947,7 @@ class EvidenceConditionedQueryAttention(nn.Module):
 
 
 class SharedPoolScorer(nn.Module):
-    """Score every query against one shared candidate pool.
-
-    Args:
-        boundary_dim: Boundary state width.
-        query_dim: Query state width.
-        pair_dim: Candidate feature width.
-        dropout: Dropout probability.
-        candidate_attention_layers: Overlap-biased candidate blocks.
-        candidate_attention_heads: Heads in candidate and query attention.
-        query_attention_layers: Evidence-conditioned query blocks.
-        enable_span_content: Add pooled token content.
-        content_dim: Content projection width.
-        content_soft_max_pool: Also pool a smooth maximum.
-        text_hidden_size: Token hidden size read by the content pooler.
-    """
+    """Score every query against one shared candidate pool."""
 
     def __init__(
         self,
@@ -2455,24 +2017,7 @@ class SharedPoolScorer(nn.Module):
         text_mask: torch.Tensor,
         inside_prefix_mean: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return query scores in candidate-major order plus candidate states.
-
-        Args:
-            boundary_states: Boundary states `[B, N, D]`.
-            query_states: Query states `[B, Q, H]`.
-            query_mask: Valid queries `[B, Q]`.
-            pooled: Document pool.
-            start_logits: Start marginals `[B, Q, N]`.
-            end_logits: End marginals `[B, Q, N]`.
-            inside_prefix: Centered inside prefix `[B, Q, L + 1]`, or None.
-            text_lengths: Token counts `[B]`.
-            text_states: Token states `[B, L, H]`.
-            text_mask: Valid tokens `[B, L]`.
-            inside_prefix_mean: Mean restored onto inside intervals.
-
-        Returns:
-            Scores `[B, C, Q]` and contextual candidate states `[B, C, P]`.
-        """
+        """Return query scores in candidate-major order plus candidate states."""
         starts, ends = pooled.indices[..., 0], pooled.indices[..., 1]
         start_rep = gather_token_states(self.start_projection(boundary_states), starts)
         end_rep = gather_token_states(self.end_projection(boundary_states), ends)
@@ -2530,24 +2075,7 @@ class SharedPoolScorer(nn.Module):
 
 @dataclass
 class RelationPairBatch:
-    """Flattened typed relation pairs.
-
-    Index tensors have shape `[P]`. Ends are exclusive.
-
-    Attributes:
-        batch_index: Sample index of each pair.
-        relation_index: Relation index of each pair.
-        head_start: Inclusive head start.
-        head_end: Exclusive head end.
-        tail_start: Inclusive tail start.
-        tail_end: Exclusive tail end.
-        head_prob: Head mention probability.
-        tail_prob: Tail mention probability.
-        pair_mask: True for pairs that should be scored.
-        head_keys: Optional decode metadata `(type, start, end)`.
-        tail_keys: Optional decode metadata `(type, start, end)`.
-        relation_types: Optional relation name per pair.
-    """
+    """Flattened typed relation pairs."""
 
     batch_index: torch.Tensor
     relation_index: torch.Tensor
@@ -2567,18 +2095,7 @@ class RelationPairBatch:
 
 
 def _query_type(layout, query_id: int) -> str:
-    """Return the role name of one query.
-
-    Args:
-        layout: Query layout.
-        query_id: Query index.
-
-    Returns:
-        The role name.
-
-    Raises:
-        ValueError: If `query_id` is not in `layout`.
-    """
+    """Return the role name of one query."""
     try:
         return layout.query(query_id).role_name
     except KeyError:
@@ -2621,19 +2138,7 @@ class TypedRelationPairGenerator:
         self.argument_threshold = argument_threshold
 
     def _relation_membership(self, routing, relation_schemas, batch_size, rel_count, queries, device):
-        """Build head and tail membership for each relation.
-
-        Args:
-            routing: Optional precomputed membership tensors.
-            relation_schemas: Per-sample relation specs used when `routing` is None.
-            batch_size: Batch size.
-            rel_count: Relation count.
-            queries: Query count.
-            device: Device for the membership tensors.
-
-        Returns:
-            Head membership, tail membership, relation validity, and allow-self.
-        """
+        """Build head and tail membership for each relation."""
         if routing is not None:
             head_member, tail_member, relation_valid, allow_self = routing
             return (
@@ -2659,19 +2164,7 @@ class TypedRelationPairGenerator:
         return head_member, tail_member, relation_valid, allow_self
 
     def _select_relation_slots(self, valid, requested, candidates, flat_prob, flat_spans, floor):
-        """Rank mention slots for one relation argument role.
-
-        Args:
-            valid: Slots that may be selected `[B, R, Q * C]`.
-            requested: Cap for this role.
-            candidates: Candidate batch.
-            flat_prob: Mention probabilities `[B, R, Q * C]`.
-            flat_spans: Spans `[B, Q * C, 2]`.
-            floor: Score written over invalid slots.
-
-        Returns:
-            Probabilities, query slots, spans, and a validity mask.
-        """
+        """Rank mention slots for one relation argument role."""
         device = valid.device
         batch_size, rel_count, _ = valid.shape
         queries, cand_count = candidates.valid_mask.shape[1:]
@@ -2724,27 +2217,7 @@ class TypedRelationPairGenerator:
         rel_count,
         device,
     ):
-        """Keep the top typed pairs and pack them into a batch.
-
-        Args:
-            hp: Head probabilities.
-            hq: Head query slots.
-            hspan: Head spans.
-            hvalid: Head validity.
-            tp: Tail probabilities.
-            tq: Tail query slots.
-            tspan: Tail spans.
-            tvalid: Tail validity.
-            allow_self: Whether a relation may link a span to itself.
-            relation_valid: Relations present in each sample.
-            floor: Score written over invalid pairs.
-            batch_size: Batch size.
-            rel_count: Relation count.
-            device: Device for index tensors.
-
-        Returns:
-            The packed pair batch and the head/tail query ids.
-        """
+        """Keep the top typed pairs and pack them into a batch."""
         pair_score = hp.unsqueeze(-1) * tp.unsqueeze(-2)
         pair_valid = hvalid.unsqueeze(-1) & tvalid.unsqueeze(-2)
         same_span = (hspan.unsqueeze(-2) == tspan.unsqueeze(-3)).all(-1)
@@ -2797,14 +2270,7 @@ class TypedRelationPairGenerator:
         )
 
     def _attach_compact_keys(self, out, tensors, query_layouts, relation_schemas):
-        """Attach Python relation metadata for compact pairs.
-
-        Args:
-            out: Pair batch to update.
-            tensors: Packed pair tensors, including query ids.
-            query_layouts: One query layout per sample.
-            relation_schemas: Per-sample relation specs.
-        """
+        """Attach Python relation metadata for compact pairs."""
         for index in range(len(out)):
             batch_index = int(out.batch_index[index])
             relation_index = int(out.relation_index[index])
@@ -2836,17 +2302,7 @@ class TypedRelationPairGenerator:
         *,
         compact: bool = True,
     ) -> RelationPairBatch:
-        """Propose pairs for one schema shared by every sample.
-
-        Args:
-            candidates: Per-query mention candidates.
-            query_layouts: One query layout per sample, used for decode names.
-            relation_schema: Relation types applied to every sample.
-            compact: Drop padded pairs and attach Python metadata.
-
-        Returns:
-            Flattened relation pairs.
-        """
+        """Propose pairs for one schema shared by every sample."""
         schemas = [relation_schema for _ in range(candidates.indices.shape[0])]
         return self.generate_batched(candidates, query_layouts, schemas, compact=compact)
 
@@ -2942,14 +2398,7 @@ class TypedRelationPairGenerator:
 
 
 class SparseRelationScorer(nn.Module):
-    """Score proposed relation pairs from the four endpoint states.
-
-    Args:
-        hidden_size: Boundary-state width.
-        dropout: MLP dropout probability.
-        relation_query_dim: Relation-query width. Defaults to `hidden_size`.
-        use_biaffine_content: Add pooled head/tail content features.
-    """
+    """Score proposed relation pairs from the four endpoint states."""
 
     def __init__(
         self,
@@ -2982,17 +2431,7 @@ class SparseRelationScorer(nn.Module):
         entity_candidates,
         relation_pairs: RelationPairBatch,
     ) -> torch.Tensor:
-        """Score each proposed pair.
-
-        Args:
-            boundary_states: Boundary or token states `[B, L, H]`.
-            relation_query_states: Relation queries `[B, R, H]`.
-            entity_candidates: Candidate carrier kept for call compatibility.
-            relation_pairs: Pairs from `TypedRelationPairGenerator`.
-
-        Returns:
-            Pair logits `[P]`, zero where the pair is invalid.
-        """
+        """Score each proposed pair."""
         del entity_candidates  # spans are read from relation_pairs
         if len(relation_pairs) == 0:
             return boundary_states.new_zeros(0)
@@ -3049,26 +2488,13 @@ class SparseRelationScorer(nn.Module):
 
 @dataclass
 class RecordGroupOutput:
-    """One record group's instance and field-assignment scores.
+    """One record group's instance and field-assignment scores."""
 
-    Attributes:
-        spec: Record schema that produced this group.
-        object_logits: Instance object scores `[Ni]`.
-        assign_logits: Per-field logits `[Ni, 1 + Cf]`, column 0 is absent.
-        field_query_ids: Boundary query id of each field.
-        field_specs: Field schema objects, in assignment order.
-        field_spans: Half-open candidate spans per field.
-        field_cand_mask: Real candidates per field.
-        field_cand_logits: Pair logits of those candidates.
-        instance_seed: `(field_index, candidate_index)` seed, if any.
-        instance_spans: Span of each seeded instance.
-    """
-
-    spec: object
+    spec: GroupRecord
     object_logits: torch.Tensor
     assign_logits: list[torch.Tensor]
     field_query_ids: list[int]
-    field_specs: list
+    field_specs: list[RecordField]
     field_spans: list[torch.Tensor]
     field_cand_mask: list[torch.Tensor]
     field_cand_logits: list[torch.Tensor]
@@ -3106,16 +2532,7 @@ class RecordHead(nn.Module):
         field_query_states: torch.Tensor,
         field_cand_states: list[torch.Tensor],
     ) -> list[torch.Tensor]:
-        """Score absent-aware assignment of each field candidate.
-
-        Args:
-            inst_states: Instance states `[Ni, H]`.
-            field_query_states: Field queries `[F, H]`.
-            field_cand_states: Candidate states per field, each `[Cf, H]`.
-
-        Returns:
-            Logits per field, each `[Ni, 1 + Cf]`.
-        """
+        """Score absent-aware assignment of each field candidate."""
         inst_q = self.inst_proj(inst_states)
         field_q = self.field_proj(field_query_states)
         out: list[torch.Tensor] = []
@@ -3131,14 +2548,7 @@ class RecordHead(nn.Module):
         return out
 
     def _anchorless_states(self, field_cand_states: list[torch.Tensor]) -> torch.Tensor:
-        """Cross-attend learned instance queries over field candidates.
-
-        Args:
-            field_cand_states: Non-empty candidate states are concatenated.
-
-        Returns:
-            Conditioned instance states `[I, H]`.
-        """
+        """Cross-attend learned instance queries over field candidates."""
         inst = self.instance_embed
         ctx = [cand for cand in field_cand_states if cand.shape[0] > 0]
         if not ctx:
@@ -3158,17 +2568,7 @@ class RecordHead(nn.Module):
         candidates,
         sample_index: int,
     ) -> RecordGroupOutput:
-        """Score one record schema for one sample.
-
-        Args:
-            spec: Schema with `mode`, `fields`, and optional `anchor_query_id`.
-            query_states: This sample's query states `[Q, H]`.
-            candidates: Batch candidates containing states, spans, and logits.
-            sample_index: Batch row to read.
-
-        Returns:
-            Instance object logits and per-field assignment logits.
-        """
+        """Score one record schema for one sample."""
         device = query_states.device
         field_specs = list(spec.fields)
         field_query_ids = [fspec.query_id for fspec in field_specs]
@@ -3209,7 +2609,7 @@ class RecordHead(nn.Module):
         instance_seed: list[tuple[int, int] | None] = []
         instance_spans: list[tuple[int, int] | None] = []
 
-        if spec.mode == RecordMode.NATURAL:
+        if spec.mode == "natural":
             anchor_field_idx = field_query_ids.index(spec.anchor_query_id)
             anchor_states = field_cand_states[anchor_field_idx]
             anchor_spans = field_spans[anchor_field_idx]
@@ -3220,7 +2620,7 @@ class RecordHead(nn.Module):
             for cand_idx in range(ni):
                 instance_seed.append((anchor_field_idx, cand_idx))
                 instance_spans.append((int(anchor_spans[cand_idx, 0]), int(anchor_spans[cand_idx, 1])))
-        elif spec.mode == RecordMode.LATENT:
+        elif spec.mode == "latent":
             seed_states: list[torch.Tensor] = []
             seed_scores: list[torch.Tensor] = []
             for f_idx, states in enumerate(field_cand_states):
@@ -3259,22 +2659,6 @@ class RecordHead(nn.Module):
             instance_seed=instance_seed,
             instance_spans=instance_spans,
         )
-
-
-@dataclass  # trf-ignore: TRF031
-class RecordFieldSpec:
-    """One record field query read by `RecordHead`."""
-
-    query_id: int
-
-
-@dataclass
-class RecordSpec:
-    """Record schema `RecordHead.forward_group` reads."""
-
-    mode: str
-    fields: tuple[RecordFieldSpec, ...]
-    anchor_query_id: int | None = None
 
 
 @dataclass
@@ -3404,19 +2788,7 @@ class BoundaryHead(nn.Module):
         indices: torch.Tensor,
         valid_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Score caller-provided half-open spans for every query.
-
-        Args:
-            token_states: Token states `[B, L, H]`.
-            text_mask: Valid tokens `[B, L]`.
-            query_states: Query states `[B, Q, H]`.
-            query_mask: Valid queries `[B, Q]`.
-            indices: Spans `[B, Q, C, 2]`.
-            valid_mask: Optional extra mask `[B, Q, C]`.
-
-        Returns:
-            Pair logits `[B, Q, C]`.
-        """
+        """Score caller-provided half-open spans for every query."""
         if indices.dim() != 4 or indices.shape[-1] != 2:
             raise ValueError(f"indices must be [B, Q, C, 2], got {tuple(indices.shape)}")
         batch, queries, _, _ = indices.shape
@@ -3480,25 +2852,7 @@ class BoundaryHead(nn.Module):
         injection,
         batch,
     ):
-        """Score one shared document pool.
-
-        Args:
-            encoding: Boundary encoding.
-            marginals: Start, end, and inside scores.
-            query_states: Query states.
-            query_mask: Valid queries.
-            token_states: Token states.
-            text_mask: Valid tokens.
-            text_lengths: Token counts.
-            inside_prefix: Centered inside prefix, or None.
-            gold_pairs: Optional gold spans.
-            gold_mask: Mask for `gold_pairs`.
-            injection: Gold injection probability.
-            batch: Batch size.
-
-        Returns:
-            Proposals, pair logits, the pool, pool logits, and pooled candidate states.
-        """
+        """Score one shared document pool."""
         pooled = self.shared_pool_builder(
             encoding.states,
             encoding.mask,
@@ -3563,24 +2917,7 @@ class BoundaryHead(nn.Module):
         gold_mask,
         injection,
     ):
-        """Propose and rerank one candidate list per query.
-
-        Args:
-            encoding: Boundary encoding.
-            marginals: Start, end, and inside scores.
-            query_states: Query states.
-            query_mask: Valid queries.
-            token_states: Token states.
-            text_mask: Valid tokens.
-            text_lengths: Token counts.
-            inside_prefix: Centered inside prefix, or None.
-            gold_pairs: Optional gold spans.
-            gold_mask: Mask for `gold_pairs`.
-            injection: Gold injection probability.
-
-        Returns:
-            Proposals and pair logits.
-        """
+        """Propose and rerank one candidate list per query."""
         scorer_start_states, scorer_end_states = self.pair_scorer.project_endpoints(encoding.states)
         proposals = self.boundary_proposer(
             encoding.states,
@@ -3623,21 +2960,7 @@ class BoundaryHead(nn.Module):
         consistency_scale: float | None = None,
         soft_iou_scale: float | None = None,
     ) -> BoundaryHeadOutput:
-        """Propose and rerank boundary spans.
-
-        Args:
-            token_states: Token states `[B, L, H]`.
-            text_mask: Valid tokens `[B, L]`.
-            query_states: Query states `[B, Q, H]`.
-            query_mask: Valid queries `[B, Q]`.
-            targets: Optional gold mention spans.
-            return_candidates: Keep the candidate batch on the output.
-            gold_injection_prob: Gold injection rate. None reads the boundary config.
-            consistency_scale: Accepted so callers can pass the annealed scale. The
-                schema-extraction loss applies it.
-            soft_iou_scale: Accepted so callers can pass the annealed scale. The
-                schema-extraction loss applies it.
-        """
+        """Propose and rerank boundary spans."""
         batch = token_states.shape[0]
         text_lengths = text_mask.sum(dim=1).long()
         encoding = self.boundary_encoder(token_states, text_mask)
@@ -3797,7 +3120,7 @@ class Gliner2SchemaExtractionOutput(ModelOutput):
     relation_temperature (`float`, *optional*):
         Divisor applied to `relation_logits` before the sigmoid.
     record_logits (`list`, *optional*):
-        Per-sample record object logits and field-assignment logits.
+        One `RecordGroupOutput` per record group, per sample.
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Sum of the active training objectives. Omitted when labels are absent.
     losses (`dict`, *optional*):
@@ -3896,10 +3219,7 @@ class Gliner2Model(Gliner2PreTrainedModel):
 
 
 class SpanHead(nn.Module):
-    """Dispatch span representation, counts, and classification.
-
-    The task module owns the checkpoint parameters. References here are not registered.
-    """
+    """Dispatch span representation, counts, and classification."""
 
     def __init__(self, span_rep, count_embed, count_pred, classifier):
         super().__init__()
@@ -4443,27 +3763,28 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         head_member[batch_index[valid], relation_index[valid], head_slot[valid]] = True
         tail_member[batch_index[valid], relation_index[valid], tail_slot[valid]] = True
         allow_self = torch.zeros(batch, relations, dtype=torch.bool, device=device)
-        pairs, logits = self.propose_and_score_relations(
-            text_states,
-            relation_states,
+        pairs = self.relation_pair_generator.generate_batched(
             boundary.candidates,
-            (head_member, tail_member, relation_mask, allow_self),
+            [None] * batch,
+            [[] for _ in range(batch)],
+            routing=(head_member, tail_member, relation_mask, allow_self),
         )
-        keep = pairs.pair_mask
-        if keep is None or keep.numel() == 0:
+        if pairs.pair_mask is None or pairs.pair_mask.numel() == 0:
             return text_states.new_zeros(0, 6).long(), text_states.new_zeros(0)
-        coords = torch.stack(
-            (
-                pairs.batch_index,
-                pairs.relation_index,
-                pairs.head_start,
-                pairs.head_end,
-                pairs.tail_start,
-                pairs.tail_end,
-            ),
-            dim=-1,
-        )
-        return coords[keep].long(), logits[keep]
+        fields = ("batch_index", "relation_index", "head_start", "head_end", "tail_start", "tail_end")
+        coords, logits = [], []
+        for sample_index in range(batch):
+            # Scoring one sample's real pairs at a time keeps GLiNER2's matmul shapes.
+            chosen = pairs.pair_mask & (pairs.batch_index == sample_index)
+            if not bool(chosen.any()):
+                continue
+            selected = {name: getattr(pairs, name)[chosen] for name in (*fields, "head_prob", "tail_prob")}
+            sample_pairs = replace(pairs, pair_mask=None, **selected)
+            coords.append(torch.stack([selected[name] for name in fields], dim=-1).long())
+            logits.append(self.relation_scorer(text_states, relation_states, boundary.candidates, sample_pairs))
+        if not coords:
+            return text_states.new_zeros(0, 6).long(), text_states.new_zeros(0)
+        return torch.cat(coords), torch.cat(logits)
 
     def _inference_records(
         self,
@@ -4476,7 +3797,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         field_mask,
         record_mask,
     ):
-        """Score each record group. One `(object_logits, assign_logits)` pair per group."""
+        """Score each record group into one `RecordGroupOutput`."""
         if (
             self.record_decoder is None
             or boundary is None
@@ -4499,16 +3820,16 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 if not bool(record_mask[sample_index, record_index]):
                     continue
                 spec = _record_spec(
-                    int(mode_ids[sample_index, record_index]),
-                    int(anchor_query[sample_index, record_index]),
+                    mode_ids[sample_index, record_index],
+                    anchor_query[sample_index, record_index],
                     field_query[sample_index, record_index],
-                    field_cardinality[sample_index, record_index],
                     field_mask[sample_index, record_index],
                 )
-                decoded = self.record_decoder.forward_group(
-                    spec, query_states[sample_index], boundary.candidates, sample_index
+                sample.append(
+                    self.record_decoder.forward_group(
+                        spec, query_states[sample_index], boundary.candidates, sample_index
+                    )
                 )
-                sample.append((decoded.object_logits, decoded.assign_logits))
             rows.append(sample)
         return rows
 
@@ -4537,19 +3858,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         return pairs, logits
 
     def _boundary_mention_terms(self, text_mask, query_mask, boundary, supervision, soft_iou_scale, consistency_scale):
-        """Boundary training terms, or None when the batch has no mentions.
-
-        Args:
-            text_mask: Valid tokens.
-            query_mask: Valid queries.
-            boundary: Boundary head output.
-            supervision: Training targets.
-            soft_iou_scale: Soft-IoU multiplier.
-            consistency_scale: Marginal-consistency multiplier.
-
-        Returns:
-            The dict from `boundary_training_loss`, or None.
-        """
+        """Boundary training terms, or None when the batch has no mentions."""
         mention_pairs = supervision.get("mention_pairs")
         if mention_pairs is None:
             return None
@@ -4575,24 +3884,12 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             text_mask=text_mask,
             settings=self.config.boundary_config,
             training=self.training,
-            start_targets=supervision.get("start_targets"),
-            end_targets=supervision.get("end_targets"),
-            inside_targets=supervision.get("inside_targets"),
             soft_iou_scale=soft_iou_scale,
             consistency_scale=consistency_scale,
         )
 
     def _record_part_losses(self, query_states, boundary, record_groups):
-        """Decode each record group and return its unaggregated loss parts.
-
-        Args:
-            query_states: Query states `[B, Q, H]`.
-            boundary: Boundary head output.
-            record_groups: Per-sample record groups.
-
-        Returns:
-            One `compute_record_group_loss` dict per group.
-        """
+        """Decode each record group and return its unaggregated loss parts."""
         if self.record_decoder is None or boundary is None or boundary.candidates is None:
             raise ValueError("record_groups require enable_records")
         if boundary.candidates.candidate_states is None:
@@ -4600,34 +3897,14 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         parts = []
         for sample_index, groups in enumerate(record_groups):
             for group in groups:
-                spec = group.get("spec")
-                targets = group.get("targets")
-                if spec is None or targets is None:
-                    from .processing_gliner2 import build_record_spec, build_record_targets
-
-                    spec = build_record_spec(group) if spec is None else spec
-                    targets = build_record_targets(group) if targets is None else targets
                 decoded = self.record_decoder.forward_group(
-                    spec,
-                    query_states[sample_index],
-                    boundary.candidates,
-                    sample_index,
+                    group["spec"], query_states[sample_index], boundary.candidates, sample_index
                 )
-                parts.append(compute_record_group_loss(decoded, targets))
+                parts.append(compute_record_group_loss(decoded, group["targets"]))
         return parts
 
     def _scored_relation_loss(self, text_states, query_states, boundary, supervision):
-        """Weighted relation loss, or None when the batch has no relation gold.
-
-        Args:
-            text_states: Token states.
-            query_states: Query states.
-            boundary: Boundary head output.
-            supervision: Training targets.
-
-        Returns:
-            The weighted relation loss.
-        """
+        """Weighted relation loss, or None when the batch has no relation gold."""
         if supervision.get("relation_gold_pairs") is None:
             return None
         if self.relation_scorer is None or self.relation_pair_generator is None:
@@ -4719,36 +3996,15 @@ def _states_from_routing(query_states, routing, directional):
     return (head + tail) * 0.5
 
 
-def _record_spec(mode_id, anchor, field_query, _field_cardinality, field_mask):
-    """Record schema object `RecordHead.forward_group` reads.
-
-    Field rows may be tensors. Invalid entries are skipped without copying the row to a list.
-
-    Args:
-        mode_id: Record mode id.
-        anchor: Anchor query id, or negative when there is no anchor.
-        field_query: Query id of each field.
-        field_cardinality: Cardinality id of each field.
-        field_mask: Valid-field mask.
-
-    Returns:
-        A `RecordSpec`.
-    """
-    try:
-        mode = _RECORD_ID_TO_MODE[int(mode_id)]
-    except KeyError:
-        raise ValueError(f"unknown record mode id {mode_id}") from None
-    if torch.is_tensor(field_mask):
-        keep = field_mask.to(dtype=torch.bool)
-        query_ids = field_query[keep]
-        pairs = [int(query_ids[index]) for index in range(query_ids.shape[0])]
-    else:
-        pairs = [int(query_id) for query_id, keep in zip(field_query, field_mask) if keep]
-    fields = tuple(RecordFieldSpec(query_id=query_id) for query_id in pairs)
+def _record_spec(mode_id, anchor, field_query, field_mask):
+    """Build the `GroupRecord` that `RecordHead.forward_group` reads from packed record rows."""
+    if int(mode_id) not in _RECORD_MODES:
+        raise ValueError(f"unknown record mode id {mode_id}")
+    query_ids = field_query[field_mask.to(dtype=torch.bool)].tolist()
     anchor_id = int(anchor)
-    return RecordSpec(
-        mode=mode,
-        fields=fields,
+    return GroupRecord(
+        mode=_RECORD_MODES[int(mode_id)],
+        fields=tuple(RecordField(query_id=query_id) for query_id in query_ids),
         anchor_query_id=None if anchor_id < 0 else anchor_id,
     )
 
@@ -4763,18 +4019,7 @@ def _load_encoder(encoder_config):
 
 
 def _active_group_ids(group_mask, task_ids, *, classification: bool):
-    """Group indices kept by the span or classification loop.
-
-    The mask is moved once. Classifier calls stay per group so dropout matches.
-
-    Args:
-        group_mask: Valid groups `[B, G]`.
-        task_ids: Task id of each group `[B, G]`.
-        classification: Keep classification groups when True, span groups otherwise.
-
-    Returns:
-        One list of group indices per batch row.
-    """
+    """Group indices kept by the span or classification loop."""
     is_classification = task_ids == int(TaskId.CLASSIFICATION)
     selected = group_mask.bool() & (is_classification if classification else ~is_classification)
     flags = selected.detach().cpu()
@@ -4813,25 +4058,7 @@ def _predicted_span_counts(
     count_pred,
     grouped,
 ):
-    """Batched count-head argmax for inference groups.
-
-    One argmax keeps the first-max tie break of the per-group call.
-
-    Args:
-        text_states: Word states.
-        text_mask: Valid words.
-        query_states: Field states.
-        query_mask: Valid fields.
-        query_groups: Field group ids.
-        prompt_states: Prompt states.
-        prompt_mask: Valid prompts.
-        prompt_groups: Prompt group ids.
-        count_pred: Count classifier.
-        grouped: Span group indices per batch row.
-
-    Returns:
-        Map of `(batch, group)` to the predicted count.
-    """
+    """Batched count-head argmax for inference groups."""
     prompts = []
     keys = []
     for index, groups in enumerate(grouped):
