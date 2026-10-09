@@ -560,15 +560,22 @@ def _is_packed_sequence(position_ids, batch_size):
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
         2. Flattened sequences only are supported
-        3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+        3. More than one position, as a single position (decode) is a single sequence
+        4. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
     """
+    # Answer from the shapes when they suffice: reading the values below forces a device sync, in every layer
     if position_ids is None:
         return False
+    # Packed sequences are flattened into a single row
+    if batch_size != 1:
+        return False
+    # A single position (decode) is a single sequence
+    if position_ids.shape[-1] == 1:
+        return False
 
-    increasing_position_sequences = (
-        torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
-    )
-    return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
+    # One sequence counts up from its first position; a restart (or a gap) differs from that count
+    single_sequence_positions = torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
+    return (single_sequence_positions - position_ids).abs().sum().bool()
 
 
 def fa_peft_integration_check(

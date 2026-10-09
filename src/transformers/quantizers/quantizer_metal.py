@@ -103,6 +103,30 @@ class MetalHfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
+    def update_attn_implementation(self, config):
+        """Remember whether an attention was asked for. The default itself is set once the weights are loaded."""
+        self.attn_requested = config._attn_implementation is not None
+        return config
+
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        """ggml's layer kernels, as the GGUF path uses: the quantized matmuls are only part of a decode step,
+        and on MPS the layers around them (gated delta net, norms, router) otherwise run as many small ops.
+        Attention goes to MLX's attention kernels unless the caller chose one."""
+        if self.quantization_config.dequantize:
+            return model
+        from ..integrations.gguf.kernels import kernelize_ggml_layers
+
+        kernelize_ggml_layers(model)
+        if not getattr(self, "attn_requested", False):
+            try:
+                model.set_attn_implementation("kernels-community/metal-flash-sdpa")
+            except Exception as error:
+                logger.warning(
+                    f"Could not use the `kernels-community/metal-flash-sdpa` attention kernel ({error}); keeping "
+                    f"`{model.config._attn_implementation}`. Pass `attn_implementation=` to choose one explicitly."
+                )
+        return model
+
     def is_serializable(self):
         return True
 
