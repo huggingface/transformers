@@ -691,6 +691,32 @@ class TestKernelUtilities(TestCasePlus):
 
         self.assertEqual(wrapped(), "torch")
 
+    def test_fallback_raises_on_packed_sequence_boundaries(self):
+        """The reference implementation can't keep packed sequences apart, so it refuses their boundaries instead of
+        silently dropping them. A single sequence has no boundary and still runs it. The package implementation takes
+        them."""
+
+        def fake_op(hidden_states, weight, **kwargs):
+            return hidden_states * weight
+
+        inputs = (torch.ones(4), torch.full((4,), 3.0))
+        cu_seqlens = torch.tensor([0, 2, 4], dtype=torch.int32)
+        reference = use_kernel_func_from_hub_with_fallback("fake_op", "missing_kernel_package")(fake_op)
+
+        # Inputs with a single sequence still run the reference implementation
+        self.assertTrue(torch.equal(reference(*inputs, cu_seqlens=None), torch.full((4,), 3.0)))
+        single_cu_seqlens = torch.tensor([0, 4], dtype=torch.int32)
+        self.assertTrue(torch.equal(reference(*inputs, cu_seqlens=single_cu_seqlens), torch.full((4,), 3.0)))
+        single_seq_idx = torch.zeros((1, 4), dtype=torch.int32)
+        self.assertTrue(torch.equal(reference(*inputs, seq_idx=single_seq_idx), torch.full((4,), 3.0)))
+        with self.assertRaisesRegex(ValueError, "packed sequences"):
+            reference(*inputs, cu_seqlens=cu_seqlens)
+        with self.assertRaisesRegex(ValueError, "packed sequences"):
+            reference(*inputs, seq_idx=torch.tensor([[0, 0, 1, 1]], dtype=torch.int32))
+        self.assertTrue(
+            torch.equal(self._make_fallback_func(fake_op)(*inputs, cu_seqlens=cu_seqlens), torch.full((4,), 30.0))
+        )
+
 
 @require_kernels
 class TestAttentionKernelRegistration(TestCasePlus):
