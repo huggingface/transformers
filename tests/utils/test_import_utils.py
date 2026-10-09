@@ -439,3 +439,20 @@ def test_auto_classes_do_not_import_generation_or_sklearn():
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "[]", result.stdout + result.stderr
+
+
+@require_torch
+def test_deferred_generation_imports_still_load_on_first_use():
+    """The imports deferred above must still resolve when the feature that needs them is used."""
+    from transformers import SynthIDTextWatermarkingConfig, WatermarkingConfig
+    from transformers.generation.logits_process import (
+        SynthIDTextWatermarkLogitsProcessor,
+        WatermarkLogitsProcessor,
+    )
+
+    processor = WatermarkingConfig().construct_processor(vocab_size=10, device="cpu")
+    assert isinstance(processor, WatermarkLogitsProcessor)
+    processor = SynthIDTextWatermarkingConfig(ngram_len=2, keys=[1, 2]).construct_processor(
+        vocab_size=10, device="cpu"
+    )
+    assert isinstance(processor, SynthIDTextWatermarkLogitsProcessor)
