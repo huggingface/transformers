@@ -234,7 +234,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
         sampling_rate = processor.feature_extractor.sampling_rate
-        audio_lengths = [sampling_rate, 4 * sampling_rate, int(1.7 * sampling_rate)]
+        audio_lengths = [sampling_rate, 4 * sampling_rate, int(1.7 * sampling_rate) + 50]
 
         prompt = f"{processor.audio_bos_token}{processor.audio_token}{processor.audio_eos_token}"
         audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)

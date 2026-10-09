@@ -16,6 +16,7 @@
 Processor class for Qwen2.5Omni.
 """
 
+import math
 import re
 
 import numpy as np
@@ -416,7 +417,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         """
         Computes the output length of the convolutional layers and the output length of the audio encoder
         """
-        input_lengths = audio_length // self.feature_extractor.hop_length
+        input_lengths = min(
+            math.ceil(audio_length / self.feature_extractor.hop_length), self.feature_extractor.nb_max_frames
+        )
         input_lengths = (input_lengths - 1) // 2 + 1
         return (input_lengths - 2) // 2 + 1
 
