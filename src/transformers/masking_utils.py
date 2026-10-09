@@ -263,6 +263,9 @@ def _ignore_causal_mask_sdpa(
     # never skipping while compiling.  # noqa: NC001, NC002
     if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
         return False
+    # Static caches use a tensor `q_offset` to avoid graph breaks, but reading it would cause one
+    if isinstance(q_offset, torch.Tensor) and is_tracing(q_offset):
+        return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
         return False

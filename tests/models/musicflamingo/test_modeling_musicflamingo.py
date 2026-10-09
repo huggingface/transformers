@@ -77,6 +77,7 @@ class MusicFlamingoModelTester(ALMModelTester):
         # MusicFlamingoConfig requires rope_parameters.
         config = super().get_config()
         config.rope_parameters = {"rope_type": "default", "rope_theta": 2048, "partial_rotary_factor": 0.5}
+        config.max_position_embeddings = 2048  # config syncs it with theta in `post-init`
         return config
 
 
