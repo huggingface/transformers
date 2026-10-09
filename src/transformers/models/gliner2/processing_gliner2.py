@@ -20,6 +20,7 @@ import re
 from collections import Counter, OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import torch
@@ -29,7 +30,12 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...utils import auto_docstring
 from .decoding_gliner2 import (
+    _align_logits,
+    _batch_rows,
+    _coerce_schema,
+    _compile_classification,
     _doc_axis,
+    _sample_outputs,
     decode_boundary,
     decode_classification,
     decode_joint,
@@ -39,7 +45,8 @@ from .decoding_gliner2 import (
     normalize_overlap_policy,
     resolve_overlaps,
 )
-from .loss_gliner2 import dense_targets_from_pairs
+
+_AGGREGATIONS = ("max", "mean", "first")
 
 
 logger = logging.getLogger(__name__)
@@ -619,6 +626,31 @@ def merge_chunk_results(
     return _strip_span_metadata(merged, include_confidence, include_spans)
 
 
+def aggregate_classification_logits(chunk_logits, schema, mode: str = "max") -> dict:
+    """Aggregate per-chunk label logits, then the caller decodes once."""
+    if mode not in _AGGREGATIONS:
+        raise ValueError(f"aggregate must be one of {_AGGREGATIONS}")
+    if not chunk_logits:
+        raise ValueError("cannot aggregate an empty list of chunk scores")
+    compiled = _compile_classification(_coerce_schema(schema))
+    aligned = [_align_logits(item, compiled) for item in chunk_logits]
+    tasks = {}
+    for spec in compiled.task_specs:
+        tasks[spec.name] = {
+            label_name: (
+                max(row[spec.name][label_name] for row in aligned)
+                if mode == "max"
+                else (
+                    sum(row[spec.name][label_name] for row in aligned) / len(aligned)
+                    if mode == "mean"
+                    else aligned[0][spec.name][label_name]
+                )
+            )
+            for label_name in spec.label_names
+        }
+    return tasks
+
+
 def _is_score(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -968,23 +1000,8 @@ def _group_name(tokens: Sequence[str], task_type: str) -> str:
     return task_type
 
 
-def _public_metadata(source: Any, schema: Mapping[str, Any]) -> dict[str, Any]:
+def _public_metadata(_source: Any, schema: Mapping[str, Any]) -> dict[str, Any]:
     """Metadata the span decoder needs to map ids back to strings."""
-    if hasattr(source, "build") or hasattr(source, "_entity_metadata"):
-        classifications = schema.get("classifications", []) or []
-        return {
-            "field_metadata": dict(getattr(source, "_field_metadata", {}) or {}),
-            "entity_metadata": dict(getattr(source, "_entity_metadata", {}) or {}),
-            "relation_metadata": dict(getattr(source, "_relation_metadata", {}) or {}),
-            "relation_descriptions": schema.get("relation_descriptions", {}) or {},
-            "field_orders": dict(getattr(source, "_field_orders", {}) or {}),
-            "entity_order": list(getattr(source, "_entity_order", []) or []),
-            "relation_order": list(getattr(source, "_relation_order", []) or []),
-            "classification_tasks": [item["task"] for item in classifications],
-            "entity_attribute_groups": getattr(source, "_entity_attribute_groups", {}) or {},
-            "entity_attribute_prompt_labels": dict(getattr(source, "_entity_attribute_prompt_labels", {}) or {}),
-            "entity_attribute_labels": set(getattr(source, "_entity_attribute_labels", ()) or ()),
-        }
     entities = schema.get("entities")
     entity_order = list(entities.keys()) if isinstance(entities, dict) else []
     classifications = schema.get("classifications", []) or []
@@ -1970,6 +1987,66 @@ def _is_span_structure(labels: Any) -> bool:
     )
 
 
+def dense_targets_from_pairs(pairs: torch.Tensor, mask: torch.Tensor, text_length: int):
+    """Build start, end, and inside targets from half-open mention pairs."""
+    if pairs.shape[:-1] != mask.shape or pairs.shape[-1] != 2:
+        raise ValueError(f"pairs {tuple(pairs.shape)} and mask {tuple(mask.shape)} are incompatible")
+    if text_length < 0:
+        raise ValueError("text_length must be non-negative")
+    batch, queries = pairs.shape[:2]
+    valid = mask & (pairs[..., 0] >= 0) & (pairs[..., 1] > pairs[..., 0]) & (pairs[..., 1] <= text_length)
+    weights = valid.to(torch.float32)
+    starts = pairs[..., 0].masked_fill(~mask, 0).clamp(0, text_length)
+    ends = pairs[..., 1].masked_fill(~mask, 0).clamp(0, text_length)
+    start_targets = torch.zeros(batch, queries, text_length + 1, dtype=torch.float32, device=pairs.device)
+    end_targets = torch.zeros_like(start_targets)
+    start_targets.scatter_add_(2, starts, weights).clamp_(max=1.0)
+    end_targets.scatter_add_(2, ends, weights).clamp_(max=1.0)
+    difference = torch.zeros(batch, queries, text_length + 2, dtype=torch.float32, device=pairs.device)
+    difference.scatter_add_(2, starts, weights)
+    difference.scatter_add_(2, ends, -weights)
+    inside_targets = (difference[..., : text_length + 1].cumsum(-1)[..., :text_length] > 0.5).to(torch.float32)
+    return start_targets, end_targets, inside_targets
+
+
+def build_record_spec(group: dict):
+    """Record schema object `RecordHead.forward_group` reads."""
+    query_ids = group.get("field_query_ids")
+    scalars = group.get("field_scalar")
+    if not query_ids or scalars is None or len(query_ids) != len(scalars):
+        raise ValueError("record group requires field_query_ids and field_scalar of equal length")
+    mode = group.get("mode")
+    if mode not in ("natural", "latent", "anchorless"):
+        raise ValueError(f"unknown record mode {mode!r}")
+    fields = [
+        SimpleNamespace(query_id=int(query_id), cardinality=SimpleNamespace(is_scalar=bool(scalar)))
+        for query_id, scalar in zip(query_ids, scalars)
+    ]
+    return SimpleNamespace(
+        mode=mode,
+        fields=fields,
+        anchor_query_id=group.get("anchor_query_id"),
+        task_index=int(group.get("task_index", 0)),
+    )
+
+
+def build_record_targets(group: dict):
+    """Gold records with `field_for_query`."""
+    records = []
+    for record in group.get("records", ()):
+        raw_fields = record.get("fields", {})
+        fields = [SimpleNamespace(query_id=int(query_id), values=values) for query_id, values in raw_fields.items()]
+
+        def field_for_query(query_id, fields=fields):
+            for item in fields:
+                if item.query_id == int(query_id):
+                    return item
+            return None
+
+        records.append(SimpleNamespace(task_index=int(group.get("task_index", 0)), field_for_query=field_for_query))
+    return records
+
+
 def _pack_targets(records: Sequence[Mapping[str, Any]], max_gold_per_query: int | None = None) -> dict[str, Any]:
     """Pad mention, classification, and relation targets."""
     batch = len(records)
@@ -2086,17 +2163,18 @@ def _record_groups(records: Sequence[Mapping[str, Any]], supervisions: Sequence[
                     half_open = [(int(start), int(end) + 1) for start, end in spans]
                     fields[int(field_spec["query_id"])] = [half_open]
                 gold.append({"fields": fields})
-            sample.append(
-                {
-                    "task_index": spec["task_index"],
-                    "task_name": spec["task_name"],
-                    "mode": spec["mode"],
-                    "anchor_query_id": spec["anchor_query_id"],
-                    "field_query_ids": [int(field["query_id"]) for field in spec["fields"]],
-                    "field_scalar": [field["cardinality"] in scalar for field in spec["fields"]],
-                    "records": gold,
-                }
-            )
+            packed = {
+                "task_index": spec["task_index"],
+                "task_name": spec["task_name"],
+                "mode": spec["mode"],
+                "anchor_query_id": spec["anchor_query_id"],
+                "field_query_ids": [int(field["query_id"]) for field in spec["fields"]],
+                "field_scalar": [field["cardinality"] in scalar for field in spec["fields"]],
+                "records": gold,
+            }
+            packed["spec"] = build_record_spec(packed)
+            packed["targets"] = build_record_targets(packed)
+            sample.append(packed)
         grouped.append(sample)
     return grouped
 
@@ -2629,95 +2707,6 @@ class Gliner2Processor(ProcessorMixin):
             overlap_policy=overlap_policy,
         )
 
-    def _unpack_metadata(self, metadata: Any) -> list[dict[str, Any]]:
-        if isinstance(metadata, Mapping):
-            metadata = [metadata]
-        rows = []
-        for item in metadata:
-            if "schema_meta" in item:
-                meta = dict(item["schema_meta"])
-                meta["words"] = list(item.get("words", meta.get("words", [])))
-            else:
-                meta = dict(item)
-                meta["words"] = list(meta.get("words", []))
-            rows.append(meta)
-        return rows
-
-    def _sample_outputs(self, outputs: Any, batch_size: int) -> list[Mapping[str, Any]]:
-        if isinstance(outputs, (list, tuple)):
-            if len(outputs) != batch_size:
-                raise ValueError(f"outputs length ({len(outputs)}) != metadata length ({batch_size})")
-            return list(outputs)
-        boundary = getattr(outputs, "boundary", None)
-        if not isinstance(outputs, Mapping):
-            outputs = dict(outputs.items()) if hasattr(outputs, "items") else dict(outputs)
-        if boundary is not None and getattr(boundary, "candidates", None) is not None:
-            samples = []
-            candidates = boundary.candidates
-            for index in range(batch_size):
-                sample = {
-                    "candidates": type(candidates)(
-                        indices=candidates.indices[index : index + 1],
-                        proposal_logits=(
-                            None
-                            if candidates.proposal_logits is None
-                            else candidates.proposal_logits[index : index + 1]
-                        ),
-                        pair_logits=candidates.pair_logits[index : index + 1],
-                        valid_mask=candidates.valid_mask[index : index + 1],
-                        query_mask=candidates.query_mask[index : index + 1],
-                        candidate_states=(
-                            None
-                            if candidates.candidate_states is None
-                            else candidates.candidate_states[index : index + 1]
-                        ),
-                    ),
-                    "pair_logits": candidates.pair_logits[index],
-                    "null_logits": None if boundary.null_logits is None else boundary.null_logits[index],
-                    "count_log_rates": (None if boundary.count_log_rates is None else boundary.count_log_rates[index]),
-                }
-                if outputs.get("classification_logits") is not None:
-                    sample["classification_logits"] = outputs["classification_logits"][index]
-                text_states = outputs.get("text_states")
-                query_states = outputs.get("query_states")
-                if text_states is not None:
-                    sample["text_states"] = text_states[index : index + 1]
-                if query_states is not None:
-                    sample["query_states"] = query_states[index : index + 1]
-                relation_pairs = outputs.get("relation_pairs")
-                relation_logits = outputs.get("relation_logits")
-                if relation_pairs is not None and relation_logits is not None and relation_pairs.numel():
-                    keep = relation_pairs[:, 0] == index
-                    sample["relation_pairs"] = relation_pairs[keep]
-                    sample["relation_logits"] = relation_logits[keep]
-                    sample["relation_temperature"] = outputs.get("relation_temperature")
-                if outputs.get("record_logits") is not None:
-                    sample["record_logits"] = outputs["record_logits"][index]
-                samples.append(sample)
-            return samples
-        keys = (
-            "span_logits",
-            "counts",
-            "classification_logits",
-            "record_logits",
-            "relation_pairs",
-            "relation_logits",
-            "pair_logits",
-            "grouped_candidates",
-        )
-        present = [key for key in keys if key in outputs and outputs[key] is not None]
-        if not present:
-            raise ValueError(
-                "outputs need span_scores or span_logits (count, fields, words, width) "
-                "and/or classification_logits (num_labels,). "
-                "words includes the classification prefix. "
-                "Boundary pair_logits require decoding_gliner2.decode_boundary."
-            )
-        samples = []
-        for index in range(batch_size):
-            samples.append({key: outputs[key][index] for key in present})
-        return samples
-
     def _span_group_tensors(self, value: Any, num_groups: int, apply_sigmoid: bool) -> list[torch.Tensor]:
         if torch.is_tensor(value):
             tensors = [value]
@@ -3164,8 +3153,8 @@ class Gliner2Processor(ProcessorMixin):
         are delegated to ``decoding_gliner2`` and raise ``NotImplementedError``
         when that module does not define ``decode_records`` or ``decode_boundary``.
         """
-        rows = self._unpack_metadata(metadata)
-        samples = self._sample_outputs(outputs, len(rows))
+        rows = _batch_rows(metadata)
+        samples = _sample_outputs(outputs, len(rows))
         formatted = []
         for sample_out, meta in zip(samples, rows):
             chosen = overlap_policy if overlap_policy is not None else meta.get("_overlap_policy")
@@ -3207,7 +3196,7 @@ class Gliner2Processor(ProcessorMixin):
         ``decoder="beam"`` or ``"exact"``, and non-empty schema constraints,
         call ``decoding_gliner2.decode_classification`` when it exists.
         """
-        rows = self._unpack_metadata(metadata)
+        rows = _batch_rows(metadata)
         needs_solver = decoder in ("beam", "exact") or any(row.get("constraints") for row in rows)
         if needs_solver and decoder != "independent":
             return decode_classification(
@@ -3218,7 +3207,7 @@ class Gliner2Processor(ProcessorMixin):
                 temperature=temperature,
                 decoder=decoder,
             )
-        samples = self._sample_outputs(outputs, len(rows))
+        samples = _sample_outputs(outputs, len(rows))
         results = []
         for sample_out, meta in zip(samples, rows):
             raw = self._decode_sample(

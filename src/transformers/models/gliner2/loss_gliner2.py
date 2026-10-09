@@ -14,8 +14,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import torch
 import torch.nn.functional as F
 
@@ -519,28 +517,6 @@ def count_log_rate_loss(
     return (elementwise * keep).sum() / keep.sum().clamp_min(1)
 
 
-def dense_targets_from_pairs(pairs: torch.Tensor, mask: torch.Tensor, text_length: int):
-    """Build start, end, and inside targets from half-open mention pairs."""
-    if pairs.shape[:-1] != mask.shape or pairs.shape[-1] != 2:
-        raise ValueError(f"pairs {tuple(pairs.shape)} and mask {tuple(mask.shape)} are incompatible")
-    if text_length < 0:
-        raise ValueError("text_length must be non-negative")
-    batch, queries = pairs.shape[:2]
-    valid = mask & (pairs[..., 0] >= 0) & (pairs[..., 1] > pairs[..., 0]) & (pairs[..., 1] <= text_length)
-    weights = valid.to(torch.float32)
-    starts = pairs[..., 0].masked_fill(~mask, 0).clamp(0, text_length)
-    ends = pairs[..., 1].masked_fill(~mask, 0).clamp(0, text_length)
-    start_targets = torch.zeros(batch, queries, text_length + 1, dtype=torch.float32, device=pairs.device)
-    end_targets = torch.zeros_like(start_targets)
-    start_targets.scatter_add_(2, starts, weights).clamp_(max=1.0)
-    end_targets.scatter_add_(2, ends, weights).clamp_(max=1.0)
-    difference = torch.zeros(batch, queries, text_length + 2, dtype=torch.float32, device=pairs.device)
-    difference.scatter_add_(2, starts, weights)
-    difference.scatter_add_(2, ends, -weights)
-    inside_targets = (difference[..., : text_length + 1].cumsum(-1)[..., :text_length] > 0.5).to(torch.float32)
-    return start_targets, end_targets, inside_targets
-
-
 def _check_gold_pairs(gold_pairs: torch.Tensor, gold_mask: torch.Tensor) -> None:
     if gold_pairs.dim() != 4 or gold_pairs.shape[-1] != 2:
         raise ValueError(f"mention_pairs must be [batch, queries, gold, 2], got {tuple(gold_pairs.shape)}")
@@ -620,6 +596,8 @@ def boundary_training_loss(
     n_boundary = start_logits.shape[-1]
     text_length = text_mask.shape[-1]
     if start_targets is None or end_targets is None or inside_targets is None:
+        from .processing_gliner2 import dense_targets_from_pairs
+
         safe_pairs = mention_pairs.clamp(0, max(n_boundary - 1, 0))
         built_start, built_end, built_inside = dense_targets_from_pairs(safe_pairs, mention_mask, text_length)
         start_targets = built_start if start_targets is None else start_targets
@@ -803,44 +781,6 @@ def sparse_relation_loss(
     loss = F.binary_cross_entropy_with_logits(logits, labels, reduction="none")
     reduced = (loss * pair_mask.to(loss.dtype)).sum() / pair_mask.sum().clamp_min(1)
     return weight * reduced
-
-
-def build_record_spec(group: dict):
-    """Build the attribute object `RecordHead.forward_group` reads."""
-    query_ids = group.get("field_query_ids")
-    scalars = group.get("field_scalar")
-    if not query_ids or scalars is None or len(query_ids) != len(scalars):
-        raise ValueError("record group requires field_query_ids and field_scalar of equal length")
-    mode = group.get("mode")
-    if mode not in ("natural", "latent", "anchorless"):
-        raise ValueError(f"unknown record mode {mode!r}")
-    fields = [
-        SimpleNamespace(query_id=int(query_id), cardinality=SimpleNamespace(is_scalar=bool(scalar)))
-        for query_id, scalar in zip(query_ids, scalars)
-    ]
-    return SimpleNamespace(
-        mode=mode,
-        fields=fields,
-        anchor_query_id=group.get("anchor_query_id"),
-        task_index=int(group.get("task_index", 0)),
-    )
-
-
-def build_record_targets(group: dict):
-    """Build gold records with `field_for_query`."""
-    records = []
-    for record in group.get("records", ()):
-        raw_fields = record.get("fields", {})
-        fields = [SimpleNamespace(query_id=int(query_id), values=values) for query_id, values in raw_fields.items()]
-
-        def field_for_query(query_id, fields=fields):
-            for field in fields:
-                if field.query_id == int(query_id):
-                    return field
-            return None
-
-        records.append(SimpleNamespace(task_index=int(group.get("task_index", 0)), field_for_query=field_for_query))
-    return records
 
 
 def _span_index(field_spans: torch.Tensor) -> dict:

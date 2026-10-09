@@ -15,8 +15,6 @@
 from __future__ import annotations
 
 import bisect
-import hashlib
-import json
 import logging
 import math
 from collections import OrderedDict, defaultdict
@@ -49,7 +47,6 @@ _RESERVED = (
 _ACTIVATIONS = ("auto", "sigmoid", "softmax")
 _DECODERS = ("auto", "independent", "exact", "beam")
 _ON_INFEASIBLE = ("relax", "min_violations", "raise")
-_AGGREGATIONS = ("max", "mean", "first")
 _MODEL_KEYS = (
     "json_structures",
     "classifications",
@@ -1152,18 +1149,6 @@ class Expr:
     def references(self):
         return _walk(self)[0]
 
-    def to_dict(self) -> dict:
-        payload = {"type": self.type}
-        for name in _EXPR_FIELDS[self.type]:
-            value = self.fields[name]
-            if isinstance(value, Expr):
-                value = value.to_dict()
-            elif isinstance(value, tuple) and value and isinstance(value[0], Expr):
-                value = [item.to_dict() for item in value]
-            payload[name] = value
-        return payload
-
-
 def _walk(expr: Expr, schema=None):
     """Collect task, label, set, and count references, optionally checking them."""
     kind = expr.type
@@ -1531,7 +1516,6 @@ class CompiledClassificationSchema:
     task_specs: tuple
     constraints: tuple
     task_order: tuple
-    fingerprint: str
 
     def task(self, name) -> TaskSpec:
         for spec in self.task_specs:
@@ -1744,17 +1728,11 @@ def _compile_classification(schema) -> CompiledClassificationSchema:
         "entity_descriptions": {},
     }
     _assert_model_schema(model)
-    payload = {
-        "tasks": [spec.name for spec in task_specs],
-        "constraints": [item.to_dict() for item in constraints],
-    }
-    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     return CompiledClassificationSchema(
         model_schema=model,
         task_specs=tuple(task_specs),
         constraints=_lower_defaults(constraints, task_specs),
         task_order=order,
-        fingerprint=fingerprint,
     )
 
 
@@ -1860,12 +1838,11 @@ def enumerate_locals(spec, retained, utilities, *, bound_labels, set_coupled=Fal
 
 
 class ClassificationScores:
-    """Raw per-label logits plus the schema fingerprint."""
+    """Raw per-label logits for one compiled schema."""
 
-    def __init__(self, text, tasks, fingerprint, specs):
+    def __init__(self, text, tasks, specs):
         self.text = text
         self.tasks = {task: dict(values) for task, values in tasks.items()}
-        self.fingerprint = fingerprint
         self.specs = specs
 
     def _spec(self, task):
@@ -2038,14 +2015,40 @@ def _suffix_max(order, problem):
     return suffix
 
 
-def _recursive_search(problem, *, mode: str, budget: int) -> Solution | None:
-    """Depth-first search shared by exact and min-violations.
-
-    Exact prunes with the suffix bound and keeps a partial only when it is not
-    yet false. Equal totals keep the incumbent. Min-violations walks the same
-    locals and ranks complete assignments by violation count, then utility.
-    """
+def _search(problem, *, mode: str, budget: int, beam_size: int = 16) -> Solution | None:
+    """Exact, beam, and min-violations over the same local assignments."""
     order = _search_order(problem)
+    if mode == "beam":
+        beams = [(0.0, {})]
+        for index, task in enumerate(order):
+            expanded = []
+            for score, chosen in beams:
+                for local in problem.locals[task]:
+                    if _accepts(problem, order, index, chosen, local):
+                        nxt = dict(chosen)
+                        nxt[task] = local
+                        expanded.append((score + local.utility, nxt))
+            expanded.sort(key=lambda item: (-item[0], _signature(item[1], order)))
+            beams = []
+            seen = set()
+            for score, chosen in expanded:
+                sig = _signature(chosen, order)
+                if sig in seen:
+                    continue
+                seen.add(sig)
+                beams.append((score, chosen))
+                if len(beams) >= beam_size:
+                    break
+            if not beams:
+                return None
+        score, chosen = beams[0]
+        return Solution(
+            assignments=dict(chosen),
+            score=score,
+            violations=problem.violations_of(chosen),
+            exact=False,
+            decoder="beam",
+        )
     suffix = _suffix_max(order, problem) if mode == "exact" else None
     best = {"assign": None, "score": -math.inf, "weight": math.inf}
     nodes = {"n": 0}
@@ -2113,41 +2116,6 @@ def _signature(chosen, order):
     return tuple((task, tuple(sorted(chosen[task].labels))) for task in order if task in chosen)
 
 
-def _beam_search(problem, beam_size: int) -> Solution | None:
-    """Same local expansion as exact search, without the suffix bound."""
-    order = _search_order(problem)
-    beams = [(0.0, {})]
-    for index, task in enumerate(order):
-        expanded = []
-        for score, chosen in beams:
-            for local in problem.locals[task]:
-                if _accepts(problem, order, index, chosen, local):
-                    nxt = dict(chosen)
-                    nxt[task] = local
-                    expanded.append((score + local.utility, nxt))
-        expanded.sort(key=lambda item: (-item[0], _signature(item[1], order)))
-        beams = []
-        seen = set()
-        for score, chosen in expanded:
-            sig = _signature(chosen, order)
-            if sig in seen:
-                continue
-            seen.add(sig)
-            beams.append((score, chosen))
-            if len(beams) >= beam_size:
-                break
-        if not beams:
-            return None
-    score, chosen = beams[0]
-    return Solution(
-        assignments=dict(chosen),
-        score=score,
-        violations=problem.violations_of(chosen),
-        exact=False,
-        decoder="beam",
-    )
-
-
 def _independent(problem) -> Solution:
     """Pick each task's best local. Only that task is treated as decided."""
     chosen: dict = {}
@@ -2183,12 +2151,12 @@ def _primary(problem, config):
         solution = _independent(problem)
         return solution if solution.feasible else None
     if decoder == "beam":
-        solution = _beam_search(problem, config.beam_size)
+        solution = _search(problem, mode="beam", budget=config.exact_node_budget, beam_size=config.beam_size)
         return solution if (solution is not None and solution.feasible) else None
     try:
-        solution = _recursive_search(problem, mode="exact", budget=config.exact_node_budget)
+        solution = _search(problem, mode="exact", budget=config.exact_node_budget)
     except _BudgetExceeded:
-        solution = _beam_search(problem, config.beam_size)
+        solution = _search(problem, mode="beam", budget=config.exact_node_budget, beam_size=config.beam_size)
     return solution if (solution is not None and solution.feasible) else None
 
 
@@ -2206,8 +2174,8 @@ def _decode_problem(problem, config, *, widen=None) -> Solution:
             return recovered
         working = relaxed
     if mode in ("relax", "min_violations"):
-        return _recursive_search(working, mode="min_violations", budget=config.exact_node_budget)
-    diagnosis = _recursive_search(working, mode="min_violations", budget=config.exact_node_budget)
+        return _search(working, mode="min_violations", budget=config.exact_node_budget)
+    diagnosis = _search(working, mode="min_violations", budget=config.exact_node_budget)
     raise InfeasibleError(
         "no assignment satisfies the classification constraints",
         violations=diagnosis.violations,
@@ -2368,18 +2336,14 @@ def label_names_from_tokens(schema_tokens: Sequence[str]) -> tuple:
     return tuple(schema_tokens[i + 1] for i in range(len(schema_tokens) - 1) if schema_tokens[i] == _L)
 
 
-def recover_task_name(schema_tokens: Sequence[str], known: Sequence[str]) -> str:
-    """Resolve the owning task by boundary-aware longest match."""
+def _task_name(schema_tokens: Sequence[str], known: Sequence[str]) -> str:
+    """Resolve a task with the processor's boundary-aware prompt match."""
+    from .processing_gliner2 import _resolve_classification_config
+
     prompt_str = schema_tokens[2] if len(schema_tokens) > 2 else ""
-    best = None
-    for name in known:
-        if prompt_str.startswith(name):
-            rest = prompt_str[len(name) :]
-            if rest == "" or rest[0] in (":", " "):
-                if best is None or len(name) > len(best):
-                    best = name
-    if best is not None:
-        return best
+    found = _resolve_classification_config(prompt_str, [{"task": name} for name in known])
+    if found is not None:
+        return found["task"]
     return prompt_str.split(" [DESCRIPTION] ", 1)[0].split(":", 1)[0]
 
 
@@ -2398,7 +2362,7 @@ def _align_encoded(payload, compiled) -> dict:
     found = {task: {} for task in known}
     for group, row in zip(groups, rows):
         names = label_names_from_tokens(group)
-        task = recover_task_name(group, known)
+        task = _task_name(group, known)
         if task not in known:
             raise SchemaError(f"encoded tokens name unknown task {task!r}")
         spec = compiled.task(task)
@@ -2461,42 +2425,12 @@ def _with_temperature(compiled, temperature):
 
 def _scores_from_logits(logits, compiled, text: str) -> ClassificationScores:
     if hasattr(logits, "probability") and hasattr(logits, "utility") and hasattr(logits, "tasks"):
-        if getattr(logits, "fingerprint", compiled.fingerprint) != compiled.fingerprint:
-            raise SchemaError(
-                "scores were produced for a different schema (fingerprint mismatch); re-score before decoding"
-            )
         return logits
     return ClassificationScores(
         text=text,
         tasks=_align_logits(logits, compiled),
-        fingerprint=compiled.fingerprint,
         specs={spec.name: spec for spec in compiled.task_specs},
     )
-
-
-def aggregate_classification_logits(chunk_logits, schema, mode: str = "max") -> dict:
-    """Aggregate per-chunk label logits so decoding runs once."""
-    if mode not in _AGGREGATIONS:
-        raise ValueError(f"aggregate must be one of {_AGGREGATIONS}")
-    if not chunk_logits:
-        raise ValueError("cannot aggregate an empty list of chunk scores")
-    compiled = _compile_classification(_coerce_schema(schema))
-    aligned = [_align_logits(item, compiled) for item in chunk_logits]
-    tasks = {}
-    for spec in compiled.task_specs:
-        tasks[spec.name] = {
-            label_name: (
-                max(row[spec.name][label_name] for row in aligned)
-                if mode == "max"
-                else (
-                    sum(row[spec.name][label_name] for row in aligned) / len(aligned)
-                    if mode == "mean"
-                    else aligned[0][spec.name][label_name]
-                )
-            )
-            for label_name in spec.label_names
-        }
-    return tasks
 
 
 def decode_constrained_classification(
@@ -2570,6 +2504,7 @@ def _batch_rows(metadata):
             meta["words"] = list(item.get("words", meta.get("words", [])))
         else:
             meta = dict(item)
+            meta["words"] = list(meta.get("words", []))
         rows.append(meta)
     return rows
 
@@ -2583,6 +2518,48 @@ def _sample_outputs(outputs, batch_size):
     boundary = getattr(outputs, "boundary", None)
     if not isinstance(outputs, Mapping):
         outputs = dict(outputs.items()) if hasattr(outputs, "items") else dict(outputs)
+    if boundary is not None and getattr(boundary, "candidates", None) is not None:
+        samples = []
+        candidates = boundary.candidates
+        for index in range(batch_size):
+            sample = {
+                "candidates": type(candidates)(
+                    indices=candidates.indices[index : index + 1],
+                    proposal_logits=(
+                        None if candidates.proposal_logits is None else candidates.proposal_logits[index : index + 1]
+                    ),
+                    pair_logits=candidates.pair_logits[index : index + 1],
+                    valid_mask=candidates.valid_mask[index : index + 1],
+                    query_mask=candidates.query_mask[index : index + 1],
+                    candidate_states=(
+                        None
+                        if candidates.candidate_states is None
+                        else candidates.candidate_states[index : index + 1]
+                    ),
+                ),
+                "pair_logits": candidates.pair_logits[index],
+                "null_logits": None if boundary.null_logits is None else boundary.null_logits[index],
+                "count_log_rates": None if boundary.count_log_rates is None else boundary.count_log_rates[index],
+            }
+            if outputs.get("classification_logits") is not None:
+                sample["classification_logits"] = outputs["classification_logits"][index]
+            text_states = outputs.get("text_states")
+            query_states = outputs.get("query_states")
+            if text_states is not None:
+                sample["text_states"] = text_states[index : index + 1]
+            if query_states is not None:
+                sample["query_states"] = query_states[index : index + 1]
+            relation_pairs = outputs.get("relation_pairs")
+            relation_logits = outputs.get("relation_logits")
+            if relation_pairs is not None and relation_logits is not None and relation_pairs.numel():
+                keep = relation_pairs[:, 0] == index
+                sample["relation_pairs"] = relation_pairs[keep]
+                sample["relation_logits"] = relation_logits[keep]
+                sample["relation_temperature"] = outputs.get("relation_temperature")
+            if outputs.get("record_logits") is not None:
+                sample["record_logits"] = outputs["record_logits"][index]
+            samples.append(sample)
+        return samples
     keys = (
         "span_logits",
         "counts",
@@ -2594,27 +2571,13 @@ def _sample_outputs(outputs, batch_size):
         "grouped_candidates",
     )
     present = [key for key in keys if key in outputs and outputs[key] is not None]
-    samples = []
-    for index in range(batch_size):
-        sample = {key: outputs[key][index] for key in present}
-        if boundary is not None and getattr(boundary, "candidates", None) is not None:
-            candidates = boundary.candidates
-            sample["candidates"] = type(candidates)(
-                indices=candidates.indices[index : index + 1],
-                proposal_logits=(
-                    None if candidates.proposal_logits is None else candidates.proposal_logits[index : index + 1]
-                ),
-                pair_logits=candidates.pair_logits[index : index + 1],
-                valid_mask=candidates.valid_mask[index : index + 1],
-                query_mask=candidates.query_mask[index : index + 1],
-                candidate_states=(
-                    None if candidates.candidate_states is None else candidates.candidate_states[index : index + 1]
-                ),
-            )
-            sample["pair_logits"] = candidates.pair_logits[index]
-            sample["null_logits"] = None if boundary.null_logits is None else boundary.null_logits[index]
-        samples.append(sample)
-    return samples
+    if not present:
+        raise ValueError(
+            "outputs need span_logits (count, fields, words, width) "
+            "and/or classification_logits (num_labels,). "
+            "Boundary pair_logits require candidates on the forward output."
+        )
+    return [{key: outputs[key][index] for key in present} for index in range(batch_size)]
 
 
 def _classification_schema_from_row(meta, threshold):

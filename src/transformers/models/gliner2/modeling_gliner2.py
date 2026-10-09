@@ -772,22 +772,6 @@ class BoundaryQueryHead(nn.Module):
 MASK_LOGIT = -1.0e4
 
 
-@dataclass(frozen=True)
-class ProposalStats:
-    """Element counts and optional gold-recall diagnostics."""
-
-    boundary_score_elements: int
-    conditional_pair_score_elements: int
-    max_materialized_pair_elements: int
-    retained_candidate_count: torch.Tensor
-    gold_hit_without_injection: torch.Tensor | None = None
-    gold_total: torch.Tensor | None = None
-    start_hit: torch.Tensor | None = None
-    end_hit: torch.Tensor | None = None
-    boundary_total: torch.Tensor | None = None
-    unique_candidates: torch.Tensor | None = None
-
-
 @dataclass
 class BoundaryProposals:
     """Padded start/end candidates for one query axis.
@@ -797,7 +781,6 @@ class BoundaryProposals:
         logits: Full prior, or None when proposal logits were not requested.
         valid_mask: True for real candidates `[B, Q, C]`.
         gold_mask: True where a training candidate was injected.
-        stats: Optional proposal diagnostics.
         compat_logits: Marginal-free endpoint compatibility `[B, Q, C]`.
         score_start_states: Gathered reranker start states.
         score_end_states: Gathered reranker end states.
@@ -807,7 +790,6 @@ class BoundaryProposals:
     logits: torch.Tensor | None
     valid_mask: torch.Tensor
     gold_mask: torch.Tensor | None = None
-    stats: ProposalStats | None = None
     compat_logits: torch.Tensor | None = None
     score_start_states: torch.Tensor | None = None
     score_end_states: torch.Tensor | None = None
@@ -1242,7 +1224,6 @@ class SparseBoundaryProposer(nn.Module):
         *,
         gold_pairs: torch.Tensor | None = None,
         gold_mask: torch.Tensor | None = None,
-        return_stats: bool = False,
         return_proposal_logits: bool = True,
         gold_injection_prob: float = 1.0,
         generator: torch.Generator | None = None,
@@ -1394,56 +1375,11 @@ class SparseBoundaryProposer(nn.Module):
             logits_diff = compat + sm + em
             out_logits = torch.where(out_valid, logits_diff, torch.full_like(logits_diff, MASK_LOGIT))
         out_compat = torch.where(out_valid, compat, torch.zeros_like(compat))
-
-        stats = None
-        if return_stats:
-            retained = out_valid.sum()
-            gold_hit = gold_total = start_hit = end_hit = boundary_total = None
-            if gold_pairs is not None and gold_mask is not None:
-                diagnostic_gold = gold_mask & query_mask.unsqueeze(-1)
-                gold_keys = gold_pairs[..., 0] * n_boundaries + gold_pairs[..., 1]
-                pair_hit = ((gold_keys.unsqueeze(-1) == pre_keys.unsqueeze(-2)) & pre_valid.unsqueeze(-2)).any(
-                    -1
-                ) & diagnostic_gold
-                gold_hit = pair_hit.sum()
-                gold_total = diagnostic_gold.sum()
-                selected_starts = st_idx
-                selected_starts_valid = st_valid
-                if settings.bidirectional_proposals:
-                    selected_ends = en_idx
-                    selected_ends_valid = en_valid
-                else:
-                    selected_ends = fwd_end_idx.reshape(batch, queries, -1)
-                    selected_ends_valid = fwd_pairs_valid
-                start_hit = (
-                    (gold_pairs[..., 0].unsqueeze(-1) == selected_starts.unsqueeze(-2))
-                    & selected_starts_valid.unsqueeze(-2)
-                ).any(-1) & diagnostic_gold
-                end_hit = (
-                    (gold_pairs[..., 1].unsqueeze(-1) == selected_ends.unsqueeze(-2))
-                    & selected_ends_valid.unsqueeze(-2)
-                ).any(-1) & diagnostic_gold
-                start_hit = start_hit.sum()
-                end_hit = end_hit.sum()
-                boundary_total = diagnostic_gold.sum()
-            stats = ProposalStats(
-                boundary_score_elements=batch * queries * n_boundaries * 2,
-                conditional_pair_score_elements=cond_e1 + cond_e2,
-                max_materialized_pair_elements=max(maxe1, maxe2),
-                retained_candidate_count=retained,
-                gold_hit_without_injection=gold_hit,
-                gold_total=gold_total,
-                start_hit=start_hit,
-                end_hit=end_hit,
-                boundary_total=boundary_total,
-                unique_candidates=retained,
-            )
         return BoundaryProposals(
             indices=out_idx,
             logits=out_logits,
             valid_mask=out_valid,
             gold_mask=out_gold if training else None,
-            stats=stats,
             compat_logits=out_compat,
             score_start_states=score_start_selected,
             score_end_states=score_end_selected,
@@ -1747,7 +1683,6 @@ class PooledCandidates:
         proposal_logits: Query-agnostic proposal scores `[B, C]`.
         gold_mask: Gold membership `[B, C, Q]`.
         compat_logits: Marginal-free compatibility `[B, C]`.
-        stats: Optional pool diagnostics.
     """
 
     indices: torch.Tensor
@@ -1755,7 +1690,6 @@ class PooledCandidates:
     proposal_logits: torch.Tensor | None
     gold_mask: torch.Tensor | None
     compat_logits: torch.Tensor | None = None
-    stats: ProposalStats | None = None
 
     def to_candidate_batch(
         self,
@@ -1881,7 +1815,6 @@ class DocumentCandidatePool(nn.Module):
         gold_pairs: torch.Tensor | None = None,
         gold_mask: torch.Tensor | None = None,
         gold_injection_prob: float = 1.0,
-        return_stats: bool = False,
         generator: torch.Generator | None = None,
     ) -> PooledCandidates:
         """Pair union endpoints once and keep a capped document pool.
@@ -1895,7 +1828,6 @@ class DocumentCandidatePool(nn.Module):
             gold_pairs: Optional gold spans `[B, Q, G, 2]`.
             gold_mask: Mask for `gold_pairs`.
             gold_injection_prob: Fraction of gold spans forced into the pool.
-            return_stats: Populate recall diagnostics.
             generator: Generator for partial gold injection.
 
         Returns:
@@ -1975,13 +1907,6 @@ class DocumentCandidatePool(nn.Module):
         all_keys = torch.cat((quota_keys, global_keys), -1)
         all_scores = torch.cat((quota_scores, union_pair_score.detach()), -1)
         all_valid = torch.cat((quota_valid, pair_valid), -1)
-        diagnostic_keys = diagnostic_valid = None
-        if return_stats:
-            with torch.no_grad():
-                diagnostic_keys, diagnostic_valid = _deduplicate_pool(
-                    all_keys, all_scores, all_valid, self.pool_size, n_boundaries
-                )
-
         if gold_pairs is not None and gold_mask is not None:
             gvalid = gold_mask & query_mask.unsqueeze(-1)
             oob = (
@@ -2027,48 +1952,12 @@ class DocumentCandidatePool(nn.Module):
             selected_gold = (selected_gold & gold_mask.unsqueeze(1) & selected_valid.unsqueeze(-1).unsqueeze(-1)).any(
                 -1
             )
-
-        stats = None
-        if return_stats:
-            gold_hit = gold_total = start_hit = end_hit = boundary_total = None
-            if gold_pairs is not None and gold_mask is not None:
-                diagnostic_gold = gold_mask & query_mask.unsqueeze(-1)
-                gold_keys = gold_pairs[..., 0] * n_boundaries + gold_pairs[..., 1]
-                pair_hit = (
-                    (gold_keys.unsqueeze(-1) == diagnostic_keys.unsqueeze(1).unsqueeze(1))
-                    & diagnostic_valid.unsqueeze(1).unsqueeze(1)
-                ).any(-1) & diagnostic_gold
-                gold_hit = pair_hit.sum()
-                gold_total = diagnostic_gold.sum()
-                start_hit = (
-                    (gold_pairs[..., 0].unsqueeze(-1) == starts.unsqueeze(1).unsqueeze(1))
-                    & starts_valid.unsqueeze(1).unsqueeze(1)
-                ).any(-1) & diagnostic_gold
-                end_hit = (
-                    (gold_pairs[..., 1].unsqueeze(-1) == ends.unsqueeze(1).unsqueeze(1))
-                    & ends_valid.unsqueeze(1).unsqueeze(1)
-                ).any(-1) & diagnostic_gold
-                start_hit, end_hit = start_hit.sum(), end_hit.sum()
-                boundary_total = diagnostic_gold.sum()
-            stats = ProposalStats(
-                boundary_score_elements=batch * queries * n_boundaries * 2,
-                conditional_pair_score_elements=batch * ks * ke,
-                max_materialized_pair_elements=batch * ks * ke,
-                retained_candidate_count=selected_valid.sum(),
-                gold_hit_without_injection=gold_hit,
-                gold_total=gold_total,
-                start_hit=start_hit,
-                end_hit=end_hit,
-                boundary_total=boundary_total,
-                unique_candidates=selected_valid.sum(),
-            )
         return PooledCandidates(
             indices=indices,
             mask=selected_valid,
             proposal_logits=selected_score,
             gold_mask=selected_gold,
             compat_logits=selected_compat,
-            stats=stats,
         )
 
 
@@ -2372,16 +2261,6 @@ class SharedPoolScorer(nn.Module):
         score = score.masked_fill(~pooled.mask.unsqueeze(-1), MASK_LOGIT)
         score = score.masked_fill(~query_mask.unsqueeze(1), MASK_LOGIT)
         return score, candidate
-
-
-@dataclass(frozen=True)
-class RelationTypeSpec:
-    """One relation type and the entity queries allowed at each argument."""
-
-    relation_type: str
-    head_query_ids: tuple[int, ...]
-    tail_query_ids: tuple[int, ...]
-    allow_self: bool = False
 
 
 @dataclass
@@ -3024,7 +2903,6 @@ class BoundaryHead(nn.Module):
         self.hidden_size = hidden_size
         self.settings = settings
         self.query_dim = query_dim if query_dim is not None else hidden_size
-        self.collect_diagnostics = False
         self._gold_injection_prob = 1.0
         self._consistency_scale = 1.0
         self._soft_iou_scale = 1.0
@@ -3204,7 +3082,6 @@ class BoundaryHead(nn.Module):
         *,
         return_candidates: bool = True,
         gold_injection_prob: float | None = None,
-        collect_diagnostics: bool | None = None,
     ) -> BoundaryHeadOutput:
         """Propose and rerank boundary spans."""
         batch = token_states.shape[0]
@@ -3222,9 +3099,6 @@ class BoundaryHead(nn.Module):
         if targets is not None:
             gold_pairs = targets.mention_pairs
             gold_mask = targets.mention_mask
-        diagnostics = self.collect_diagnostics if collect_diagnostics is None else collect_diagnostics
-        if targets is not None:
-            diagnostics = True
         injection = self._gold_injection_prob if gold_injection_prob is None else gold_injection_prob
         inside_prefix = marginals.inside_prefix if self.use_inside_evidence else None
         pooled = None
@@ -3240,7 +3114,6 @@ class BoundaryHead(nn.Module):
                 gold_pairs=gold_pairs,
                 gold_mask=gold_mask,
                 gold_injection_prob=injection if self.training else 0.0,
-                return_stats=diagnostics,
             )
             pooled_logits, _ = self.shared_pool_scorer(
                 encoding.states,
@@ -3266,7 +3139,6 @@ class BoundaryHead(nn.Module):
                 ),
                 valid_mask=pooled.mask.unsqueeze(1).expand(batch, queries, count),
                 gold_mask=(pooled.gold_mask.transpose(1, 2) if pooled.gold_mask is not None else None),
-                stats=pooled.stats,
                 compat_logits=(
                     pooled.compat_logits.unsqueeze(1).expand(batch, queries, count)
                     if pooled.compat_logits is not None
@@ -3291,7 +3163,6 @@ class BoundaryHead(nn.Module):
                 marginals.end_logits,
                 gold_pairs=gold_pairs,
                 gold_mask=gold_mask,
-                return_stats=diagnostics,
                 return_proposal_logits=self.training,
                 gold_injection_prob=injection,
                 scorer_start_states=scorer_start_states,
@@ -3807,37 +3678,24 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         loss = None
         losses = None
         structures = None if supervision is None else supervision.get("span_structures")
-        if structures is None:
-            span_logits, counts = _span_logits(
-                text_states,
-                text_word_mask,
-                query_states,
-                query_marker_mask,
-                query_group_index,
-                prompt_states,
-                prompt_marker_mask,
-                prompt_group_index,
-                task_type_ids,
-                group_mask,
-                self.span_rep,
-                self.count_pred,
-                self.count_embed,
-                self.max_width,
-            )
-        else:
-            span_logits, counts, struct_loss, count_loss = self._gold_span_logits(
-                text_states,
-                text_word_mask,
-                query_states,
-                query_marker_mask,
-                query_group_index,
-                prompt_states,
-                prompt_marker_mask,
-                prompt_group_index,
-                task_type_ids,
-                group_mask,
-                structures,
-            )
+        span_logits, counts, struct_loss, count_loss = _span_logits(
+            text_states,
+            text_word_mask,
+            query_states,
+            query_marker_mask,
+            query_group_index,
+            prompt_states,
+            prompt_marker_mask,
+            prompt_group_index,
+            task_type_ids,
+            group_mask,
+            self.span_rep,
+            self.count_pred,
+            self.count_embed,
+            self.max_width,
+            structures=structures,
+            training=self.training,
+        )
         if supervision is not None:
             anchor = text_states.sum() * 0.0
             cls_loss = anchor
@@ -3869,91 +3727,6 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             loss=loss,
             losses=losses,
         )
-
-    def _gold_span_logits(
-        self,
-        text_states,
-        text_mask,
-        query_states,
-        query_mask,
-        query_groups,
-        prompt_states,
-        prompt_mask,
-        prompt_groups,
-        task_ids,
-        group_mask,
-        structures,
-    ):
-        """Span logits from `count_embed` at `min(count, 19)`, plus span and count losses."""
-        if query_groups is None or task_ids is None or prompt_states is None or group_mask is None:
-            raise ValueError("span targets require query, prompt, task, and group tensors")
-        if len(structures) != text_states.shape[0]:
-            raise ValueError("span_structures must have one entry per batch row")
-        span_rows = []
-        count_rows = []
-        struct_loss = text_states.sum() * 0.0
-        count_prompt = []
-        count_target = []
-        for index in range(text_states.shape[0]):
-            words = text_states[index][text_mask[index].bool()]
-            length = words.shape[0]
-            rep = None
-            if length:
-                indices = _span_indices(length, self.max_width, words.device)
-                rep = self.span_rep(words.unsqueeze(0), indices).squeeze(0)
-            sample_spans = []
-            sample_counts = []
-            sample_structures = structures[index]
-            slot = 0
-            for group in range(task_ids.shape[1]):
-                if not bool(group_mask[index, group]) or int(task_ids[index, group]) == _CLASSIFICATION_TASK:
-                    continue
-                if slot >= len(sample_structures):
-                    raise ValueError("span_structures has fewer groups than the schema")
-                structure = sample_structures[slot]
-                slot += 1
-                fields = _rows(query_states[index], query_mask[index], query_groups[index], group)
-                prompt = _rows(prompt_states[index], prompt_mask[index], prompt_groups[index], group)
-                gold = loss_gliner2.clamp_gold_count(
-                    structure.shape[0] if torch.is_tensor(structure) else structure[0]
-                )
-                task_id = int(task_ids[index, group])
-                scored = False
-                if gold > 0 and prompt.numel() > 0 and fields.numel() > 0 and rep is not None:
-                    if torch.is_tensor(structure):
-                        structure = structure[:gold]
-                    projected = self.count_embed(fields, gold)
-                    scores = count_conditioned_scores(rep, projected)
-                    sample_spans.append(scores)
-                    sample_counts.append(gold)
-                    span_mask = loss_gliner2.invalid_span_mask(length, self.max_width, scores.device)
-                    struct_loss = struct_loss + loss_gliner2.span_structure_loss(
-                        scores, structure, span_mask, training=self.training
-                    )
-                    scored = True
-                else:
-                    sample_spans.append(text_states.new_zeros(0, fields.shape[0], length, self.max_width))
-                    sample_counts.append(0)
-                if (
-                    gold > 0
-                    and prompt.numel() > 0
-                    and loss_gliner2.supervises_count(task_id)
-                    and (scored or rep is None or fields.numel() == 0)
-                ):
-                    count_prompt.append(prompt[:1])
-                    count_target.append(gold)
-            if slot != len(sample_structures):
-                raise ValueError("span_structures has more groups than the schema")
-            span_rows.append(sample_spans)
-            count_rows.append(sample_counts)
-        if count_prompt:
-            count_logits = self.count_pred(torch.cat(count_prompt, dim=0))
-            count_loss = loss_gliner2.span_count_loss(
-                count_logits, torch.tensor(count_target, dtype=torch.long, device=count_logits.device)
-            )
-        else:
-            count_loss = text_states.new_zeros(())
-        return span_rows, count_rows, struct_loss, count_loss
 
     def _boundary_forward(
         self,
@@ -4235,15 +4008,20 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             parts = []
             for sample_index, groups in enumerate(record_groups):
                 for group in groups:
+                    spec = group.get("spec")
+                    targets = group.get("targets")
+                    if spec is None or targets is None:
+                        from .processing_gliner2 import build_record_spec, build_record_targets
+
+                        spec = build_record_spec(group) if spec is None else spec
+                        targets = build_record_targets(group) if targets is None else targets
                     decoded = self.record_decoder.forward_group(
-                        loss_gliner2.build_record_spec(group),
+                        spec,
                         query_states[sample_index],
                         boundary.candidates,
                         sample_index,
                     )
-                    parts.append(
-                        loss_gliner2.compute_record_group_loss(decoded, loss_gliner2.build_record_targets(group))
-                    )
+                    parts.append(loss_gliner2.compute_record_group_loss(decoded, targets))
             packed = loss_gliner2.aggregate_record_losses(parts, cfg.record_loss_weight)
             losses["record_object_loss"] = packed["object"]
             losses["record_field_loss"] = packed["field"]
@@ -4407,14 +4185,25 @@ def _span_logits(
     count_pred,
     count_embed,
     max_width,
+    structures=None,
+    training=False,
 ):
-    """Pre-sigmoid span logits and instance counts, one entry per span group."""
-    if query_groups is None or task_ids is None or prompt_states is None:
-        return None, None
+    """One count-conditioned span loop. Gold counts replace predictions when set."""
+    missing = query_groups is None or task_ids is None or prompt_states is None
+    if structures is not None and (missing or group_mask is None):
+        raise ValueError("span targets require query, prompt, task, and group tensors")
+    if missing:
+        return None, None, None, None
+    if structures is not None and len(structures) != text_states.shape[0]:
+        raise ValueError("span_structures must have one entry per batch row")
     span_rows = []
     count_rows = []
+    struct_loss = text_states.sum() * 0.0 if structures is not None else None
+    count_prompt = []
+    count_target = []
     for index in range(text_states.shape[0]):
-        words = text_states[index][text_mask[index]]
+        mask = text_mask[index].bool() if structures is not None else text_mask[index]
+        words = text_states[index][mask]
         length = words.shape[0]
         rep = None
         if length:
@@ -4422,26 +4211,70 @@ def _span_logits(
             rep = span_rep(words.unsqueeze(0), indices).squeeze(0)
         sample_spans = []
         sample_counts = []
+        sample_structures = None if structures is None else structures[index]
+        slot = 0
         for group in range(task_ids.shape[1]):
             if not bool(group_mask[index, group]) or int(task_ids[index, group]) == _CLASSIFICATION_TASK:
                 continue
             fields = _rows(query_states[index], query_mask[index], query_groups[index], group)
             prompt = _rows(prompt_states[index], prompt_mask[index], prompt_groups[index], group)
-            if prompt.numel() == 0 or fields.numel() == 0 or rep is None:
-                width = max_width
-                sample_spans.append(text_states.new_zeros(0, fields.shape[0], length, width))
-                sample_counts.append(0)
-                continue
-            predicted = int(count_pred(prompt[:1]).argmax(dim=-1).item())
-            sample_counts.append(predicted)
-            if predicted <= 0:
+            structure = None
+            if structures is None:
+                if prompt.numel() == 0 or fields.numel() == 0 or rep is None:
+                    sample_spans.append(text_states.new_zeros(0, fields.shape[0], length, max_width))
+                    sample_counts.append(0)
+                    continue
+                count = int(count_pred(prompt[:1]).argmax(dim=-1).item())
+            else:
+                if slot >= len(sample_structures):
+                    raise ValueError("span_structures has fewer groups than the schema")
+                structure = sample_structures[slot]
+                slot += 1
+                count = loss_gliner2.clamp_gold_count(
+                    structure.shape[0] if torch.is_tensor(structure) else structure[0]
+                )
+            scored = False
+            if count > 0 and prompt.numel() > 0 and fields.numel() > 0 and rep is not None:
+                if structures is not None and torch.is_tensor(structure):
+                    structure = structure[:count]
+                projected = count_embed(fields, count)
+                scores = count_conditioned_scores(rep, projected)
+                sample_spans.append(scores)
+                sample_counts.append(count)
+                scored = True
+                if structures is not None:
+                    span_mask = loss_gliner2.invalid_span_mask(length, max_width, scores.device)
+                    struct_loss = struct_loss + loss_gliner2.span_structure_loss(
+                        scores, structure, span_mask, training=training
+                    )
+            else:
                 sample_spans.append(text_states.new_zeros(0, fields.shape[0], length, max_width))
+                sample_counts.append(0 if structures is not None else count)
+            if structures is None:
                 continue
-            projected = count_embed(fields, predicted)
-            sample_spans.append(count_conditioned_scores(rep, projected))
+            task_id = int(task_ids[index, group])
+            if (
+                count > 0
+                and prompt.numel() > 0
+                and loss_gliner2.supervises_count(task_id)
+                and (scored or rep is None or fields.numel() == 0)
+            ):
+                count_prompt.append(prompt[:1])
+                count_target.append(count)
+        if structures is not None and slot != len(sample_structures):
+            raise ValueError("span_structures has more groups than the schema")
         span_rows.append(sample_spans)
         count_rows.append(sample_counts)
-    return span_rows, count_rows
+    if structures is None:
+        return span_rows, count_rows, None, None
+    if count_prompt:
+        count_logits = count_pred(torch.cat(count_prompt, dim=0))
+        count_loss = loss_gliner2.span_count_loss(
+            count_logits, torch.tensor(count_target, dtype=torch.long, device=count_logits.device)
+        )
+    else:
+        count_loss = text_states.new_zeros(())
+    return span_rows, count_rows, struct_loss, count_loss
 
 
 __all__ = [

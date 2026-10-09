@@ -301,8 +301,10 @@ class ContractDecodeTest(unittest.TestCase):
             self.assertIsInstance(decoded, dict)
 
     def test_long_text_aggregation(self):
-        from transformers.models.gliner2.decoding_gliner2 import aggregate_classification_logits
-        from transformers.models.gliner2.processing_gliner2 import merge_chunk_results
+        from transformers.models.gliner2.processing_gliner2 import (
+            aggregate_classification_logits,
+            merge_chunk_results,
+        )
 
         schema = {"tasks": {"topic": {"labels": ["math", "art"], "min_labels": 1, "max_labels": 1}}}
         chunks = [{"topic": {"math": 1.0, "art": 0.0}}, {"topic": {"math": 0.0, "art": 2.0}}]
