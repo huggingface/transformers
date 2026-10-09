@@ -19,13 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det")
@@ -82,7 +78,12 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mm-grounding-dino"
-    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="swin", init_kwargs={"out_indices": [2, 3, 4]}
+        ),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bert"),
+    }
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -126,24 +127,6 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     init_std: float = 0.02
     layer_norm_eps: float = 1e-5
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="swin",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
-
-        # Text backbone
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bert")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
-            self.text_config = CONFIG_MAPPING["bert"]()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["MMGroundingDinoConfig"]
