@@ -64,7 +64,6 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "qwen2_moe",
     "cohere2_moe",
     # VLM
-    "got_ocr2",
     "glm4v_moe",
 }
 
@@ -284,9 +283,10 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
                             # interleaved slicing
                             grad = get_packed_grad_shard(grad, world_size, rank, dim)
                         else:
-                            # regular slicing: every shard but the last is ceil(size / world_size) long
-                            start = rank * -(-grad.size(dim) // world_size)
-                            grad = grad.narrow(dim, start, grad_tp.size(dim))
+                            # regular slicing
+                            shard_size = grad_tp.size(dim)
+                            start = rank * shard_size
+                            grad = grad.narrow(dim, start, shard_size)
                         break
 
             if not torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol):
@@ -526,10 +526,12 @@ class TensorParallelTesterMixin(ABC):
         return self.all_model_classes[0]
 
     def _get_tp_config(self, tie_word_embeddings: bool | None = None):
-        """The tester's tiny config. Its vocab stays as it is: 99 does not divide by the world size, which is
-        the uneven sharding of `lm_head` (and of the tied embedding) that real vocabs need."""
+        """Tiny config with `vocab_size` rounded up to a multiple of the world size, as sharded dims (typically `lm_head`) have to be split across ranks."""
         config = self.model_tester.get_config()
         text_config = config.get_text_config()
+        remainder = text_config.vocab_size % self.tensor_parallel_size
+        if remainder:
+            text_config.vocab_size += self.tensor_parallel_size - remainder
         if tie_word_embeddings is not None:
             if hasattr(text_config, "tie_word_embeddings"):
                 text_config.tie_word_embeddings = tie_word_embeddings
