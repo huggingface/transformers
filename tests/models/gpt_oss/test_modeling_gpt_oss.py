@@ -40,7 +40,6 @@ from transformers.testing_utils import (
     require_kernels,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -92,28 +91,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
 
-    @require_kernels
-    @require_torch_accelerator
-    def test_kernels_can_load_without_crashing(self):
-        if is_rocm_platform() and not is_torch_greater_or_equal("2.11"):
-            self.skipTest(f"kernels-community/megablocks has no ROCm build for torch=={torch.__version__} (<2.11).")
-        super().test_kernels_can_load_without_crashing()
-
-    @require_kernels
-    @require_torch_accelerator
-    def test_kernelize_does_not_crash(self):
-        """Regression test #45799 and #46619: `kernelize` should not crash with `use_kernelized_func` + `use_kernel_forward_from_hub`."""
-        if is_rocm_platform() and not is_torch_greater_or_equal("2.11"):
-            self.skipTest(f"kernels-community/megablocks has no ROCm build for torch=={torch.__version__} (<2.11).")
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = GptOssModel(config).to(device=torch_device)
-        # This used to raise TypeError because apply_rotary_pos_emb was not wrapped as nn.Module
-        # and also because a stale `position_ids` arg made its signature mismatch the hub rotary kernel
-        model.set_use_kernels(True)
-
-    @require_kernels
     @pytest.mark.flash_attn_test
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_kernels
     def test_default_flash_implementation_auto_correction(self):
         """
         Tests that setting attn_implementation="flash_attention_2" during model initialization
@@ -449,8 +429,8 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_kernels
     @require_deterministic_for_xpu
+    @require_kernels
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         if torch_device == "cpu":
             if attn_impl == "kernels-community/vllm-flash-attn3":

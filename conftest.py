@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     patch_psutil_cpu_memory,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
+    scoped_non_kernels_class,
 )
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
@@ -300,6 +301,13 @@ def pytest_configure(config):
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
     register_network_debug_plugin(config)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_pycollect_makeitem(collector, name, obj):
+    # Disable any kernels usage on integration tests
+    if isinstance(obj, type) and "integration" in name.lower():
+        scoped_non_kernels_class(obj)
 
 
 def pytest_collection_modifyitems(items):

@@ -27,6 +27,7 @@ from ..conversion_mapping import get_checkpoint_conversion_mapping, register_che
 from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
+from ..utils.generic import suppress_kernels_logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -59,8 +60,17 @@ _MISSING_KERNELS_MESSAGE = (
 )
 
 
-_TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
-_kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
+def _kernels_enabled() -> bool:
+    return os.environ.get("USE_HUB_KERNELS", "YES").upper() in ENV_VARS_TRUE_VALUES
+
+
+def _ensure_kernels_enabled() -> None:
+    if not _kernels_enabled():
+        value = os.environ.get("USE_HUB_KERNELS", "YES")
+        raise ValueError(
+            "Hub kernels are disabled through the environment variable "
+            f"`USE_HUB_KERNELS={value}`. Set `USE_HUB_KERNELS=YES` to enable them."
+        )
 
 
 # Maps from func name to the internal module path
@@ -103,37 +113,15 @@ if is_kernels_available():
     )
     from kernels import use_kernelized_func as _kernels_use_kernelized_func
 
+    # We change the strategy to prepare the metadata like kernels but the exchange
+    # at runtime can be determined by the env variable `USE_HUB_KERNELS`
     def use_kernel_forward_from_hub(layer_name: str):
-        if _kernels_enabled:
-            return _kernels_use_kernel_forward_from_hub(layer_name)
-        else:
-            logger.warning_once(
-                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-            )
-            return lambda cls: cls
+        return _kernels_use_kernel_forward_from_hub(layer_name)
 
     def use_kernelized_func(module_names: list[Callable] | Callable):
-        if _kernels_enabled:
-            if isinstance(module_names, Callable):
-                module_names = [module_names]
-            return _kernels_use_kernelized_func(*module_names)
-        else:
-            logger.warning_once(
-                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-            )
-            return lambda cls: cls
-
-    def use_kernel_func_from_hub(layer_name: str):
-        if _kernels_enabled:
-            logger.warning_once(
-                "`use_kernel_func_from_hub` is deprecated in transformers v5.16 and will be removed in the future. Please use `use_kernel_forward_from_hub` instead."
-            )
-            return _kernels_use_kernel_forward_from_hub(layer_name)
-        else:
-            logger.warning_once(
-                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-            )
-            return lambda cls: cls
+        if isinstance(module_names, Callable):
+            module_names = [module_names]
+        return _kernels_use_kernelized_func(*module_names)
 
     # The default kernel mapping is built lazily (see `get_kernel_mapping_transformers`) so that simply
     # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
@@ -142,7 +130,10 @@ if is_kernels_available():
     _KERNEL_MAPPING_CACHE: dict | None = None
 
     def _build_kernel_mapping() -> dict:
+        # NOTE: Every entry here has to be compatible with torch compile otherwise it is not added to the list
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
+            # TODO: not checked -> potentially to remove for now"""
+            """
             "MultiScaleDeformableAttention": {
                 "cuda": LayerRepository(
                     repo_id="kernels-community/deformable-detr",
@@ -150,14 +141,17 @@ if is_kernels_available():
                     version=1,
                 )
             },
-            # NOTE: No longer maintained
-            # "Llama4TextMoe": {
-            #    "cuda": LayerRepository(
-            #        repo_id="kernels-community/moe",
-            #        layer_name="Llama4TextMoe",
-            #        version=1,
-            #    )
-            # },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="biohub/esmfold2-trimul",
+                        layer_name="EsmFold2TriangleMultiplication",
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
+                        trust_remote_code=True,
+                    ),
+                },
+            },
+            """
             # GB10/SM121 GDN fast path (no fla/causal_conv1d build there); dense and MoE share it.
             "Qwen3_5GatedDeltaNet": {
                 Device(
@@ -182,6 +176,120 @@ if is_kernels_available():
                     trust_remote_code=True,
                 ),
             },
+            # TODO: add torch compile flag then
+            # TODO: not checked FLA
+            "chunk_gated_delta_rule": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_gated_delta_rule": {
+                # Inference only: the fused recurrent kernel has no backward implementation,
+                # so training stays on the torch path.
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+            },
+            "chunk_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    # Inference only: the `chunk_kda` backward kernel uses Intel 2D block-read intrinsics
+                    # that the Triton XPU backend fails to build, so training stays on the torch path.
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_kda": {
+                # Inference only: the fused recurrent kernel has no backward implementation,
+                # so training stays on the torch path.
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
+            "RMSNormGated": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                },
+            },
+            # FIXME: https://github.com/huggingface/kernels-community/pull/1206 -> v4
             "causal_conv1d_fn": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
@@ -231,50 +339,6 @@ if is_kernels_available():
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
                         version=3,
-                    ),
-                },
-            },
-            "chunk_gated_delta_rule": {
-                "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="chunk_gated_delta_rule",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="chunk_gated_delta_rule",
-                        version=1,
-                    ),
-                },
-                "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="chunk_gated_delta_rule",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="chunk_gated_delta_rule",
-                        version=1,
-                    ),
-                },
-            },
-            "fused_recurrent_gated_delta_rule": {
-                # Inference only: the fused recurrent kernel has no backward implementation,
-                # so training stays on the torch path.
-                "cuda": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="recurrent_gated_delta_rule",
-                        version=1,
-                    ),
-                },
-                "xpu": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="recurrent_gated_delta_rule",
-                        version=1,
                     ),
                 },
             },
@@ -408,172 +472,6 @@ if is_kernels_available():
                     ),
                 },
             },
-            "EsmFold2TriangleMultiplication": {
-                "cuda": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="biohub/esmfold2-trimul",
-                        layer_name="ESMFold2TriangleMultiplication",
-                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
-                        trust_remote_code=True,
-                    ),
-                },
-            },
-            "SwiGLUMLP": {
-                "cuda": {
-                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerSwiGLUMLP",
-                        version=3,
-                    ),
-                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerTiledSwiGLUMLP",
-                        version=3,
-                    ),
-                },
-            },
-            "GeGLUMLP": {
-                "cuda": {
-                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerGEGLUMLP",
-                        version=3,
-                    ),
-                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerTiledGEGLUMLP",
-                        version=3,
-                    ),
-                },
-            },
-            "Linear": {
-                "cuda": {
-                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerLinear",
-                        version=3,
-                    ),
-                },
-            },
-            "RMSNorm": {
-                # NOTE: Not torch.compile friendly for unknown reasons
-                "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerRMSNorm",
-                        version=3,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerRMSNorm",
-                        version=3,
-                    ),
-                },
-                "rocm": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerRMSNorm",
-                        version=3,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerRMSNorm",
-                        version=3,
-                    ),
-                },
-                "xpu": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/rmsnorm",
-                        layer_name="RMSNorm",
-                        version=1,
-                    )
-                },
-                "mps": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mlx_rmsnorm",
-                        layer_name="RMSNorm",
-                        version=1,
-                    )
-                },
-                "npu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerRMSNorm",
-                        version=3,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels",
-                        layer_name="LigerRMSNorm",
-                        version=3,
-                    ),
-                },
-            },
-            "RMSNormGated": {
-                "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="FusedRMSNormGated",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="FusedRMSNormGated",
-                        version=1,
-                    ),
-                },
-                "xpu": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="FusedRMSNormGated",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="FusedRMSNormGated",
-                        version=1,
-                    ),
-                },
-            },
-            "MegaBlocksMoeMLP": {
-                "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/megablocks",
-                        layer_name="MegaBlocksMoeMLP",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/megablocks",
-                        layer_name="MegaBlocksMoeMLP",
-                        version=1,
-                    ),
-                },
-                "rocm": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/megablocks",
-                        layer_name="MegaBlocksMoeMLP",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/megablocks",
-                        layer_name="MegaBlocksMoeMLP",
-                        version=1,
-                    ),
-                },
-                "xpu": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/megablocks",
-                        layer_name="MegaBlocksMoeMLP",
-                        version=1,
-                    )
-                },
-                "cpu": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/megablocks",
-                        layer_name="CPUMegaBlocksMoeMLP",
-                        version=1,
-                    )
-                },
-            },
             "FastGELU": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
@@ -658,66 +556,46 @@ if is_kernels_available():
                     )
                 },
             },
-            "chunk_kda": {
-                "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="chunk_kimi_delta_attention",
-                        version=1,
-                    ),
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="chunk_kimi_delta_attention",
-                        version=1,
-                    ),
-                },
-                "xpu": {
-                    # Inference only: the `chunk_kda` backward kernel uses Intel 2D block-read intrinsics
-                    # that the Triton XPU backend fails to build, so training stays on the torch path.
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="chunk_kimi_delta_attention",
-                        version=1,
-                    ),
-                },
-            },
-            "fused_recurrent_kda": {
-                # Inference only: the fused recurrent kernel has no backward implementation,
-                # so training stays on the torch path.
-                "cuda": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="recurrent_kimi_delta_attention",
-                        version=1,
-                    ),
-                },
-                "xpu": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="recurrent_kimi_delta_attention",
-                        version=1,
-                    ),
-                },
-            },
             "rotary_pos_emb": {
                 "xpu": {
-                    Mode.INFERENCE: LayerRepository(
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
-                "cuda": LayerRepository(
-                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
-                ),
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
+                    )
+                },
                 "rocm": {
-                    Mode.INFERENCE: LayerRepository(
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=2
                     )
                 },
             },
-            "ForCausalLMLoss": {
+            "RMSNorm": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels", layer_name="LigerForCausalLMLossLayer", version=3
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=4,
+                    ),
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=4,
+                    ),
+                },
+                "rocm": {
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=4,
+                    ),
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=4,
                     ),
                 },
             },
@@ -733,13 +611,12 @@ if is_kernels_available():
         return _KERNEL_MAPPING_CACHE
 
     def register_kernel_mapping_transformers(mapping=None):
+        _ensure_kernels_enabled()
         if mapping is None:
             mapping = get_kernel_mapping_transformers()
         register_kernel_mapping(mapping)
 
 else:
-    _kernels_enabled = False
-
     # Stub to make decorators in transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
@@ -749,12 +626,6 @@ else:
         return decorator
 
     def use_kernelized_func(*args, **kwargs):
-        def decorator(cls):
-            return cls
-
-        return decorator
-
-    def use_kernel_func_from_hub(*args, **kwargs):
         def decorator(cls):
             return cls
 
@@ -856,9 +727,7 @@ def load_and_register_attn_kernel(
 
     # create revision xor version
     rev = rev.strip() if rev else None
-    version = None
-    if rev is None:
-        version = get_attn_kernel_version(repo_id)
+    version = get_attn_kernel_version(repo_id) if rev is None else None
 
     # Load the kernel from hub
     try:
@@ -903,7 +772,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
-    if is_kernels_available() and _kernels_enabled:
+    if is_kernels_available() and _kernels_enabled():
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
@@ -946,20 +815,24 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
+# NOTE: Add suppressed layers here if they are dynamically added like gguf kernel layers
+@suppress_kernels_logging(layers={"RMSNormZeroCentered", "SoftmaxTopKRouter", "Qwen3_5GatedDeltaNet"})
+def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None, kernel_config: "KernelConfig | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
+    _ensure_kernels_enabled()
 
-    mode = (Mode.INFERENCE if not model.training else Mode.TRAINING) if mode is None else mode
+    used_mode = model.kernels_mode if mode is None else mode
+    used_kernel_config = model.kernel_config if kernel_config is None else kernel_config
     device = Device(type=get_device_type(model.device))
 
-    if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
-        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-            _kernels_kernelize(model, device=device, mode=mode)
+    if used_kernel_config is not None:
+        inherit_mapping = not used_kernel_config.use_local_kernel and used_kernel_config.inherit_mapping
+        with use_kernel_mapping(used_kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+            _kernels_kernelize(model, device=device, mode=used_mode)
     else:
-        _kernels_kernelize(model, device=device, mode=mode)
+        _kernels_kernelize(model, device=device, mode=used_mode)
 
     model._use_kernels = True
 
@@ -1253,6 +1126,5 @@ __all__ = [
     "register_kernel_replacements_and_fusions",
     "replace_kernel_forward_from_hub",
     "use_kernel_forward_from_hub",
-    "use_kernel_func_from_hub",
     "use_kernelized_func",
 ]  # type: ignore

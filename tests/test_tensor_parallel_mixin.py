@@ -105,7 +105,7 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
 
 
 def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
-    """Wrapper to set up distributed environment and run the test function."""
+    """Wrapper to set up (distributed) environment and run the test function."""
 
     def setup_dist_env(rank, world_size, port):
         os.environ["WORLD_SIZE"] = str(world_size)

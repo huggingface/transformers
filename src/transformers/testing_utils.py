@@ -4903,38 +4903,39 @@ def force_serialization_as_bin_files():
         PreTrainedModel.save_pretrained = original_save
 
 
-@contextmanager
-def preserve_module_forwards(model: "PreTrainedModel"):
+def scoped_non_kernels(test):
     """
-    A context to keep track of __dict__["forward"] for each module. Upon entering, the context creates a dict where keys
-    are module and values module.__dict__["forward"]; on exit those entries are restored (if there was no "forward" key
-    in __dict__, we only pop the "forward" key).
-    This cancels the effect of a call to "kernelize" because it re-routes module.forward by adding a "forward" key to
-    the modules' __dict__ object. Exists mainly because `kernels` does not provide an `unkernelize` function.
+    Decorator that temporarily disables kernels usage. Important for e.g. integration tests that rely on exact previous numbers.
     """
-    original_fw = {}
-    _fw_not_set = object()  # has a unique id
 
-    # Before entering: create the dictionnary of original __dict__["forward"]
-    for _, module in model.named_modules():
-        # This is a dictionnary w/ keys -> module that can be kernelized
-        _kernel_funcs = getattr(module, "_kernel_funcs", {})
-        kernelizable_modules = list(_kernel_funcs.values())
-        # If the module is simply a wrapper around a kernel function, it has the attribute "kernel_layer_name"
-        if hasattr(type(module), "kernel_layer_name"):
-            kernelizable_modules.append(module)
-        # Go through kernelizable modules and keep track of the original forward
-        for k_module in kernelizable_modules:
-            original_fw[k_module] = k_module.__dict__.get("forward", _fw_not_set)
+    @require_kernels
+    @functools.wraps(test)
+    def wrapper(*args, **kwargs):
+        with patch.dict("os.environ", {"USE_HUB_KERNELS": "NO"}):
+            return test(*args, **kwargs)
 
-    # Enter context manager
-    try:
-        yield
+    # Mark to avoid class level usage duplication
+    wrapper._is_scoped_kernels = True
 
-    # On exit: restore the original __dict__["forward"] if they were set, otherwise pop them
-    finally:
-        for module, original_forward in original_fw.items():
-            if original_forward is _fw_not_set:
-                module.__dict__.pop("forward", None)
-            else:
-                module.__dict__["forward"] = original_forward
+    return wrapper
+
+
+def scoped_non_kernels_class(test_class):
+    """
+    Applies `scoped_non_kernels` on each test function individually.
+    """
+    for name in dir(test_class):
+        if not name.startswith("test"):
+            continue
+
+        test = getattr(test_class, name)
+
+        if not callable(test):
+            continue
+
+        if getattr(test, "_is_scoped_kernels", False):
+            continue
+
+        setattr(test_class, name, scoped_non_kernels(test))
+
+    return test_class

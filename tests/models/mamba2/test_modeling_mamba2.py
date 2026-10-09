@@ -217,6 +217,10 @@ class Mamba2ModelTester:
         model.to(device)
         model.eval()
 
+        # Enable kernels path
+        if device != "cpu":
+            model.use_kernels = True
+
         input_ids = input_ids[:1].to(device)
         prefill_len = input_ids.shape[1] // 2 + 1
         prompt = input_ids[:, :prefill_len]
@@ -250,8 +254,9 @@ class Mamba2ModelTester:
             model.gradient_checkpointing_enable()
 
         token_emb = model.embeddings(input_ids)
-        outputs_fast = model.layers[0].mixer.cuda_kernels_forward(token_emb)
-        outputs_slow = model.layers[0].mixer.torch_forward(token_emb)
+        outputs_slow = model.layers[0].mixer(token_emb)
+        model.use_kernels = True
+        outputs_fast = model.layers[0].mixer(token_emb)
 
         self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
 
