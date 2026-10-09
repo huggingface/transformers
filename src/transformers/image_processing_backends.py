@@ -53,7 +53,7 @@ from .image_utils import (
     is_valid_image,
     load_image_as_tensor,
 )
-from .integrations.hub_processing_kernels import run_processing_kernel
+from .integrations.hub_processing_kernels import resize_normalize_with_kernel, use_processing_kernel
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
@@ -70,7 +70,6 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
@@ -370,6 +369,7 @@ class TorchvisionBackend(BaseImageProcessor):
         crop_left = int((image_width - crop_width) / 2.0)
         return tvF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
+    @use_processing_kernel(resize_normalize_with_kernel, default_methods_of="TorchvisionBackend")
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -390,30 +390,6 @@ class TorchvisionBackend(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         """Preprocess using Torchvision backend (fast, GPU-accelerated)."""
-        kernel_replaces_default_methods = all(
-            getattr(type(self), name) is getattr(TorchvisionBackend, name)
-            for name in ("resize", "center_crop", "rescale_and_normalize", "rescale", "normalize")
-        )
-        if (
-            self.use_kernels
-            and kernel_replaces_default_methods
-            and do_resize
-            and do_rescale
-            and do_normalize
-            and not do_pad
-        ):
-            pixel_values = run_processing_kernel(
-                "resize_normalize",
-                images,
-                size,
-                crop_size if do_center_crop else None,
-                resample,
-                rescale_factor,
-                image_mean,
-                image_std,
-            )
-            if pixel_values is not None:
-                return BatchFeature(data={"pixel_values": list(pixel_values)}, tensor_type=return_tensors)
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}

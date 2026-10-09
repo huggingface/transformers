@@ -26,7 +26,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
-from ...integrations.hub_processing_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_videos_with_kernel, use_processing_kernel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
@@ -264,6 +264,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
 
         return flatten_patches, grid_t, grid_h, grid_w
 
+    @use_processing_kernel(resize_normalize_patchify_videos_with_kernel)
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
@@ -292,42 +293,6 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
                 "warning."
             )
             cap_pixels_per_frame = False
-        if self.use_kernels and do_resize and do_rescale and do_normalize:
-            frames, target_sizes, items = [], [], []
-            for video in videos:
-                target_size = self._resized_size(
-                    *video.shape[-2:],
-                    video.shape[0],
-                    size,
-                    patch_size * merge_size,
-                    temporal_patch_size,
-                    cap_pixels_per_frame,
-                )
-                items.append(list(range(len(frames), len(frames) + video.shape[0])))
-                frames.extend(video)
-                target_sizes.extend([target_size] * video.shape[0])
-            kernel_output = run_processing_kernel(
-                "resize_normalize_patchify",
-                frames,
-                target_sizes,
-                items,
-                resample,
-                rescale_factor,
-                image_mean,
-                image_std,
-                patch_size,
-                merge_size,
-                temporal_patch_size,
-            )
-            if kernel_output is not None:
-                pixel_values_videos, video_grid_thw = kernel_output
-                return BatchFeature(
-                    data={
-                        "pixel_values_videos": pixel_values_videos,
-                        "video_grid_thw": torch.tensor(video_grid_thw, dtype=torch.long),
-                    },
-                    tensor_type=return_tensors,
-                )
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}

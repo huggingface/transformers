@@ -34,7 +34,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...integrations.hub_processing_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -212,6 +212,12 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         )
         return flatten_patches, grid_h, grid_w
 
+    @use_processing_kernel(
+        resize_normalize_patchify_images_with_kernel,
+        compute_resized_height_and_width=smart_resize,
+        merge_patches=False,
+        flatten_patches=False,
+    )
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -230,27 +236,6 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        if self.use_kernels and do_resize and do_rescale and do_normalize:
-            kernel_output = self._resize_normalize_patchify_kernel(
-                images,
-                size,
-                resample,
-                rescale_factor,
-                image_mean,
-                image_std,
-                patch_size,
-                temporal_patch_size,
-                merge_size,
-            )
-            if kernel_output is not None:
-                pixel_values, image_grid_thw = kernel_output
-                return BatchFeature(
-                    data={
-                        "pixel_values": pixel_values,
-                        "image_grid_thw": torch.tensor(image_grid_thw, dtype=torch.long),
-                    },
-                    tensor_type=return_tensors,
-                )
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -289,48 +274,6 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
-
-    def _resize_normalize_patchify_kernel(
-        self,
-        images,
-        size,
-        resample,
-        rescale_factor,
-        image_mean,
-        image_std,
-        patch_size,
-        temporal_patch_size,
-        merge_size,
-    ):
-        """Row by row patches are the kernel layout with `merge_size=1`, viewed as `(C * T, P, P)` blocks."""
-        target_sizes = [
-            smart_resize(
-                image.shape[-2],
-                image.shape[-1],
-                factor=patch_size * merge_size,
-                min_pixels=size.shortest_edge,
-                max_pixels=size.longest_edge,
-            )
-            for image in images
-        ]
-        kernel_output = run_processing_kernel(
-            "resize_normalize_patchify",
-            images,
-            target_sizes,
-            [[index] for index in range(len(images))],
-            resample,
-            rescale_factor,
-            image_mean,
-            image_std,
-            patch_size,
-            1,
-            temporal_patch_size,
-        )
-        if kernel_output is None:
-            return None
-        pixel_values, image_grid_thw = kernel_output
-        channels = images[0].shape[0]
-        return pixel_values.view(-1, channels * temporal_patch_size, patch_size, patch_size), image_grid_thw
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """

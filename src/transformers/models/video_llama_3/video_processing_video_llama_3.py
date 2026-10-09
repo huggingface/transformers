@@ -240,20 +240,6 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             resample=resample,
         )
 
-    def _resized_size(self, height, width, num_frames, size, factor, temporal_factor, cap_pixels_per_frame):
-        """Frame size a video of `num_frames` frames of `height` x `width` pixels is resized to."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        max_pixels = size.longest_edge
-        if cap_pixels_per_frame:
-            # the per-frame cap (`size.longest_edge`) is bounded by an even share of the `max_video_tokens`
-            total_pixels = int(self.max_video_tokens * factor * factor * 0.9)
-            max_pixels = max(
-                min(max_pixels, total_pixels * temporal_factor // num_frames), int(size.shortest_edge * 1.05)
-            )
-        return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=max_pixels)
-
     def patchify(
         self,
         videos: "torch.Tensor",

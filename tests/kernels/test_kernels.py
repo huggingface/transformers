@@ -1000,14 +1000,14 @@ def processors_calling_the_patchify_kernel():
 
 
 class ReferenceConnectedComponentsKernel:
-    """Stand-in for `kernels-community/cv-utils`: records the input of `cc_2d` and answers with the reference."""
+    """Stand-in for `kernels-community/cv-utils`: records the input of `connected_component_areas`, answers the reference."""
 
     def __init__(self):
         self.inputs = []
 
-    def cc_2d(self, inputs, get_counts):
-        self.inputs.append(inputs)
-        return None, connected_component_areas_reference(inputs.bool())
+    def connected_component_areas(self, mask):
+        self.inputs.append(mask)
+        return connected_component_areas_reference(mask)
 
 
 class TestProcessingKernels(TestCasePlus):
@@ -1064,16 +1064,14 @@ class TestProcessingKernels(TestCasePlus):
             with patch("transformers.integrations.hub_kernels.lazy_load_kernel", self.fail):
                 self.assertIsNone(run_processing_kernel("connected_component_areas", self.mask_logits > 0))
 
-    def test_connected_component_areas_adapter_pads_to_even_size(self):
+    def test_connected_component_areas_adapter_calls_the_kernel(self):
         kernel = ReferenceConnectedComponentsKernel()
         regions = torch.zeros(2, 1, 5, 7, dtype=torch.bool)
         regions[:, :, 1:3, 1:4] = True
         # The kernel is CUDA only; pretend CPU is its device so the adapter can be tested without a GPU.
         with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
             areas = _connected_component_areas_kernel(kernel, regions)
-        self.assertEqual(tuple(kernel.inputs[0].shape), (2, 1, 6, 8))
-        self.assertEqual(kernel.inputs[0].dtype, torch.uint8)
-        self.assertEqual(tuple(areas.shape), (2, 1, 5, 7))
+        self.assertIs(kernel.inputs[0], regions)
         self.assertTrue(torch.equal(areas, connected_component_areas_reference(regions)))
 
     def test_connected_component_areas_adapter_needs_cuda_tensors(self):
@@ -1121,17 +1119,15 @@ class TestProcessingKernels(TestCasePlus):
         kernel, result = self.run_resize_adapter()
         self.assertIs(result, kernel.resize_normalize.return_value)
         arguments, keyword_arguments = kernel.resize_normalize.call_args
-        self.assertEqual(arguments[1:], ((8, 8), [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]))
-        self.assertEqual(keyword_arguments["resample"], "bicubic")
-        self.assertEqual(keyword_arguments["resize_mode"], "square")
-        self.assertTrue(keyword_arguments["round_to_uint8"])
+        self.assertEqual(arguments[1:], ([0.5, 0.5, 0.5], [0.5, 0.5, 0.5], 1 / 255, "bicubic"))
+        self.assertEqual(keyword_arguments, {"crop_size": None, "size": (8, 8)})
 
         kernel, _ = self.run_resize_adapter(
             size=SizeDict(shortest_edge=8), crop_size=SizeDict(height=6, width=6), image_mean=0.5, image_std=0.5
         )
         arguments, keyword_arguments = kernel.resize_normalize.call_args
-        self.assertEqual(arguments[1:], (8, [0.5] * 3, [0.5] * 3))
-        self.assertEqual((keyword_arguments["resize_mode"], keyword_arguments["crop_size"]), ("shortest_edge", (6, 6)))
+        self.assertEqual(arguments[1:3], (0.5, 0.5))
+        self.assertEqual(keyword_arguments, {"crop_size": (6, 6), "shortest_edge": 8})
 
     def test_resize_adapter_falls_back(self):
         unsupported = {
@@ -1140,7 +1136,6 @@ class TestProcessingKernels(TestCasePlus):
             "empty_crop": {"crop_size": SizeDict()},
             "shortest_edge_without_crop": {"size": SizeDict(shortest_edge=8)},
             "bounded_resize": {"size": SizeDict(shortest_edge=8, longest_edge=16)},
-            "stats_do_not_match_channels": {"image_mean": [0.5, 0.5], "image_std": [0.5, 0.5]},
             "float_images": {"images": [torch.rand(3, 40, 60)]},
             "mixed_channels": {
                 "images": [torch.zeros(3, 4, 4, dtype=torch.uint8), torch.zeros(1, 4, 4, dtype=torch.uint8)]
@@ -1172,21 +1167,19 @@ class TestProcessingKernels(TestCasePlus):
         frames = [torch.zeros(3, 30, 40, dtype=torch.uint8), torch.zeros(3, 20, 20, dtype=torch.uint8)]
         with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
             result = _resize_normalize_patchify_kernel(
-                kernel, frames, [(28, 28), (28, 28)], [[0], [1]], 3, 1 / 255, [0.5] * 3, [0.5] * 3, 14, 2, 2
+                kernel, frames, [(28, 28), (28, 28)], 3, 1 / 255, [0.5] * 3, [0.5] * 3, 14, 2, 2
             )
         self.assertIs(result, kernel.resize_normalize_patchify.return_value)
         arguments, keyword_arguments = kernel.resize_normalize_patchify.call_args
-        self.assertEqual(
-            arguments[1:], ([(28, 28), (28, 28)], [[0], [1]], [0.5] * 3, [0.5] * 3, 1 / 255, "bicubic", True, 14, 2, 2)
-        )
-        self.assertTrue(keyword_arguments["round_to_uint8"])
+        self.assertEqual(arguments[1:], ([(28, 28), (28, 28)], [0.5] * 3, [0.5] * 3, 1 / 255, "bicubic", 14, 2, 2))
+        self.assertEqual(keyword_arguments, {"items": None})
 
     def test_qwen2_vl_uses_the_patchify_kernel_output(self):
         images = [torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)]
         pixel_values = torch.zeros(24, 3 * 2 * 14 * 14)
         with patch(
-            "transformers.models.qwen2_vl.image_processing_qwen2_vl.run_processing_kernel",
-            return_value=(pixel_values, [(1, 4, 6)]),
+            "transformers.integrations.hub_processing_kernels.run_processing_kernel",
+            return_value=(pixel_values, torch.tensor([[1, 4, 6]])),
         ) as run_kernel:
             output = Qwen2VLImageProcessor(use_kernels=True)(images, return_tensors="pt")
             Qwen2VLImageProcessor(use_kernels=False)(images, return_tensors="pt")
@@ -1201,13 +1194,14 @@ class TestProcessingKernels(TestCasePlus):
             torch.randint(0, 255, (2, 3, 32, 32), dtype=torch.uint8),
         ]
         with patch(
-            "transformers.models.qwen2_vl.video_processing_qwen2_vl.run_processing_kernel",
-            return_value=(torch.zeros(1, 1), [(2, 4, 6), (1, 2, 2)]),
+            "transformers.integrations.hub_processing_kernels.run_processing_kernel",
+            return_value=(torch.zeros(1, 1), torch.tensor([[2, 4, 6], [1, 2, 2]])),
         ) as run_kernel:
             output = Qwen2VLVideoProcessor(use_kernels=True)(
                 videos, do_sample_frames=False, cap_pixels_per_frame=False, return_tensors="pt"
             )
-        frames, target_sizes, items = run_kernel.call_args[0][1:4]
+        frames, target_sizes = run_kernel.call_args.args[1:3]
+        items = run_kernel.call_args.kwargs["items"]
         self.assertEqual(len(frames), 5)
         self.assertEqual(items, [[0, 1, 2], [3, 4]])
         self.assertEqual(len(set(target_sizes[:3])), 1)
@@ -1254,7 +1248,14 @@ class TestProcessingKernels(TestCasePlus):
                         {
                             "resize_normalize_patchify": (
                                 "cv-utils",
-                                lambda kernel, *arguments: recorded_arguments.append(arguments),
+                                lambda kernel, frames, target_sizes, *arguments, items=None: recorded_arguments.append(
+                                    (
+                                        frames,
+                                        target_sizes,
+                                        items or [[index] for index in range(len(frames))],
+                                        *arguments,
+                                    )
+                                ),
                             )
                         },
                         clear=True,

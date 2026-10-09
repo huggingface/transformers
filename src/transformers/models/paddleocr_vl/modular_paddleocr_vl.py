@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import SubConfigSpec
-from ...integrations.hub_processing_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -215,37 +215,14 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         )
         return flatten_patches, grid_h, grid_w
 
-    def _resize_normalize_patchify_kernel(
-        self,
-        images,
-        target_sizes,
-        resample,
-        rescale_factor,
-        image_mean,
-        image_std,
-        patch_size,
-        temporal_patch_size,
-        merge_size,
-    ):
-        """Row by row patches are the kernel layout with `merge_size=1`, viewed as `(C * T, P, P)` blocks."""
-        kernel_output = run_processing_kernel(
-            "resize_normalize_patchify",
-            images,
-            target_sizes,
-            [[index] for index in range(len(images))],
-            resample,
-            rescale_factor,
-            image_mean,
-            image_std,
-            patch_size,
-            1,
-            temporal_patch_size,
-        )
-        if kernel_output is None:
-            return None
-        pixel_values, image_grid_thw = kernel_output
-        channels = images[0].shape[0]
-        return pixel_values.view(-1, channels * temporal_patch_size, patch_size, patch_size), image_grid_thw
+    @use_processing_kernel(
+        resize_normalize_patchify_images_with_kernel,
+        compute_resized_height_and_width=smart_resize,
+        merge_patches=False,
+        flatten_patches=False,
+    )
+    def _preprocess(self, **super_kwargs):
+        return super()._preprocess(**super_kwargs)
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):

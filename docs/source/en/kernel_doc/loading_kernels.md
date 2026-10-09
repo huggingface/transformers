@@ -335,13 +335,15 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct", use_kerne
 inputs = processor(text=prompt, images=images, return_tensors="pt", device="cuda")
 ```
 
-For vision-language models the flag passes through [`AutoProcessor`] to the image and video processors. Kernels run on the device the inputs are already on, so pass `device="cuda"` to the processor call. The processor uses its default implementation when there is no CUDA device, when the kernel fails to load, when the inputs are on CPU, or when the kernel does not support the requested arguments.
+[`AutoProcessor`] passes the flag to its image and video processors. Kernels run on the device of the inputs, so pass `device="cuda"`. The processor keeps its default implementation when the inputs are on CPU, when the kernel fails to load, or when the kernel does not support the arguments.
 
-The resize kernels round to `uint8` after each pass, like the default torchvision path, so outputs differ from it by at most one `uint8` level on natural images.
+The resize kernels round to `uint8` after each pass, like the torchvision path, but in a different order. On photos the mean difference stays below a quarter of a `uint8` level. Bicubic resampling can differ by several levels on a few pixels near sharp edges.
 
-### Registering a processing kernel
+### Adding a processing kernel
 
-Processing operations have no shared signature to swap, so a kernel is plugged in through an adapter instead of a `kernelize` pass. Adapters live in `integrations/hub_processing_kernels.py`. `register_processing_kernel` maps an operation name to a kernel of `_HUB_KERNEL_MAPPING` in `integrations/hub_kernels.py`, and the decorated adapter receives the loaded kernel module followed by the arguments of the operation. Return `None` for arguments the kernel cannot handle, and the caller keeps its default implementation.
+A processing kernel has two levels in `integrations/hub_processing_kernels.py`.
+
+`register_processing_kernel` maps an operation to a kernel of `_HUB_KERNEL_MAPPING`. The adapter receives the loaded kernel module and the arguments of the operation. It translates them to the kernel call and returns `None` for arguments the kernel cannot handle.
 
 ```py
 from transformers.integrations.hub_processing_kernels import register_processing_kernel
@@ -354,7 +356,27 @@ def my_op_kernel(kernel, images):
     return kernel.my_op(images)
 ```
 
-The processor calls `run_processing_kernel("my_op", images)` and uses its default implementation when the result is `None`. The kernel is downloaded on the first call that reaches it, and only when a CUDA device is available.
+`use_processing_kernel` connects a processor to it. It decorates `_preprocess` with a function that receives the processor, the named arguments of `_preprocess` and the options of the decorator. That function owns everything the kernel needs, such as the target sizes and the output `BatchFeature`, so the processor code does not change. When `use_kernels=True` and the function returns a result, `_preprocess` returns it. Otherwise `_preprocess` runs as usual.
+
+```py
+from transformers import BatchFeature, TorchvisionBackend
+from transformers.integrations.hub_processing_kernels import run_processing_kernel, use_processing_kernel
+
+
+def my_op_with_kernel(processor, images, return_tensors, **kwargs):
+    pixel_values = run_processing_kernel("my_op", images)
+    if pixel_values is None:
+        return None
+    return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+
+
+class MyImageProcessor(TorchvisionBackend):
+    @use_processing_kernel(my_op_with_kernel)
+    def _preprocess(self, images, return_tensors, **kwargs):
+        ...
+```
+
+Subclasses that keep `_preprocess` keep the kernel. In a modular file, a model passes its own options by redefining `_preprocess` with the decorator and a call to `super()._preprocess(**super_kwargs)`. A model that replaces `_preprocess` with a different pipeline marks it with `@no_inherit_decorator`.
 
 ## Troubleshooting
 
