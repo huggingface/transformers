@@ -1445,6 +1445,16 @@ class Cache:
 
         return keys, values
 
+    def get_conv_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
+        """Returns the conv state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
+        Raises if the layer is not a linear attention layer."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+            raise ValueError(
+                f"Cannot get conv state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
+            )
+        return layer.conv_states[state_idx]
+
     def update_conv_state(
         self, conv_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
     ) -> torch.Tensor:
