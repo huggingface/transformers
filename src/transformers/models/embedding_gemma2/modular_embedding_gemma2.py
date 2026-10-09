@@ -850,6 +850,7 @@ class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
 
 class EmbeddingGemma2Processor(Gemma4Processor):
     valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
+    return_mm_token_type_ids = AttributeError()
 
     def model_input_names(self):
         raise AttributeError("Deleted: Gemma 4 appended `mm_token_type_ids`, which we no longer produce.")

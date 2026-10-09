@@ -49,7 +49,6 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         "padding": True,
     }
     videos_kwargs = {"return_metadata": True}
-    return_mm_token_type_ids = True
 
     def __init__(
         self,
