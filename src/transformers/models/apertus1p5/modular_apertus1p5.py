@@ -555,14 +555,9 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
 
     def __init__(self, config: Apertus1p5VisionTokenizerConfig):
         super().__init__(config)
-        self.config = config
-
         self.encoder = Apertus1p5VisionTokenizerEncoder(config)
         self.quantize = Apertus1p5VisionTokenizerVectorQuantizer(config)
         self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, kernel_size=1)
-
-        self.vision_spatial_factor = config.spatial_scale_factor
-
         self.post_init()
 
     def encode(self, pixel_values: torch.Tensor) -> Apertus1p5VisionTokenizerEncoderOutput:
