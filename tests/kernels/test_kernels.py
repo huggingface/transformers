@@ -44,22 +44,22 @@ from transformers import (
     Sam2ImageProcessor,
     ViTImageProcessor,
 )
-from transformers.image_processing_backends import (
-    TorchvisionBackend,
-    _connected_component_areas_kernel,
-    _resize_normalize_kernel,
-    _resize_normalize_patchify_kernel,
-)
+from transformers.image_processing_backends import TorchvisionBackend
 from transformers.image_utils import PILImageResampling, SizeDict, load_image
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
-    _PROCESSING_KERNEL_ADAPTERS,
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
-    run_processing_kernel,
     use_kernel_func_from_hub_with_fallback,
+)
+from transformers.integrations.hub_processing_kernels import (
+    _PROCESSING_KERNEL_ADAPTERS,
+    _connected_component_areas_kernel,
+    _resize_normalize_kernel,
+    _resize_normalize_patchify_kernel,
+    run_processing_kernel,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -1037,14 +1037,14 @@ class TestProcessingKernels(TestCasePlus):
         with (
             patch.object(torch.cuda, "is_available", return_value=True),
             patch.dict(
-                run_processing_kernel.__globals__,
-                {
-                    "_kernels_enabled": True,
-                    "_PROCESSING_KERNEL_ADAPTERS": {
-                        "dummy_op": ("dummy-kernel", lambda kernel, value: (kernel, value))
-                    },
-                    "lazy_load_kernel": {"dummy-kernel": sentinel}.get,
-                },
+                _PROCESSING_KERNEL_ADAPTERS,
+                {"dummy_op": ("dummy-kernel", lambda kernel, value: (kernel, value))},
+                clear=True,
+            ),
+            patch.multiple(
+                "transformers.integrations.hub_kernels",
+                _kernels_enabled=True,
+                lazy_load_kernel={"dummy-kernel": sentinel}.get,
             ),
         ):
             self.assertEqual(run_processing_kernel("dummy_op", 3), (sentinel, 3))
@@ -1054,14 +1054,14 @@ class TestProcessingKernels(TestCasePlus):
         with patch.object(torch.cuda, "is_available", return_value=True):
             # Unknown op, `USE_HUB_KERNELS=0`, and a kernel that cannot be loaded all keep the default path.
             self.assertIsNone(run_processing_kernel("not_a_registered_op"))
-            with patch.dict(run_processing_kernel.__globals__, {"_kernels_enabled": False}):
+            with patch("transformers.integrations.hub_kernels._kernels_enabled", False):
                 self.assertIsNone(run_processing_kernel("connected_component_areas", regions))
-            with patch.dict(run_processing_kernel.__globals__, {"lazy_load_kernel": lambda name: None}):
+            with patch("transformers.integrations.hub_kernels.lazy_load_kernel", lambda name: None):
                 self.assertIsNone(run_processing_kernel("connected_component_areas", regions))
 
     def test_run_processing_kernel_needs_accelerator(self):
         with patch.object(torch.cuda, "is_available", return_value=False):
-            with patch.dict(run_processing_kernel.__globals__, {"lazy_load_kernel": self.fail}):
+            with patch("transformers.integrations.hub_kernels.lazy_load_kernel", self.fail):
                 self.assertIsNone(run_processing_kernel("connected_component_areas", self.mask_logits > 0))
 
     def test_connected_component_areas_adapter_pads_to_even_size(self):
@@ -1069,7 +1069,7 @@ class TestProcessingKernels(TestCasePlus):
         regions = torch.zeros(2, 1, 5, 7, dtype=torch.bool)
         regions[:, :, 1:3, 1:4] = True
         # The kernel is CUDA only; pretend CPU is its device so the adapter can be tested without a GPU.
-        with patch("transformers.image_processing_backends._KERNEL_DEVICE_TYPE", "cpu"):
+        with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
             areas = _connected_component_areas_kernel(kernel, regions)
         self.assertEqual(tuple(kernel.inputs[0].shape), (2, 1, 6, 8))
         self.assertEqual(kernel.inputs[0].dtype, torch.uint8)
@@ -1113,7 +1113,7 @@ class TestProcessingKernels(TestCasePlus):
         images = (
             [torch.randint(0, 255, (3, 40, 60), dtype=torch.uint8) for _ in range(2)] if images is None else images
         )
-        with patch("transformers.image_processing_backends._KERNEL_DEVICE_TYPE", "cpu"):
+        with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
             result = _resize_normalize_kernel(kernel, images, **{**arguments, **overrides})
         return kernel, result
 
@@ -1170,7 +1170,7 @@ class TestProcessingKernels(TestCasePlus):
     def test_patchify_adapter_translates_arguments(self):
         kernel = MagicMock()
         frames = [torch.zeros(3, 30, 40, dtype=torch.uint8), torch.zeros(3, 20, 20, dtype=torch.uint8)]
-        with patch("transformers.image_processing_backends._KERNEL_DEVICE_TYPE", "cpu"):
+        with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
             result = _resize_normalize_patchify_kernel(
                 kernel, frames, [(28, 28), (28, 28)], [[0], [1]], 3, 1 / 255, [0.5] * 3, [0.5] * 3, 14, 2, 2
             )
@@ -1216,13 +1216,11 @@ class TestProcessingKernels(TestCasePlus):
     def test_processor_overriding_resize_does_not_use_the_resize_kernel(self):
         with (
             patch.object(torch.cuda, "is_available", return_value=True),
-            patch.dict(
-                run_processing_kernel.__globals__,
-                {
-                    "_kernels_enabled": True,
-                    "_PROCESSING_KERNEL_ADAPTERS": {"resize_normalize": ("cv-utils", self.fail)},
-                    "lazy_load_kernel": lambda name: types.ModuleType("sentinel_kernel_module"),
-                },
+            patch.dict(_PROCESSING_KERNEL_ADAPTERS, {"resize_normalize": ("cv-utils", self.fail)}, clear=True),
+            patch.multiple(
+                "transformers.integrations.hub_kernels",
+                _kernels_enabled=True,
+                lazy_load_kernel=lambda name: types.ModuleType("sentinel_kernel_module"),
             ),
         ):
             output = LevitImageProcessor(use_kernels=True)([torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)])
@@ -1232,9 +1230,12 @@ class TestProcessingKernels(TestCasePlus):
         processor_classes = processors_calling_the_patchify_kernel()
         for processor_class in (Qwen2VLImageProcessor, PaddleOCRVLImageProcessor, HunYuanVLImageProcessor):
             self.assertIn(processor_class, processor_classes)
-        for processor_class in processor_classes:
-            with self.subTest(processor_class=processor_class.__name__):
-                processor = processor_class(use_kernels=True)
+        qwen3_vl_image_settings = {"patch_size": 16, "image_mean": [0.5, 0.5, 0.5], "image_std": [0.5, 0.5, 0.5]}
+        cases = [(processor_class, {}) for processor_class in processor_classes]
+        cases.append((Qwen2VLImageProcessor, qwen3_vl_image_settings))
+        for processor_class, settings in cases:
+            with self.subTest(processor_class=processor_class.__name__, **settings):
+                processor = processor_class(use_kernels=True, **settings)
                 is_video = issubclass(processor_class, BaseVideoProcessor)
                 recorded_arguments = []
 
@@ -1249,17 +1250,19 @@ class TestProcessingKernels(TestCasePlus):
                 with (
                     patch.object(torch.cuda, "is_available", return_value=True),
                     patch.dict(
-                        run_processing_kernel.__globals__,
+                        _PROCESSING_KERNEL_ADAPTERS,
                         {
-                            "_kernels_enabled": True,
-                            "_PROCESSING_KERNEL_ADAPTERS": {
-                                "resize_normalize_patchify": (
-                                    "cv-utils",
-                                    lambda kernel, *arguments: recorded_arguments.append(arguments),
-                                )
-                            },
-                            "lazy_load_kernel": lambda name: types.ModuleType("sentinel_kernel_module"),
+                            "resize_normalize_patchify": (
+                                "cv-utils",
+                                lambda kernel, *arguments: recorded_arguments.append(arguments),
+                            )
                         },
+                        clear=True,
+                    ),
+                    patch.multiple(
+                        "transformers.integrations.hub_kernels",
+                        _kernels_enabled=True,
+                        lazy_load_kernel=lambda name: types.ModuleType("sentinel_kernel_module"),
                     ),
                 ):
                     height, width = 112, 168

@@ -947,38 +947,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-_PROCESSING_KERNEL_ADAPTERS: dict[str, tuple[str, Callable]] = {}
-
-
-def register_processing_kernel(name: str, kernel_name: str):
-    """
-    Register the kernel `kernel_name` of `_HUB_KERNEL_MAPPING` as an implementation of the processing op `name`.
-
-    Processing ops have no common signature to swap, so the decorated function is an adapter: it receives the loaded
-    kernel module followed by the arguments of the op, and returns the kernel result, or `None` when the kernel
-    cannot handle these arguments so that the caller keeps its default implementation.
-    """
-
-    def register(adapter: Callable) -> Callable:
-        _PROCESSING_KERNEL_ADAPTERS[name] = (kernel_name, adapter)
-        return adapter
-
-    return register
-
-
-def run_processing_kernel(name: str, *args, **kwargs):
-    """Run the kernel registered for the processing op `name`, or return `None` if the default path should be used."""
-    if name not in _PROCESSING_KERNEL_ADAPTERS or not _kernels_enabled:
-        return None
-    if not is_torch_available() or not torch.cuda.is_available():
-        return None
-    kernel_name, adapter = _PROCESSING_KERNEL_ADAPTERS[name]
-    kernel = lazy_load_kernel(kernel_name)
-    if kernel is None:
-        return None
-    return adapter(kernel, *args, **kwargs)
-
-
 def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
@@ -1284,9 +1252,7 @@ __all__ = [
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "register_kernel_replacements_and_fusions",
-    "register_processing_kernel",
     "replace_kernel_forward_from_hub",
-    "run_processing_kernel",
     "use_kernel_forward_from_hub",
     "use_kernel_func_from_hub",
     "use_kernelized_func",

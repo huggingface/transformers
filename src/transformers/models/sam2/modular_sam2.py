@@ -34,7 +34,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...integrations.hub_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import run_processing_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel

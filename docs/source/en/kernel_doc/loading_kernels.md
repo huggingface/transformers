@@ -341,10 +341,10 @@ The resize kernels round to `uint8` after each pass, like the default torchvisio
 
 ### Registering a processing kernel
 
-Processing operations have no shared signature to swap, so a kernel is plugged in through an adapter instead of a `kernelize` pass. `register_processing_kernel` maps an operation name to a kernel of `_HUB_KERNEL_MAPPING` in `integrations/hub_kernels.py`, and the decorated adapter receives the loaded kernel module followed by the arguments of the operation. Return `None` for arguments the kernel cannot handle, and the caller keeps its default implementation.
+Processing operations have no shared signature to swap, so a kernel is plugged in through an adapter instead of a `kernelize` pass. Adapters live in `integrations/hub_processing_kernels.py`. `register_processing_kernel` maps an operation name to a kernel of `_HUB_KERNEL_MAPPING` in `integrations/hub_kernels.py`, and the decorated adapter receives the loaded kernel module followed by the arguments of the operation. Return `None` for arguments the kernel cannot handle, and the caller keeps its default implementation.
 
 ```py
-from transformers.integrations.hub_kernels import register_processing_kernel
+from transformers.integrations.hub_processing_kernels import register_processing_kernel
 
 
 @register_processing_kernel("my_op", kernel_name="my-processing-kernel")

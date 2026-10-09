@@ -30,7 +30,7 @@ from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
-from ...integrations.hub_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import run_processing_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS

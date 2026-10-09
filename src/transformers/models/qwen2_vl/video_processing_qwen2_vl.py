@@ -31,7 +31,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...integrations.hub_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import run_processing_kernel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor

@@ -25,7 +25,7 @@ import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
-from ...integrations.hub_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import run_processing_kernel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor

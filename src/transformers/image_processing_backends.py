@@ -53,6 +53,7 @@ from .image_utils import (
     is_valid_image,
     load_image_as_tensor,
 )
+from .integrations.hub_processing_kernels import run_processing_kernel
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
@@ -70,15 +71,6 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from .integrations.hub_kernels import register_processing_kernel, run_processing_kernel
-else:
-
-    def register_processing_kernel(name, kernel_name):
-        return lambda adapter: adapter
-
-    def run_processing_kernel(name, *args, **kwargs):
-        return None
-
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
@@ -90,110 +82,6 @@ else:
 
 
 logger = logging.get_logger(__name__)
-
-
-_KERNEL_DEVICE_TYPE = "cuda"
-
-
-@register_processing_kernel("connected_component_areas", kernel_name="cv-utils")
-def _connected_component_areas_kernel(kernel, regions):
-    """Area of the 8-connected component of every pixel of a boolean `(batch_size, 1, height, width)` tensor."""
-    if regions.device.type != _KERNEL_DEVICE_TYPE:
-        return None
-    height, width = regions.shape[-2:]
-    padded_regions = torch.nn.functional.pad(regions.to(torch.uint8), (0, width % 2, 0, height % 2))
-    _, areas = kernel.cc_2d(padded_regions.contiguous(), get_counts=True)
-    return areas[..., :height, :width]
-
-
-_KERNEL_INTERPOLATIONS = {2: "bilinear", 3: "bicubic"}
-
-
-def _resize_kernel_arguments(images, resample, rescale_factor, image_mean, image_std):
-    """Interpolation and per-channel stats for the resize kernels, `None` when they cannot process these inputs."""
-    if not images or any(
-        not isinstance(image, torch.Tensor)
-        or image.ndim != 3
-        or image.dtype != torch.uint8
-        or image.device != images[0].device
-        or image.shape[0] != images[0].shape[0]
-        for image in images
-    ):
-        return None
-    interpolation = _KERNEL_INTERPOLATIONS.get(resample)
-    channels = images[0].shape[0]
-    image_mean = [image_mean] * channels if isinstance(image_mean, (int, float)) else list(image_mean)
-    image_std = [image_std] * channels if isinstance(image_std, (int, float)) else list(image_std)
-    if images[0].device.type != _KERNEL_DEVICE_TYPE or interpolation is None or len(image_mean) != channels:
-        return None
-    return interpolation, image_mean, image_std, rescale_factor
-
-
-@register_processing_kernel("resize_normalize", kernel_name="cv-utils")
-def _resize_normalize_kernel(kernel, images, size, crop_size, resample, rescale_factor, image_mean, image_std):
-    """Resize every image to `size`, center crop to `crop_size` when given, then rescale and normalize."""
-    arguments = _resize_kernel_arguments(images, resample, rescale_factor, image_mean, image_std)
-    if arguments is None:
-        return None
-    interpolation, image_mean, image_std, rescale_factor = arguments
-    crop = (crop_size.height, crop_size.width) if crop_size is not None else None
-    if crop is not None and not all(crop):
-        return None
-    if size.height and size.width:
-        if crop is not None and (crop[0] > size.height or crop[1] > size.width):
-            return None
-        resize, resize_mode = (size.height, size.width), "square"
-    elif size.shortest_edge and not size.longest_edge and crop is not None and size.shortest_edge >= max(crop):
-        resize, resize_mode = size.shortest_edge, "shortest_edge"
-    else:
-        return None
-    return kernel.resize_normalize(
-        images,
-        resize,
-        image_mean,
-        image_std,
-        rescale_factor=rescale_factor,
-        resample=interpolation,
-        antialias=True,
-        crop_size=crop,
-        resize_mode=resize_mode,
-        round_to_uint8=True,
-    )
-
-
-@register_processing_kernel("resize_normalize_patchify", kernel_name="cv-utils")
-def _resize_normalize_patchify_kernel(
-    kernel,
-    frames,
-    target_sizes,
-    items,
-    resample,
-    rescale_factor,
-    image_mean,
-    image_std,
-    patch_size,
-    merge_size,
-    temporal_patch_size,
-):
-    """Resize every frame to its target size, normalize, and write the flattened patches of every item in order."""
-    arguments = _resize_kernel_arguments(frames, resample, rescale_factor, image_mean, image_std)
-    if arguments is None:
-        return None
-    interpolation, image_mean, image_std, rescale_factor = arguments
-    return kernel.resize_normalize_patchify(
-        frames,
-        target_sizes,
-        items,
-        image_mean,
-        image_std,
-        rescale_factor,
-        interpolation,
-        True,
-        patch_size,
-        merge_size,
-        temporal_patch_size,
-        round_to_uint8=True,
-    )
 
 
 @requires(backends=("torch", "torchvision"))
