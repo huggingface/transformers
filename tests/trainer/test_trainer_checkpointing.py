@@ -810,6 +810,27 @@ class TrainerCheckpointRotationTest(TestCasePlus, TrainerIntegrationCommon):
             values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
             self.assertEqual(values, [5, 10, 15, 20, 25])
 
+    def test_checkpoint_rotation_ignores_non_checkpoint_directories(self):
+        for use_mtime in (False, True):
+            with self.subTest(use_mtime=use_mtime), tempfile.TemporaryDirectory() as tmp_dir:
+                checkpoints = ["checkpoint-1", "checkpoint-2"]
+                ignored = ["checkpoint-9.backup", "checkpoint-10.tmp", "checkpoint-unfinished"]
+
+                for index, name in enumerate(checkpoints + ignored):
+                    path = Path(tmp_dir) / name
+                    path.mkdir()
+                    timestamp = 1_600_000_000 + index * 100
+                    os.utime(path, (timestamp, timestamp))
+
+                sorted_checkpoints = [Path(path).name for path in sort_checkpoints(tmp_dir, use_mtime=use_mtime)]
+                self.assertEqual(sorted_checkpoints, checkpoints)
+
+                rotate_checkpoints(tmp_dir, save_total_limit=1, use_mtime=use_mtime)
+                self.assertSetEqual(
+                    {path.name for path in Path(tmp_dir).iterdir()},
+                    {"checkpoint-2"} | set(ignored),
+                )
+
     def check_checkpoint_deletion(self, trainer, output_dir, expected):
         # Make fake checkpoints
         for n in [5, 10, 15, 20, 25]:
