@@ -13,9 +13,9 @@
 # limitations under the License.
 """Post-training quantization export tests.
 
-Each backend quantizes every architecture family (dense / MoE / SSM) with the quantizers it supports: a
-`pt2e_quantizer` on the traced graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch), and the converted
-model's own toolchain on ONNX (`onnxruntime_quantizer`) and OpenVINO (`nncf_quantizer`). Calibration and
+Each backend quantizes every architecture family (dense / MoE / SSM) with the quantizers it supports:
+`PT2EQuantizer` on the FX graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch), and the converted
+model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`) and OpenVINO (`NNCFOpenVINOQuantizer`). Calibration and
 per-component recipes go through `export_for_generation`, whose components take the attention mask as an input
 (PT2E's retrace trips on in-graph mask construction).
 """
@@ -27,7 +27,12 @@ from unittest.mock import patch
 import pytest
 from parameterized import parameterized
 
-from tests.exporters.test_export import _run_onnx_program, _run_openvino_model, disable_hub_kernels
+from tests.exporters.test_export import (
+    _run_executorch_program,
+    _run_onnx_program,
+    _run_openvino_model,
+    disable_hub_kernels,
+)
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters.utils import capture_calibration_inputs, decompose_for_generation
 from transformers.testing_utils import (
@@ -196,8 +201,20 @@ class QuantizationExportTest(unittest.TestCase):
         raise ValueError(f"unknown quantizer {name}")
 
     def _quantization(self, quantizer, inputs):
-        """Config kwargs for the PT2E quantizer named `quantizer`, calibrated on `inputs`."""
-        return {"pt2e_quantizer": self._quantizer(quantizer), "calibration_dataset": [copy.deepcopy(inputs)]}
+        """Config kwargs for a `PT2EQuantizer` over the quantizer named `quantizer`, calibrated on `inputs`."""
+        from transformers.exporters import PT2EQuantizer
+
+        return {"quantizer": PT2EQuantizer(self._quantizer(quantizer), calibration_dataset=[copy.deepcopy(inputs)])}
+
+    def _nncf_torch_fx_quantizer(self, inputs, weights_only):
+        """`NNCFTorchFXQuantizer`, int8 weight-only or fully quantized and calibrated on `inputs`."""
+        import nncf
+
+        from transformers.exporters import NNCFTorchFXQuantizer
+
+        if weights_only:
+            return NNCFTorchFXQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT8_SYM)
+        return NNCFTorchFXQuantizer(calibration_dataset=[copy.deepcopy(inputs)], subset_size=1)
 
     def _quantization_target(self, family):
         """The `(model, inputs)` to quantize for `family`, picked so the traced forward builds no attention
@@ -221,30 +238,64 @@ class QuantizationExportTest(unittest.TestCase):
     def test_calibration_defaults_to_sample_inputs_with_warning(self):
         """With no `calibration_dataset`, calibration falls back to a single pass on the sample inputs and
         warns (one sample can hurt accuracy) — quantization still applies."""
-        from transformers.exporters import DynamoConfig, DynamoExporter, exporter_dynamo
+        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
+        from transformers.exporters.quantizers import base
 
         decode_model, decode_inputs = self._decode_component()
-        with patch.object(exporter_dynamo.logger, "warning_once") as warning_once:
+        with patch.object(base.logger, "warning_once") as warning_once:
             exported = DynamoExporter().export(
                 decode_model,
                 copy.deepcopy(decode_inputs),
-                DynamoConfig(dynamic=False, pt2e_quantizer=self._quantizer("x86")),
+                DynamoConfig(dynamic=False, quantizer=PT2EQuantizer(self._quantizer("x86"))),
             )
         messages = [call.args[0] for call in warning_once.call_args_list]
         self.assertTrue(any("calibration_dataset" in message for message in messages), messages)
         self.assertTrue(_has_quantize_ops(exported))
 
-    def test_config_takes_one_quantizer(self):
-        """A PT2E quantizer and the backend's own quantize at different stages; a config takes one of them."""
-        from transformers.exporters import OnnxConfig, OpenVINOConfig
+    def test_quantizer_checks_export_format(self):
+        """A quantizer refuses an export format it doesn't support before anything is traced."""
+        from transformers.exporters import DynamoConfig, DynamoExporter, NNCFOpenVINOQuantizer, OnnxRuntimeQuantizer
 
-        def quantizer(model, dataset):
-            return model
+        decode_model, decode_inputs = self._decode_component()
+        for quantizer in (NNCFOpenVINOQuantizer(), OnnxRuntimeQuantizer()):
+            with self.assertRaisesRegex(ValueError, "not dynamo"):
+                DynamoExporter().export(decode_model, decode_inputs, DynamoConfig(quantizer=quantizer))
 
-        with self.assertRaisesRegex(ValueError, "at most one"):
-            OnnxConfig(pt2e_quantizer=object(), onnxruntime_quantizer=quantizer)
-        with self.assertRaisesRegex(ValueError, "at most one"):
-            OpenVINOConfig(pt2e_quantizer=object(), nncf_quantizer=quantizer)
+    @pytest.mark.torch_export_test
+    @disable_hub_kernels
+    def test_calibration_sample_missing_traced_inputs(self):
+        """A calibration sample without the exported forward's inputs (here generate kwargs handed to a single
+        component's quantizer) fails with a message naming the missing inputs."""
+        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
+
+        decode_model, decode_inputs = self._decode_component()
+        generate_kwargs = {"input_ids": decode_inputs["input_ids"], "attention_mask": decode_inputs["attention_mask"]}
+        quantizer = PT2EQuantizer(self._quantizer("x86"), calibration_dataset=[generate_kwargs])
+        with self.assertRaisesRegex(ValueError, "lacks the traced inputs .*past_key_values"):
+            DynamoExporter().export(decode_model, copy.deepcopy(decode_inputs), DynamoConfig(quantizer=quantizer))
+
+    @pytest.mark.torch_export_test
+    @disable_hub_kernels
+    def test_backend_quantizer_on_dynamo(self):
+        """A Dynamo export's backend model is its FX graph, so a backend-stage quantizer that lists Dynamo runs on it."""
+        from transformers.exporters import DynamoConfig, DynamoExporter, ExportFormat
+        from transformers.exporters.quantizers import ExportQuantizer, QuantizationStage
+
+        class RecordingQuantizer(ExportQuantizer):
+            stage = QuantizationStage.BACKEND
+            supported_formats = (ExportFormat.DYNAMO,)
+            models = []
+
+            def quantize(self, model, calibration, export_format):
+                self.models.append(model)
+                return model
+
+        decode_model, decode_inputs = self._decode_component()
+        DynamoExporter().export(
+            decode_model, copy.deepcopy(decode_inputs), DynamoConfig(quantizer=RecordingQuantizer())
+        )
+        self.assertEqual(len(RecordingQuantizer.models), 1)
+        self.assertIsInstance(RecordingQuantizer.models[0], torch.fx.GraphModule)
 
     @pytest.mark.torch_export_test
     @disable_hub_kernels
@@ -266,15 +317,15 @@ class QuantizationExportTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @disable_hub_kernels
     def test_export_for_generation_fans_out_calibration(self):
-        """`export_for_generation` hands each component's export its own captured calibration set in place of
-        the single config's generate-level `calibration_dataset`."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
+        """`export_for_generation` hands each component's export a copy of the quantizer holding that component's
+        captured calibration set in place of the generate-level `calibration_dataset`."""
+        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
 
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
             for n in (3, 4, 5)
         ]
-        config = DynamoConfig(pt2e_quantizer=self._quantizer("x86"), calibration_dataset=calibration)
+        config = DynamoConfig(quantizer=PT2EQuantizer(self._quantizer("x86"), calibration_dataset=calibration))
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         with patch.object(DynamoExporter, "export", autospec=True) as export:
             DynamoExporter().export_for_generation(
@@ -284,13 +335,13 @@ class QuantizationExportTest(unittest.TestCase):
                 generation_config=self._generation_config(),
                 multi_token_decode=True,
             )
-        received = sorted(len(call.kwargs["config"].calibration_dataset) for call in export.call_args_list)
+        received = sorted(len(call.kwargs["config"].quantizer.calibration_dataset) for call in export.call_args_list)
         self.assertEqual(received, [len(calibration), 2 * len(calibration)])
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @pytest.mark.torch_export_test
     @disable_hub_kernels
-    def test_quantized_dynamo(self, family):
+    def test_pt2e_dynamo(self, family):
         """Every family's graph gains PT2E quantize ops with the x86 quantizer."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
@@ -300,18 +351,45 @@ class QuantizationExportTest(unittest.TestCase):
         )
         self.assertTrue(_has_quantize_ops(exported))
 
+    @parameterized.expand(
+        [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
+    )
+    @require_nncf
+    @pytest.mark.torch_export_test
+    @disable_hub_kernels
+    def test_nncf_torch_fx_dynamo(self, family, weights_only):
+        """NNCF quantizes the FX graph through its TorchFX backend (`NNCFTorchFXQuantizer`), fully (quantize ops,
+        calibrated on the model's inputs) or weights only (int8 weights): every family's program still runs."""
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        if family == "moe" and not weights_only:
+            self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
+        model, inputs = self._quantization_target(family)
+        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only)
+        exported = DynamoExporter().export(model, copy.deepcopy(inputs), DynamoConfig(quantizer=quantizer))
+        if weights_only:
+            tensors = [*exported.state_dict.values(), *exported.constants.values()]
+            self.assertTrue(any(tensor.dtype == torch.int8 for tensor in tensors if isinstance(tensor, torch.Tensor)))
+        else:
+            self.assertTrue(_has_quantize_ops(exported))
+        traced_inputs = {name: inputs[name] for name in exported.call_spec.in_spec.children_specs[1].context}
+        with torch.no_grad():
+            outputs = exported.module()(**copy.deepcopy(traced_inputs))
+        self.assertTrue(outputs.logits.isfinite().all())
+
     @pytest.mark.torch_export_test
     @disable_hub_kernels
     def test_vlm_per_component_quantization(self):
         """A VLM is quantized component by component, each with its own recipe, via a `{component: config}`
         dict on `export_for_generation` (multi-token decode): static int8 on the prompt's `language_model`,
         the lighter dynamic int8 on `decode`, and `lm_head` left in fp32."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
+        from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
 
         model, inputs = self._vlm_model()
+        static, dynamic = PT2EQuantizer(self._quantizer("x86")), PT2EQuantizer(self._quantizer("x86", dynamic=True))
         config = {
-            "language_model": DynamoConfig(dynamic=True, pt2e_quantizer=self._quantizer("x86", dynamic=False)),
-            "decode": DynamoConfig(dynamic=True, pt2e_quantizer=self._quantizer("x86", dynamic=True)),
+            "language_model": DynamoConfig(dynamic=True, quantizer=static),
+            "decode": DynamoConfig(dynamic=True, quantizer=dynamic),
             "lm_head": DynamoConfig(dynamic=True),
         }
         components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
@@ -330,7 +408,7 @@ class QuantizationExportTest(unittest.TestCase):
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     @disable_hub_kernels
-    def test_quantized_onnx(self, family):
+    def test_pt2e_onnx(self, family):
         """The x86 quantizer lowered to ONNX: every family gets a QDQ graph that runs in ONNX Runtime."""
         from transformers.exporters import OnnxConfig, OnnxExporter
 
@@ -351,10 +429,11 @@ class QuantizationExportTest(unittest.TestCase):
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     @disable_hub_kernels
-    def test_onnxruntime_quantized_onnx(self, family, dynamic):
-        """ONNX Runtime quantizes the converted model itself (an `onnxruntime_quantizer`),
-        statically calibrated on the model's inputs or dynamically: every family gains quantize nodes and still runs
-        in ONNX Runtime."""
+    def test_onnxruntime_onnx(self, family, dynamic):
+        """ONNX Runtime quantizes the converted model itself (`OnnxRuntimeQuantizer`), statically calibrated on the
+        model's inputs or dynamically: every family gains quantize nodes and still runs in ONNX Runtime. Dynamic mode
+        is kept to `MatMul`/`Gemm`: ONNX Runtime has no CPU kernel for the `ConvInteger` it makes of Mamba2's
+        depthwise conv."""
         from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeQuantizer
 
         model, inputs = self._quantization_target(family)
@@ -364,12 +443,80 @@ class QuantizationExportTest(unittest.TestCase):
             OnnxConfig(
                 dynamic=False,
                 external_data=False,
-                onnxruntime_quantizer=OnnxRuntimeQuantizer(dynamic=dynamic),
-                calibration_dataset=[copy.deepcopy(inputs)],
+                quantizer=OnnxRuntimeQuantizer(dynamic=True, op_types_to_quantize=["MatMul", "Gemm"])
+                if dynamic
+                else OnnxRuntimeQuantizer(calibration_dataset=[copy.deepcopy(inputs)]),
             ),
         )
         quantize_op = "DynamicQuantizeLinear" if dynamic else "QuantizeLinear"
         self.assertTrue(any(node.op_type == quantize_op for node in program.model_proto.graph.node))
+        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        self.assertTrue(outputs)
+        self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @parameterized.expand(
+        [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
+    )
+    @require_onnxscript
+    @require_onnxruntime
+    @require_nncf
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_nncf_onnx_onnx(self, family, weights_only):
+        """NNCF quantizes the converted ONNX model through its ONNX backend (`NNCFOnnxQuantizer`), fully (int8 QDQ,
+        calibrated on the model's inputs) or weights only (int8): every family gains quantization nodes and still runs
+        in ONNX Runtime. Weight compression leaves `Conv` out: NNCF gives Mamba2's depthwise conv weight a 2-D per-axis
+        scale, which ONNX Runtime rejects (per-axis scales must be 1-D)."""
+        import nncf
+
+        from transformers.exporters import NNCFOnnxQuantizer, OnnxConfig, OnnxExporter
+
+        model, inputs = self._quantization_target(family)
+        if weights_only:
+            quantizer = NNCFOnnxQuantizer(
+                weights_only=True,
+                mode=nncf.CompressWeightsMode.INT8_SYM,
+                ignored_scope=nncf.IgnoredScope(types=["Conv"], validate=False),
+            )
+        else:
+            quantizer = NNCFOnnxQuantizer(calibration_dataset=[copy.deepcopy(inputs)], subset_size=1)
+        program = OnnxExporter().export(
+            model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, external_data=False, quantizer=quantizer)
+        )
+        quantize_op = "DequantizeLinear" if weights_only else "QuantizeLinear"
+        self.assertTrue(any(node.op_type == quantize_op for node in program.model_proto.graph.node))
+        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        self.assertTrue(outputs)
+        self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @parameterized.expand(
+        [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
+    )
+    @require_onnxscript
+    @require_onnxruntime
+    @require_nncf
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_nncf_torch_fx_onnx(self, family, weights_only):
+        """`NNCFTorchFXQuantizer` quantizes the FX graph for ONNX too: full quantization becomes QDQ nodes, weight
+        compression int8 initializers; both run in ONNX Runtime."""
+        import onnx
+
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        if family == "moe" and not weights_only:
+            self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
+        model, inputs = self._quantization_target(family)
+        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only)
+        # The optimizer would constant-fold the dequantization of these tiny weights (under its 8192-element input
+        # limit) back into float initializers; real models' weights are far above it.
+        config = OnnxConfig(dynamic=False, external_data=False, optimize=not weights_only, quantizer=quantizer)
+        program = OnnxExporter().export(model, copy.deepcopy(inputs), config)
+        if weights_only:
+            initializers = program.model_proto.graph.initializer
+            self.assertTrue(any(tensor.data_type == onnx.TensorProto.INT8 for tensor in initializers))
+        else:
+            self.assertTrue(_has_onnx_quantize_ops(program))
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
@@ -395,54 +542,35 @@ class QuantizationExportTest(unittest.TestCase):
         tolerance = (0.1 if int8_activations else 0.05) * expected.abs().max().item()
         torch.testing.assert_close(outputs["logits"].to(expected.dtype), expected, atol=tolerance, rtol=0)
 
-    @parameterized.expand([("dense",), ("moe",), ("ssm",)])
+    @parameterized.expand(
+        [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
+    )
     @require_openvino
     @require_nncf
     @pytest.mark.openvino_export_test
     @disable_hub_kernels
-    def test_quantized_openvino(self, family):
-        """NNCF quantizes the converted IR itself (an `nncf_quantizer`): every family gains `FakeQuantize` nodes
-        and int8 weights. Static export. Mamba2's depthwise conv (`GroupConvolution`) is left out: NNCF quantizes it
-        along a channel axis the CPU plugin's `FakeQuantize` rejects."""
+    def test_nncf_openvino_openvino(self, family, weights_only):
+        """NNCF quantizes the converted OpenVINO model itself (`NNCFOpenVINOQuantizer`): fully (`FakeQuantize` nodes
+        and int8 weights; Mamba2's depthwise conv, a `GroupConvolution`, is left out because NNCF quantizes it along a
+        channel axis the CPU plugin's `FakeQuantize` rejects) or weights only (int8 weights, float matmuls)."""
         import nncf
 
-        from transformers.exporters import NNCFQuantizer, OpenVINOConfig, OpenVINOExporter
+        from transformers.exporters import NNCFOpenVINOQuantizer, OpenVINOConfig, OpenVINOExporter
 
         model, inputs = self._quantization_target(family)
-        quantizer = NNCFQuantizer(
-            subset_size=1, ignored_scope=nncf.IgnoredScope(types=["GroupConvolution"], validate=False)
-        )
+        if weights_only:
+            quantizer = NNCFOpenVINOQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT8_SYM)
+        else:
+            quantizer = NNCFOpenVINOQuantizer(
+                calibration_dataset=[copy.deepcopy(inputs)],
+                subset_size=1,
+                ignored_scope=nncf.IgnoredScope(types=["GroupConvolution"], validate=False),
+            )
         ov_model = OpenVINOExporter().export(
-            model,
-            copy.deepcopy(inputs),
-            OpenVINOConfig(dynamic=False, nncf_quantizer=quantizer, calibration_dataset=[copy.deepcopy(inputs)]),
+            model, copy.deepcopy(inputs), OpenVINOConfig(dynamic=False, quantizer=quantizer)
         )
         fake_quantize, low_precision = _openvino_op_counts(ov_model)
-        self.assertGreater(fake_quantize, 0)
-        self.assertGreater(low_precision, 0)
-        self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
-
-    @parameterized.expand([("dense",), ("moe",), ("ssm",)])
-    @require_openvino
-    @require_nncf
-    @pytest.mark.openvino_export_test
-    @disable_hub_kernels
-    def test_openvino_weight_compression(self, family):
-        """NNCF compresses the converted IR's weights to int8 (`NNCFQuantizer(weights_only=True)`), leaving activations
-        alone, so the matmuls stay in floating point and accuracy is checked on any CPU."""
-        import nncf
-
-        from transformers.exporters import NNCFQuantizer, OpenVINOConfig, OpenVINOExporter
-
-        model, inputs = self._quantization_target(family)
-        quantizer = NNCFQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT8_SYM)
-        ov_model = OpenVINOExporter().export(
-            model,
-            copy.deepcopy(inputs),
-            OpenVINOConfig(dynamic=False, nncf_quantizer=quantizer),
-        )
-        fake_quantize, low_precision = _openvino_op_counts(ov_model)
-        self.assertEqual(fake_quantize, 0)
+        self.assertEqual(fake_quantize > 0, not weights_only)
         self.assertGreater(low_precision, 0)
         self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
 
@@ -450,8 +578,8 @@ class QuantizationExportTest(unittest.TestCase):
     @require_openvino
     @pytest.mark.openvino_export_test
     @disable_hub_kernels
-    def test_pt2e_quantizer_on_openvino(self, family):
-        """A `pt2e_quantizer` works on OpenVINO too: its weights stay unfolded behind quantize/dequantize pairs, which
+    def test_pt2e_openvino(self, family):
+        """`PT2EQuantizer` works on OpenVINO too: its weights stay unfolded behind quantize/dequantize pairs, which
         OpenVINO converts to `FakeQuantize` and compresses itself."""
         from transformers.exporters import OpenVINOConfig, OpenVINOExporter
 
@@ -464,34 +592,79 @@ class QuantizationExportTest(unittest.TestCase):
         self.assertGreater(_openvino_op_counts(ov_model)[0], 0)
         self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
 
+    @parameterized.expand(
+        [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
+    )
+    @require_openvino
+    @require_nncf
+    @pytest.mark.openvino_export_test
+    @disable_hub_kernels
+    def test_nncf_torch_fx_openvino(self, family, weights_only):
+        """`NNCFTorchFXQuantizer` quantizes the FX graph for OpenVINO too: full quantization becomes `FakeQuantize`
+        nodes, weight compression int8 constants."""
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        if family == "moe" and not weights_only:
+            self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
+        model, inputs = self._quantization_target(family)
+        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only)
+        ov_model = OpenVINOExporter().export(model, copy.deepcopy(inputs), OpenVINOConfig(quantizer=quantizer))
+        fake_quantize, low_precision = _openvino_op_counts(ov_model)
+        self.assertEqual(fake_quantize > 0, not weights_only)
+        self.assertGreater(low_precision, 0)
+        self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
+
     # ────────────────────────────── ExecuTorch ──────────────────────────────
+
+    def _assert_executorch_program_runs(self, program, inputs):
+        """The `.pte` runs to finite outputs, unless ExecuTorch's runtime can't service it (`None`: an XNNPACK delegate
+        it refuses to compile, a missing portable kernel), which is a runtime limitation rather than an export defect."""
+        outputs = _run_executorch_program(program, copy.deepcopy(inputs))
+        if outputs is not None:
+            self.assertTrue(all(o.isfinite().all() for o in outputs if o.is_floating_point()))
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_executorch
     @pytest.mark.executorch_export_test
     @disable_hub_kernels
-    def test_quantized_executorch(self, family):
-        """The same `pt2e_quantizer` recipe, lowered to an ExecuTorch `.pte`: every family's graph is quantized
+    def test_pt2e_executorch(self, family):
+        """The same `PT2EQuantizer` recipe, lowered to an ExecuTorch `.pte`: every family's graph is quantized
         and lowers to a program. The x86 quantizer is absent — its per-channel q/dq ops have no out variant, so
         they stay undelegated and fail `to_executorch`; XNNPACK wants its per-tensor quantizer instead."""
         from transformers.exporters import ExecutorchConfig, ExecutorchExporter
         from transformers.exporters.exporter_dynamo import DynamoExporter
 
-        # lowering hides the quantize ops inside the XNNPACK delegate, so check the graph `_quantize` returns
+        # lowering hides the quantize ops inside the XNNPACK delegate, so check the graph `_quantize_fx` returns
         quantized = []
-        quantize = DynamoExporter._quantize
+        quantize = DynamoExporter._quantize_fx
 
         def record_quantized(exporter, *args, **kwargs):
             quantized.append(quantize(exporter, *args, **kwargs))
             return quantized[-1]
 
         model, inputs = self._quantization_target(family)
-        with patch.object(DynamoExporter, "_quantize", record_quantized):
+        with patch.object(DynamoExporter, "_quantize_fx", record_quantized):
             program = ExecutorchExporter().export(
                 model,
                 copy.deepcopy(inputs),
                 ExecutorchConfig(backend="xnnpack", dynamic=False, **self._quantization("xnnpack", inputs)),
             )
-        self.assertIsNotNone(program)
         self.assertTrue(_has_quantize_ops(quantized[0]))
-        # Not executed: running a quantized `.pte` in-process SIGABRTs under the pytest-rerunfailures plugin thread.
+        self._assert_executorch_program_runs(program, inputs)
+
+    @parameterized.expand([("dense",), ("moe",), ("ssm",)])
+    @require_executorch
+    @require_nncf
+    @pytest.mark.executorch_export_test
+    @disable_hub_kernels
+    def test_nncf_torch_fx_executorch(self, family):
+        """`NNCFTorchFXQuantizer`'s weight compression lowers to an ExecuTorch `.pte` (its full quantization doesn't:
+        XNNPACK doesn't delegate those quantize ops)."""
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+        model, inputs = self._quantization_target(family)
+        quantizer = self._nncf_torch_fx_quantizer(inputs, weights_only=True)
+        program = ExecutorchExporter().export(
+            model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
+        )
+        self._assert_executorch_program_runs(program, inputs)

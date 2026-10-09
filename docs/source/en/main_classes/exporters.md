@@ -67,13 +67,21 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.configs.OpenVINOConfig
 
-## OnnxRuntimeQuantizer
+## Quantizers
 
-[[autodoc]] exporters.exporter_onnx.OnnxRuntimeQuantizer
+[[autodoc]] exporters.quantizers.ExportQuantizer
 
-## NNCFQuantizer
+[[autodoc]] exporters.quantizers.CalibrationSet
 
-[[autodoc]] exporters.exporter_openvino.NNCFQuantizer
+[[autodoc]] exporters.quantizers.PT2EQuantizer
+
+[[autodoc]] exporters.quantizers.OnnxRuntimeQuantizer
+
+[[autodoc]] exporters.quantizers.NNCFOpenVINOQuantizer
+
+[[autodoc]] exporters.quantizers.NNCFOnnxQuantizer
+
+[[autodoc]] exporters.quantizers.NNCFTorchFXQuantizer
 
 ## Utilities
 

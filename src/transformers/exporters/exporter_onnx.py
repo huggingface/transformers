@@ -35,7 +35,8 @@ into an ONNX model via `torch.onnx.export`:
 5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
    fixes on the `ONNXProgram` IR for ORT compatibility.
 
-An `onnxruntime_quantizer` (e.g. [`OnnxRuntimeQuantizer`]) then runs on the fixed model, before it's saved.
+A backend-model quantizer (e.g. [`~exporters.quantizers.OnnxRuntimeQuantizer`]) then runs on the fixed model, before
+it's saved.
 """
 
 from __future__ import annotations
@@ -43,9 +44,7 @@ from __future__ import annotations
 import copy
 import functools
 import operator
-import os
-import tempfile
-from collections.abc import Iterable, MutableMapping, Sequence
+from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -55,6 +54,7 @@ from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import OnnxConfig
 from .exporter_dynamo import DynamoExporter
+from .quantizers.base import CalibrationSet, QuantizationStage
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
@@ -98,8 +98,6 @@ if is_onnxscript_available():
     }
 
 if TYPE_CHECKING:
-    import onnx
-
     from ..modeling_utils import PreTrainedModel
 
     if is_onnxscript_available():
@@ -155,8 +153,8 @@ class OnnxExporter(DynamoExporter):
 
         apply_onnx_ir_fixes(onnx_program)
 
-        if config.onnxruntime_quantizer is not None:
-            _run_onnxruntime_quantizer(onnx_program, config, sample_inputs)
+        if config.quantizer is not None and config.quantizer.stage is QuantizationStage.BACKEND:
+            _quantize_onnx(onnx_program, config, sample_inputs)
 
         if config.output_path is not None:
             onnx_program.save(
@@ -1219,69 +1217,14 @@ def apply_onnx_ir_fixes(onnx_program: ONNXProgram) -> None:
 # ── Quantization ────────────────────────────────────────────────────────────
 
 
-class OnnxRuntimeQuantizer:
-    """Quantize a converted ONNX model with ONNX Runtime's own tools (`onnxruntime.quantization`), which work on the
-    ONNX graph rather than the PyTorch one. Pass it as `OnnxConfig(onnxruntime_quantizer=...)`.
-
-    By default it runs `quantize_static` (int8 QDQ activations and weights, calibrated on the config's
-    `calibration_dataset`); with `dynamic=True` it runs `quantize_dynamic` (int8 weights, activations quantized at
-    runtime, no calibration) on `MatMul`/`Gemm` unless `op_types_to_quantize` says otherwise. Other keyword arguments
-    go to that function.
-
-    Example:
-
-    ```python
-    >>> from transformers.exporters import OnnxConfig, OnnxRuntimeQuantizer
-
-    >>> OnnxConfig(onnxruntime_quantizer=OnnxRuntimeQuantizer(per_channel=True), calibration_dataset=samples)
-    >>> OnnxConfig(onnxruntime_quantizer=OnnxRuntimeQuantizer(dynamic=True))
-    ```
-    """
-
-    def __init__(self, dynamic: bool = False, **kwargs):
-        self.dynamic = dynamic
-        self.kwargs = kwargs
-
-    def __call__(self, model: onnx.ModelProto, feeds: Iterable[dict[str, np.ndarray]]) -> onnx.ModelProto:
-        import onnx
-        from onnxruntime.quantization import quantize_dynamic, quantize_static
-
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "model.onnx")
-            if self.dynamic:
-                _drop_initializer_shapes(model)
-                # ONNX Runtime has no kernels for some integer ops dynamic mode would emit elsewhere (`ConvInteger`).
-                quantize_dynamic(model, path, **{"op_types_to_quantize": ["MatMul", "Gemm"], **self.kwargs})
-            else:
-                quantize_static(model, path, _FeedReader(feeds), **self.kwargs)
-            return onnx.load(path)
-
-
-class _FeedReader:
-    """The `get_next` interface `quantize_static` reads its calibration feeds through."""
-
-    def __init__(self, feeds: Iterable[dict[str, np.ndarray]]):
-        self.feeds = iter(feeds)
-
-    def get_next(self) -> dict[str, np.ndarray] | None:
-        return next(self.feeds, None)
-
-
-def _drop_initializer_shapes(model: onnx.ModelProto) -> None:
-    """Remove the `value_info` of initializers: dynamic mode transposes `Gemm` weights in place, then re-infers shapes
-    and trips over the stale ones."""
-    initializers = {initializer.name for initializer in model.graph.initializer}
-    value_info = [info for info in model.graph.value_info if info.name not in initializers]
-    del model.graph.value_info[:]
-    model.graph.value_info.extend(value_info)
-
-
-def _run_onnxruntime_quantizer(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs) -> None:
-    """Replace `onnx_program`'s model with the `onnxruntime_quantizer`'s, calibrated on the model's inputs."""
+def _quantize_onnx(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs) -> None:
+    """Replace `onnx_program`'s model with the config's quantizer's, calibrated on the model's inputs."""
     model = onnx_program.model_proto
     names = [graph_input.name for graph_input in model.graph.input]
-    feeds = (_onnx_feed(names, sample) for sample in config.calibration_dataset or [sample_inputs])
-    onnx_program.model = onnx_ir.from_proto(config.onnxruntime_quantizer(model, feeds))
+    calibration = CalibrationSet(
+        config.quantizer.calibration_dataset, sample_inputs, functools.partial(_onnx_feed, names)
+    )
+    onnx_program.model = onnx_ir.from_proto(config.quantizer.quantize(model, calibration, config.export_format))
 
 
 def _onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:

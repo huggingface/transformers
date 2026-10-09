@@ -169,11 +169,6 @@ class HfExporter(ABC):
                 classic single-token step (see [`~exporters.utils.decompose_for_generation`]). Only
                 stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
-        Quantization calibration: a single `config`'s `calibration_dataset` holds **generate** kwarg dicts (like
-        `sample_inputs`), which are run through the decomposition to give each component its own calibration set.
-        A per-component `config` dict is used as is, each `calibration_dataset` holding that component's forward
-        kwargs.
-
         Returns:
             `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
             [`~exporters.utils.decompose_for_generation`]. Values are whatever
@@ -197,15 +192,18 @@ class HfExporter(ABC):
             configs = config
         else:
             configs = dict.fromkeys(components, config)
-            if config.calibration_dataset:
+            quantizer = config.quantizer
+            if quantizer is not None and quantizer.calibration_dataset:
+                # Generate-level samples: capture each component's own forward inputs from them.
                 calibration = capture_calibration_inputs(
                     model,
-                    config.calibration_dataset,
+                    quantizer.calibration_dataset,
                     generation_config=generation_config,
                     multi_token_decode=multi_token_decode,
                 )
                 configs = {
-                    name: dataclasses.replace(config, calibration_dataset=calibration[name]) for name in components
+                    name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
+                    for name in components
                 }
 
         exported: dict[str, object] = {}

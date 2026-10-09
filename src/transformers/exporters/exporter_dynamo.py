@@ -40,6 +40,7 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
+import functools
 import importlib
 import inspect
 import sys
@@ -51,7 +52,8 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
-from .configs import DynamoConfig
+from .configs import DynamoConfig, ExportFormat
+from .quantizers.base import CalibrationSet, QuantizationStage
 from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
 
 
@@ -84,10 +86,6 @@ class DynamoExporter(HfExporter):
     min_versions = {"torch": "2.11.0"}
     tested_versions = {"torch": "2.12.0"}
 
-    # Whether quantization folds each weight into an int8 constant behind a lone `dequantize`, or keeps it in
-    # full precision behind a quantize/dequantize pair for the backend to compress.
-    fold_quantized_weights = True
-
     def export(
         self,
         model: PreTrainedModel,
@@ -98,6 +96,8 @@ class DynamoExporter(HfExporter):
             config = DynamoConfig(**config)
         elif not isinstance(config, DynamoConfig):
             raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+        if config.quantizer is not None:
+            config.quantizer.validate_environment(config.export_format)
 
         model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
 
@@ -115,6 +115,7 @@ class DynamoExporter(HfExporter):
         register_cache_pytrees_for_model(model)
 
         with (
+            torch.no_grad(),
             apply_patches("dynamo"),
             reset_model_state(model),
             patch_model_config(model, output_flags),
@@ -129,46 +130,52 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
-        if config.pt2e_quantizer is not None:
-            exported_program = self._quantize(exported_program, config, sample_inputs, dynamic_shapes)
+        # A Dynamo export's backend model is its FX graph, so it runs quantizers of either stage here.
+        quantizer = config.quantizer
+        if quantizer is not None and (
+            quantizer.stage is QuantizationStage.FX or config.export_format is ExportFormat.DYNAMO
+        ):
+            exported_program = self._quantize_fx(exported_program, config, sample_inputs, dynamic_shapes)
 
         return exported_program
 
-    def _quantize(
+    def _quantize_fx(
         self,
         exported_program: ExportedProgram,
         config: DynamoConfig,
         sample_inputs: MutableMapping[str, Any],
         dynamic_shapes: Any,
     ) -> ExportedProgram:
-        """Quantize the exported graph with PT2E (`prepare_pt2e` → calibrate → `convert_pt2e`) and re-export the
-        resulting `GraphModule` with the same inputs and dynamic shapes."""
-        from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
-
-        prepared = prepare_pt2e(exported_program.module(), config.pt2e_quantizer)
-
-        calibration_dataset = config.calibration_dataset
-        if not calibration_dataset:
-            logger.warning_once(
-                "Quantizing with no `calibration_dataset`; calibrating on the single sample input. Observer "
-                "statistics from one sample can hurt accuracy — set a representative `calibration_dataset` "
-                "(for generative models, `export_for_generation` fans a generate-level one out per component)."
-            )
-            calibration_dataset = [sample_inputs]
-
-        for sample in calibration_dataset:
-            # Only the traced inputs: a sample may still carry the output flags `prepare_for_export` popped.
-            prepared(**copy.deepcopy({name: sample[name] for name in sample_inputs}))
-
-        converted = convert_pt2e(prepared, fold_quantize=self.fold_quantized_weights)
-        return torch.export.export(
-            converted,
-            args=(),
-            kwargs=copy.deepcopy(dict(sample_inputs)),
-            strict=config.strict,
-            dynamic_shapes=dynamic_shapes,
-            prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
+        """Quantize the exported program's FX graph with the config's quantizer and re-export the result with the same
+        inputs and dynamic shapes."""
+        calibration = CalibrationSet(
+            config.quantizer.calibration_dataset,
+            sample_inputs,
+            functools.partial(_traced_inputs, traced_names=list(sample_inputs)),
         )
+        with torch.no_grad():
+            quantized = config.quantizer.quantize(exported_program.module(), calibration, config.export_format)
+            return torch.export.export(
+                quantized,
+                args=(),
+                kwargs=copy.deepcopy(dict(sample_inputs)),
+                strict=config.strict,
+                dynamic_shapes=dynamic_shapes,
+                prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
+            )
+
+
+def _traced_inputs(sample: MutableMapping[str, Any], traced_names: list[str]) -> dict[str, Any]:
+    """A calibration sample's traced inputs, deep-copied (a calibration forward writes the cache in place). Any other
+    key, such as an output flag `prepare_for_export` popped from the sample inputs, is dropped."""
+    missing = [name for name in traced_names if name not in sample]
+    if missing:
+        raise ValueError(
+            f"A calibration sample lacks the traced inputs {missing} (it has {sorted(sample)}). Calibration samples "
+            "are the exported forward's kwargs; only `export_for_generation` with a single config takes generate "
+            "kwargs, captured into each component's inputs."
+        )
+    return copy.deepcopy({name: sample[name] for name in traced_names})
 
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────

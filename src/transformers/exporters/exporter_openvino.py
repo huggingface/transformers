@@ -51,6 +51,7 @@ from ..utils.import_utils import is_openvino_available, is_torch_available
 from .configs import OpenVINOConfig
 from .exporter_dynamo import DynamoExporter, is_cache_object
 from .exporter_onnx import disambiguate_io_names, patch_model_outputs
+from .quantizers.base import CalibrationSet, QuantizationStage
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -79,8 +80,6 @@ if is_openvino_available():
 
 
 if TYPE_CHECKING:
-    import nncf
-
     from ..modeling_utils import PreTrainedModel
 
 
@@ -104,10 +103,6 @@ class OpenVINOExporter(DynamoExporter):
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
 
-    # OV converts a weight's quantize/dequantize pair to a `FakeQuantize` and compresses it to int8 itself, but
-    # has no conversion for the lone `dequantize` of a folded int8 weight.
-    fold_quantized_weights = False
-
     def export(
         self,
         model: PreTrainedModel,
@@ -119,10 +114,7 @@ class OpenVINOExporter(DynamoExporter):
         elif type(config) is not OpenVINOConfig:
             raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
 
-        # ``torch.no_grad()``: with grad enabled, every modeling-internal ``torch.no_grad()``
-        # region (frozen towers, VQ-VAEs) traces as a ``wrap_with_set_grad_enabled``
-        # HigherOrderOp subgraph, which OV's frontend can't lower.
-        with torch.no_grad(), patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
+        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
 
         exported_program, graph_module = _fix_exported_program(exported_program)
@@ -133,8 +125,8 @@ class OpenVINOExporter(DynamoExporter):
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
 
         # Before the state folding, so calibration feeds each sample's cache as an input instead of empty state.
-        if config.nncf_quantizer is not None:
-            ov_model = _run_nncf_quantizer(ov_model, config, sample_inputs)
+        if config.quantizer is not None and config.quantizer.stage is QuantizationStage.BACKEND:
+            ov_model = _quantize_openvino(ov_model, config, sample_inputs)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -611,48 +603,12 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
 # ── Quantization ────────────────────────────────────────────────────────────
 
 
-class NNCFQuantizer:
-    """Quantize a converted OpenVINO model with [NNCF](https://github.com/openvinotoolkit/nncf), OpenVINO's own
-    optimizer, which works on the IR rather than the PyTorch graph. Pass it as
-    `OpenVINOConfig(nncf_quantizer=...)`.
-
-    By default it runs `nncf.quantize` (int8 activations and weights, calibrated on the config's
-    `calibration_dataset`, with `model_type=nncf.ModelType.TRANSFORMER` unless given); with `weights_only=True` it
-    runs `nncf.compress_weights` (weight-only int8 or int4). Other keyword arguments go to that NNCF function.
-
-    Example:
-
-    ```python
-    >>> import nncf
-    >>> from transformers.exporters import NNCFQuantizer, OpenVINOConfig
-
-    >>> OpenVINOConfig(nncf_quantizer=NNCFQuantizer(), calibration_dataset=samples)
-    >>> OpenVINOConfig(nncf_quantizer=NNCFQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT4_SYM))
-    ```
-    """
-
-    def __init__(self, weights_only: bool = False, **kwargs):
-        self.weights_only = weights_only
-        self.kwargs = kwargs
-
-    def __call__(self, model: openvino.Model, dataset: nncf.Dataset) -> openvino.Model:
-        import nncf
-
-        if not self.weights_only:
-            return nncf.quantize(model, dataset, **{"model_type": nncf.ModelType.TRANSFORMER, **self.kwargs})
-        # The int8 modes are data-free and refuse a dataset; the others use it for their data-aware methods.
-        mode = self.kwargs.get("mode", nncf.CompressWeightsMode.INT8_ASYM)
-        data_free = mode in (nncf.CompressWeightsMode.INT8_SYM, nncf.CompressWeightsMode.INT8_ASYM)
-        return nncf.compress_weights(model, dataset=None if data_free else dataset, **self.kwargs)
-
-
-def _run_nncf_quantizer(ov_model: openvino.Model, config: OpenVINOConfig, sample_inputs) -> openvino.Model:
-    """Run the `nncf_quantizer` on the converted model, with an `nncf.Dataset` of its inputs."""
-    import nncf
-
-    samples = config.calibration_dataset or [sample_inputs]
-    dataset = nncf.Dataset(samples, lambda sample: _openvino_feed(ov_model, sample))
-    return config.nncf_quantizer(ov_model, dataset)
+def _quantize_openvino(ov_model: openvino.Model, config: OpenVINOConfig, sample_inputs) -> openvino.Model:
+    """Run the config's quantizer on the converted model, calibrated on the model's inputs."""
+    calibration = CalibrationSet(
+        config.quantizer.calibration_dataset, sample_inputs, lambda sample: _openvino_feed(ov_model, sample)
+    )
+    return config.quantizer.quantize(ov_model, calibration, config.export_format)
 
 
 def _openvino_feed(ov_model: openvino.Model, sample) -> dict[str, Any]:

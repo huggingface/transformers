@@ -17,5 +17,13 @@ from .base import HfExporter
 from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
 from .exporter_dynamo import DynamoExporter
 from .exporter_executorch import ExecutorchExporter
-from .exporter_onnx import OnnxExporter, OnnxRuntimeQuantizer
-from .exporter_openvino import NNCFQuantizer, OpenVINOExporter
+from .exporter_onnx import OnnxExporter
+from .exporter_openvino import OpenVINOExporter
+from .quantizers import (
+    ExportQuantizer,
+    NNCFOnnxQuantizer,
+    NNCFOpenVINOQuantizer,
+    NNCFTorchFXQuantizer,
+    OnnxRuntimeQuantizer,
+    PT2EQuantizer,
+)
