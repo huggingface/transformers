@@ -559,11 +559,9 @@ def _is_packed_sequence(position_ids, batch_size):
     """
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
-        2. Flattened sequences only are supported, i.e. a batch size of 1
+        2. Flattened sequences only are supported
         3. More than one position, as a single position (decode) is a single sequence
-        4. Compile-friendly check that the positions differ from `min + arange(seq_len)`, i.e. they are not a single
-           sequence counting up by 1, e.g. `[[0, 1, 2, 0, 1]]` restarts
-    Checks 1-3 only read shapes; check 4 reads the values, which forces a device sync.
+        4. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
     """
     # Answer from the shapes when they suffice: reading the values below forces a device sync, in every layer
     if position_ids is None:
