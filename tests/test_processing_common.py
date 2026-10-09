@@ -24,7 +24,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import ProcessorMixin
@@ -1483,34 +1482,32 @@ class ProcessorTesterMixin:
                 processor_kwargs={"do_sample_frames": True},
             )
 
-    @require_librosa
     @require_torchcodec
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest(f"{self.processor_class} does not support video inputs")
+        if "video_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"{self.processor_class.__name__} does not support video inputs")
 
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
-            or "audio_processor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
         ):
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+            self.skipTest(f"{self.processor_class.__name__} does not support audio inputs")
 
-        video_file_path = hf_hub_download(
-            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
+        video_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
         )
-        messages = [
+        video_expected_shape = processor.video_processor(videos=video_file_path)[self.videos_input_name].shape
+
+        Video_audio_message = [
             {
                 "role": "user",
                 "content": [
                     {"type": "video", "path": video_file_path},
+                    {"type": "audio"},
                     {"type": "text", "text": "Which of these animals is making the sound?"},
                 ],
             },
@@ -1526,25 +1523,52 @@ class ProcessorTesterMixin:
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
         out_dict = processor.apply_chat_template(
-            messages,
+            Video_audio_message,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            load_audio_backend="torchcodec",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
         self.assertTrue(self.videos_input_name in out_dict)
 
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+        self.assertEqual(out_dict["input_ids"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict["attention_mask"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 1)  # 1 audio from video
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
+
+        audio_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
+        )
+        audio_message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "path": audio_file_path},
+                    {"type": "text", "text": "What do you hear in this track?"},
+                ],
+            },
+        ]
+        out_dict = processor.apply_chat_template(
+            [Video_audio_message, audio_message],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            load_audio_backend="torchcodec",
+            load_audio_from_video=True,
+        )
+        self.assertTrue(self.audio_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
+
+        self.assertEqual(out_dict["input_ids"].shape[0], 2)
+        self.assertEqual(out_dict["attention_mask"].shape[0], 2)
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 2)  # 2 audios
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""

@@ -181,35 +181,43 @@ def get_all_config_mappings():
 def get_all_processor_mappings(config_mapping: dict[str, str]):
     files_to_names = {
         "image_processing_pil": (
-            "PilBackend",
+            ("PilBackend",),
             "IMAGE_PROCESSOR_MAPPING_NAMES_PIL",
             MISSING_IMAGE_PROCESSOR_MAPPING_NAMES,
         ),
         "image_processing": (
-            "TorchvisionBackend",
+            ("TorchvisionBackend",),
             "IMAGE_PROCESSOR_MAPPING_NAMES_TV",
             MISSING_IMAGE_PROCESSOR_MAPPING_NAMES,
         ),
         "video_processing": (
-            "BaseVideoProcessor",
+            ("BaseVideoProcessor",),
             "VIDEO_PROCESSOR_MAPPING_NAMES",
             MISSING_VIDEO_PROCESSOR_MAPPING_NAMES,
         ),
         "feature_extraction": (
-            "SequenceFeatureExtractor",
+            ("SequenceFeatureExtractor",),
             "FEATURE_EXTRACTOR_MAPPING_NAMES",
             MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES,
         ),
-        "processing": ("ProcessorMixin", "PROCESSOR_MAPPING_NAMES", MISSING_PROCESSOR_MAPPING_NAMES),
+        "processing": (
+            ("ProcessorMixin", "OmniModalProcessorMixin"),
+            "PROCESSOR_MAPPING_NAMES",
+            MISSING_PROCESSOR_MAPPING_NAMES,
+        ),
     }
 
     all_mappings = {}
-    for processor_filename, (parent_class_name, mapping_name, missing_mapping_names) in files_to_names.items():
-        all_mappings[mapping_name] = build_processor_mapping(
-            config_mapping=config_mapping,
-            processor_filename=processor_filename,
-            parent_class_name=parent_class_name,
-        )
+    for processor_filename, (parent_class_names, mapping_name, missing_mapping_names) in files_to_names.items():
+        all_mappings[mapping_name] = {}
+        for parent_class_name in parent_class_names:
+            all_mappings[mapping_name].update(
+                build_processor_mapping(
+                    config_mapping=config_mapping,
+                    processor_filename=processor_filename,
+                    parent_class_name=parent_class_name,
+                )
+            )
 
         # Make sure users aren't duplicating the same keys manually
         # Skip image processor until pil <-> tv backend are merged into one mapping

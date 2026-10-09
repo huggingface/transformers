@@ -18,17 +18,17 @@ import unittest
 import numpy as np
 
 from transformers import EmbeddingGemma2Processor
-from transformers.testing_utils import get_tests_dir, require_torch, require_vision
+from transformers.testing_utils import get_tests_dir, require_torch, require_torchcodec, require_vision
 from transformers.video_utils import VideoMetadata
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
-SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_vision
 class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    model_id = "google/embeddinggemma-2"
     processor_class = EmbeddingGemma2Processor
     videos_unstructured_max_length = 570
     videos_text_kwargs_max_length = 570
@@ -52,11 +52,6 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return video_processor_class(**video_processor_kwargs)
 
     @classmethod
-    def _setup_feature_extractor(cls):
-        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
-        return feature_extractor_class()
-
-    @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         image_processor_kwargs = {
@@ -67,58 +62,8 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return image_processor_class(**image_processor_kwargs)
 
     @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        extra_special_tokens = {
-            "image_token": "<|image|>",
-            "video_token": "<|video|>",
-            "boi_token": "<start_of_image>",
-            "eoi_token": "<end_of_image>",
-            "audio_token": "<|audio|>",
-            "boa_token": "<start_of_audio>",
-            "eoa_token": "<end_of_audio>",
-        }
-        tokenizer = tokenizer_class.from_pretrained(
-            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
-        )
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        return tokenizer
-
-    @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    # TODO: remove `_CHAT_TEMPLATE` and set `model_id` once the checkpoint is available on the Hub.
-    _CHAT_TEMPLATE = (
-        "{%- for msg in messages if msg.get('role') == 'system' -%}"
-        "{%- if msg.get('content') is string -%}"
-        "{{ msg['content'] }}"
-        "{%- else -%}"
-        "{%- for item in msg['content'] if item.get('type') == 'text' -%}"
-        "{{ item['text'] }}"
-        "{%- endfor -%}"
-        "{%- endif -%}"
-        "{%- endfor -%}"
-        "{%- for msg in messages if msg.get('role') != 'system' -%}"
-        "{%- if msg.get('content') is string -%}"
-        "{{ msg['content'] }}"
-        "{%- else -%}"
-        "{%- set existing_text = msg['content'] | selectattr('type', 'equalto', 'text') | map(attribute='text') | join -%}"
-        "{%- set has_manual_placeholders = ('<|image|>' in existing_text) or ('<|video|>' in existing_text) or ('<|audio|>' in existing_text) -%}"
-        "{%- for item in msg['content'] -%}"
-        "{%- if item.get('type') == 'text' -%}"
-        "{{ item['text'] }}"
-        "{%- elif not has_manual_placeholders and item.get('type') == 'image' -%}"
-        "<|image|>"
-        "{%- elif not has_manual_placeholders and item.get('type') == 'video' -%}"
-        "<|video|>"
-        "{%- elif not has_manual_placeholders and item.get('type') == 'audio' -%}"
-        "<|audio|>"
-        "{%- endif -%}"
-        "{%- endfor -%}"
-        "{%- endif -%}"
-        "{%- endfor -%}"
-    )
 
     @staticmethod
     def prepare_processor_dict():
@@ -264,7 +209,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         aud3 = np.zeros(1600, dtype=np.float32)
 
         # 1. Nested audio list: batch size 2, sample 0 has 2 audios, sample 1 has 1 audio
-        out_aud = processor(audio=[[aud1, aud2], [aud3]], return_tensors="pt")
+        out_aud = processor(audio=[[aud1, aud2], [aud3]], padding=True, return_tensors="pt")
         self.assertEqual(out_aud["input_ids"].shape[0], 2)
         self.assertGreater(
             (out_aud["input_ids"][0] == processor.audio_token_id).sum().item(),
@@ -272,7 +217,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         # 2. Nested video list: batch size 2, sample 0 has 2 videos, sample 1 has 1 video
-        out_vid = processor(videos=[[vid1, vid2], [vid3]], do_sample_frames=False, return_tensors="pt")
+        out_vid = processor(videos=[[vid1, vid2], [vid3]], padding=True, do_sample_frames=False, return_tensors="pt")
         self.assertEqual(out_vid["input_ids"].shape[0], 2)
         self.assertGreater(
             (out_vid["input_ids"][0] == processor.video_token_id).sum().item(),
@@ -283,6 +228,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_mixed = processor(
             images=[[img1, img2], [img3]],
             audio=[[aud1], [aud2, aud3]],
+            padding=True,
             return_tensors="pt",
         )
         self.assertEqual(out_mixed["input_ids"].shape[0], 2)
@@ -293,11 +239,11 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # 4. Mismatched outer batch sizes across modalities with text=None raises ValueError
         with self.assertRaisesRegex(ValueError, "inconsistently sized modality batches"):
-            processor(images=[[img1], [img2]], audio=[aud1], return_tensors="pt")
+            processor(images=[[img1], [img2]], audio=[aud1], padding=True, return_tensors="pt")
 
         # 5. Nested audio and video lists also work when explicit text placeholders are provided
         out_aud_with_text = processor(
-            text=["<|audio|> <|audio|>", "<|audio|>"], audio=[[aud1, aud2], [aud3]], return_tensors="pt"
+            text=["<|audio|> <|audio|>", "<|audio|>"], audio=[[aud1, aud2], [aud3]], padding=True, return_tensors="pt"
         )
         self.assertTrue((out_aud["input_ids"] == out_aud_with_text["input_ids"]).all())
 
@@ -305,6 +251,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=["<|video|> <|video|>", "<|video|>"],
             videos=[[vid1, vid2], [vid3]],
             do_sample_frames=False,
+            padding=True,
             return_tensors="pt",
         )
         self.assertTrue((out_vid["input_ids"] == out_vid_with_text["input_ids"]).all())
@@ -374,7 +321,6 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_chat_template_ordering_and_manual_placeholders(self):
         """System prompts precede media, content order is preserved, and manual markers disable auto-insertion."""
         processor = self.get_processor()
-        processor.chat_template = self._CHAT_TEMPLATE
         img = np.random.randint(0, 256, size=(56, 56, 3), dtype=np.uint8)
         aud = np.zeros(1600, dtype=np.float32)
 
@@ -442,3 +388,117 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertNotIn("<|audio|>", rendered_partial)
         with self.assertRaisesRegex(ValueError, "audio"):
             processor(text=[rendered_partial], images=[[img]], audio=[aud], return_tensors="pt")
+
+    @require_torchcodec
+    def test_chat_template_audio_from_video(self):
+        processor = self.get_processor()
+        video_file = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
+        )
+        message_video = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video", "path": video_file},
+                    {"type": "text", "text": "Which of these animals is making the sound?"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "It is a cow."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Tell me all about this animal."},
+                ],
+            },
+        ]
+
+        audio_file = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
+        )
+        message_audio = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "path": audio_file},
+                    {"type": "text", "text": "Which can you hear?"},
+                ],
+            },
+        ]
+
+        silent_video_file = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/karate.mp4"
+        )
+        message_silent_video = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video", "path": silent_video_file},
+                    {"type": "text", "text": "Describe the man"},
+                ],
+            },
+        ]
+
+        out_dict = processor.apply_chat_template(
+            [message_silent_video, message_audio, message_video],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            truncation=False,
+            load_audio_from_video=True,
+            # video sampled to 3 frames
+            overflow_strategy="uniform",
+            max_frames=3,
+            do_sample_frames=True,
+            add_timestamps=True,
+            load_audio_backend="torchcodec",
+        )
+        self.assertTrue(self.audio_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
+
+        self.assertEqual(out_dict["input_ids"].shape[-1], 229)
+        self.assertListEqual(list(out_dict[self.audio_input_name].shape[:2]), [2, 290])
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape[:2]), [4, 630])
+
+        # Audio can be truncated shorter than video
+        out_dict = processor.apply_chat_template(
+            [message_silent_video, message_audio],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=16_000,
+            load_audio_from_video=True,
+            # video sampled to 3 frames
+            overflow_strategy="uniform",
+            max_frames=3,
+            do_sample_frames=True,
+            add_timestamps=True,
+            load_audio_backend="torchcodec",
+        )
+
+        self.assertEqual(out_dict["input_ids"].shape[-1], 229)
+        self.assertListEqual(list(out_dict[self.audio_input_name].shape[:2]), [1, 99])
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape[:2]), [3, 630])
+
+        with self.assertRaisesRegex(ValueError, "`audio_from_video_indices` has 2 standalone slots"):
+            processor(
+                videos=[video_file, silent_video_file],
+                audio=[audio_file],
+                text=f"{self.video_token}{self.audio_token}{self.video_token}",
+                padding=True,
+                audio_from_video_indices=[0, None, None],
+                return_tensors="pt",
+                load_audio_from_video=True,
+                overflow_strategy="uniform",
+                max_frames=3,
+                do_sample_frames=True,
+                add_timestamps=True,
+                load_audio_backend="torchcodec",
+            )
