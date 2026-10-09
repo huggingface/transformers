@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 There are many quantization methods available in Transformers for inference and fine-tuning. This guide helps you choose the most common and production-ready quantization techniques depending on your use case, and presents the advantages and disadvantages of each technique.
 
-For a comprehensive overview of all supported methods and their features, refer back to the table in the [Overview](./overview).
+For a comprehensive overview of all supported methods and their features, refer to the [quantization picker](./overview) or the full compatibility table below it.
 
 ## Inference
 

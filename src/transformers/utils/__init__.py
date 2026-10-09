@@ -252,6 +252,7 @@ from .import_utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     is_torchdistx_available,
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,

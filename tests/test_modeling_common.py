@@ -3860,7 +3860,9 @@ class ModelTesterMixin(ExportTesterMixin):
                     "audio_model",
                 }
                 language_model_names = {"language_model", "model", "text_model"}
-                modality_tower_name = [name for name in modality_tower_names if hasattr(model_sdpa, name)]
+                modality_tower_name = [
+                    name for name in modality_tower_names if getattr(model_sdpa, name, None) is not None
+                ]
                 modality_tower_name = modality_tower_name[0] if len(modality_tower_name) > 0 else None
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
                 language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
@@ -5401,18 +5403,23 @@ class ModelTesterMixin(ExportTesterMixin):
                     "hidden_dim",
                     "mm_embed_dim",  # gemma4-only
                 ]
-                hidden_size = None
-                for attr in attribute_candidates:
-                    if hasattr(vision_config, attr):
-                        hidden_size = getattr(vision_config, attr)
-                        break
-                    elif isinstance(vision_config, dict) and attr in vision_config:
-                        hidden_size = vision_config[attr]
-                        break
+                if "Fuyu" in model_class.__name__:
+                    # very old model without an encoder - simple MLP as vision backbone
+                    # add a knob here to not overwrite the whole test
+                    hidden_size = config.get_text_config().hidden_size
                 else:
-                    raise ValueError("Cannot find the hidden size attribute in vision_config")
-                if isinstance(hidden_size, (list, tuple)):
-                    hidden_size = hidden_size[-1]
+                    hidden_size = None
+                    for attr in attribute_candidates:
+                        if hasattr(vision_config, attr):
+                            hidden_size = getattr(vision_config, attr)
+                            break
+                        elif isinstance(vision_config, dict) and attr in vision_config:
+                            hidden_size = vision_config[attr]
+                            break
+                    else:
+                        raise ValueError("Cannot find the hidden size attribute in vision_config")
+                    if isinstance(hidden_size, (list, tuple)):
+                        hidden_size = hidden_size[-1]
                 self.assertEqual(
                     last_hidden_state_shape[-1],
                     hidden_size,
@@ -6176,7 +6183,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 any(potential_name in name for potential_name in possible_rope_attributes)
                 # skip if module doesn't accept config - old API/model
                 and (
-                    len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                    len(params := list(inspect.signature(module.__init__).parameters.values())) >= 1
                     and params[0].name == "config"
                 )
                 # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
@@ -6247,7 +6254,7 @@ class ModelTesterMixin(ExportTesterMixin):
             text_config,
             {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor},
         )
-        original_rope = rope_class(config=text_config, device=torch_device)
+        original_rope = rope_class(config=text_config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short, **kwargs)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -6264,7 +6271,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        linear_scaling_rope = rope_class(config=text_config, device=torch_device)
+        linear_scaling_rope = rope_class(config=text_config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, **kwargs)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -6286,7 +6293,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        ntk_scaling_rope = rope_class(config=text_config, device=torch_device)
+        ntk_scaling_rope = rope_class(config=text_config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, **kwargs)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -6322,7 +6329,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        yarn_scaling_rope = rope_class(config=text_config, device=torch_device)
+        yarn_scaling_rope = rope_class(config=text_config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, **kwargs)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, **kwargs)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
