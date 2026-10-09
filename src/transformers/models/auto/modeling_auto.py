@@ -158,6 +158,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("embedding_gemma2_text", "EmbeddingGemma2TextModel"),
         ("emu3", "Emu3Model"),
         ("encodec", "EncodecModel"),
+        ("encodec_decoder", "EncodecDecoderModel"),
+        ("encodec_encoder", "EncodecEncoderModel"),
         ("ernie", "ErnieModel"),
         ("ernie4_5", "Ernie4_5Model"),
         ("ernie4_5_moe", "Ernie4_5_MoeModel"),

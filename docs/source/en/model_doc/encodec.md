@@ -58,6 +58,14 @@ audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_value
 
 [[autodoc]] EncodecConfig
 
+## EncodecEncoderConfig
+
+[[autodoc]] EncodecEncoderConfig
+
+## EncodecDecoderConfig
+
+[[autodoc]] EncodecDecoderConfig
+
 ## EncodecFeatureExtractor
 
 [[autodoc]] EncodecFeatureExtractor
@@ -68,4 +76,14 @@ audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_value
 [[autodoc]] EncodecModel
     - decode
     - encode
+    - forward
+
+## EncodecEncoderModel
+
+[[autodoc]] EncodecEncoderModel
+    - forward
+
+## EncodecDecoderModel
+
+[[autodoc]] EncodecDecoderModel
     - forward
