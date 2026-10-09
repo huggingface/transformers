@@ -597,21 +597,19 @@ def _get_backbone_map() -> dict[str, frozenset[str]]:
 
 def create_backbone_edges() -> list[tuple[str, str]]:
     models_dir = "src/transformers/models"
-    edges = []
-    for parent, children in _get_backbone_map().items():
-        targets = [
-            f"{models_dir}/{parent}/{kind}_{parent}.py"
-            for kind in ("configuration", "modeling")  # processor changes don't
-            if (PATH_TO_REPO / f"{models_dir}/{parent}/{kind}_{parent}.py").is_file()
-        ]
-        for child in children:
-            deps = [
-                f"{models_dir}/{child}/{kind}_{child}.py"
-                for kind in ("configuration", "modeling")  # processor changes don't
-                if (PATH_TO_REPO / f"{models_dir}/{child}/{kind}_{child}.py").is_file()
-            ]
-            edges.extend((dep, target) for dep in deps for target in targets)
-    return edges
+
+    def existing_files(model: str) -> list[str]:
+        # processors aren't used as backbones
+        paths = (f"{models_dir}/{model}/{kind}_{model}.py" for kind in ("configuration", "modeling"))
+        return [path for path in paths if (PATH_TO_REPO / path).is_file()]
+
+    return [
+        (dep, target)
+        for parent, children in _get_backbone_map().items()
+        for target in existing_files(parent)
+        for child in children
+        for dep in existing_files(child)
+    ]
 
 
 def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
@@ -948,7 +946,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
                     reverse_map.setdefault(key, [])
                     deps = [
                         f"src/transformers/models/{parent_model}/{kind}_{parent_model}.py"
-                        for kind in ("configuration", "modeling")  # processor changes don't
+                        for kind in ("configuration", "modeling")  # processors aren't used as backbones
                         if (
                             PATH_TO_REPO / f"src/transformers/models/{parent_model}/{kind}_{parent_model}.py"
                         ).is_file()
