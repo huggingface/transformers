@@ -70,7 +70,11 @@ jobs:
           else
             selection=()  # pushes to the proof branch run every contract
           fi
-          echo "Changed files: $(wc -l < /tmp/changed-files.txt 2>/dev/null || echo all)"; cat /tmp/changed-files.txt 2>/dev/null | head -20
+          if [[ -f /tmp/changed-files.txt ]]; then
+            echo "Changed files: $(wc -l < /tmp/changed-files.txt)"; head -20 /tmp/changed-files.txt
+          else
+            echo "Changed files: all"
+          fi
           start=$SECONDS
           python utils/contracts/run.py --framework transformers --fixtures-only --lock "$LOCK" --require-all \
             "${selection[@]}" --output /tmp/results.jsonl 2> /tmp/run.log | python -c '
