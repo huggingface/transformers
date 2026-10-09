@@ -286,7 +286,7 @@ class QuantizationExportTest(unittest.TestCase):
             supported_formats = (ExportFormat.DYNAMO,)
             models = []
 
-            def quantize(self, model, calibration, export_format):
+            def _quantize(self, model, calibration, export_format):
                 self.models.append(model)
                 return model
 

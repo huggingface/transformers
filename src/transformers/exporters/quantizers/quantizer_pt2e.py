@@ -62,7 +62,7 @@ class PT2EQuantizer(ExportQuantizer):
         super().__init__(calibration_dataset)
         self.quantizer = quantizer
 
-    def quantize(
+    def _quantize(
         self, model: torch.fx.GraphModule, calibration: CalibrationSet, export_format: ExportFormat
     ) -> torch.fx.GraphModule:
         from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e

@@ -43,9 +43,9 @@ class ExportQuantizer(ABC):
     Base class for post-training quantizers applied during export.
 
     A quantizer declares the export formats it supports, the packages it needs and the stage it runs at; the exporter
-    validates it against the export up front, then hands it the model at that stage together with a
-    [`CalibrationSet`] of the model's own inputs. Subclass it and implement [`~ExportQuantizer.quantize`] to add a
-    new quantization method.
+    validates it against the export up front, then calls [`~ExportQuantizer.quantize`] with the model at that stage.
+    Subclass it and implement `_quantize`, which receives a [`CalibrationSet`] of the model's own inputs, to add a new
+    quantization method.
 
     Args:
         calibration_dataset (`Iterable[dict]`, *optional*):
@@ -77,9 +77,22 @@ class ExportQuantizer(ABC):
         if missing:
             raise ImportError(f"{type(self).__name__} requires: {', '.join(missing)}")
 
+    def quantize(
+        self,
+        model: Any,
+        sample_inputs: dict[str, Any],
+        transform: Callable[[dict[str, Any]], Any],
+        export_format: ExportFormat,
+    ) -> Any:
+        """Quantize `model` (the FX graph or backend model for this quantizer's stage), calibrated on this quantizer's
+        `calibration_dataset`, or on `sample_inputs` when it has none. `transform` maps each forward-kwarg sample to the
+        model's own inputs."""
+        calibration = CalibrationSet(self.calibration_dataset, sample_inputs, transform)
+        return self._quantize(model, calibration, export_format)
+
     @abstractmethod
-    def quantize(self, model: Any, calibration: CalibrationSet, export_format: ExportFormat) -> Any:
-        """Quantize `model` (the FX graph or backend model for this quantizer's stage) and return the result."""
+    def _quantize(self, model: Any, calibration: CalibrationSet, export_format: ExportFormat) -> Any:
+        """Quantize `model` on the `calibration` set of its own inputs and return the result."""
 
 
 class CalibrationSet:

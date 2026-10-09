@@ -54,7 +54,7 @@ from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import OnnxConfig
 from .exporter_dynamo import DynamoExporter
-from .quantizers.base import CalibrationSet, QuantizationStage
+from .quantizers.base import QuantizationStage
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
@@ -1221,10 +1221,10 @@ def _quantize_onnx(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs)
     """Replace `onnx_program`'s model with the config's quantizer's, calibrated on the model's inputs."""
     model = onnx_program.model_proto
     names = [graph_input.name for graph_input in model.graph.input]
-    calibration = CalibrationSet(
-        config.quantizer.calibration_dataset, sample_inputs, functools.partial(_onnx_feed, names)
+    quantized = config.quantizer.quantize(
+        model, sample_inputs, lambda sample: _onnx_feed(names, sample), config.export_format
     )
-    onnx_program.model = onnx_ir.from_proto(config.quantizer.quantize(model, calibration, config.export_format))
+    onnx_program.model = onnx_ir.from_proto(quantized)
 
 
 def _onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:

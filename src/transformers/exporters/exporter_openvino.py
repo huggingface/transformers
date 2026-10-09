@@ -51,7 +51,7 @@ from ..utils.import_utils import is_openvino_available, is_torch_available
 from .configs import OpenVINOConfig
 from .exporter_dynamo import DynamoExporter, is_cache_object
 from .exporter_onnx import disambiguate_io_names, patch_model_outputs
-from .quantizers.base import CalibrationSet, QuantizationStage
+from .quantizers.base import QuantizationStage
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -605,10 +605,9 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
 
 def _quantize_openvino(ov_model: openvino.Model, config: OpenVINOConfig, sample_inputs) -> openvino.Model:
     """Run the config's quantizer on the converted model, calibrated on the model's inputs."""
-    calibration = CalibrationSet(
-        config.quantizer.calibration_dataset, sample_inputs, lambda sample: _openvino_feed(ov_model, sample)
+    return config.quantizer.quantize(
+        ov_model, sample_inputs, lambda sample: _openvino_feed(ov_model, sample), config.export_format
     )
-    return config.quantizer.quantize(ov_model, calibration, config.export_format)
 
 
 def _openvino_feed(ov_model: openvino.Model, sample) -> dict[str, Any]:

@@ -42,7 +42,7 @@ class _NNCFQuantizer(ExportQuantizer):
         self.weights_only = weights_only
         self.kwargs = kwargs
 
-    def quantize(
+    def _quantize(
         self,
         model: openvino.Model | onnx.ModelProto | torch.fx.GraphModule,
         calibration: CalibrationSet,

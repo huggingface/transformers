@@ -84,9 +84,10 @@ Quantizers live in `transformers.exporters.quantizers`, one class per toolchain 
 - `supported_formats`: the export formats it quantizes. The export rejects any other format before tracing.
 - `required_packages`: what it imports. The export checks they're installed before tracing.
 
-Then implement `quantize(model, calibration, export_format)`. `model` is the FX graph or backend model for the stage,
+Then implement `_quantize(model, calibration, export_format)`. `model` is the FX graph or backend model for the stage,
 and `calibration` is a [`~exporters.quantizers.CalibrationSet`] that yields the model's own inputs one sample at a
-time. The exporter builds it from the quantizer's `calibration_dataset`, so the quantizer never maps inputs itself.
+time, built from the quantizer's `calibration_dataset` with the exporter's input mapping, so the quantizer never maps
+inputs itself.
 
 ```python
 from transformers.exporters import ExportFormat
@@ -98,7 +99,7 @@ class MyOnnxQuantizer(ExportQuantizer):
     supported_formats = (ExportFormat.ONNX,)
     required_packages = ("my_toolkit",)
 
-    def quantize(self, model, calibration, export_format):
+    def _quantize(self, model, calibration, export_format):
         import my_toolkit
 
         return my_toolkit.quantize(model, calibration_feeds=list(calibration))

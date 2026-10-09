@@ -56,7 +56,7 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
         self.dynamic = dynamic
         self.kwargs = kwargs
 
-    def quantize(
+    def _quantize(
         self, model: onnx.ModelProto, calibration: CalibrationSet, export_format: ExportFormat
     ) -> onnx.ModelProto:
         import onnx

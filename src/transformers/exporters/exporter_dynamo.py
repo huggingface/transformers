@@ -40,7 +40,6 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
-import functools
 import importlib
 import inspect
 import sys
@@ -53,7 +52,7 @@ from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .configs import DynamoConfig, ExportFormat
-from .quantizers.base import CalibrationSet, QuantizationStage
+from .quantizers.base import QuantizationStage
 from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
 
 
@@ -148,13 +147,13 @@ class DynamoExporter(HfExporter):
     ) -> ExportedProgram:
         """Quantize the exported program's FX graph with the config's quantizer and re-export the result with the same
         inputs and dynamic shapes."""
-        calibration = CalibrationSet(
-            config.quantizer.calibration_dataset,
-            sample_inputs,
-            functools.partial(_traced_inputs, traced_names=list(sample_inputs)),
-        )
         with torch.no_grad():
-            quantized = config.quantizer.quantize(exported_program.module(), calibration, config.export_format)
+            quantized = config.quantizer.quantize(
+                exported_program.module(),
+                sample_inputs,
+                lambda sample: _traced_inputs(sample, list(sample_inputs)),
+                config.export_format,
+            )
             return torch.export.export(
                 quantized,
                 args=(),
