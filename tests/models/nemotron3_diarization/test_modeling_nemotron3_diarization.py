@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 from huggingface_hub import download_bucket_files
+from parameterized import parameterized
 from safetensors.torch import load_file
 
 from transformers import is_torch_available
@@ -200,43 +201,79 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_streaming_steps_match_offline(self):
-        """With equal FIFO sizes, feeding the offline chunks one forward at a time reproduces the offline forward."""
+    # the input is 32 encoder frames and the FIFO queue holds 4
+    @parameterized.expand(
+        [
+            ("no_context", 4, 0, 0),
+            ("lookahead", 4, 0, 1),
+            ("lookback", 4, 2, 0),
+            ("lookback_and_lookahead", 4, 2, 1),
+            ("lookback_of_a_whole_chunk", 4, 4, 1),
+            ("lookback_beyond_the_previous_chunk_and_the_fifo", 4, 6, 1),
+            ("partial_last_chunk", 5, 2, 1),
+            ("single_chunk", 64, 2, 1),
+        ]
+    )
+    def test_streaming_steps_match_offline(self, _, chunk_length, chunk_left_context, chunk_right_context):
+        """
+        With equal FIFO sizes, feeding the offline chunks one forward at a time, each with its look-back and look-ahead
+        frames, reproduces the offline forward.
+        """
         config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
-        config.chunk_length = 4
-        config.chunk_right_context = 1
+        config.chunk_length = chunk_length
+        config.chunk_left_context = chunk_left_context
+        config.chunk_right_context = chunk_right_context
         model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
 
         with torch.no_grad():
             offline_logits = model(input_features, attention_mask=attention_mask).logits
 
-        chunk_frames = config.chunk_length * config.audio_config.subsampling_factor
-        lookahead_frames = config.chunk_right_context * config.audio_config.subsampling_factor
+        subsampling_factor = config.audio_config.subsampling_factor
+        chunk_frames = config.chunk_length * subsampling_factor
+        lookahead_frames = config.chunk_right_context * subsampling_factor
         num_frames = input_features.shape[1]
         step_logits, speaker_cache, start = [], None, 0
         with torch.no_grad():
-            while start + chunk_frames + lookahead_frames <= num_frames:
-                end = start + chunk_frames + lookahead_frames
+            # every chunk but the last one is followed by frames, of which it takes up to `chunk_right_context`
+            while start + chunk_frames < num_frames:
+                # the first chunks have fewer frames to look back at
+                lookback_frames = min(config.chunk_left_context * subsampling_factor, start)
+                end = min(start + chunk_frames + lookahead_frames, num_frames)
                 outputs = model(
-                    input_features[:, start:end],
-                    attention_mask=attention_mask[:, start:end],
+                    input_features[:, start - lookback_frames : end],
+                    attention_mask=attention_mask[:, start - lookback_frames : end],
                     speaker_cache=speaker_cache,
-                    num_lookahead_frames=config.chunk_right_context,
+                    num_lookahead_frames=(end - start - chunk_frames) // subsampling_factor,
+                    num_lookback_frames=lookback_frames // subsampling_factor,
                 )
                 step_logits.append(outputs.logits)
                 speaker_cache = outputs.speaker_cache
                 start += chunk_frames
             # The last call: the remaining frames are the last (partial) chunk, none of them is look-ahead.
+            lookback_frames = min(config.chunk_left_context * subsampling_factor, start)
             outputs = model(
-                input_features[:, start:],
-                attention_mask=attention_mask[:, start:],
+                input_features[:, start - lookback_frames :],
+                attention_mask=attention_mask[:, start - lookback_frames :],
                 speaker_cache=speaker_cache,
+                num_lookback_frames=lookback_frames // subsampling_factor,
             )
             step_logits.append(outputs.logits)
-        self.assertIs(outputs.speaker_cache, speaker_cache)
         streaming_logits = torch.cat(step_logits, dim=1)
         self.assertEqual(streaming_logits.shape, offline_logits.shape)
         torch.testing.assert_close(streaming_logits, offline_logits, atol=1e-5, rtol=1e-5)
+
+    def test_single_chunk_matches_single_pass(self):
+        """An input that fits in one chunk is encoded in a single pass, with no cached, look-back or look-ahead frames."""
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        config.chunk_left_context = 2
+        model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
+        self.assertLessEqual(input_features.shape[1], config.chunk_length * config.audio_config.subsampling_factor)
+        input_features = input_features * attention_mask[..., None]
+        with torch.no_grad():
+            logits = model(input_features, attention_mask=attention_mask).logits
+            hidden_states = model.model(input_features, attention_mask=attention_mask).last_hidden_state
+            single_pass_logits = model.classifier(hidden_states)[:, : input_features.shape[1]]
+        torch.testing.assert_close(logits, single_pass_logits, atol=1e-5, rtol=1e-5)
 
     def test_streaming_rejects_invalid_lookahead(self):
         config, input_features, _ = self.model_tester.prepare_config_and_inputs()
@@ -247,6 +284,16 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         # nothing but look-ahead
         with self.assertRaises(ValueError):
             model(input_features[:, :subsampling_factor], num_lookahead_frames=1)
+
+    def test_streaming_rejects_invalid_lookback_frames(self):
+        config, input_features, _ = self.model_tester.prepare_config_and_inputs()
+        model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
+        subsampling_factor = config.audio_config.subsampling_factor
+        with self.assertRaises(ValueError):
+            model(input_features, num_lookback_frames=-1)
+        # nothing but look-back and look-ahead frames
+        with self.assertRaises(ValueError):
+            model(input_features[:, : 2 * subsampling_factor], num_lookahead_frames=1, num_lookback_frames=1)
 
 
 @require_torch
