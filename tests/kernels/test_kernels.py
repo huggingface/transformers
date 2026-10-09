@@ -15,6 +15,7 @@
 # Run the test: CUDA_VISIBLE_DEVICES=0 RUN_SLOW=1 pytest -sv tests/kernels/test_kernels.py
 
 
+import ast
 import copy
 import importlib
 import inspect
@@ -1280,6 +1281,27 @@ class TestProcessingKernels(TestCasePlus):
                 torch.testing.assert_close(
                     pixel_values.reshape(-1), patchify_kernel_layout_reference(*recorded_arguments[0]).reshape(-1)
                 )
+
+    def test_image_and_video_processors_run_through_preprocess(self):
+        """`use_processing_kernel` decorates `_preprocess`, so a processor whose entry point skips it never runs a kernel."""
+        allowed = {"timm_wrapper.TimmWrapperImageProcessor"}
+        bypassing = []
+        for path in sorted(Path(transformers.__file__).parent.glob("models/*/*_processing_*.py")):
+            if path.stem.startswith("modular_"):
+                continue
+            for node in ast.parse(path.read_text()).body:
+                if not isinstance(node, ast.ClassDef) or not node.name.endswith(
+                    ("ImageProcessor", "ImageProcessorPil", "VideoProcessor")
+                ):
+                    continue
+                for method in node.body:
+                    if not isinstance(method, ast.FunctionDef) or method.name not in ("preprocess", "__call__"):
+                        continue
+                    source = ast.unparse(method)
+                    name = f"{path.parent.name}.{node.name}"
+                    if "_preprocess" not in source and "super()" not in source and name not in allowed:
+                        bypassing.append(f"{name}.{method.name}")
+        self.assertEqual(bypassing, [], "these processors do not reach `_preprocess`")
 
     def test_use_kernels_is_a_runtime_flag(self):
         processor = Sam2ImageProcessor(use_kernels=True)
