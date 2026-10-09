@@ -21,7 +21,7 @@ import tempfile
 import unittest
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, trainers
-from tokenizers.models import BPE, WordLevel
+from tokenizers.models import BPE, Unigram, WordLevel
 
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tiktoken, require_tokenizers
@@ -217,6 +217,46 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
 
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
             self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+
+    def test_added_token_does_not_get_metaspace_prefix(self):
+        # #28218: a non-special add_tokens call on a SentencePiece-style fast tokenizer
+        # must not leave a spurious "▁" prefix on the chunk after the added token.
+        tokenizer = AutoTokenizer.from_pretrained(
+            "facebook/nllb-200-distilled-600M", revision="f8d333a098d19b4fd9a8b18f94170487ad3f821d"
+        )
+        self.assertEqual(tokenizer._tokenizer.pre_tokenizer.prepend_scheme, "always")
+
+        tokenizer.add_tokens(["abcd"])
+
+        self.assertEqual(tokenizer._tokenizer.pre_tokenizer.prepend_scheme, "first")
+        self.assertEqual(tokenizer.tokenize("abcdgym"), ["abcd", "gym"])
+        self.assertEqual(tokenizer.tokenize("abcd gym"), ["abcd", "▁gym"])
+        self.assertEqual(
+            tokenizer.tokenize("I like to walk abcdgym along the beach"),
+            ["▁I", "▁like", "▁to", "▁walk", "▁", "abcd", "gym", "▁along", "▁the", "▁beach"],
+        )
+        self.assertEqual(tokenizer.decode(tokenizer.encode("abcdgym", add_special_tokens=False)), "abcdgym")
+
+    def test_checkpoint_restore_keeps_metaspace_prepend_scheme(self):
+        # #28218 follow-up: restoring a checkpoint that legitimately baked prepend_scheme="always"
+        # together with its own non-special added tokens must NOT flip the scheme to "first". The
+        # realignment only applies to genuine post-init user add_tokens, never to load-time restore.
+        vocab = [("<unk>", 0.0), ("▁", -10.0), ("gym", 0.0), ("▁gym", 0.0)]
+        backend = Tokenizer(Unigram(vocab=vocab, unk_id=0))
+        backend.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        backend.add_tokens(["abcd"])  # a non-special token baked into the checkpoint
+        fast = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="<unk>")
+        self.assertEqual(fast._tokenizer.pre_tokenizer.prepend_scheme, "always")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fast.save_pretrained(tmp_dir)
+            reloaded = PreTrainedTokenizerFast.from_pretrained(tmp_dir)
+
+        # Restoring "abcd" while loading must leave the scheme untouched...
+        self.assertEqual(reloaded._tokenizer.pre_tokenizer.prepend_scheme, "always")
+        # ...while a genuine post-load user add still realigns it.
+        reloaded.add_tokens(["efgh"])
+        self.assertEqual(reloaded._tokenizer.pre_tokenizer.prepend_scheme, "first")
 
     def test_bpe_tokenizer_skips_clean_up_tokenization_spaces(self):
         """BPE tokenizers should not apply clean_up_tokenization even when the flag is True.
