@@ -148,7 +148,8 @@ class Chunk(ConversionOps):
 
 
 class Split(ConversionOps):
-    """Split a tensor along `dim` into one piece per target, sized like that target's model parameter."""
+    """Split a tensor along `dim` into one piece per target, sized like that target's model parameter.
+    WARNING this op is not TP-safe, a sharded fused tensor needs each target's local slice, not the full parameter sizes."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
