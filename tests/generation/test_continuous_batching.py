@@ -50,6 +50,7 @@ from transformers.generation.continuous_batching.cache_allocators import (
     FullAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
 )
+from transformers.generation.continuous_batching.cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from transformers.generation.continuous_batching.continuous_api import (
     BackgroundThreadStatus,
     ContinuousBatchingManager,
@@ -59,12 +60,18 @@ from transformers.generation.continuous_batching.distributed import DistributedH
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import (
+    FutureRequestState,
     GenerationOutput,
     RequestState,
     RequestStatus,
     get_device_and_memory_breakdown,
 )
 from transformers.generation.continuous_batching.utils import DEVICE_TYPE_TO_GRAPH_NAME
+from transformers.generation.logits_process import (
+    LogitsProcessorList,
+    MinLengthLogitsProcessor,
+    TemperatureLogitsWarper,
+)
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.testing_utils import (
     Expectations,
@@ -290,6 +297,38 @@ def _make_allocator(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    @parameterized.expand([(0, 0), (4, 0), (4, torch.tensor(0)), (4, [0, 9]), (4, [-1, 0, 9, 10])])
+    def test_min_length_processor_matches_individual_requests(self, min_length, eos_token_id):
+        processors = ContinuousBatchingLogitsProcessorList(
+            LogitsProcessorList([MinLengthLogitsProcessor(min_length, eos_token_id), TemperatureLogitsWarper(2.0)]),
+            per_request_processors=True,
+        )
+        requests = []
+        for i, (length, has_new_token) in enumerate([(3, True), (2, False), (4, True), (5, True)]):
+            state = RequestState(request_id=str(i), initial_tokens=[1, 2])
+            # Async scheduling advances position_offset before generated_tokens is updated.
+            state.position_offset = length
+            requests.append(FutureRequestState(state, has_new_token, complete_blocks={}, query_length=1))
+        args = torch.empty((processors.tensors_required, 4), dtype=torch.int32)
+        processors.fill_defaults(args)
+        processors.prepare_tensor_args(requests, args)
+        scores = torch.arange(40, dtype=torch.float32).view(4, 10)
+        scores[0, 0] = float("inf")
+        original_scores = scores.clone()
+        actual = processors(torch.ones(4, dtype=torch.long), scores, args)
+        reference = LogitsProcessorList(
+            [MinLengthLogitsProcessor(min_length, eos_token_id), TemperatureLogitsWarper(2.0)]
+        )
+        expected = torch.cat(
+            [
+                reference(torch.ones((1, length), dtype=torch.long), row[None])
+                for length, row in zip([3, 4, 5], original_scores)
+            ]
+        )
+        torch.testing.assert_close(actual[:3], expected)
+        torch.testing.assert_close(actual[3], scores[3] / 2)  # padded row uses processor defaults
+        torch.testing.assert_close(scores, original_scores)
+
     @parameterized.expand([("paged|eager", eager_paged_attention_forward)])
     def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
         # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
@@ -2208,6 +2247,39 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
             text_fast = tokenizer.decode(out_fast.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_varlen, text_fast, f"Mismatch:\nvarlen: {text_varlen}\nfast: {text_fast}")
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    @slow
+    def test_min_length_generation_parity(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
+        tokenizer, model = get_tokenizer_and_model("Qwen/Qwen2.5-0.5B-Instruct", "eager", torch_device, torch.float32)
+        generation_config = GenerationConfig(
+            min_length=100,
+            max_new_tokens=120,
+            do_sample=False,
+            eos_token_id=model.generation_config.eos_token_id,
+            pad_token_id=model.generation_config.pad_token_id,
+        )
+        # Generate each reference separately: left padding would count toward min_length.
+        expected = [
+            regular_generate(model, tokenizer, [message], generation_config=generation_config)[0][0]
+            for message in _DEFAULT_USER_MESSAGES
+        ]
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        outputs = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=ContinuousBatchingConfig(
+                per_request_processors=True,
+                use_cuda_graph=use_cuda_graph,
+                use_async_batching=use_async_batching,
+                default_compile_level=0,
+                auto_switch_to_flash=False,
+            ),
+        )
+        for i, prompt in enumerate(input_ids):
+            actual = outputs[f"req_{i}"].generated_tokens
+            self.assertEqual(actual, expected[i])
+            self.assertGreaterEqual(len(prompt) + len(actual), generation_config.min_length)
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow

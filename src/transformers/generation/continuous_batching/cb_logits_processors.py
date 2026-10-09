@@ -17,6 +17,7 @@ import torch
 
 from ..logits_process import (
     LogitsProcessorList,
+    MinLengthLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -214,6 +215,39 @@ class ContinuousBatchingLogitsProcessorList:
 
 
 # Here are all the continuous batching logits processors that are supported
+class ContinuousBatchingMinLengthLogitsProcessor(ContinuousBatchingLogitsProcessor):
+    supported_kwargs: dict[str, type] = {}
+    ignored_kwargs: tuple[str, ...] = ()
+
+    def __init__(self, processor: MinLengthLogitsProcessor) -> None:
+        self.min_length = processor.min_length
+        self.eos_token_ids = processor.eos_token_id.reshape(-1).tolist()
+
+    def fill_defaults(self, int32_tensor: torch.Tensor) -> None:
+        int32_tensor.zero_()
+
+    def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
+        # Input preparation has already counted this batch's tokens in position_offset.
+        # Unlike generated_tokens, this count is up to date during asynchronous batching.
+        bias = torch.tensor(
+            [
+                -float("inf") if request.state.position_offset < self.min_length else 0.0
+                for request in requests_with_new_token
+            ],
+            dtype=torch.float32,
+            device="cpu",
+        )
+        return bias.view(dtype=torch.int32)
+
+    def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
+        bias = tensor_arg[: scores.size(0)].view(dtype=torch.float32)
+        scores_processed = scores.clone()
+        for eos_token_id in self.eos_token_ids:
+            if 0 <= eos_token_id < scores.size(-1):
+                scores_processed[:, eos_token_id] = torch.where(bias == 0, scores[:, eos_token_id], bias)
+        return scores_processed
+
+
 class ContinuousBatchingTemperatureLogitsWarper(ContinuousBatchingLogitsProcessor):
     supported_kwargs: dict[str, type] = {"temperature": float}
     ignored_kwargs: tuple[str, ...] = ()
@@ -322,6 +356,7 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
 # TODO: add non-per-request CB variants so the memory-efficient warpers work when `per_request_processors=False`.
 # TODO: fuse temperature + top-k + top-p into a single pass to reuse the softmax/sort and cut activation peak.
 CLASSIC_TO_CB_PROCESSORS_MAP = {
+    MinLengthLogitsProcessor: ContinuousBatchingMinLengthLogitsProcessor,
     TemperatureLogitsWarper: ContinuousBatchingTemperatureLogitsWarper,
     TopKLogitsWarper: ContinuousBatchingTopKLogitsWarper,
     TopPLogitsWarper: ContinuousBatchingTopPLogitsWarper,
