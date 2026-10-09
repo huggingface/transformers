@@ -1024,6 +1024,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
 
+            # The torch references run the whole row as one sequence, so they would silently drop the boundaries of
+            # packed sequences and let them leak into each other
+            if not is_new_implementation and any(
+                kwargs.get(name) is not None and name not in applicable_params for name in ("seq_idx", "cu_seqlens")
+            ):
+                distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+                raise ValueError(
+                    f"`{func_name}` can't keep packed sequences apart without `{distribution}`: its reference PyTorch "
+                    f"implementation ignores `seq_idx` / `cu_seqlens`. Install `{distribution}` to train on packed "
+                    "sequences."
+                )
+
             if not is_new_implementation and not is_torchdynamo_compiling():
                 # These torch paths are readable references, not fast kernels, so their runtimes are
                 # significantly slower: for `chunk_gated_delta_rule` the gap is more than an order of
