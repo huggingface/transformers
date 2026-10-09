@@ -327,12 +327,25 @@ class SequentialLlama4TextExperts(ModuleList):
     def forward(
         self,
         hidden_states: "torch.Tensor",
+        top_k_index: "torch.Tensor",
+        top_k_weights: "torch.Tensor",
     ) -> "torch.Tensor":
-        hidden_states = hidden_states.reshape(self.num_experts, -1, hidden_states.shape[-1])
-        routed_out = torch.zeros_like(hidden_states)
-        for expert_idx in range(self.num_experts):
-            routed_out[expert_idx] = self[expert_idx](hidden_states[expert_idx])
-        return routed_out
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_hidden_states = self[expert_idx](hidden_states[token_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
 
 MODULES_TO_PATCH_FOR_QUANTIZATION = {
