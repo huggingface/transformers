@@ -17,7 +17,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from .decoding_gliner2 import linear_sum_assignment
+from ..models.gliner2.decoding_gliner2 import linear_sum_assignment
 
 
 ENTITY_TASK_ID = 1
@@ -30,26 +30,21 @@ class TargetCapacityError(ValueError):
     """Raised when gold records exceed the instance hypotheses."""
 
 
-def finite_loss(value: torch.Tensor) -> torch.Tensor:
-    """Replace non-finite loss values with zero."""
-    return torch.nan_to_num(value, nan=0.0, posinf=0.0, neginf=0.0)
+def _require_finite(value: torch.Tensor) -> torch.Tensor:
+    """Return `value` when every entry is finite.
 
+    Args:
+        value: Reduced loss term.
 
-def head_touch(modules, device=None) -> torch.Tensor:
-    """Zero term so enabled optional heads stay in the autograd graph."""
-    total = None
-    for module in modules:
-        if module is None:
-            continue
-        for parameter in module.parameters():
-            term = parameter.sum() * 0.0
-            total = term if total is None else total + term
-            device = parameter.device
-    if total is None:
-        if device is None:
-            raise ValueError("head_touch requires a module or a device")
-        return torch.zeros((), device=device)
-    return total
+    Returns:
+        The same tensor.
+
+    Raises:
+        ValueError: If `value` contains NaN or infinity.
+    """
+    if not torch.isfinite(value).all().item():
+        raise ValueError("loss is not finite")
+    return value
 
 
 def supervises_count(task_id: int) -> bool:
@@ -80,7 +75,7 @@ def invalid_span_mask(length: int, max_width: int, device) -> torch.Tensor:
 
 def span_classification_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
     """Summed classification BCE."""
-    return _bce_sum(logits, targets, "classification_targets")
+    return classification_bce(logits, targets, reduction="sum")
 
 
 def span_count_loss(logits: torch.Tensor, counts: torch.Tensor) -> torch.Tensor:
@@ -169,13 +164,6 @@ def _write_one_span(labels: torch.Tensor, index: int, field_index: int, span) ->
         labels[index, field_index, start, width] = 1
 
 
-def _bce_sum(logits: torch.Tensor, targets: torch.Tensor, name: str) -> torch.Tensor:
-    if tuple(logits.shape) != tuple(targets.shape):
-        raise ValueError(f"{name} shape {tuple(targets.shape)} != logits {tuple(logits.shape)}")
-    targets = targets.to(device=logits.device, dtype=logits.dtype)
-    return F.binary_cross_entropy_with_logits(logits, targets, reduction="sum")
-
-
 def iter_aligned_logits(predictions, targets, path: str):
     """Yield logit/target pairs from nested batch and group lists."""
     if predictions is None:
@@ -196,34 +184,62 @@ def iter_aligned_logits(predictions, targets, path: str):
         yield from iter_aligned_logits(prediction, target, f"{path}[{index}]")
 
 
-def summed_classification_loss(logits, targets) -> torch.Tensor:
-    """Summed BCE over every aligned classification group."""
-    total = None
-    for prediction, target in iter_aligned_logits(logits, targets, "classification_targets"):
-        if prediction.numel() == 0 and target.numel() == 0:
-            continue
-        term = span_classification_loss(prediction, target)
-        total = term if total is None else total + term
-    if total is None:
-        raise ValueError("classification_targets did not match any logits")
-    return total
+def classification_bce(
+    logits,
+    targets,
+    *,
+    reduction: str = "sum",
+    normalize: bool = False,
+    weight: float = 1.0,
+) -> torch.Tensor:
+    """BCE over aligned classification groups.
 
+    Args:
+        logits: Classification logits, or nested lists aligned with `targets`.
+        targets: Targets with the same nesting as `logits`.
+        reduction: `"sum"` adds every label. `"mean"` also divides by the label count.
+        normalize: Divide the summed BCE by the number of labels.
+        weight: Scale applied after reduction. Boundary training passes
+            `classification_loss_weight` here.
 
-def mean_classification_loss(logits, targets, weight: float) -> torch.Tensor:
-    """Label-normalized BCE scaled by `classification_loss_weight`."""
+    Returns:
+        Scalar loss. A mean over no labels is a zero attached to `logits`.
+
+    Raises:
+        ValueError: If the sum path has no labels, shapes disagree, or the loss is non-finite.
+    """
+    if reduction not in ("sum", "mean"):
+        raise ValueError(f"unknown reduction {reduction!r}")
+    normalize = normalize or reduction == "mean"
     total = None
     count = 0
     for prediction, target in iter_aligned_logits(logits, targets, "classification_targets"):
         if prediction.numel() == 0 and target.numel() == 0:
             continue
-        term = span_classification_loss(prediction, target)
+        if tuple(prediction.shape) != tuple(target.shape):
+            raise ValueError(f"classification_targets shape {tuple(target.shape)} != logits {tuple(prediction.shape)}")
+        target = target.to(device=prediction.device, dtype=prediction.dtype)
+        term = F.binary_cross_entropy_with_logits(prediction, target, reduction="sum")
         total = term if total is None else total + term
         count += int(target.numel())
     if total is None or count == 0:
+        if not normalize:
+            raise ValueError("classification_targets did not match any logits")
         if logits is None:
             raise ValueError("classification_targets require classification logits")
-        return _anchor_zero(logits) * weight
-    return weight * total / count
+        return _require_finite(_anchor_zero(logits) * weight)
+    reduced = weight * total / count if normalize else weight * total
+    return _require_finite(reduced)
+
+
+def summed_classification_loss(logits, targets) -> torch.Tensor:
+    """Summed BCE over every aligned classification group."""
+    return classification_bce(logits, targets, reduction="sum", normalize=False, weight=1.0)
+
+
+def mean_classification_loss(logits, targets, weight: float) -> torch.Tensor:
+    """Label-normalized BCE scaled by `classification_loss_weight`."""
+    return classification_bce(logits, targets, reduction="mean", normalize=True, weight=weight)
 
 
 def _anchor_zero(value) -> torch.Tensor:
@@ -242,10 +258,59 @@ def _from_query_candidate(tensor: torch.Tensor, query_axis: int, candidate_axis:
     return torch.movedim(tensor, (1, 2), (query_axis, candidate_axis))
 
 
-def _safe_bce(logits: torch.Tensor, targets: torch.Tensor, keep: torch.Tensor) -> torch.Tensor:
+def _masked_bce_elements(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    mask: torch.Tensor,
+    negative_weight: float = 1.0,
+) -> torch.Tensor:
+    """Elementwise BCE. Masked logits and targets are zero before the activation."""
+    keep = mask.bool()
     safe_logits = torch.where(keep, logits, torch.zeros_like(logits))
     safe_targets = torch.where(keep, targets, torch.zeros_like(targets))
-    return F.binary_cross_entropy_with_logits(safe_logits, safe_targets, reduction="none")
+    elementwise = F.binary_cross_entropy_with_logits(safe_logits, safe_targets, reduction="none")
+    if float(negative_weight) != 1.0:
+        weight = torch.where(
+            targets > 0.5,
+            torch.ones_like(targets),
+            torch.full_like(targets, negative_weight),
+        )
+        elementwise = elementwise * weight
+    return elementwise
+
+
+def masked_bce(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    mask: torch.Tensor,
+    *,
+    negative_weight: float = 1.0,
+    query_mask=None,
+    reduction: str = "global",
+) -> torch.Tensor:
+    """Masked BCE reduced over kept positions.
+
+    Args:
+        logits: Unnormalized scores.
+        targets: Labels aligned with `logits`.
+        mask: Positions that contribute. Other positions are zeroed before the BCE.
+        negative_weight: Weight of targets that are not positive.
+        query_mask: Optional query filter. Applied by `"sum"` and `"per_query"`.
+        reduction: `"sum"`, `"global"`, or `"per_query"`.
+
+    Returns:
+        Scalar loss.
+
+    Raises:
+        ValueError: If `reduction` is unknown or the reduced loss is non-finite.
+    """
+    elementwise = _masked_bce_elements(logits, targets, mask, negative_weight)
+    return _reduce(elementwise, mask.bool(), query_mask, reduction)
+
+
+def _safe_bce(logits: torch.Tensor, targets: torch.Tensor, keep: torch.Tensor) -> torch.Tensor:
+    """Elementwise BCE with masked positions replaced by zeros."""
+    return _masked_bce_elements(logits, targets, keep)
 
 
 def _reduce(elementwise: torch.Tensor, keep: torch.Tensor, query_mask, mode: str) -> torch.Tensor:
@@ -253,19 +318,21 @@ def _reduce(elementwise: torch.Tensor, keep: torch.Tensor, query_mask, mode: str
     if mode == "sum":
         if query_mask is not None and keep_f.dim() >= 2:
             keep_f = keep_f * query_mask.unsqueeze(-1).to(keep_f.dtype)
-        return (elementwise * keep_f).sum()
-    if mode == "global":
-        return (elementwise * keep_f).sum() / keep_f.sum().clamp_min(1)
-    if mode != "per_query":
+        reduced = (elementwise * keep_f).sum()
+    elif mode == "global":
+        reduced = (elementwise * keep_f).sum() / keep_f.sum().clamp_min(1)
+    elif mode == "per_query":
+        numerator = (elementwise * keep_f).sum(-1)
+        denominator = keep_f.sum(-1).clamp_min(1)
+        per_query = numerator / denominator
+        active = keep.any(-1)
+        if query_mask is not None:
+            active = active & query_mask
+        active_f = active.to(per_query.dtype)
+        reduced = (per_query * active_f).sum() / active_f.sum().clamp_min(1)
+    else:
         raise ValueError(f"unknown reduction mode {mode!r}")
-    numerator = (elementwise * keep_f).sum(-1)
-    denominator = keep_f.sum(-1).clamp_min(1)
-    per_query = numerator / denominator
-    active = keep.any(-1)
-    if query_mask is not None:
-        active = active & query_mask
-    active_f = active.to(per_query.dtype)
-    return (per_query * active_f).sum() / active_f.sum().clamp_min(1)
+    return _require_finite(reduced)
 
 
 def balanced_multilabel_bce(
@@ -278,9 +345,14 @@ def balanced_multilabel_bce(
     reduction: str = "global",
 ) -> torch.Tensor:
     """Mean multi-label BCE over valid positions."""
-    bce = _safe_bce(logits, targets, valid_mask)
-    weight = torch.where(targets > 0.5, torch.ones_like(targets), torch.full_like(targets, negative_weight))
-    return _reduce(bce * weight, valid_mask, query_mask, reduction)
+    return masked_bce(
+        logits,
+        targets,
+        valid_mask,
+        negative_weight=negative_weight,
+        query_mask=query_mask,
+        reduction=reduction,
+    )
 
 
 def asymmetric_focal_loss(
@@ -397,7 +469,7 @@ def candidate_pair_loss(
         effective = valid_mask & ((labels > 0.5) | hard_negative_mask)
     else:
         effective = valid_mask
-    return _reduce(_safe_bce(logits, labels, effective), effective, query_mask, reduction)
+    return masked_bce(logits, labels, effective, query_mask=query_mask, reduction=reduction)
 
 
 def inside_consistency_loss(
@@ -439,28 +511,7 @@ def proposal_listwise_loss(
     gold_lse = torch.logsumexp(logits.masked_fill(~gold_mask, MASK_LOGIT), dim=-1)
     has_gold = gold_mask.any(-1) & query_mask
     loss = torch.where(has_gold, all_lse - gold_lse, torch.zeros_like(all_lse))
-    return loss.sum() / has_gold.to(loss.dtype).sum().clamp_min(1)
-
-
-def reranker_listwise_loss(
-    pair_logits: torch.Tensor,
-    labels: torch.Tensor,
-    valid_mask: torch.Tensor,
-    query_mask: torch.Tensor,
-    *,
-    query_axis: int = 1,
-    candidate_axis: int = 2,
-) -> torch.Tensor:
-    """Listwise gold-mass loss over reranked candidates."""
-    gold_mask = (labels > 0.5) & valid_mask
-    return proposal_listwise_loss(
-        pair_logits,
-        gold_mask,
-        valid_mask,
-        query_mask,
-        query_axis=query_axis,
-        candidate_axis=candidate_axis,
-    )
+    return _require_finite(loss.sum() / has_gold.to(loss.dtype).sum().clamp_min(1))
 
 
 def marginal_pair_consistency_loss(
@@ -479,7 +530,13 @@ def marginal_pair_consistency_loss(
 
     def accumulate(index: torch.Tensor):
         safe_index = index.clamp(0, n_boundary - 1)
-        total = torch.zeros(batch, queries, n_boundary, dtype=log_survival.dtype, device=log_survival.device)
+        total = torch.zeros(
+            batch,
+            queries,
+            n_boundary,
+            dtype=log_survival.dtype,
+            device=log_survival.device,
+        )
         total.scatter_add_(2, safe_index, log_survival)
         count = torch.zeros_like(total)
         count.scatter_add_(2, safe_index, valid_mask.to(total.dtype))
@@ -496,15 +553,13 @@ def marginal_pair_consistency_loss(
         target = torch.sigmoid(torch.where(keep, marginal, torch.zeros_like(marginal)))
         squared = (predicted - target) ** 2
         result = result + (squared * keep).sum() / keep.sum().clamp_min(1)
-    return result * 0.5
+    return _require_finite(result * 0.5)
 
 
 def abstention_loss(null_logits: torch.Tensor, mention_mask: torch.Tensor, query_mask: torch.Tensor) -> torch.Tensor:
     """BCE for a gate that is positive when the query has no mention."""
     target = (~mention_mask.any(-1)).to(null_logits.dtype)
-    elementwise = F.binary_cross_entropy_with_logits(null_logits, target, reduction="none")
-    keep = query_mask.to(elementwise.dtype)
-    return (elementwise * keep).sum() / keep.sum().clamp_min(1)
+    return masked_bce(null_logits, target, query_mask, reduction="global")
 
 
 def count_log_rate_loss(
@@ -514,7 +569,7 @@ def count_log_rate_loss(
     target = mention_mask.sum(-1).to(count_log_rate.dtype)
     elementwise = F.poisson_nll_loss(count_log_rate, target, log_input=True, full=False, reduction="none")
     keep = query_mask.to(elementwise.dtype)
-    return (elementwise * keep).sum() / keep.sum().clamp_min(1)
+    return _require_finite((elementwise * keep).sum() / keep.sum().clamp_min(1))
 
 
 def _check_gold_pairs(gold_pairs: torch.Tensor, gold_mask: torch.Tensor) -> None:
@@ -552,7 +607,10 @@ def _negative_query_mask(
 
 
 def matched_gold_mask(
-    indices: torch.Tensor, valid: torch.Tensor, pairs: torch.Tensor, pair_mask: torch.Tensor
+    indices: torch.Tensor,
+    valid: torch.Tensor,
+    pairs: torch.Tensor,
+    pair_mask: torch.Tensor,
 ) -> torch.Tensor:
     """Mark candidates whose half-open span equals a gold mention."""
     same = (indices.unsqueeze(-2) == pairs.unsqueeze(-3)).all(-1)
@@ -596,7 +654,7 @@ def boundary_training_loss(
     n_boundary = start_logits.shape[-1]
     text_length = text_mask.shape[-1]
     if start_targets is None or end_targets is None or inside_targets is None:
-        from .processing_gliner2 import dense_targets_from_pairs
+        from ..models.gliner2.processing_gliner2 import dense_targets_from_pairs
 
         safe_pairs = mention_pairs.clamp(0, max(n_boundary - 1, 0))
         built_start, built_end, built_inside = dense_targets_from_pairs(safe_pairs, mention_mask, text_length)
@@ -630,7 +688,12 @@ def boundary_training_loss(
         if marginal != "bce":
             raise ValueError(f"unknown boundary_marginal_loss {marginal!r}")
         return balanced_multilabel_bce(
-            logits, target, keep, negative_weight=negative_weight, query_mask=query_mask, reduction=reduction
+            logits,
+            target,
+            keep,
+            negative_weight=negative_weight,
+            query_mask=query_mask,
+            reduction=reduction,
         )
 
     start_loss = marginal_loss(start_logits, start_targets, boundary_keep)
@@ -688,11 +751,21 @@ def boundary_training_loss(
         )
     rerank_loss = pair_logits.new_zeros(())
     if float(settings.rerank_listwise_weight) > 0:
-        rerank_loss = reranker_listwise_loss(
-            pair_logits, labels, loss_valid, pair_query_mask, query_axis=query_axis, candidate_axis=candidate_axis
+        rerank_loss = proposal_listwise_loss(
+            pair_logits,
+            (labels > 0.5) & loss_valid,
+            loss_valid,
+            pair_query_mask,
+            query_axis=query_axis,
+            candidate_axis=candidate_axis,
         )
     inside_loss = inside_consistency_loss(
-        inside_logits, inside_targets, text_mask, query_mask, negative_weight=negative_weight, reduction=reduction
+        inside_logits,
+        inside_targets,
+        text_mask,
+        query_mask,
+        negative_weight=negative_weight,
+        reduction=reduction,
     )
     proposal_loss = pair_logits.new_zeros(())
     if proposal_logits is not None and float(settings.proposal_loss_weight) > 0:
@@ -709,7 +782,12 @@ def boundary_training_loss(
     consistency_loss = pair_logits.new_zeros(())
     if float(settings.consistency_loss_weight) > 0:
         consistency_loss = marginal_pair_consistency_loss(
-            pair_logits, candidate_indices.to(device), loss_valid, start_logits, end_logits, boundary_keep
+            pair_logits,
+            candidate_indices.to(device),
+            loss_valid,
+            start_logits,
+            end_logits,
+            boundary_keep,
         )
     null_loss = pair_logits.new_zeros(())
     if null_logits is not None and float(settings.abstention_loss_weight) > 0:
@@ -719,16 +797,16 @@ def boundary_training_loss(
         count_loss = count_log_rate_loss(count_log_rates, mention_mask, query_mask)
     weights = getattr(settings, "loss_weights", None) or {}
     terms = {
-        "start_loss": finite_loss(start_loss),
-        "end_loss": finite_loss(end_loss),
-        "pair_loss": finite_loss(pair_loss),
-        "soft_iou_loss": finite_loss(soft_iou_loss),
-        "rerank_listwise_loss": finite_loss(rerank_loss),
-        "inside_loss": finite_loss(inside_loss),
-        "proposal_loss": finite_loss(proposal_loss),
-        "consistency_loss": finite_loss(consistency_loss),
-        "abstention_loss": finite_loss(null_loss),
-        "count_loss": finite_loss(count_loss),
+        "start_loss": start_loss,
+        "end_loss": end_loss,
+        "pair_loss": pair_loss,
+        "soft_iou_loss": soft_iou_loss,
+        "rerank_listwise_loss": rerank_loss,
+        "inside_loss": inside_loss,
+        "proposal_loss": proposal_loss,
+        "consistency_loss": consistency_loss,
+        "abstention_loss": null_loss,
+        "count_loss": count_loss,
     }
     total = (
         float(weights.get("start", 1.0)) * terms["start_loss"]
@@ -742,7 +820,7 @@ def boundary_training_loss(
         + float(settings.abstention_loss_weight) * terms["abstention_loss"]
         + float(settings.count_loss_weight) * terms["count_loss"]
     )
-    terms["loss"] = total
+    terms["loss"] = _require_finite(total)
     return terms
 
 
@@ -759,7 +837,7 @@ def sparse_relation_loss(
     if tuple(gold_mask.shape) != tuple(gold_pairs.shape[:-1]):
         raise ValueError("relation_gold_mask must match relation_gold_pairs without the coordinate axis")
     if logits.numel() == 0 or gold_pairs.shape[1] == 0 or gold_pairs.shape[0] == 0:
-        return logits.sum() * 0.0
+        return _require_finite(logits.sum() * 0.0)
     gold_pairs = gold_pairs.to(logits.device)
     gold_mask = gold_mask.to(logits.device).bool()
     max_rel = gold_pairs.shape[1]
@@ -778,9 +856,8 @@ def sparse_relation_loss(
     pair_mask = pair_mask.to(logits.device) & valid_rel & valid_batch
     if pair_mask.shape != logits.shape:
         raise ValueError(f"relation pair_mask {tuple(pair_mask.shape)} != logits {tuple(logits.shape)}")
-    loss = F.binary_cross_entropy_with_logits(logits, labels, reduction="none")
-    reduced = (loss * pair_mask.to(loss.dtype)).sum() / pair_mask.sum().clamp_min(1)
-    return weight * reduced
+    reduced = masked_bce(logits, labels, pair_mask, reduction="global")
+    return _require_finite(weight * reduced)
 
 
 def _span_index(field_spans: torch.Tensor) -> dict:
@@ -814,7 +891,8 @@ def _list_field_bce(logits_row: torch.Tensor, positive_cols) -> torch.Tensor:
         idx = col - 1
         if 0 <= idx < cand_logits.shape[0]:
             target[idx] = 1.0
-    return F.binary_cross_entropy_with_logits(cand_logits, target, reduction="mean")
+    keep = torch.ones_like(cand_logits, dtype=torch.bool)
+    return masked_bce(cand_logits, target, keep, reduction="global")
 
 
 def _field_target_cols(field_spec, record, span_to_idx):
@@ -856,7 +934,12 @@ def _instance_field_logprob(group, inst: int, record, span_indices) -> torch.Ten
                 idx = col - 1
                 if 0 <= idx < cand_logits.shape[0]:
                     target[idx] = 1.0
-            total = total - F.binary_cross_entropy_with_logits(cand_logits, target, reduction="sum")
+            total = total - masked_bce(
+                cand_logits,
+                target,
+                torch.ones_like(cand_logits, dtype=torch.bool),
+                reduction="sum",
+            )
     return total
 
 
@@ -894,7 +977,12 @@ def compute_record_group_loss(group, records) -> dict[str, torch.Tensor]:
     if count == 0:
         target = torch.zeros(n_instances, device=device)
         object_loss = F.binary_cross_entropy_with_logits(group.object_logits, target) if n_instances else zero
-        return {"object_loss": object_loss, "field_loss": zero, "object_count": n_instances, "field_count": 0}
+        return {
+            "object_loss": object_loss,
+            "field_loss": zero,
+            "object_count": n_instances,
+            "field_count": 0,
+        }
     if n_instances < count:
         task = getattr(group.spec, "task_index", 0)
         raise TargetCapacityError(
@@ -949,164 +1037,246 @@ def aggregate_record_losses(parts, weight: float) -> dict[str, torch.Tensor]:
     return {"object": obj, "field": field, "total": float(weight) * (obj + field)}
 
 
-def build_dense_record_matching_cost(
-    object_logits: torch.Tensor,
-    assign_logits: torch.Tensor,
-    gold_indicator: torch.Tensor,
-    scalar_fields: torch.Tensor,
-    instance_mask: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """Vectorized record cost `[..., instances, gold]` for dense pools."""
-    present = gold_indicator.any(-1)
-    target = torch.cat(((~present).unsqueeze(-1), gold_indicator), -1)
-    logp = F.log_softmax(assign_logits, -1)
-    scalar_logprob = torch.logsumexp(logp.unsqueeze(-3).masked_fill(~target.unsqueeze(-4), MASK_LOGIT), -1)
-    candidates = assign_logits[..., 1:]
-    list_logprob = -F.binary_cross_entropy_with_logits(
-        candidates.unsqueeze(-3).expand(
-            *candidates.shape[:-3],
-            candidates.shape[-3],
-            gold_indicator.shape[-3],
-            candidates.shape[-2],
-            candidates.shape[-1],
-        ),
-        gold_indicator.unsqueeze(-4)
-        .expand(
-            *gold_indicator.shape[:-3],
-            assign_logits.shape[-3],
-            gold_indicator.shape[-3],
-            gold_indicator.shape[-2],
-            gold_indicator.shape[-1],
-        )
-        .to(candidates.dtype),
-        reduction="none",
-    ).sum(-1)
-    field_logprob = torch.where(scalar_fields.unsqueeze(-2).unsqueeze(-2), scalar_logprob, list_logprob).sum(-1)
-    cost = -(F.logsigmoid(object_logits).unsqueeze(-1) + field_logprob)
-    if instance_mask is not None:
-        cost = cost.masked_fill(~instance_mask.unsqueeze(-1), -MASK_LOGIT)
-    return cost
+def _combine_span_losses(anchor, classification_logits, classification_targets, structure_loss, count_loss):
+    """Sum span classification, structure, and count losses."""
+    cls_loss = anchor
+    if classification_targets is not None and classification_logits is not None:
+        cls_loss = summed_classification_loss(classification_logits, classification_targets)
+    if structure_loss is None:
+        structure_loss = anchor
+    if count_loss is None:
+        count_loss = anchor
+    total = cls_loss + structure_loss + count_loss
+    return total, {
+        "classification_loss": cls_loss,
+        "structure_loss": structure_loss,
+        "count_loss": count_loss,
+        "loss": total,
+    }
 
 
-def _filter_match_indices(indices, shape, instance_mask=None):
-    if len(indices) != len(shape):
-        raise ValueError(f"index rank {len(indices)} does not match tensor rank {len(shape)}")
-    if not indices:
-        return ()
-    if len({int(index.numel()) for index in indices}) != 1:
-        raise ValueError("advanced-index tensors must have equal lengths")
-    valid = torch.ones_like(indices[0], dtype=torch.bool)
-    for index, size in zip(indices, shape):
-        valid = valid & (index >= 0) & (index < int(size))
-    if instance_mask is not None and valid.any():
-        if len(indices) < 3:
-            raise ValueError("instance_mask requires at least three index axes")
-        if any(int(size) <= 0 for size in instance_mask.shape):
-            return tuple(index[:0] for index in indices)
-        for index, size in zip(indices[:3], instance_mask.shape):
-            valid = valid & (index >= 0) & (index < int(size))
-        safe = tuple(
-            index.clamp(min=0, max=max(int(size) - 1, 0)) for index, size in zip(indices[:3], instance_mask.shape)
-        )
-        valid = valid & instance_mask[safe]
-    return tuple(index[valid] for index in indices)
+def _combine_boundary_losses(
+    anchor,
+    classification_logits,
+    classification_targets,
+    boundary_terms,
+    record_part_losses,
+    relation_loss,
+    classification_weight,
+    record_weight,
+):
+    """Add boundary, mean classification, record, and relation terms."""
+    total = anchor
+    losses: dict[str, torch.Tensor] = {}
+    if boundary_terms is not None:
+        losses.update(boundary_terms)
+        total = total + boundary_terms["loss"]
+    if classification_targets is not None and classification_logits is not None:
+        cls_loss = mean_classification_loss(classification_logits, classification_targets, classification_weight)
+        losses["classification_loss"] = cls_loss
+        total = total + cls_loss
+    if record_part_losses is not None:
+        packed = aggregate_record_losses(record_part_losses, record_weight)
+        losses["record_object_loss"] = packed["object"]
+        losses["record_field_loss"] = packed["field"]
+        total = total + packed["total"]
+    if relation_loss is not None:
+        losses["relation_loss"] = relation_loss
+        total = total + relation_loss
+    losses["loss"] = total
+    return total, losses
 
 
-def dense_record_batch_loss(output) -> dict[str, torch.Tensor]:
-    """Vectorized record loss. Hungarian assignment stays per group."""
-    device = output.object_logits.device
-    record_mask = output.record_mask.to(device)
-    gold_indicator = output.gold_indicator.to(device)
-    present = gold_indicator.any(-1)
-    target = torch.cat(((~present).unsqueeze(-1), gold_indicator), -1)
-    logp = F.log_softmax(output.assign_logits, -1)
-    scalar_nll = -torch.logsumexp(logp.unsqueeze(3).masked_fill(~target.unsqueeze(2), MASK_LOGIT), -1)
-    candidates = output.assign_logits[..., 1:]
-    list_nll = F.binary_cross_entropy_with_logits(
-        candidates.unsqueeze(3).expand(
-            *candidates.shape[:3], gold_indicator.shape[2], candidates.shape[3], candidates.shape[4]
-        ),
-        gold_indicator.unsqueeze(2)
-        .expand(
-            *gold_indicator.shape[:2],
-            output.object_logits.shape[2],
-            gold_indicator.shape[2],
-            gold_indicator.shape[3],
-            gold_indicator.shape[4],
+def _boundary_from_supervision(
+    *,
+    text_states,
+    text_mask,
+    query_mask,
+    boundary,
+    classification_logits,
+    supervision,
+    settings,
+    training,
+    soft_iou_scale,
+    consistency_scale,
+    record_parts,
+    relation_logits,
+    relation_pairs,
+    dense_records=None,
+    head_modules=None,
+    head_device=None,
+):
+    """Score boundary supervision, then apply the boundary combiner."""
+    anchor = text_states.sum() * 0.0
+    boundary_terms = None
+    mention_pairs = supervision.get("mention_pairs")
+    if mention_pairs is not None:
+        candidates = boundary.candidates
+        boundary_terms = boundary_training_loss(
+            start_logits=boundary.start_logits,
+            end_logits=boundary.end_logits,
+            inside_logits=boundary.inside_logits,
+            pair_logits=candidates.pair_logits,
+            candidate_indices=candidates.indices,
+            candidate_valid=candidates.valid_mask,
+            proposal_logits=candidates.proposal_logits,
+            proposal_gold=getattr(candidates, "gold_mask", None),
+            null_logits=boundary.null_logits,
+            count_log_rates=boundary.count_log_rates,
+            mention_pairs=mention_pairs,
+            mention_mask=supervision["mention_mask"],
+            query_mask=query_mask,
+            text_mask=text_mask,
+            settings=settings,
+            training=training,
+            start_targets=supervision.get("start_targets"),
+            end_targets=supervision.get("end_targets"),
+            inside_targets=supervision.get("inside_targets"),
+            soft_iou_scale=soft_iou_scale,
+            consistency_scale=consistency_scale,
         )
-        .to(candidates.dtype),
-        reduction="none",
-    ).mean(-1)
-    field_nll = torch.where(output.scalar_fields[:, :, None, None, :], scalar_nll, list_nll)
-    field_nll = (field_nll * output.field_mask[:, :, None, None, :].to(field_nll.dtype)).sum(
-        -1
-    ) / output.field_mask.sum(-1)[:, :, None, None].clamp_min(1)
-    with torch.no_grad():
-        cost = build_dense_record_matching_cost(
-            output.object_logits,
-            output.assign_logits,
-            gold_indicator,
-            output.scalar_fields,
-            output.instance_mask,
+    parts = None
+    if record_parts is not None:
+        parts = [compute_record_group_loss(decoded, targets) for decoded, targets in record_parts]
+    relation_loss = None
+    if relation_logits is not None:
+        relation_loss = sparse_relation_loss(
+            relation_logits,
+            relation_pairs,
+            supervision["relation_gold_pairs"],
+            supervision["relation_gold_mask"],
+            settings.relation_loss_weight,
         )
-        cost_cpu = cost.detach().cpu()
-        metadata = torch.stack(
-            (
-                output.instance_mask.sum(-1),
-                record_mask.sum(-1),
-                output.modes,
-                output.group_mask.to(torch.long),
-            ),
-            -1,
-        ).cpu()
-        anchor = output.anchor_fields.clamp(min=0, max=gold_indicator.shape[3] - 1)
-        natural_gold = (
-            gold_indicator.gather(
-                3, anchor[..., None, None, None].expand(*gold_indicator.shape[:3], 1, gold_indicator.shape[-1])
-            )
-            .squeeze(3)
-            .cpu()
-        )
-        matched_batch, matched_group, matched_rows, matched_cols = [], [], [], []
-        batch_size, groups = output.group_mask.shape
-        for batch_index in range(batch_size):
-            for group_index in range(groups):
-                available, count, mode, valid = metadata[batch_index, group_index].tolist()
-                if not valid:
-                    continue
-                if available < count:
-                    raise TargetCapacityError(
-                        f"record group batch={batch_index} group={group_index} has {count} gold instances "
-                        f"but only {available} hypotheses"
-                    )
-                if count == 0:
-                    continue
-                if mode == 0:
-                    anchors = natural_gold[batch_index, group_index, : int(count)]
-                    columns = torch.nonzero(anchors.any(-1), as_tuple=False).flatten()
-                    rows = anchors[columns].to(torch.long).argmax(-1)
-                else:
-                    rows, columns = linear_sum_assignment(cost_cpu[batch_index, group_index, :, : int(count)])
-                matched_batch.extend([batch_index] * len(rows))
-                matched_group.extend([group_index] * len(rows))
-                matched_rows.extend(rows.tolist())
-                matched_cols.extend(columns.tolist())
-    index = tuple(
-        torch.as_tensor(values, dtype=torch.long, device=device)
-        for values in (matched_batch, matched_group, matched_rows, matched_cols)
+    total, losses = _combine_boundary_losses(
+        anchor,
+        classification_logits,
+        supervision.get("classification_targets"),
+        boundary_terms,
+        parts,
+        relation_loss,
+        settings.classification_loss_weight,
+        settings.record_loss_weight,
     )
-    index = _filter_match_indices(index, field_nll.shape, instance_mask=output.instance_mask)
-    object_target = torch.zeros(
-        output.object_logits.shape, device=output.object_logits.device, dtype=output.object_logits.dtype
-    )
-    non_natural = (
-        output.modes[index[0], index[1]] != 0 if index[0].numel() else torch.zeros(0, dtype=torch.bool, device=device)
-    )
-    row_idx = index[2][non_natural]
-    if row_idx.numel():
-        object_target[index[0][non_natural], index[1][non_natural], row_idx] = 1.0
-    object_keep = output.instance_mask & output.group_mask[..., None] & (output.modes != 0)[..., None]
-    object_terms = F.binary_cross_entropy_with_logits(output.object_logits, object_target, reduction="none")
-    object_loss = (object_terms * object_keep.to(object_terms.dtype)).sum() / object_keep.sum().clamp_min(1)
-    field_loss = field_nll[index].mean() if index[0].numel() else output.object_logits.new_zeros(())
-    return {"object_loss": object_loss, "field_loss": field_loss}
+    if dense_records is not None:
+        raise ValueError("dense record loss was removed")
+    del head_modules, head_device
+    losses["loss"] = total
+    return total, losses
+
+
+def ForSchemaExtractionLoss(
+    config=None,
+    *,
+    anchor=None,
+    classification_logits=None,
+    classification_targets=None,
+    structure_loss=None,
+    count_loss=None,
+    boundary_terms=None,
+    record_part_losses=None,
+    relation_loss=None,
+    span_scores=None,
+    span_structure=None,
+    span_mask=None,
+    training: bool = False,
+    count_logits=None,
+    count_targets=None,
+    text_states=None,
+    text_mask=None,
+    query_mask=None,
+    boundary=None,
+    supervision=None,
+    settings=None,
+    soft_iou_scale: float = 1.0,
+    consistency_scale: float = 1.0,
+    record_parts=None,
+    dense_records=None,
+    relation_logits=None,
+    relation_pairs=None,
+    head_modules=None,
+    head_device=None,
+):
+    """Sum the schema-extraction terms the model has already scored.
+
+    Span checkpoints add classification, structure, and count losses. Boundary checkpoints add
+    `boundary_terms["loss"]`, classification BCE multiplied by `boundary_config.classification_loss_weight`,
+    `aggregate_record_losses`, and `relation_loss`. `anchor` is a zero tensor on the right device used when a
+    term is absent.
+
+    The span loop may also call this with `span_scores` or `count_logits`. Those calls return the structure or
+    count tensor from `span_structure_loss` and `span_count_loss`. A `supervision` dict runs `boundary_training_loss`,
+    `compute_record_group_loss`, and `sparse_relation_loss`, then the same boundary
+    sum. `dense_records` is rejected. `head_modules` is ignored.
+
+    Args:
+        config: `Gliner2Config`. Boundary weights are read from `config.boundary_config`.
+        anchor: Zero scalar that fixes the device and dtype of an empty sum.
+        classification_logits: Per-label logits, when classification targets are present.
+        classification_targets: Dense classification targets.
+        structure_loss: Span-structure loss already reduced by the span head.
+        count_loss: Span-count loss already reduced by the span head.
+        boundary_terms: Dict returned by `boundary_training_loss`, including its own `"loss"` key.
+        record_part_losses: Per-group record losses for `aggregate_record_losses`.
+        relation_loss: Already weighted relation loss.
+        span_scores: One group's span logits for `span_structure_loss`.
+        span_structure: Gold structure aligned with `span_scores`.
+        span_mask: Invalid-span mask for `span_scores`.
+        training: Enables negative masking inside `span_structure_loss` and boundary pair sampling.
+        count_logits: Count-head logits for `span_count_loss`.
+        count_targets: Gold counts aligned with `count_logits`.
+        text_states: Word states. Their sum anchors an empty boundary loss.
+        text_mask: Valid word positions.
+        query_mask: Valid field queries.
+        boundary: Boundary output with marginals and candidates.
+        supervision: Label dict the boundary path reads.
+        settings: `boundary_config` loss weights.
+        soft_iou_scale: Multiplier for the soft-IoU term.
+        consistency_scale: Multiplier for the marginal-consistency term.
+        record_parts: `(decoded group, gold targets)` pairs from the record decoder.
+        dense_records: Unused. Passing a value raises `ValueError`.
+        relation_logits: Scores for `relation_pairs`.
+        relation_pairs: Pairs from the relation generator.
+        head_modules: Ignored. Optional heads are not added as a zero parameter term.
+        head_device: Ignored with `head_modules`.
+
+    Returns:
+        The total loss and the per-term dict, including `"loss"`. Structure and count calls return that scalar.
+    """
+    if span_scores is not None:
+        return span_structure_loss(span_scores, span_structure, span_mask, training=training)
+    if count_logits is not None:
+        return span_count_loss(count_logits, count_targets)
+    if supervision is not None and settings is not None:
+        return _boundary_from_supervision(
+            text_states=text_states,
+            text_mask=text_mask,
+            query_mask=query_mask,
+            boundary=boundary,
+            classification_logits=classification_logits,
+            supervision=supervision,
+            settings=settings,
+            training=training,
+            soft_iou_scale=soft_iou_scale,
+            consistency_scale=consistency_scale,
+            record_parts=record_parts,
+            relation_logits=relation_logits,
+            relation_pairs=relation_pairs,
+            dense_records=dense_records,
+            head_modules=head_modules,
+            head_device=head_device,
+        )
+    if anchor is None:
+        raise ValueError("anchor is required")
+    if getattr(config, "architecture", "span") == "boundary":
+        cfg = config.boundary_config
+        return _combine_boundary_losses(
+            anchor,
+            classification_logits,
+            classification_targets,
+            boundary_terms,
+            record_part_losses,
+            relation_loss,
+            cfg.classification_loss_weight,
+            cfg.record_loss_weight,
+        )
+    return _combine_span_losses(anchor, classification_logits, classification_targets, structure_loss, count_loss)

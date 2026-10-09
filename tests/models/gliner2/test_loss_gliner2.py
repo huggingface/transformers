@@ -16,25 +16,28 @@ import unittest
 
 import torch
 import torch.nn.functional as F
-from torch import nn
 
 from transformers import AutoConfig, Gliner2Config, Gliner2ForSchemaExtraction
-from transformers.models.gliner2.decoding_gliner2 import linear_sum_assignment
-from transformers.models.gliner2.loss_gliner2 import (
+from transformers.loss.loss_gliner2 import (
+    ForSchemaExtractionLoss,
     TargetCapacityError,
     abstention_loss,
+    aggregate_record_losses,
     asymmetric_focal_loss,
     balanced_multilabel_bce,
     clamp_gold_count,
     compute_record_group_loss,
     count_log_rate_loss,
-    head_touch,
+    mean_classification_loss,
     select_hard_negative_candidates,
     span_count_loss,
     span_structure_loss,
     sparse_relation_loss,
+    summed_classification_loss,
     supervises_count,
 )
+from transformers.models.gliner2.configuration_gliner2 import classification_temperature_of
+from transformers.models.gliner2.decoding_gliner2 import linear_sum_assignment
 from transformers.models.gliner2.modeling_gliner2 import count_conditioned_scores
 
 
@@ -149,7 +152,7 @@ class LossMathTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             linear_sum_assignment(torch.tensor([[float("nan"), 0.0]]))
 
-    def test_record_assignment_and_head_touch(self):
+    def test_record_assignment(self):
         spans = [torch.tensor([[0, 2]])]
         spec = type("Spec", (), {"mode": "latent", "task_index": 0, "anchor_query_id": None})()
         field = type("Field", (), {"query_id": 0, "cardinality": type("Card", (), {"is_scalar": True})()})()
@@ -175,12 +178,6 @@ class LossMathTest(unittest.TestCase):
         group.object_logits = torch.zeros(1)
         with self.assertRaises(TargetCapacityError):
             compute_record_group_loss(group, [record, record])
-        layer = nn.Linear(2, 2)
-        touched = head_touch([layer])
-        self.assertEqual(float(touched), 0.0)
-        touched.backward()
-        self.assertIsNotNone(layer.weight.grad)
-        self.assertEqual(int(layer.weight.grad.count_nonzero()), 0)
         pairs = type("Pairs", (), {})()
         pairs.relation_index = torch.tensor([0, 0])
         pairs.batch_index = torch.tensor([0, 0])
@@ -241,7 +238,7 @@ class ForwardLossTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             model(**_span_inputs(4), labels={"classification_targets": [[torch.zeros(3)]]})
 
-    def test_boundary_loss_and_optional_head_touch(self):
+    def test_boundary_training_loss(self):
         boundary = {
             "boundary_dim": 16,
             "pair_dim": 16,
@@ -301,7 +298,93 @@ class ForwardLossTest(unittest.TestCase):
         self.assertIn("classification_loss", output.losses)
         output.loss.backward()
         self.assertIsNotNone(model.record_decoder.object_head.weight.grad)
-        self.assertIsNotNone(model.relation_scorer.mlp[0].weight.grad)
-        self.assertEqual(int(model.relation_scorer.mlp[0].weight.grad.count_nonzero()), 0)
         with self.assertRaises(ValueError):
             model(**batch, labels={"mention_pairs": torch.zeros(1, 1, 1)})
+
+
+class SchemaLossContractTest(unittest.TestCase):
+    def test_span_path_sums_classification_structure_and_count(self):
+        config = Gliner2Config(encoder_config=_encoder(), architecture="span")
+        logits = torch.tensor([[0.5, -1.0]])
+        targets = torch.tensor([[1.0, 0.0]])
+        structure = torch.tensor(1.25)
+        count = torch.tensor(0.5)
+        anchor = torch.zeros(())
+        total, parts = ForSchemaExtractionLoss(
+            config,
+            anchor=anchor,
+            classification_logits=logits,
+            classification_targets=targets,
+            structure_loss=structure,
+            count_loss=count,
+        )
+        classification = summed_classification_loss(logits, targets)
+        expected = classification + structure + count
+        self.assertTrue(torch.allclose(total, expected))
+        self.assertTrue(torch.allclose(parts["loss"], expected))
+        self.assertTrue(torch.allclose(parts["classification_loss"], classification))
+        self.assertTrue(torch.allclose(parts["structure_loss"], structure))
+        self.assertTrue(torch.allclose(parts["count_loss"], count))
+
+    def test_boundary_path_weights_classification_records_and_relation(self):
+        config = Gliner2Config(
+            encoder_config=_encoder(),
+            architecture="boundary",
+            boundary_config={"classification_loss_weight": 2.0, "record_loss_weight": 3.0},
+        )
+        logits = torch.tensor([[0.0, 1.0]])
+        targets = torch.tensor([[1.0, 0.0]])
+        anchor = logits.sum() * 0.0
+        boundary_terms = {"loss": torch.tensor(0.4), "start_loss": torch.tensor(0.4)}
+        record = {
+            "object_loss": torch.tensor(0.2),
+            "field_loss": torch.tensor(0.1),
+            "object_count": 2,
+            "field_count": 2,
+        }
+        relation = torch.tensor(0.05)
+        total, parts = ForSchemaExtractionLoss(
+            config,
+            anchor=anchor,
+            classification_logits=logits,
+            classification_targets=targets,
+            boundary_terms=boundary_terms,
+            record_part_losses=[record],
+            relation_loss=relation,
+        )
+        classification = mean_classification_loss(logits, targets, config.boundary_config.classification_loss_weight)
+        packed = aggregate_record_losses([record], config.boundary_config.record_loss_weight)
+        expected = anchor + boundary_terms["loss"] + classification + packed["total"] + relation
+        self.assertTrue(torch.allclose(total, expected))
+        self.assertTrue(torch.allclose(parts["classification_loss"], classification))
+        self.assertTrue(torch.allclose(parts["relation_loss"], relation))
+
+    def test_nonfinite_loss_raises(self):
+        logits = torch.tensor([[float("nan"), 0.0]])
+        targets = torch.tensor([[1.0, 0.0]])
+        keep = torch.ones_like(logits, dtype=torch.bool)
+        with self.assertRaises(ValueError):
+            summed_classification_loss(logits, targets)
+        with self.assertRaises(ValueError):
+            balanced_multilabel_bce(logits, targets, keep)
+
+    def test_classification_temperature_follows_architecture(self):
+        span = Gliner2Config(encoder_config=_encoder(), classification_temperature=1.5)
+        self.assertEqual(classification_temperature_of(span), 1.5)
+        boundary = Gliner2Config(
+            encoder_config=_encoder(),
+            architecture="boundary",
+            classification_temperature=1.5,
+            boundary_config={"classification_temperature": 0.25},
+        )
+        self.assertEqual(classification_temperature_of(boundary), 0.25)
+        raw = type(
+            "Config",
+            (),
+            {
+                "architecture": "boundary",
+                "classification_temperature": 2.0,
+                "boundary_config": {"classification_temperature": 0.4},
+            },
+        )()
+        self.assertEqual(classification_temperature_of(raw), 0.4)

@@ -118,7 +118,6 @@ def convert(source: Path, dest: Path) -> None:
     boundary = _boundary_config(raw)
     architecture = raw.get("architecture", "boundary" if boundary else "span")
     span_head = raw.get("span_head")
-    head = _published_head(raw)
     config = Gliner2Config(
         encoder_config=encoder,
         architecture=architecture,
@@ -131,9 +130,7 @@ def convert(source: Path, dest: Path) -> None:
         architecture_version=raw.get("architecture_version"),
         config_version=raw.get("config_version"),
         boundary_config=boundary,
-        classification_temperature=float(
-            head.get("classification_temperature", raw.get("classification_temperature", 1.0))
-        ),
+        classification_temperature=float(raw.get("classification_temperature", 1.0)),
     )
     config.architectures = ["Gliner2ForSchemaExtraction"]
     config.save_pretrained(dest)

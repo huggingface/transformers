@@ -12,16 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import annotations
-
-import copy
 import logging
 import re
-from collections import Counter, OrderedDict
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
-from types import SimpleNamespace
-from typing import Any
+from dataclasses import dataclass, replace
+from enum import Enum
+from typing import Any, TypedDict
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -30,12 +27,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...utils import auto_docstring
 from .decoding_gliner2 import (
-    _align_logits,
-    _batch_rows,
-    _coerce_schema,
-    _compile_classification,
-    _doc_axis,
-    _sample_outputs,
     decode_boundary,
     decode_classification,
     decode_joint,
@@ -46,13 +37,13 @@ from .decoding_gliner2 import (
     resolve_overlaps,
 )
 
-_AGGREGATIONS = ("max", "mean", "first")
 
+_AGGREGATIONS = ("max", "mean", "first")
+_POOLING = ("first", "mean", "max")
 
 logger = logging.getLogger(__name__)
 
 TextInput = str | Sequence[str]
-RawSpan = tuple[str, float, int, int]
 
 SEP_STRUCT = "[SEP_STRUCT]"
 SEP_TEXT = "[SEP_TEXT]"
@@ -92,83 +83,406 @@ CARDINALITY_TO_ID = {
 VALID_RECORD_MODES = ("natural", "latent", "anchorless")
 RECORD_TASK_TYPES = ("json_structures",)
 _SPAN_RESERVED = frozenset({"text", "confidence", "start", "end"})
+_SCALAR_CARDINALITY = frozenset({"optional_one", "required_one"})
 
 
 class Gliner2TextKwargs(TextKwargs, total=False):
-    """GLiNER2 call options merged through `ProcessingKwargs`."""
+    """
+    GLiNER2 call options merged through `ProcessingKwargs`.
+
+    Args:
+        max_len (`int`, *optional*):
+            Maximum tokenized length of one window.
+        architecture (`str`, *optional*):
+            `"span"` or `"boundary"`.
+        labels (`dict`, *optional*):
+            Supervision grouped by task.
+        max_gold_per_query (`int`, *optional*):
+            Maximum gold spans packed per query.
+    """
 
     max_len: int | None
     architecture: str
-    rng: Any
-    sampling_config: Any
     labels: Any
     max_gold_per_query: int | None
 
 
 class Gliner2ProcessorKwargs(ProcessingKwargs, total=False):
-    """Defaults for schema collation."""
+    """Call kwargs accepted by `Gliner2Processor`."""
 
+    _defaults = {}
     text_kwargs: Gliner2TextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "max_len": None,
-            "architecture": "span",
-            "rng": None,
-            "sampling_config": None,
-            "labels": None,
-            "max_gold_per_query": None,
-        }
-    }
 
 
-Gliner2ProcessorKwargs.__annotations__["text_kwargs"] = Gliner2TextKwargs
+class FieldSpec(TypedDict, total=False):
+    """
+    One entity or structure field in a caller schema.
+
+    Args:
+        dtype (`str`, *optional*):
+            Value kind, such as `"str"` or `"list"`.
+        threshold (`float`, *optional*):
+            Minimum score for this field.
+        description (`str`, *optional*):
+            Text added to the field prompt.
+        choices (`list[str]`, *optional*):
+            Closed set of values for a choice field.
+        validators (`list`, *optional*):
+            Caller-side checks stored with the field.
+        value (`str`, *optional*):
+            Fixed value stored with the field.
+    """
+
+    dtype: str
+    threshold: float
+    description: str
+    choices: list[str]
+    validators: list[Any]
+    value: str
 
 
-@dataclass
-class SamplingConfig:
-    """Training draws. Call order matches the gliner2 schema transformer."""
+class ClassificationTask(TypedDict, total=False):
+    """
+    One classification task in a caller schema.
 
-    remove_json_structure_prob: float = 0.2
-    shuffle_json_fields: bool = True
-    remove_json_field_prob: float = 0.2
-    remove_entities_prob: float = 0.0
-    shuffle_entities: bool = False
-    remove_entity_prob: float = 0.0
-    synthetic_entity_label_prob: float = 0.2
-    remove_relations_prob: float = 0.2
-    swap_head_tail_prob: float = 0.2
-    remove_classification_prob: float = 0.0
-    shuffle_classification_labels: bool = True
-    remove_classification_label_prob: float = 0.5
-    synthetic_label_prob: float = 0.5
-    include_true_label_prob: float = 0.5
-    max_num_labels: int = 1000
+    Args:
+        task (`str`, *optional*):
+            Name of the classification task.
+        labels (`list[str]`, *optional*):
+            Class names.
+        multi_label (`bool`, *optional*):
+            Whether several classes may be selected.
+        cls_threshold (`float`, *optional*):
+            Minimum class score.
+        class_act (`str`, *optional*):
+            `"softmax"` or `"sigmoid"`.
+        prompt (`str`, *optional*):
+            Text prepended to the class list.
+        examples (`list[tuple[str, str]]`, *optional*):
+            Text and label pairs shown in the prompt.
+        label_descriptions (`dict[str, str]`, *optional*):
+            Extra text for each class name.
+    """
+
+    task: str
+    labels: list[str]
+    multi_label: bool
+    cls_threshold: float
+    class_act: str
+    prompt: str
+    examples: list[tuple[str, str]]
+    label_descriptions: dict[str, str]
 
 
-@dataclass
-class SchemaField:
-    """One schema field after normalization."""
+class Gliner2Schema(TypedDict, total=False):
+    """
+    Schema accepted by `Gliner2Processor.__call__`.
 
-    name: str
+    Args:
+        entities (`dict` or `list`, *optional*):
+            Entity fields, as a name-to-spec map or a list of names.
+        entity_descriptions (`dict[str, str]`, *optional*):
+            Prompt text for each entity name.
+        entity_attribute_groups (`dict`, *optional*):
+            Attribute groups attached to entity types.
+        entity_attribute_labels (`list[str]`, *optional*):
+            Attribute names scored for every entity.
+        entity_attribute_prompt_labels (`dict[str, str]`, *optional*):
+            Prompt text for each attribute name.
+        json_structures (`list[dict]`, *optional*):
+            Record structures and their fields.
+        json_descriptions (`dict`, *optional*):
+            Prompt text for structure fields.
+        relations (`list[dict]`, *optional*):
+            Relation types and their head and tail fields.
+        relation_descriptions (`dict[str, str]`, *optional*):
+            Prompt text for each relation name.
+        relation_metadata (`dict`, *optional*):
+            Endpoint names and thresholds for each relation.
+        classifications (`list`, *optional*):
+            Classification tasks.
+        constraints (`list[dict]`, *optional*):
+            Constraints applied by the classification decoder.
+        record_metadata (`dict`, *optional*):
+            Record mode and anchor field for each structure.
+    """
+
+    entities: dict[str, str | FieldSpec] | list[str]
+    entity_descriptions: dict[str, str]
+    entity_attribute_groups: dict[str, dict[str, Any]]
+    entity_attribute_labels: list[str]
+    entity_attribute_prompt_labels: dict[str, str]
+    json_structures: list[dict[str, dict[str, Any]]]
+    json_descriptions: dict[str, dict[str, str]]
+    relations: list[dict[str, dict[str, Any]]]
+    relation_descriptions: dict[str, str]
+    relation_metadata: dict[str, dict[str, Any]]
+    classifications: list[ClassificationTask]
+    constraints: list[dict[str, Any]]
+    record_metadata: dict[str, dict[str, Any]]
+
+
+class SpanLabel(TypedDict, total=True):
+    """
+    One labeled character span.
+
+    Args:
+        start (`int`):
+            Inclusive character start.
+        end (`int`):
+            Exclusive character end.
+    """
+
+    text: str
+    start: int
+    end: int
+
+
+class Gliner2Labels(TypedDict, total=False):
+    """
+    Supervision accepted by `Gliner2Processor.__call__`.
+
+    Args:
+        entities (`dict`, *optional*):
+            Entity name to a span, a string, or a list of either.
+        classifications (`dict`, *optional*):
+            Task name to a class name or a list of class names.
+        relations (`dict`, *optional*):
+            Relation name to a head/tail pair or a list of pairs.
+        json_structures (`dict`, *optional*):
+            Structure name to a record or a list of records.
+    """
+
+    entities: dict[str, list[str | SpanLabel] | str | SpanLabel]
+    classifications: dict[str, list[str] | str]
+    relations: dict[str, list[dict[str, Any]] | dict[str, Any]]
+    json_structures: dict[str, list[dict[str, Any]] | dict[str, Any]]
+
+
+@auto_docstring(custom_intro="Schema field kind. Serializes to `span`, `choice`, or `label`.")
+class FieldKind(str, Enum):
+    """Schema field kind. Serializes to `span`, `choice`, or `label`."""
+
+    SPAN = "span"
+    CHOICE = "choice"
+    LABEL = "label"
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+@dataclass(frozen=True)
+class Field:
+    """One schema field after compilation."""
+
+    kind: FieldKind = FieldKind.SPAN
+    name: str = ""
     dtype: str = "list"
     threshold: float | None = None
-    description: str | None = None
     choices: tuple[str, ...] = ()
     validators: tuple[Any, ...] = ()
+    description: str | None = None
+    query_id: int | None = None
+    is_scalar: bool | None = None
+    start: int | None = None
+    end: int | None = None
+
+    def __post_init__(self) -> None:
+        kind = self.kind if isinstance(self.kind, FieldKind) else FieldKind(self.kind)
+        choices = self.choices if isinstance(self.choices, tuple) else tuple(self.choices or ())
+        validators = self.validators if isinstance(self.validators, tuple) else tuple(self.validators or ())
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "choices", choices)
+        object.__setattr__(self, "validators", validators)
 
 
-@dataclass
-class SchemaGroup:
-    """One encoded schema group. `options` is the schema metadata."""
+@dataclass(frozen=True)
+class AttributeSpec:
+    """Entity attribute group rescored from kept spans."""
+
+    name: str
+    labels: tuple[str, ...]
+    applies_to: tuple[str, ...] | None
+    multi_label: bool
+    threshold: float
+
+
+@dataclass(frozen=True)
+class RecordField:
+    """One record field and its boundary query id."""
+
+    name: str
+    query_id: int
+    cardinality: str
+    is_anchor: bool
+    exclusive: bool
+
+
+@dataclass(frozen=True)
+class GroupRecord:
+    """Record head configuration for one structure group."""
+
+    mode: str
+    anchor: str | None
+    occurrence_policy: str
+    fields: tuple[RecordField, ...]
+    anchor_query_id: int | None
+    task_index: int
+
+
+@dataclass(frozen=True)
+class FieldGroup:
+    """One encoded schema group. Decoding and the pipeline read this object."""
 
     task: str
     name: str
-    prompt: str
-    fields: tuple[SchemaField, ...] = ()
+    fields: tuple[Field, ...]
     tokens: tuple[str, ...] = ()
-    options: dict[str, Any] = field(default_factory=dict)
-    choices: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    true_labels: tuple[str, ...] | None = None
+    endpoints: tuple[str, ...] = ()
+    record: GroupRecord | None = None
+    threshold: float | None = None
+    multi_label: bool = False
+    activation: str = "auto"
+    prompt: str | None = None
+    attributes: tuple[AttributeSpec, ...] = ()
+    attribute_labels: tuple[str, ...] = ()
+    attribute_prompts: tuple[tuple[str, str], ...] = ()
+    cls_threshold: float | None = None
+    class_act: str | None = None
+    examples: tuple[Any, ...] | None = None
+    label_descriptions: dict[str, str] | None = None
+    options: dict[str, Any] | None = None
+    choices: dict[str, Any] | None = None
+    true_labels: Any = None
+    record_mode: str | None = None
+    record_anchor: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.class_act is not None:
+            object.__setattr__(self, "activation", self.class_act)
+        options = self.options
+        if options:
+            record = options.get("record") if isinstance(options, Mapping) else None
+            if isinstance(record, Mapping):
+                if self.record_mode is None:
+                    object.__setattr__(self, "record_mode", record.get("mode"))
+                if self.record_anchor is None:
+                    object.__setattr__(self, "record_anchor", record.get("anchor"))
+            return
+        object.__setattr__(self, "options", _field_group_options(self))
+
+
+def _field_group_options(group: FieldGroup) -> dict[str, Any]:
+    """Build the metadata dict `SchemaGroup.options` exposes."""
+    fields = {
+        field.name: {
+            "dtype": field.dtype,
+            "threshold": field.threshold,
+            "validators": field.validators,
+            "choices": field.choices,
+        }
+        for field in group.fields
+    }
+    options: dict[str, Any] = {"fields": fields}
+    class_act = group.class_act if group.class_act is not None else group.activation
+    descriptions = dict(group.label_descriptions or {})
+    examples = list(group.examples or [])
+    if (
+        group.task == "classifications"
+        or group.class_act is not None
+        or descriptions
+        or examples
+        or group.cls_threshold is not None
+    ):
+        options["classification"] = {
+            "multi_label": group.multi_label,
+            "cls_threshold": group.cls_threshold if group.cls_threshold is not None else group.threshold,
+            "class_act": class_act,
+            "examples": examples,
+            "label_descriptions": descriptions,
+        }
+    if group.threshold is not None and group.task != "classifications":
+        options["threshold"] = group.threshold
+    if group.endpoints:
+        options["endpoints"] = tuple(group.endpoints)
+    if group.record_mode is not None or group.record_anchor is not None:
+        options["record"] = {"mode": group.record_mode, "anchor": group.record_anchor}
+    return options
+
+
+SchemaField = Field
+SchemaGroup = FieldGroup
+
+
+@dataclass(frozen=True)
+class WordGrid:
+    """Document words and the choice-prefix length they were aligned to."""
+
+    words: tuple[str, ...]
+    starts: tuple[int, ...]
+    ends: tuple[int, ...]
+    text: str
+    prefix_len: int
+    prefix: tuple[str, ...]
+
+    @property
+    def encoded_length(self) -> int:
+        return self.prefix_len + len(self.words)
+
+
+@dataclass
+class Cardinality:
+    """Whether a record field keeps one span."""
+
+    is_scalar: bool
+
+
+@dataclass
+class RecordFieldSpec:
+    """Record field the loss reads by query id."""
+
+    query_id: int
+    cardinality: Cardinality | None = None
+    name: str | None = None
+    exclusive: bool = False
+    allows_absent: bool = False
+    values: Any = None
+
+
+@dataclass
+class RecordSpec:
+    """Record schema object `RecordHead.forward_group` reads."""
+
+    mode: str
+    fields: list[RecordFieldSpec]
+    anchor_query_id: int | None
+    task_index: int = 0
+
+
+FieldCardinality = Cardinality
+
+
+@dataclass
+class RecordFieldValue:
+    """Gold spans for one record field."""
+
+    query_id: int
+    values: list
+
+
+@dataclass
+class RecordTarget:
+    """Gold record with `field_for_query`."""
+
+    task_index: int
+    fields: list[RecordFieldValue]
+
+    def field_for_query(self, query_id: int) -> RecordFieldValue | None:
+        wanted = int(query_id)
+        for item in self.fields:
+            if item.query_id == wanted:
+                return item
+        return None
 
 
 _WS_PATTERN = re.compile(
@@ -232,10 +546,15 @@ def _normalize_text(text: str) -> str:
 
 def _resolve_schema(schema: Any) -> Any:
     """Unwrap a schema builder into its dict."""
-    if hasattr(schema, "build"):
-        return schema.build()
-    if hasattr(schema, "schema"):
-        return schema.schema
+    if isinstance(schema, Mapping):
+        return schema
+    for cls in type(schema).__mro__:
+        build = cls.__dict__.get("build")
+        if callable(build):
+            return schema.build()
+    for cls in type(schema).__mro__:
+        if "schema" in cls.__dict__:
+            return schema.__getattribute__("schema")
     return schema
 
 
@@ -269,6 +588,16 @@ def chunk_words(
     A string is split with the whitespace (or configured) splitter. Offsets
     index that original string. A sequence of strings, or of
     ``(token, start, end)`` tuples, is windowed directly.
+
+    Args:
+        words (`str` or sequence):
+            Document text or pre-split words.
+        chunk_size (`int`, *optional*, defaults to 384):
+            Maximum words in one window.
+        chunk_overlap (`int`, *optional*, defaults to 64):
+            Words shared by neighboring windows.
+        word_splitter (`str` or `callable`, *optional*):
+            Splitter name or callable used when `words` is a string.
     """
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than 0")
@@ -282,13 +611,11 @@ def chunk_words(
         source = words
     else:
         tokens = []
-        pieces = []
         for index, word in enumerate(words):
             if isinstance(word, (tuple, list)) and len(word) >= 3:
                 tokens.append((str(word[0]), int(word[1]), int(word[2])))
             else:
                 tokens.append((str(word), index, index + 1))
-            pieces.append(str(word if not isinstance(word, (tuple, list)) else word[0]))
         source = None
     if not tokens:
         text = words if isinstance(words, str) else ""
@@ -311,6 +638,12 @@ def chunk_words(
     return chunks
 
 
+def _chunk_start(chunk: Any) -> int:
+    if isinstance(chunk, Mapping):
+        return int(chunk["start_char"])
+    return int(chunk.start_char)
+
+
 def _is_span_dict(value: Any) -> bool:
     return (
         isinstance(value, dict)
@@ -326,21 +659,24 @@ def _is_classification_dict(value: Any) -> bool:
     return isinstance(value, dict) and "label" in value and "confidence" in value
 
 
-def _chunk_field(chunk: Any, name: str) -> Any:
-    if isinstance(chunk, dict):
-        return chunk[name]
-    return getattr(chunk, name)
-
-
 def remap_result_spans(result: Any, original_text: str, chunk: Any) -> Any:
-    """Add a chunk's character offset onto span dicts."""
+    """Add a chunk's character offset onto span dicts.
+
+    Args:
+        result:
+            Nested decode payload.
+        original_text (`str`):
+            Document the chunk was cut from.
+        chunk:
+            Window with `start_char`.
+    """
     if isinstance(result, list):
         return [remap_result_spans(item, original_text, chunk) for item in result]
     if isinstance(result, dict):
         remapped = {key: remap_result_spans(value, original_text, chunk) for key, value in result.items()}
         if _is_span_dict(remapped):
-            start = int(remapped["start"]) + int(_chunk_field(chunk, "start_char"))
-            end = int(remapped["end"]) + int(_chunk_field(chunk, "start_char"))
+            start = int(remapped["start"]) + _chunk_start(chunk)
+            end = int(remapped["end"]) + _chunk_start(chunk)
             remapped["start"] = start
             remapped["end"] = end
             if 0 <= start <= end <= len(original_text):
@@ -404,6 +740,41 @@ def _dedupe_items(items: list[Any], overlap_policy: str | None = None) -> list[A
     return deduped
 
 
+def _merge_map(
+    values: list[Any],
+    overlap_policy: str = "disallow",
+    *,
+    scalars: set | None = None,
+    listed: bool = False,
+) -> dict[str, Any]:
+    """Merge dicts by key. `scalars` keeps one value. `listed` always returns lists."""
+    merged: dict[str, Any] = {}
+    keys: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        for key in value:
+            if key not in seen:
+                seen.add(key)
+                keys.append(key)
+    for key in keys:
+        if listed or scalars is not None:
+            items: list[Any] = []
+            for value in values:
+                if isinstance(value, dict) and key in value:
+                    items.extend(_as_list(value[key]))
+            if listed:
+                merged[key] = _dedupe_items(items)
+            else:
+                deduped = _dedupe_items(items, overlap_policy=overlap_policy)
+                merged[key] = (deduped[0] if deduped else None) if key in scalars else deduped
+        else:
+            nested = [value[key] for value in values if isinstance(value, dict) and key in value]
+            merged[key] = _merge_values(nested, overlap_policy)
+    return merged
+
+
 def _merge_values(values: list[Any], overlap_policy: str = "disallow") -> Any:
     non_empty = [value for value in values if value not in (None, {}, [])]
     if not non_empty:
@@ -419,63 +790,11 @@ def _merge_values(values: list[Any], overlap_policy: str = "disallow") -> Any:
             items.extend(value)
         return _dedupe_items(items, overlap_policy=overlap_policy)
     if all(isinstance(value, dict) for value in non_empty):
-        return _merge_nested_dicts(non_empty, overlap_policy)
+        return _merge_map(non_empty, overlap_policy)
+    kinds = {type(value).__name__ for value in non_empty}
+    if len(kinds) > 1:
+        raise ValueError(f"cannot merge values of types {sorted(kinds)}")
     return non_empty[0]
-
-
-def _merge_nested_dicts(values: list[dict[str, Any]], overlap_policy: str = "disallow") -> dict[str, Any]:
-    merged: dict[str, Any] = {}
-    keys: list[str] = []
-    seen = set()
-    for value in values:
-        for key in value:
-            if key not in seen:
-                seen.add(key)
-                keys.append(key)
-    for key in keys:
-        merged[key] = _merge_values([value.get(key) for value in values if key in value], overlap_policy)
-    return merged
-
-
-def _merge_entity_maps(values: list[Any], scalar_labels: set, overlap_policy: str) -> dict[str, Any]:
-    merged: dict[str, Any] = {}
-    labels: list[str] = []
-    seen = set()
-    for value in values:
-        if not isinstance(value, dict):
-            continue
-        for label in value:
-            if label not in seen:
-                seen.add(label)
-                labels.append(label)
-    for label in labels:
-        items: list[Any] = []
-        for value in values:
-            if isinstance(value, dict) and label in value:
-                items.extend(_as_list(value[label]))
-        deduped = _dedupe_items(items, overlap_policy=overlap_policy)
-        merged[label] = (deduped[0] if deduped else None) if label in scalar_labels else deduped
-    return merged
-
-
-def _merge_relation_maps(values: list[Any]) -> dict[str, list[Any]]:
-    merged: dict[str, list[Any]] = {}
-    labels: list[str] = []
-    seen = set()
-    for value in values:
-        if not isinstance(value, dict):
-            continue
-        for label in value:
-            if label not in seen:
-                seen.add(label)
-                labels.append(label)
-    for label in labels:
-        items: list[Any] = []
-        for value in values:
-            if isinstance(value, dict) and label in value:
-                items.extend(_as_list(value[label]))
-        merged[label] = _dedupe_items(items)
-    return merged
 
 
 def _merge_result_dicts(
@@ -485,7 +804,7 @@ def _merge_result_dicts(
 ) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     keys: list[str] = []
-    seen = set()
+    seen: set[str] = set()
     for result in results:
         for key in result:
             if key not in seen:
@@ -494,9 +813,9 @@ def _merge_result_dicts(
     for key in keys:
         values = [result.get(key) for result in results if key in result]
         if key == "entities":
-            merged[key] = _merge_entity_maps(values, scalar_entity_labels or set(), overlap_policy)
+            merged[key] = _merge_map(values, overlap_policy, scalars=set(scalar_entity_labels or ()))
         elif key == "relation_extraction":
-            merged[key] = _merge_relation_maps(values)
+            merged[key] = _merge_map(values, overlap_policy, listed=True)
         else:
             merged[key] = _merge_values(values, overlap_policy)
     return merged
@@ -542,7 +861,7 @@ def _merge_joint_documents(original_text, chunks, chunk_results, include_confide
     entity_by_key = {}
     relation_rows = {}
     for chunk, raw in zip(chunks, chunk_results):
-        start_char = int(_chunk_field(chunk, "start_char"))
+        start_char = _chunk_start(chunk)
         entities = list(raw.get("entities") or [])
         relations = list(raw.get("relations") or [])
         local_keys = {}
@@ -615,7 +934,24 @@ def merge_chunk_results(
     scalar_entity_labels: Iterable[str] | None = None,
     overlap_policy: str | None = None,
 ) -> dict[str, Any]:
-    """Merge formatted chunk results onto document character offsets."""
+    """Merge formatted chunk results onto document character offsets.
+
+    Args:
+        original_text (`str`):
+            Document text.
+        chunks:
+            Windows aligned with `chunk_results`.
+        chunk_results:
+            One formatted decode per window.
+        include_confidence (`bool`, *optional*, defaults to `False`):
+            Keep scores after the merge.
+        include_spans (`bool`, *optional*, defaults to `False`):
+            Keep character offsets after the merge.
+        scalar_entity_labels (`iterable`, *optional*):
+            Entity names stored as one span instead of a list.
+        overlap_policy (`str`, *optional*):
+            Overlap rule. The default is `disallow`.
+    """
     if len(chunks) != len(chunk_results):
         raise ValueError("chunks and chunk_results must have the same length")
     if chunk_results and all(isinstance(item, Mapping) and _is_joint_result(item) for item in chunk_results):
@@ -626,29 +962,125 @@ def merge_chunk_results(
     return _strip_span_metadata(merged, include_confidence, include_spans)
 
 
+def _classification_tasks(schema: Mapping[str, Any]) -> list[tuple[str, list[str]]]:
+    tasks = schema.get("tasks")
+    if isinstance(tasks, Mapping):
+        rows = []
+        for name, body in tasks.items():
+            labels = body.get("labels") if isinstance(body, Mapping) else body
+            names = list(labels) if isinstance(labels, Mapping) else list(labels or [])
+            rows.append((str(name), [str(item) for item in names]))
+        return rows
+    rows = []
+    for item in schema.get("classifications") or []:
+        rows.append((str(item["task"]), [str(label) for label in item["labels"]]))
+    if not rows:
+        raise ValueError("schema has no classification tasks")
+    return rows
+
+
+def _logit_number(value: Any) -> float:
+    if torch.is_tensor(value):
+        flat = value.detach().float().cpu().reshape(-1)
+        return float(flat[0].item()) if flat.numel() else float("-inf")
+    return float(value)
+
+
+def _labels_from_tokens(tokens: Sequence[str]) -> list[str]:
+    return [str(tokens[index + 1]) for index in range(len(tokens) - 1) if tokens[index] == L_TOKEN]
+
+
+def _align_encoded_logits(
+    payload: Mapping[str, Any], tasks: Sequence[tuple[str, list[str]]]
+) -> dict[str, dict[str, float]]:
+    """Align schema-token logit rows onto the schema's task and label order."""
+    tokens = payload.get("schema_tokens_list", payload.get("schema_tokens"))
+    raw = payload["logits"]
+    known = [name for name, _ in tasks]
+    label_of = dict(tasks)
+    if tokens and isinstance(tokens[0], str):
+        groups = [list(tokens)]
+        rows = [raw]
+    else:
+        groups = [list(group) for group in tokens]
+        if torch.is_tensor(raw) and raw.ndim == 2:
+            rows = [raw[index] for index in range(raw.shape[0])]
+        else:
+            rows = list(raw)
+    found = {name: {} for name in known}
+    for group, row in zip(groups, rows):
+        names = _labels_from_tokens(group)
+        prompt = group[2] if len(group) > 2 else ""
+        config = _resolve_classification_config(prompt, [{"task": name} for name in known])
+        task = config["task"] if config is not None else str(prompt).split(f" {DESC_TOKEN} ")[0].split(":", 1)[0]
+        if task not in label_of:
+            raise ValueError(f"encoded tokens name unknown task {task!r}")
+        values = row.detach().float().cpu().tolist() if torch.is_tensor(row) else list(row)
+        for label, value in zip(names, values):
+            if label in label_of[task]:
+                found[task][label] = float(value)
+    aligned = {}
+    for name, labels in tasks:
+        if not found[name]:
+            raise ValueError(f"logits missing task {name!r}")
+        aligned[name] = {label: found[name].get(label, float("-inf")) for label in labels}
+    return aligned
+
+
+def _align_label_rows(logits: Any, tasks: Sequence[tuple[str, list[str]]]) -> dict[str, dict[str, float]]:
+    if isinstance(logits, Mapping) and ("schema_tokens" in logits or "schema_tokens_list" in logits):
+        return _align_encoded_logits(logits, tasks)
+    payload = logits
+    if isinstance(payload, Mapping) and "tasks" in payload and not any(name in payload for name, _ in tasks):
+        payload = payload["tasks"]
+    aligned: dict[str, dict[str, float]] = {}
+    if isinstance(payload, Mapping):
+        for name, labels in tasks:
+            row = payload[name]
+            if isinstance(row, Mapping):
+                aligned[name] = {label: _logit_number(row[label]) for label in labels}
+            else:
+                values = row.detach().float().cpu().tolist() if torch.is_tensor(row) else list(row)
+                aligned[name] = {label: float(values[index]) for index, label in enumerate(labels)}
+        return aligned
+    rows = payload
+    if torch.is_tensor(rows) and rows.ndim == 2:
+        rows = [rows[index] for index in range(rows.shape[0])]
+    for (name, labels), row in zip(tasks, rows):
+        values = row.detach().float().cpu().tolist() if torch.is_tensor(row) else list(row)
+        aligned[name] = {label: float(values[index]) for index, label in enumerate(labels)}
+    return aligned
+
+
 def aggregate_classification_logits(chunk_logits, schema, mode: str = "max") -> dict:
-    """Aggregate per-chunk label logits, then the caller decodes once."""
+    """Aggregate per-chunk label logits, then the caller decodes once.
+
+    Args:
+        chunk_logits:
+            One label-logit mapping or row per chunk.
+        schema (`dict`):
+            Classification schema (`tasks` or `classifications`).
+        mode (`str`, *optional*, defaults to `"max"`):
+            `max`, `mean`, or `first`.
+    """
     if mode not in _AGGREGATIONS:
         raise ValueError(f"aggregate must be one of {_AGGREGATIONS}")
     if not chunk_logits:
         raise ValueError("cannot aggregate an empty list of chunk scores")
-    compiled = _compile_classification(_coerce_schema(schema))
-    aligned = [_align_logits(item, compiled) for item in chunk_logits]
-    tasks = {}
-    for spec in compiled.task_specs:
-        tasks[spec.name] = {
-            label_name: (
-                max(row[spec.name][label_name] for row in aligned)
-                if mode == "max"
-                else (
-                    sum(row[spec.name][label_name] for row in aligned) / len(aligned)
-                    if mode == "mean"
-                    else aligned[0][spec.name][label_name]
-                )
-            )
-            for label_name in spec.label_names
-        }
-    return tasks
+    tasks = _classification_tasks(schema)
+    aligned = [_align_label_rows(item, tasks) for item in chunk_logits]
+    aggregated = {}
+    for name, labels in tasks:
+        aggregated[name] = {}
+        for label in labels:
+            column = [row[name][label] for row in aligned]
+            if mode == "max":
+                aggregated[name][label] = max(column)
+            elif mode == "mean":
+                aggregated[name][label] = sum(column) / len(column)
+            else:
+                aggregated[name][label] = column[0]
+    return aggregated
 
 
 def _is_score(value: object) -> bool:
@@ -669,66 +1101,43 @@ def _format_classification(value: object, include_confidence: bool) -> object:
     return value
 
 
-def format_entity_dict(entities: dict, include_confidence: bool) -> dict:
-    """Deduplicate an entity-type map."""
-    formatted = {}
-    for name, spans in entities.items():
-        if isinstance(spans, list):
-            unique = []
-            seen = set()
-            for span in spans:
-                if isinstance(span, tuple):
-                    text, confidence, start, end = span
-                    if text and (text.lower(), start, end) not in seen:
-                        seen.add((text.lower(), start, end))
-                        unique.append({"text": text, "confidence": confidence} if include_confidence else text)
-                elif isinstance(span, dict):
-                    text = span.get("text", "")
-                    if "start" in span and "end" in span:
-                        key = (text.lower(), span["start"], span["end"])
-                    else:
-                        key = (text.lower(), None, None)
-                    if text and key not in seen:
-                        seen.add(key)
-                        unique.append(span)
-                elif span and span.lower() not in seen:
-                    seen.add(span.lower())
-                    unique.append(span)
-            formatted[name] = unique
-        elif isinstance(spans, tuple):
-            text, confidence, _, _ = spans
-            formatted[name] = {"text": text, "confidence": confidence} if include_confidence and text else text
-        else:
-            formatted[name] = spans or None
-    return formatted
+def _dedupe_field_values(value: list, include_confidence: bool) -> list:
+    unique = []
+    seen = set()
+    for item in value:
+        if isinstance(item, tuple):
+            text, confidence, start, end = item
+            if text and (text.lower(), start, end) not in seen:
+                seen.add((text.lower(), start, end))
+                unique.append({"text": text, "confidence": confidence} if include_confidence else text)
+        elif isinstance(item, dict):
+            text = item.get("text", "")
+            if "start" in item and "end" in item:
+                key = (text.lower(), item["start"], item["end"])
+            else:
+                key = (text.lower(), None, None)
+            if text and key not in seen:
+                seen.add(key)
+                unique.append(item)
+        elif item and item.lower() not in seen:
+            seen.add(item.lower())
+            unique.append(item)
+    return unique
 
 
-def format_struct(struct: dict, include_confidence: bool) -> dict:
-    """Deduplicate one structure instance."""
+def format_field(struct: Mapping[str, Any], include_confidence: bool) -> dict[str, Any]:
+    """Deduplicate one entity map or one structure instance.
+
+    Args:
+        struct (`dict`):
+            Field name to spans, a span tuple, or a nested value.
+        include_confidence (`bool`):
+            Keep scores on tuple spans.
+    """
     formatted = {}
     for field_name, value in struct.items():
         if isinstance(value, list):
-            unique = []
-            seen = set()
-            for item in value:
-                if isinstance(item, tuple):
-                    text, confidence, start, end = item
-                    if text and (text.lower(), start, end) not in seen:
-                        seen.add((text.lower(), start, end))
-                        unique.append({"text": text, "confidence": confidence} if include_confidence else text)
-                elif isinstance(item, dict):
-                    text = item.get("text", "")
-                    if "start" in item and "end" in item:
-                        key = (text.lower(), item["start"], item["end"])
-                    else:
-                        key = (text.lower(), None, None)
-                    if text and key not in seen:
-                        seen.add(key)
-                        unique.append(item)
-                elif item and item.lower() not in seen:
-                    seen.add(item.lower())
-                    unique.append(item)
-            formatted[field_name] = unique
+            formatted[field_name] = _dedupe_field_values(value, include_confidence)
         elif isinstance(value, tuple):
             text, confidence, _, _ = value
             formatted[field_name] = {"text": text, "confidence": confidence} if include_confidence and text else text
@@ -745,7 +1154,18 @@ def format_results(
     requested_relations: list[str] | None = None,
     classification_tasks: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Format raw extraction results into the public payload."""
+    """Format raw extraction results into the public payload.
+
+    Args:
+        results (`dict`):
+            Raw task outputs from decoding.
+        include_confidence (`bool`, *optional*, defaults to `False`):
+            Keep scores on labels and spans.
+        requested_relations (`list[str]`, *optional*):
+            Relation names that are always present, possibly empty.
+        classification_tasks (`list[str]`, *optional*):
+            Keys formatted as classification labels.
+    """
     formatted: dict[str, Any] = {}
     relations: dict[str, Any] = {}
     requested_relations = requested_relations or []
@@ -770,9 +1190,9 @@ def format_results(
                 formatted[key] = {} if key == "entities" else value
             elif isinstance(value[0], dict):
                 if key == "entities":
-                    formatted[key] = format_entity_dict(value[0], include_confidence)
+                    formatted[key] = format_field(value[0], include_confidence)
                 else:
-                    formatted[key] = [format_struct(item, include_confidence) for item in value]
+                    formatted[key] = [format_field(item, include_confidence) for item in value]
             elif isinstance(value[0], tuple):
                 if include_confidence:
                     formatted[key] = [{"label": label, "confidence": confidence} for label, confidence in value]
@@ -784,7 +1204,7 @@ def format_results(
             label, confidence = value
             formatted[key] = {"label": label, "confidence": confidence} if include_confidence else label
         elif isinstance(value, dict):
-            formatted[key] = format_struct(value, include_confidence)
+            formatted[key] = format_field(value, include_confidence)
         else:
             formatted[key] = value
     for relation in requested_relations:
@@ -803,7 +1223,6 @@ def _transform_schema(
     examples: list[tuple[str, str]] | None = None,
     label_descriptions: dict[str, str] | None = None,
     example_mode: str = "both",
-    rng: Any = None,
 ) -> list[str]:
     """Turn one schema group into structural word tokens."""
     prompt_str = parent
@@ -811,15 +1230,10 @@ def _transform_schema(
         prompt_str = f"{parent}: {prompt}"
     if example_mode in ("descriptions", "both") and label_descriptions:
         described = [(label, desc) for label, desc in label_descriptions.items() if label in fields]
-        if rng is not None:
-            rng.shuffle(described)
         for label, desc in described:
             prompt_str += f" {DESC_TOKEN} {label}: {desc}"
     if example_mode in ("few_shot", "both") and examples:
-        ordered = list(examples)
-        if rng is not None:
-            rng.shuffle(ordered)
-        for inp, out in ordered:
+        for inp, out in examples:
             if out in fields:
                 out_str = out if isinstance(out, str) else ", ".join(out)
                 prompt_str += f" {EXAMPLE_TOKEN} {inp} {OUTPUT_TOKEN} {out_str}"
@@ -839,21 +1253,16 @@ def _choice_field_pairs(fields: Mapping[str, Any]) -> list[tuple[str, Mapping[st
     return pairs
 
 
-def _classification_prefix(schema: Mapping[str, Any], rng: Any = None) -> list[str]:
+def _choice_prefix(schema: Mapping[str, Any]) -> list[str]:
     """Word tokens prepended for JSON choice fields."""
     prefix_tokens: list[str] = []
     for struct in schema.get("json_structures", []) or []:
         for parent, fields in struct.items():
             cls_fields = _choice_field_pairs(fields)
-            if rng is not None:
-                rng.shuffle(cls_fields)
             inner: list[str] = []
             for fname, fval in cls_fields:
-                choices = list(fval["choices"])
-                if rng is not None:
-                    rng.shuffle(choices)
                 choice_tokens: list[str] = []
-                for index, choice in enumerate(choices):
+                for index, choice in enumerate(fval["choices"]):
                     if index > 0:
                         choice_tokens.append("|")
                     choice_tokens.append(str(choice))
@@ -876,255 +1285,182 @@ def _field_spec_map(occurrences: Sequence[Mapping[str, Any]], names: Sequence[st
     return specs
 
 
-def _compile_groups(schema: Mapping[str, Any]) -> list[SchemaGroup]:
-    """Emit schema groups. Token words are derived from those groups."""
-    compiled: list[SchemaGroup] = []
-    if "json_structures" in schema:
-        json_descs = schema.get("json_descriptions", {}) or {}
-        grouped: dict[str, list[Mapping[str, Any]]] = {}
-        for item in schema["json_structures"] or []:
-            for parent, fields in item.items():
-                grouped.setdefault(parent, []).append(fields)
-        for parent, occurrences in grouped.items():
-            common: list[str] = []
-            seen_fields = set()
-            for occurrence in occurrences:
-                for field_name in occurrence:
-                    if field_name not in seen_fields:
-                        common.append(field_name)
-                        seen_fields.add(field_name)
-            if not common:
-                continue
-            descs = json_descs.get(parent, {}) or {}
-            mode = "descriptions" if descs else "none"
-            tokens = _transform_schema(parent, common, C_TOKEN, label_descriptions=descs, example_mode=mode)
-            record = (schema.get("record_metadata") or {}).get(parent)
-            compiled.append(
-                _make_group(
-                    "json_structures",
-                    parent,
-                    common,
-                    tokens,
-                    _choice_map(occurrences, common, {}),
-                    field_specs=_field_spec_map(occurrences, common),
-                    options={"record": record} if record else {},
-                )
+def _make_field(task: str, name: str, spec: Mapping[str, Any] | None, choices: Sequence[str] = ()) -> Field:
+    spec = spec or {}
+    raw_choices = tuple(str(choice) for choice in (spec.get("choices") or choices or ()))
+    if task == "classifications":
+        kind = FieldKind.LABEL
+    elif task == "json_structures" and raw_choices:
+        kind = "choice"
+    else:
+        kind = "span"
+    threshold = spec.get("threshold")
+    return Field(
+        kind=kind,
+        name=name,
+        dtype=str(spec.get("dtype") or "list"),
+        threshold=None if threshold is None else float(threshold),
+        choices=raw_choices,
+        validators=tuple(spec.get("validators") or ()),
+    )
+
+
+def _make_fields(
+    task: str,
+    names: Sequence[str],
+    specs: Mapping[str, Mapping[str, Any]] | None = None,
+    choices: Mapping[str, Sequence[str]] | None = None,
+) -> tuple[Field, ...]:
+    choice_map = choices or {}
+    spec_map = specs or {}
+    return tuple(_make_field(task, name, spec_map.get(name), choice_map.get(name, ())) for name in names)
+
+
+def _attribute_specs(raw: Mapping[str, Any] | None) -> tuple[AttributeSpec, ...]:
+    if not raw:
+        return ()
+    if not isinstance(raw, Mapping):
+        raise TypeError("entity_attribute_groups must be a mapping")
+    specs = []
+    for name, group in raw.items():
+        if not isinstance(group, Mapping):
+            raise TypeError(f"entity_attribute_groups[{name!r}] must be a mapping")
+        applies = group.get("applies_to")
+        raw_threshold = group.get("threshold", 0.5)
+        specs.append(
+            AttributeSpec(
+                name=str(name),
+                labels=tuple(str(label) for label in (group.get("labels") or ())),
+                applies_to=None if applies is None else tuple(str(item) for item in applies),
+                multi_label=bool(group.get("multi_label", False)),
+                threshold=0.5 if raw_threshold is None else float(raw_threshold),
             )
-    if "entities" in schema:
-        entity_values = schema.get("entities") or {}
-        entity_fields = list(entity_values.keys())
-        descs = schema.get("entity_descriptions", {}) or {}
-        if entity_fields:
-            mode = "descriptions" if descs else "none"
-            tokens = _transform_schema("entities", entity_fields, E_TOKEN, label_descriptions=descs, example_mode=mode)
-            specs = {name: dict(value) if isinstance(value, Mapping) else {} for name, value in entity_values.items()}
-            compiled.append(
-                _make_group(
-                    "entities",
-                    "entities",
-                    entity_fields,
-                    tokens,
-                    field_specs=specs,
-                    options={
-                        "attributes": schema.get("entity_attribute_groups") or {},
-                        "attribute_labels": list(schema.get("entity_attribute_labels") or ()),
-                        "attribute_prompt_labels": dict(schema.get("entity_attribute_prompt_labels") or {}),
-                    },
-                )
+        )
+    return tuple(specs)
+
+
+def _structure_groups(schema: Mapping[str, Any]) -> list[FieldGroup]:
+    if "json_structures" not in schema:
+        return []
+    json_descs = schema.get("json_descriptions", {}) or {}
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for item in schema["json_structures"] or []:
+        for parent, fields in item.items():
+            grouped.setdefault(parent, []).append(fields)
+    compiled = []
+    for parent, occurrences in grouped.items():
+        common: list[str] = []
+        seen_fields: set[str] = set()
+        for occurrence in occurrences:
+            for field_name in occurrence:
+                if field_name not in seen_fields:
+                    common.append(field_name)
+                    seen_fields.add(field_name)
+        if not common:
+            continue
+        descs = json_descs.get(parent, {}) or {}
+        mode = "descriptions" if descs else "none"
+        tokens = _transform_schema(parent, common, C_TOKEN, label_descriptions=descs, example_mode=mode)
+        choices = {}
+        for occurrence in occurrences:
+            for fname, fval in occurrence.items():
+                if fname in common and isinstance(fval, Mapping) and fval.get("choices"):
+                    choices[str(fname)] = tuple(str(choice) for choice in fval["choices"])
+        compiled.append(
+            FieldGroup(
+                task="json_structures",
+                name=parent,
+                fields=_make_fields("json_structures", common, _field_spec_map(occurrences, common), choices),
+                tokens=tuple(tokens),
             )
-    if "relations" in schema:
-        relation_descriptions = schema.get("relation_descriptions", {}) or {}
-        relation_metadata = schema.get("relation_metadata") or {}
-        grouped = {}
-        for item in schema["relations"] or []:
-            for parent, fields in item.items():
-                grouped.setdefault(parent, []).append(fields)
-        for parent, occurrences in grouped.items():
-            if not occurrences:
-                continue
-            field_names = list(occurrences[0].keys())
-            if not any(all(field in occurrence for field in field_names) for occurrence in occurrences):
-                continue
-            tokens = _transform_schema(parent, field_names, R_TOKEN, prompt=relation_descriptions.get(parent))
-            threshold = (relation_metadata.get(parent) or {}).get("threshold")
-            options: dict[str, Any] = {"endpoints": tuple(field_names[:2])}
-            if threshold is not None:
-                options["threshold"] = threshold
-            compiled.append(
-                _make_group(
-                    "relations",
-                    parent,
-                    field_names,
-                    tokens,
-                    field_specs=_field_spec_map(occurrences, field_names),
-                    options=options,
-                )
-            )
-    if "classifications" in schema:
-        for item in schema["classifications"] or []:
-            labels = list(item["labels"])
-            tokens = _transform_schema(
-                item["task"],
-                labels,
-                L_TOKEN,
-                prompt=item.get("prompt"),
-                examples=item.get("examples", []) or [],
-                label_descriptions=item.get("label_descriptions", {}) or {},
-                example_mode="both",
-            )
-            compiled.append(
-                _make_group(
-                    "classifications",
-                    item["task"],
-                    labels,
-                    tokens,
-                    options={
-                        "classification": {
-                            "multi_label": bool(item.get("multi_label", False)),
-                            "cls_threshold": item.get("cls_threshold"),
-                            "class_act": item.get("class_act", "auto"),
-                            "examples": list(item.get("examples") or []),
-                            "label_descriptions": dict(item.get("label_descriptions") or {}),
-                        }
-                    },
-                )
-            )
+        )
     return compiled
 
 
-def _group_name(tokens: Sequence[str], task_type: str) -> str:
-    if task_type == "entities":
-        return "entities"
-    if len(tokens) > 2:
-        return str(tokens[2]).split(f" {DESC_TOKEN} ")[0]
-    return task_type
+def _entity_group(schema: Mapping[str, Any]) -> FieldGroup | None:
+    if "entities" not in schema:
+        return None
+    entity_values = schema.get("entities") or {}
+    entity_fields = list(entity_values.keys())
+    if not entity_fields:
+        return None
+    descs = schema.get("entity_descriptions", {}) or {}
+    mode = "descriptions" if descs else "none"
+    tokens = _transform_schema("entities", entity_fields, E_TOKEN, label_descriptions=descs, example_mode=mode)
+    specs = {name: dict(value) if isinstance(value, Mapping) else {} for name, value in entity_values.items()}
+    prompts = schema.get("entity_attribute_prompt_labels") or {}
+    return FieldGroup(
+        task="entities",
+        name="entities",
+        fields=_make_fields("entities", entity_fields, specs),
+        tokens=tuple(tokens),
+        attributes=_attribute_specs(schema.get("entity_attribute_groups") or {}),
+        attribute_labels=tuple(str(label) for label in (schema.get("entity_attribute_labels") or ())),
+        attribute_prompts=tuple((str(key), str(value)) for key, value in prompts.items()),
+    )
 
 
-def _public_metadata(_source: Any, schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Metadata the span decoder needs to map ids back to strings."""
-    entities = schema.get("entities")
-    entity_order = list(entities.keys()) if isinstance(entities, dict) else []
-    classifications = schema.get("classifications", []) or []
-    relation_order = []
-    for item in schema.get("relations") or []:
-        if isinstance(item, Mapping):
-            for name in item:
-                key = str(name)
-            if key not in relation_order:
-                relation_order.append(key)
-    field_metadata = {}
-    for item in schema.get("json_structures") or []:
-        if not isinstance(item, Mapping):
-            continue
+def _relation_groups(schema: Mapping[str, Any]) -> list[FieldGroup]:
+    if "relations" not in schema:
+        return []
+    relation_descriptions = schema.get("relation_descriptions", {}) or {}
+    relation_metadata = schema.get("relation_metadata") or {}
+    grouped: dict[str, list] = {}
+    for item in schema["relations"] or []:
         for parent, fields in item.items():
-            if not isinstance(fields, Mapping):
-                continue
-            for fname, spec in fields.items():
-                if not isinstance(spec, Mapping):
-                    continue
-                entry = {}
-                if spec.get("dtype"):
-                    entry["dtype"] = spec["dtype"]
-                if spec.get("threshold") is not None:
-                    entry["threshold"] = spec["threshold"]
-                if spec.get("choices"):
-                    entry["choices"] = list(spec["choices"])
-                if entry:
-                    field_metadata[f"{parent}.{fname}"] = entry
-    return {
-        "field_metadata": field_metadata,
-        "entity_metadata": {},
-        "relation_metadata": {},
-        "relation_descriptions": schema.get("relation_descriptions", {}) or {},
-        "field_orders": {},
-        "entity_order": entity_order,
-        "relation_order": relation_order,
-        "classification_tasks": [item["task"] for item in classifications],
-        "entity_attribute_groups": {},
-        "entity_attribute_prompt_labels": {},
-        "entity_attribute_labels": set(),
-    }
-
-
-def _attach_source_options(source: Any, groups: Sequence[SchemaGroup]) -> None:
-    """Copy builder-only attribute bags onto the entity group."""
-    attributes = getattr(source, "_entity_attribute_groups", None)
-    if not attributes:
-        return
-    labels = getattr(source, "_entity_attribute_labels", ()) or ()
-    prompts = getattr(source, "_entity_attribute_prompt_labels", {}) or {}
-    for group in groups:
-        if group.task != "entities":
+            grouped.setdefault(parent, []).append(fields)
+    compiled = []
+    for parent, occurrences in grouped.items():
+        if not occurrences:
             continue
-        group.options["attributes"] = attributes
-        group.options["attribute_labels"] = list(labels)
-        group.options["attribute_prompt_labels"] = dict(prompts)
+        field_names = list(occurrences[0].keys())
+        if not any(all(field in occurrence for field in field_names) for occurrence in occurrences):
+            continue
+        tokens = _transform_schema(parent, field_names, R_TOKEN, prompt=relation_descriptions.get(parent))
+        threshold = (relation_metadata.get(parent) or {}).get("threshold")
+        compiled.append(
+            FieldGroup(
+                task="relations",
+                name=parent,
+                fields=_make_fields("relations", field_names, _field_spec_map(occurrences, field_names)),
+                tokens=tuple(tokens),
+                endpoints=tuple(field_names[:2]),
+                threshold=None if threshold is None else float(threshold),
+                prompt=None if relation_descriptions.get(parent) is None else str(relation_descriptions.get(parent)),
+            )
+        )
+    return compiled
 
 
-def _metadata_from_groups(source: Any, schema: Mapping[str, Any], groups: Sequence[SchemaGroup]) -> dict[str, Any]:
-    """Schema metadata taken from `SchemaGroup.options`."""
-    meta = _public_metadata(source, schema)
-    field_metadata = dict(meta.get("field_metadata") or {})
-    entity_metadata = dict(meta.get("entity_metadata") or {})
-    for group in groups:
-        field_options = group.options.get("fields") or {}
-        for schema_field in group.fields:
-            stored = field_options.get(schema_field.name) or {}
-            entry = {}
-            dtype = stored.get("dtype", schema_field.dtype)
-            if dtype:
-                entry["dtype"] = dtype
-            threshold = stored.get("threshold", schema_field.threshold)
-            if threshold is not None:
-                entry["threshold"] = threshold
-            choices = stored.get("choices", schema_field.choices)
-            if choices:
-                entry["choices"] = list(choices)
-            validators = stored.get("validators", schema_field.validators)
-            if validators:
-                entry["validators"] = list(validators)
-            if not entry:
-                continue
-            if group.task == "entities":
-                entity_metadata.setdefault(schema_field.name, {}).update(entry)
-            elif group.task == "json_structures":
-                key = f"{group.name}.{schema_field.name}"
-                field_metadata[key] = {**field_metadata.get(key, {}), **entry}
-        if group.task == "entities" and group.options.get("attributes"):
-            meta["entity_attribute_groups"] = group.options["attributes"]
-            meta["entity_attribute_labels"] = set(group.options.get("attribute_labels") or ())
-            meta["entity_attribute_prompt_labels"] = dict(group.options.get("attribute_prompt_labels") or {})
-        if group.task == "relations" and group.options.get("threshold") is not None:
-            relation_metadata = dict(meta.get("relation_metadata") or {})
-            relation_metadata.setdefault(group.name, {})["threshold"] = group.options["threshold"]
-            meta["relation_metadata"] = relation_metadata
-    meta["field_metadata"] = field_metadata
-    meta["entity_metadata"] = entity_metadata
-    meta["groups_options"] = [dict(group.options) for group in groups]
-    return meta
-
-
-def _choice_fields(schema: Mapping[str, Any]) -> dict[str, list[str]]:
-    choices = {}
-    for struct in schema.get("json_structures", []) or []:
-        for parent, fields in struct.items():
-            for fname, fval in fields.items():
-                if isinstance(fval, dict) and "choices" in fval:
-                    choices[f"{parent}.{fname}"] = list(fval["choices"])
-    return choices
-
-
-def _field_dtypes(schema: Mapping[str, Any]) -> dict[str, dict[str, str]]:
-    dtypes: dict[str, dict[str, str]] = {}
-    for struct in schema.get("json_structures", []) or []:
-        for parent, fields in struct.items():
-            parent_dtypes = dtypes.setdefault(str(parent), {})
-            for fname, fval in fields.items():
-                if isinstance(fval, dict) and fval.get("dtype"):
-                    parent_dtypes[str(fname)] = str(fval["dtype"])
-                elif isinstance(fval, str) and fval in ("str", "list"):
-                    parent_dtypes[str(fname)] = fval
-    return dtypes
+def _label_groups(schema: Mapping[str, Any]) -> list[FieldGroup]:
+    if "classifications" not in schema:
+        return []
+    compiled = []
+    for item in schema["classifications"] or []:
+        labels = list(item["labels"])
+        tokens = _transform_schema(
+            item["task"],
+            labels,
+            L_TOKEN,
+            prompt=item.get("prompt"),
+            examples=item.get("examples", []) or [],
+            label_descriptions=item.get("label_descriptions", {}) or {},
+            example_mode="both",
+        )
+        cls_threshold = item.get("cls_threshold")
+        compiled.append(
+            FieldGroup(
+                task="classifications",
+                name=str(item["task"]),
+                fields=_make_fields("classifications", labels),
+                tokens=tuple(tokens),
+                threshold=None if cls_threshold is None else float(cls_threshold),
+                multi_label=bool(item.get("multi_label", False)),
+                activation=str(item.get("class_act", "auto")),
+                prompt=None if item.get("prompt") is None else str(item.get("prompt")),
+            )
+        )
+    return compiled
 
 
 def _normalize_record_metadata(
@@ -1172,37 +1508,32 @@ def _normalize_record_metadata(
     return normalized
 
 
-def _compile_record_specs(
-    groups: Sequence[Mapping[str, Any]], record_metadata: Mapping[str, Any] | None, field_dtypes
-):
-    """Compile record specs keyed by schema-group index."""
-    normalized = _normalize_record_metadata(record_metadata, field_dtypes=field_dtypes)
+def _with_records(groups: Sequence[FieldGroup], schema: Mapping[str, Any]) -> list[FieldGroup]:
+    """Attach compiled record specs. Query ids skip classification groups."""
+    dtypes = {
+        group.name: {field.name: field.dtype for field in group.fields}
+        for group in groups
+        if group.task == "json_structures"
+    }
+    normalized = _normalize_record_metadata(schema.get("record_metadata"), dtypes)
     if not normalized:
-        return []
-    queries = []
+        return list(groups)
+    by_task: dict[int, list[dict[str, Any]]] = {}
     query_id = 0
-    by_task: dict[int, list[dict]] = {}
     for task_index, group in enumerate(groups):
-        if group["task_type"] == "classifications" or not group["fields"]:
+        if group.task == "classifications" or not group.fields:
             continue
-        for role_index, role_name in enumerate(group["fields"]):
-            query = {
-                "query_id": query_id,
-                "task_index": task_index,
-                "task_type": group["task_type"],
-                "task_name": group["name"],
-                "role_index": role_index,
-                "role_name": role_name,
-            }
-            queries.append(query)
-            by_task.setdefault(task_index, []).append(query)
+        for role_index, field in enumerate(group.fields):
+            by_task.setdefault(task_index, []).append(
+                {"query_id": query_id, "role_index": role_index, "role_name": field.name}
+            )
             query_id += 1
-    specs = []
+    updated = list(groups)
     for task_index, task_queries in by_task.items():
-        name = task_queries[0]["task_name"]
-        if task_queries[0]["task_type"] not in RECORD_TASK_TYPES or name not in normalized:
+        group = groups[task_index]
+        if group.task not in RECORD_TASK_TYPES or group.name not in normalized:
             continue
-        cfg = normalized[name]
+        cfg = normalized[group.name]
         mode = cfg["mode"]
         anchor_name = cfg.get("anchor")
         fields_cfg = cfg.get("fields", {})
@@ -1213,140 +1544,67 @@ def _compile_record_specs(
             is_anchor = mode == "natural" and query["role_name"] == anchor_name
             card = fcfg.get("cardinality")
             if card is None:
-                dtype = (field_dtypes or {}).get(name, {}).get(query["role_name"])
+                dtype = dtypes.get(group.name, {}).get(query["role_name"])
                 card = _default_cardinality(dtype, is_anchor)
             fields.append(
-                {
-                    "query_id": query["query_id"],
-                    "name": query["role_name"],
-                    "cardinality": card,
-                    "is_anchor": is_anchor,
-                    "exclusive": bool(fcfg.get("exclusive", False)),
-                }
+                RecordField(
+                    name=query["role_name"],
+                    query_id=query["query_id"],
+                    cardinality=card,
+                    is_anchor=is_anchor,
+                    exclusive=bool(fcfg.get("exclusive", False)),
+                )
             )
             if is_anchor:
                 anchor_query_id = query["query_id"]
         if mode == "natural" and anchor_query_id is None:
-            raise ValueError(f"record {name!r} declares anchor {anchor_name!r} but no matching field was found")
-        specs.append(
-            {
-                "task_index": task_index,
-                "task_name": name,
-                "mode": mode,
-                "fields": fields,
-                "anchor_query_id": anchor_query_id,
-            }
+            raise ValueError(f"record {group.name!r} declares anchor {anchor_name!r} but no matching field was found")
+        updated[task_index] = replace(
+            group,
+            record=GroupRecord(
+                mode=mode,
+                anchor=anchor_name,
+                occurrence_policy=cfg["occurrence_policy"],
+                fields=tuple(fields),
+                anchor_query_id=anchor_query_id,
+                task_index=task_index,
+            ),
         )
-    return specs
+    return updated
 
 
-def _find_choice_idx(choice: str, tokens: Sequence[str]) -> int:
-    choice_lower = choice.lower()
-    for index, token in enumerate(tokens):
-        if token.lower() == choice_lower:
-            return index
-    return -1
+def compile_schema(schema: Any) -> tuple[list[FieldGroup], list[str]]:
+    """Compile a schema into field groups and the choice-prefix words.
+
+    Token words match `_transform_schema` plus the JSON choice prefix. Inference
+    and `labels=` both use this compiler.
+
+    Args:
+        schema (`dict`):
+            Entities, structures, relations, and classifications.
+
+    Returns:
+        `tuple[list[FieldGroup], list[str]]`: Groups in encode order, then the
+        choice-prefix words prepended to the document.
+    """
+    schema = _canonicalize_schema(schema)
+    groups: list[FieldGroup] = []
+    groups.extend(_structure_groups(schema))
+    entity = _entity_group(schema)
+    if entity is not None:
+        groups.append(entity)
+    groups.extend(_relation_groups(schema))
+    groups.extend(_label_groups(schema))
+    return _with_records(groups, schema), _choice_prefix(schema)
 
 
-def _passes_validators(text: str, validators: Sequence[Any]) -> bool:
-    for validator in validators or []:
-        if hasattr(validator, "validate") and not validator.validate(text):
-            return False
-    return True
-
-
-def _resolve_classification_config(
-    prompt_str: str, classifications: Sequence[Mapping[str, Any]]
-) -> Mapping[str, Any] | None:
-    """Longest boundary-aware task name for a prompt, including descriptions."""
-    prompt_str = str(prompt_str or "")
-    best = None
-    for config in classifications:
-        task = config.get("task", "")
-        if not task or not prompt_str.startswith(task):
-            continue
-        rest = prompt_str[len(task) :]
-        if rest == "" or rest[0] in (":", " "):
-            if best is None or len(task) > len(best.get("task", "")):
-                best = config
-    if best is None:
-        bare = prompt_str.split(" [DESCRIPTION] ", 1)[0].split(":", 1)[0]
-        best = next((config for config in classifications if config.get("task") == bare), None)
-    if best is None:
-        best = next((config for config in classifications if prompt_str.startswith(config.get("task", ""))), None)
-    return best
-
-
-def _classification_probs(logits: torch.Tensor, multi_label: bool, activation: str) -> torch.Tensor:
-    if activation == "sigmoid":
-        return torch.sigmoid(logits)
-    if activation == "softmax":
-        return torch.softmax(logits, dim=-1)
-    return torch.sigmoid(logits) if multi_label else torch.softmax(logits, dim=-1)
-
-
-def _decode_classification_group(
-    logits: torch.Tensor,
-    config: Mapping[str, Any],
-    threshold: float,
-    temperature: float,
-    activated: bool = False,
-) -> Any:
-    """Decode one classification group to a label pair or a list of pairs."""
-    labels = list(config["labels"])
-    flat = logits.detach().float().cpu().reshape(-1)
-    if flat.numel() != len(labels):
-        raise ValueError(f"classification logits ({flat.numel()}) do not match labels ({len(labels)})")
-    multi_label = bool(config.get("multi_label", False))
-    if activated:
-        probs = flat
-    else:
-        if temperature <= 0:
-            raise ValueError("classification temperature must be > 0")
-        probs = _classification_probs(flat / temperature, multi_label, str(config.get("class_act", "auto")))
-    cls_threshold = config.get("cls_threshold", threshold)
-    if multi_label:
-        chosen = [
-            (labels[index], float(probs[index].item()))
-            for index in range(len(labels))
-            if float(probs[index]) >= cls_threshold
-        ]
-        if not chosen:
-            best = int(torch.argmax(probs).item())
-            chosen = [(labels[best], float(probs[best].item()))]
-        return chosen
-    best = int(torch.argmax(probs).item())
-    return (labels[best], float(probs[best].item()))
-
-
-def _assign_entity_attributes(
-    logits: torch.Tensor, start: int, width: int, group_indices: dict[str, Any], entity_name: str
-) -> dict[str, Any]:
-    assigned: dict[str, Any] = {}
-    for group_name, (labels, indices, group) in group_indices.items():
-        applies_to = group.get("applies_to") if isinstance(group, Mapping) else getattr(group, "applies_to", None)
-        if applies_to is not None and entity_name not in applies_to:
-            continue
-        values = logits[indices, start, width]
-        multi_label = (
-            group.get("multi_label", False) if isinstance(group, Mapping) else getattr(group, "multi_label", False)
-        )
-        if multi_label:
-            probabilities = torch.sigmoid(values)
-            raw_threshold = (
-                group.get("threshold", 0.5) if isinstance(group, Mapping) else getattr(group, "threshold", 0.5)
-            )
-            threshold = float(raw_threshold)
-            assigned[group_name] = [
-                {"label": labels[index], "confidence": float(probabilities[index].item())}
-                for index in range(len(labels))
-                if float(probabilities[index]) >= threshold
-            ]
-        else:
-            probabilities = torch.softmax(values, dim=-1)
-            best = int(probabilities.argmax())
-            assigned[group_name] = {"label": labels[best], "confidence": float(probabilities[best].item())}
-    return assigned
+def _result_key(group: FieldGroup) -> str:
+    """Decode key. Relation prompts keep the `name: description` text."""
+    if group.task == "entities":
+        return "entities"
+    if len(group.tokens) > 2:
+        return str(group.tokens[2]).split(f" {DESC_TOKEN} ")[0]
+    return group.task
 
 
 def _parse_extract_field(spec: str) -> dict[str, Any]:
@@ -1389,16 +1647,11 @@ def _parse_field_value(value: Any) -> Any:
     raise TypeError("json structure field values must be dicts")
 
 
-def _canonicalize_schema(schema: Any) -> dict[str, Any]:
-    """Normalize entities, classifications, relations, and JSON structures."""
-    schema = _resolve_schema(schema)
-    if not isinstance(schema, Mapping):
-        raise TypeError("schema must be a dict")
-    schema = copy.deepcopy(dict(schema))
-    entities = schema.get("entities", None)
+def _canonicalize_entities(schema: dict[str, Any], entities: Any) -> None:
     if isinstance(entities, list):
         schema["entities"] = {str(name): "" for name in entities}
-    elif isinstance(entities, Mapping):
+        return
+    if isinstance(entities, Mapping):
         descriptions = dict(schema.get("entity_descriptions") or {})
         normalized: dict[str, Any] = {}
         for name, value in entities.items():
@@ -1419,26 +1672,38 @@ def _canonicalize_schema(schema: Any) -> dict[str, Any]:
         schema["entities"] = normalized
         if descriptions:
             schema["entity_descriptions"] = descriptions
-    elif entities is not None:
+        return
+    if entities is not None:
         raise TypeError("entities must be a list or dict")
 
-    structures = schema.get("json_structures", None)
-    if structures is not None:
-        if not isinstance(structures, list):
-            raise TypeError("json_structures must be a list of {parent: {field: value}}")
-        parsed_structures = []
-        for item in structures:
-            if not isinstance(item, Mapping) or not item:
-                raise ValueError("json_structures items must be {parent: {field: value}}")
-            parsed_item = {}
-            for parent, fields in item.items():
-                if not isinstance(fields, Mapping):
-                    raise TypeError(f"json_structures[{parent!r}] values must be dicts")
-                parsed_item[str(parent)] = {str(fname): _parse_field_value(fval) for fname, fval in fields.items()}
-            parsed_structures.append(parsed_item)
-        schema["json_structures"] = parsed_structures
 
-    relations = schema.get("relations", None)
+def _canonicalize_structures(structures: Any) -> list[dict[str, Any]]:
+    if not isinstance(structures, list):
+        raise TypeError("json_structures must be a list of {parent: {field: value}}")
+    parsed_structures = []
+    for item in structures:
+        if not isinstance(item, Mapping) or not item:
+            raise ValueError("json_structures items must be {parent: {field: value}}")
+        parsed_item = {}
+        for parent, fields in item.items():
+            if not isinstance(fields, Mapping):
+                raise TypeError(f"json_structures[{parent!r}] values must be dicts")
+            parsed_item[str(parent)] = {str(fname): _parse_field_value(fval) for fname, fval in fields.items()}
+        parsed_structures.append(parsed_item)
+    return parsed_structures
+
+
+def _canonicalize_schema(schema: Any) -> dict[str, Any]:
+    """Normalize entities, classifications, relations, and JSON structures."""
+    schema = _resolve_schema(schema)
+    if not isinstance(schema, Mapping):
+        raise TypeError("schema must be a dict")
+    schema = dict(schema)
+    _canonicalize_entities(schema, schema.get("entities"))
+    structures = schema.get("json_structures")
+    if structures is not None:
+        schema["json_structures"] = _canonicalize_structures(structures)
+    relations = schema.get("relations")
     if relations is not None:
         if not isinstance(relations, list):
             raise TypeError("relations must be a list of {name: {head, tail}}")
@@ -1451,8 +1716,7 @@ def _canonicalize_schema(schema: Any) -> dict[str, Any]:
                 schema_fields = {str(key) for key in endpoints}
                 if "head" not in schema_fields or "tail" not in schema_fields:
                     raise ValueError(f"relations[{name!r}] must include head and tail")
-
-    classifications = schema.get("classifications", None)
+    classifications = schema.get("classifications")
     if classifications is not None:
         if not isinstance(classifications, list):
             raise TypeError("classifications must be a list of {task, labels}")
@@ -1489,7 +1753,6 @@ def _canonicalize_labels(labels: Any, schema: Mapping[str, Any]) -> dict[str, di
         if name not in entity_names:
             raise ValueError(f"entity label {name!r} is not in the schema")
         normalized["entities"][str(name)] = value if isinstance(value, list) else [value]
-
     task_labels = {item["task"]: list(item["labels"]) for item in schema.get("classifications") or []}
     for task, value in (labels.get("classifications") or {}).items():
         if task not in task_labels:
@@ -1499,7 +1762,6 @@ def _canonicalize_labels(labels: Any, schema: Mapping[str, Any]) -> dict[str, di
         if missing:
             raise ValueError(f"classification labels {missing} are not in task {task!r}")
         normalized["classifications"][str(task)] = [str(item) for item in true]
-
     relation_names = set()
     for item in schema.get("relations") or []:
         relation_names.update(item.keys())
@@ -1507,7 +1769,6 @@ def _canonicalize_labels(labels: Any, schema: Mapping[str, Any]) -> dict[str, di
         if name not in relation_names:
             raise ValueError(f"relation label {name!r} is not in the schema")
         normalized["relations"][str(name)] = _as_instances(value, "relation")
-
     structure_names = set()
     for item in schema.get("json_structures") or []:
         structure_names.update(item.keys())
@@ -1516,293 +1777,6 @@ def _canonicalize_labels(labels: Any, schema: Mapping[str, Any]) -> dict[str, di
             raise ValueError(f"structure label {name!r} is not in the schema")
         normalized["json_structures"][str(name)] = _as_instances(value, "structure")
     return normalized
-
-
-def _rename_map(rows: list[Any], real2syn: Mapping[str, str]) -> list[Any]:
-    renamed = []
-    for row in rows:
-        if isinstance(row, Mapping):
-            renamed.append({real2syn.get(str(key), str(key)): value for key, value in row.items()})
-        else:
-            renamed.append(row)
-    return renamed
-
-
-def _choice_map(occurrences: Sequence[Mapping[str, Any]], names: Sequence[str], real2syn: Mapping[str, str]) -> dict:
-    choices: dict[str, tuple[str, ...]] = {}
-    for occ in occurrences:
-        for fname, fval in occ.items():
-            key = real2syn.get(str(fname), str(fname))
-            if key in names and isinstance(fval, Mapping) and fval.get("choices"):
-                choices[key] = tuple(str(choice) for choice in fval["choices"])
-    return choices
-
-
-def _schema_field(
-    name: str,
-    spec: Mapping[str, Any] | None,
-    choices: Sequence[str] = (),
-) -> SchemaField:
-    """One field, preferring an explicit spec over the choice map."""
-    spec = spec or {}
-    raw_choices = spec.get("choices") or choices
-    raw_validators = spec.get("validators") or ()
-    threshold = spec.get("threshold")
-    return SchemaField(
-        name=name,
-        dtype=str(spec.get("dtype") or "list"),
-        threshold=None if threshold is None else float(threshold),
-        description=None if spec.get("description") is None else str(spec["description"]),
-        choices=tuple(str(choice) for choice in raw_choices),
-        validators=tuple(raw_validators),
-    )
-
-
-def _make_group(
-    task: str,
-    parent: str,
-    fields: Sequence[str],
-    tokens: Sequence[str],
-    choices: Mapping[str, Sequence[str]] | None = None,
-    true_labels: tuple[str, ...] | None = None,
-    field_specs: Mapping[str, Mapping[str, Any]] | None = None,
-    options: Mapping[str, Any] | None = None,
-) -> SchemaGroup:
-    """Build a group whose field names are the encoded child tokens."""
-    choice_map = choices or {}
-    built = tuple(_schema_field(name, (field_specs or {}).get(name), choice_map.get(name, ())) for name in fields)
-    payload = dict(options or {})
-    payload["fields"] = {
-        field.name: {
-            "dtype": field.dtype,
-            "threshold": field.threshold,
-            "validators": field.validators,
-            "choices": field.choices,
-        }
-        for field in built
-    }
-    return SchemaGroup(
-        task=task,
-        name=parent,
-        prompt=tokens[2] if len(tokens) > 2 else parent,
-        fields=built,
-        tokens=tuple(tokens),
-        options=payload,
-        choices={name: tuple(values) for name, values in choice_map.items() if values},
-        true_labels=None if true_labels is None else tuple(true_labels),
-    )
-
-
-def _sample_groups(schema: dict[str, Any], labels: dict[str, dict[str, Any]], rng: Any, config: SamplingConfig):
-    """Apply SamplingConfig. RNG call order matches gliner2 training."""
-    groups: list[SchemaGroup] = []
-    record_meta = schema.get("record_metadata") or {}
-    if "json_structures" in schema:
-        json_descs = schema.get("json_descriptions") or {}
-        grouped: dict[str, list] = {}
-        for item in schema.get("json_structures") or []:
-            for parent, fields in item.items():
-                grouped.setdefault(parent, []).append(fields)
-        for parent, occurrences in grouped.items():
-            if rng.random() < config.remove_json_structure_prob:
-                labels["json_structures"].pop(parent, None)
-                continue
-            is_record = bool((record_meta.get(parent) or {}).get("mode"))
-            common: list[str] = []
-            seen: set[str] = set()
-            for occ in occurrences:
-                for field_name in occ:
-                    if field_name not in seen:
-                        common.append(str(field_name))
-                        seen.add(str(field_name))
-            if config.shuffle_json_fields:
-                rng.shuffle(common)
-            if not is_record:
-                chosen = [name for name in common if not (rng.random() < config.remove_json_field_prob)]
-            else:
-                chosen = list(common)
-            if not chosen:
-                labels["json_structures"].pop(parent, None)
-                continue
-            descs = dict(json_descs.get(parent) or {})
-            example_modes = ["none", "descriptions"]
-            real2syn: dict[str, str] = {}
-            if (not is_record) and rng.random() < config.synthetic_entity_label_prob:
-                example_modes.remove("none")
-                synthetic = []
-                for index, real in enumerate(chosen, 1):
-                    syn = f"field {index}"
-                    real2syn[real] = syn
-                    synthetic.append(syn)
-                descs = {real2syn.get(key, key): descs.get(key, key) for key in chosen}
-                chosen = synthetic
-                if parent in labels["json_structures"]:
-                    labels["json_structures"][parent] = _rename_map(labels["json_structures"][parent], real2syn)
-            kept = set(chosen)
-            if parent in labels["json_structures"]:
-                labels["json_structures"][parent] = [
-                    {key: value for key, value in inst.items() if key in kept}
-                    for inst in labels["json_structures"][parent]
-                    if isinstance(inst, Mapping)
-                ]
-            mode = rng.choice(example_modes)
-            tokens = _transform_schema(parent, chosen, C_TOKEN, label_descriptions=descs, example_mode=mode, rng=rng)
-            record = (record_meta.get(parent) or {}) if is_record else None
-            groups.append(
-                _make_group(
-                    "json_structures",
-                    parent,
-                    chosen,
-                    tokens,
-                    _choice_map(occurrences, chosen, real2syn),
-                    field_specs=_field_spec_map(occurrences, chosen),
-                    options={"record": record} if record else {},
-                )
-            )
-    if "entities" in schema:
-        if rng.random() < config.remove_entities_prob:
-            schema["entities"] = {}
-            labels["entities"] = {}
-        else:
-            entity_fields = list(schema["entities"].keys())
-            descs = dict(schema.get("entity_descriptions") or {})
-            example_modes = ["none", "descriptions"]
-            if rng.random() < config.synthetic_entity_label_prob:
-                example_modes.remove("none")
-                real2syn = {}
-                synthetic = []
-                for index, real in enumerate(entity_fields, 1):
-                    syn = f"entity {index}"
-                    real2syn[real] = syn
-                    synthetic.append(syn)
-                descs = {real2syn.get(key, key): value for key, value in descs.items()}
-                schema["entities"] = {real2syn.get(key, key): value for key, value in schema["entities"].items()}
-                schema["entity_descriptions"] = descs
-                labels["entities"] = {
-                    real2syn[key]: value for key, value in labels["entities"].items() if key in real2syn
-                }
-                entity_fields = synthetic
-            if config.shuffle_entities:
-                rng.shuffle(entity_fields)
-            chosen = [name for name in entity_fields if not (rng.random() < config.remove_entity_prob)]
-            labels["entities"] = {key: value for key, value in labels["entities"].items() if key in chosen}
-            if chosen:
-                mode = rng.choice(example_modes)
-                tokens = _transform_schema(
-                    "entities", chosen, E_TOKEN, label_descriptions=descs, example_mode=mode, rng=rng
-                )
-                specs = {
-                    name: dict(value) if isinstance(value, Mapping) else {}
-                    for name, value in (schema.get("entities") or {}).items()
-                }
-                groups.append(_make_group("entities", "entities", chosen, tokens, field_specs=specs))
-    if "relations" in schema:
-        relation_descriptions = schema.get("relation_descriptions") or {}
-        grouped = {}
-        for item in list(schema.get("relations") or []):
-            if rng.random() < config.remove_relations_prob:
-                continue
-            for parent, fields in item.items():
-                grouped.setdefault(parent, []).append(dict(fields))
-        kept_names = []
-        for parent, occurrences in grouped.items():
-            field_names = list(occurrences[0].keys())
-            if "head" in field_names and "tail" in field_names and rng.random() < config.swap_head_tail_prob:
-                head = field_names.index("head")
-                tail = field_names.index("tail")
-                field_names[head], field_names[tail] = field_names[tail], field_names[head]
-            if not any(all(field in occ for field in field_names) for occ in occurrences):
-                continue
-            tokens = _transform_schema(parent, field_names, R_TOKEN, prompt=relation_descriptions.get(parent), rng=rng)
-            groups.append(
-                _make_group(
-                    "relations",
-                    parent,
-                    field_names,
-                    tokens,
-                    options={"endpoints": tuple(field_names[:2])},
-                )
-            )
-            kept_names.append(parent)
-        labels["relations"] = {key: value for key, value in labels["relations"].items() if key in kept_names}
-    if "classifications" in schema:
-        rewritten = []
-        for item in schema.get("classifications") or []:
-            task = item["task"]
-            if rng.random() < config.remove_classification_prob:
-                labels["classifications"].pop(task, None)
-                continue
-            cls_labels = list(item["labels"])
-            examples = list(item.get("examples") or [])
-            descs = dict(item.get("label_descriptions") or {})
-            real2syn = {}
-            example_modes = ["few_shot", "descriptions", "both", "none"]
-            if rng.random() < config.synthetic_label_prob:
-                example_modes = [mode for mode in example_modes if mode != "none"]
-                synthetic = []
-                original = list(cls_labels)
-                for index, real in enumerate(original, 1):
-                    syn = f"label {index}"
-                    real2syn[real] = syn
-                    synthetic.append(syn)
-                cls_labels = synthetic
-                descs = {real2syn.get(key, key): descs.get(key, key) for key in original}
-                examples = [(inp, real2syn.get(out, out)) for inp, out in examples]
-            mode = rng.choice(example_modes) if example_modes else "none"
-            drop_frac = rng.betavariate(1, 1) * config.remove_classification_label_prob
-            num_remove = int(len(cls_labels) * drop_frac)
-            if num_remove > 0:
-                cls_labels = rng.sample(cls_labels, len(cls_labels) - num_remove)
-            max_labels = (
-                config.max_num_labels // 2 if mode in ("few_shot", "both", "descriptions") else config.max_num_labels
-            )
-            if len(cls_labels) > max_labels:
-                cls_labels = cls_labels[:max_labels]
-            if rng.random() < config.include_true_label_prob:
-                for true_name in list(labels["classifications"].get(task, [])):
-                    if true_name not in cls_labels:
-                        cls_labels.append(true_name)
-            if config.shuffle_classification_labels:
-                rng.shuffle(cls_labels)
-            tokens = _transform_schema(
-                task,
-                cls_labels,
-                L_TOKEN,
-                prompt=item.get("prompt"),
-                examples=examples,
-                label_descriptions=descs,
-                example_mode=mode,
-                rng=rng,
-            )
-            true = list(labels["classifications"].get(task, []))
-            if real2syn:
-                true = [real2syn.get(name, name) for name in true]
-                labels["classifications"][task] = true
-            groups.append(
-                _make_group(
-                    "classifications",
-                    task,
-                    cls_labels,
-                    tokens,
-                    true_labels=tuple(true),
-                    options={
-                        "classification": {
-                            "multi_label": bool(item.get("multi_label", False)),
-                            "cls_threshold": item.get("cls_threshold"),
-                            "class_act": item.get("class_act", "auto"),
-                            "examples": list(examples),
-                            "label_descriptions": dict(descs),
-                        }
-                    },
-                )
-            )
-            updated = dict(item)
-            updated["labels"] = cls_labels
-            rewritten.append(updated)
-        schema["classifications"] = rewritten
-    order = list(range(len(groups)))
-    rng.shuffle(order)
-    return [groups[index] for index in order]
 
 
 def _label_words(surface: str, splitter: Callable[..., Iterator[tuple[str, int, int]]]) -> list[str]:
@@ -1882,90 +1856,37 @@ def _field_spans(raw: Any, **kwargs) -> list[tuple[int, int]]:
     return spans
 
 
-def _bind_labels(
-    groups: Sequence[SchemaGroup],
-    labels: Mapping[str, Mapping[str, Any]],
-    doc_words: Sequence[str],
-    starts: Sequence[int],
-    ends: Sequence[int],
-    text: str,
-    prefix_len: int,
-    prefix_tokens: Sequence[str],
-    splitter: Callable[..., Iterator[tuple[str, int, int]]],
-) -> dict[str, Any]:
-    """Map label strings onto inclusive word spans and half-open mentions."""
+def _bind_example(
+    groups: Sequence[FieldGroup], labels: Mapping[str, Mapping[str, Any]], grid: WordGrid, splitter
+) -> dict:
+    """Map one example's labels onto inclusive word spans and half-open mentions."""
     structure_labels: list[Any] = []
     mentions: list[tuple[int, int, int]] = []
     relation_edges: list[list[tuple[int, int, int, int]]] = []
     relation_queries: list[tuple[int, int]] = []
     query_id = 0
     locate_kwargs = {
-        "doc_words": doc_words,
-        "prefix_len": prefix_len,
-        "prefix_tokens": prefix_tokens,
-        "starts": starts,
-        "ends": ends,
-        "text": text,
+        "doc_words": grid.words,
+        "prefix_len": grid.prefix_len,
+        "prefix_tokens": grid.prefix,
+        "starts": grid.starts,
+        "ends": grid.ends,
+        "text": grid.text,
         "splitter": splitter,
     }
     for group in groups:
         if group.task == "classifications":
-            true = (
-                set(group.true_labels)
-                if group.true_labels is not None
-                else set(labels["classifications"].get(group.name, []))
-            )
+            true = set(labels["classifications"].get(group.name, []))
             structure_labels.append([1 if field.name in true else 0 for field in group.fields])
             continue
-        names = [field.name for field in group.fields]
-        if group.task == "entities":
-            instance = []
-            for name in names:
-                raw = labels["entities"].get(name, [])
-                instance.append(_field_spans(raw, choices=None, **locate_kwargs))
-            count = 1 if any(instance) else 0
-            structure_labels.append([count, [instance] if count else []])
-            for field_index, spans in enumerate(instance):
-                for start, end in spans:
-                    mentions.append((query_id + field_index, start, end + 1))
-        else:
-            bucket = labels["relations"] if group.task == "relations" else labels["json_structures"]
-            built = []
-            edges = []
-            for raw_instance in bucket.get(group.name, []):
-                if not isinstance(raw_instance, Mapping):
-                    raise TypeError(f"{group.name} labels must be dicts of field values")
-                unknown = set(raw_instance) - set(names)
-                if unknown:
-                    raise ValueError(f"unknown fields {sorted(unknown)} for {group.name}")
-                instance = []
-                for name in names:
-                    choices = group.choices.get(name)
-                    if name not in raw_instance:
-                        if group.task == "relations":
-                            raise ValueError(f"relation {group.name!r} is missing {name!r}")
-                        instance.append([])
-                        continue
-                    instance.append(
-                        _field_spans(raw_instance[name], choices=choices if choices else None, **locate_kwargs)
-                    )
-                if group.task == "relations":
-                    # First two fields are the head and tail queries, in token order.
-                    if len(instance) < 2 or not instance[0] or not instance[1]:
-                        raise ValueError(f"relation {group.name!r} is not in the text")
-                    for head_start, head_end in instance[0]:
-                        for tail_start, tail_end in instance[1]:
-                            edges.append((head_start, head_end + 1, tail_start, tail_end + 1))
-                if any(instance):
-                    built.append(instance)
-            structure_labels.append([len(built), built])
-            for instance in built:
-                for field_index, spans in enumerate(instance):
-                    for start, end in spans:
-                        mentions.append((query_id + field_index, start, end + 1))
-            if group.task == "relations":
-                relation_edges.append(edges)
-                relation_queries.append((query_id, query_id + 1))
+        bound = _bind_span_group(group, labels, locate_kwargs)
+        structure_labels.append(bound["structure"])
+        for field_index, spans in bound["mentions_by_field"]:
+            for start, end in spans:
+                mentions.append((query_id + field_index, start, end + 1))
+        if group.task == "relations":
+            relation_edges.append(bound["edges"])
+            relation_queries.append((query_id, query_id + 1))
         query_id += len(group.fields)
     return {
         "structure_labels": structure_labels,
@@ -1976,7 +1897,54 @@ def _bind_labels(
     }
 
 
-def _is_span_structure(labels: Any) -> bool:
+def _bind_span_group(
+    group: FieldGroup, labels: Mapping[str, Mapping[str, Any]], locate_kwargs: dict
+) -> dict[str, Any]:
+    names = [field.name for field in group.fields]
+    if group.task == "entities":
+        instance = []
+        for field in group.fields:
+            raw = labels["entities"].get(field.name, [])
+            instance.append(_field_spans(raw, choices=None, **locate_kwargs))
+        count = 1 if any(instance) else 0
+        pairs = list(enumerate(instance))
+        return {"structure": [count, [instance] if count else []], "mentions_by_field": pairs, "edges": []}
+    bucket = labels["relations"] if group.task == "relations" else labels["json_structures"]
+    built = []
+    edges = []
+    for raw_instance in bucket.get(group.name, []):
+        if not isinstance(raw_instance, Mapping):
+            raise TypeError(f"{group.name} labels must be dicts of field values")
+        unknown = set(raw_instance) - set(names)
+        if unknown:
+            raise ValueError(f"unknown fields {sorted(unknown)} for {group.name}")
+        instance = []
+        for field in group.fields:
+            choices = field.choices if field.kind == "choice" else None
+            if field.name not in raw_instance:
+                if group.task == "relations":
+                    raise ValueError(f"relation {group.name!r} is missing {field.name!r}")
+                instance.append([])
+                continue
+            instance.append(
+                _field_spans(raw_instance[field.name], choices=choices if choices else None, **locate_kwargs)
+            )
+        if group.task == "relations":
+            if len(instance) < 2 or not instance[0] or not instance[1]:
+                raise ValueError(f"relation {group.name!r} is not in the text")
+            for head_start, head_end in instance[0]:
+                for tail_start, tail_end in instance[1]:
+                    edges.append((head_start, head_end + 1, tail_start, tail_end + 1))
+        if any(instance):
+            built.append(instance)
+    pairs = []
+    for instance in built:
+        for field_index, spans in enumerate(instance):
+            pairs.append((field_index, spans))
+    return {"structure": [len(built), built], "mentions_by_field": pairs, "edges": edges}
+
+
+def _span_block(labels: Any) -> bool:
     """Span supervision is `[count, instances]`, not a classification bit vector."""
     return (
         isinstance(labels, list)
@@ -1988,7 +1956,16 @@ def _is_span_structure(labels: Any) -> bool:
 
 
 def dense_targets_from_pairs(pairs: torch.Tensor, mask: torch.Tensor, text_length: int):
-    """Build start, end, and inside targets from half-open mention pairs."""
+    """Build start, end, and inside targets from half-open mention pairs.
+
+    Args:
+        pairs (`torch.Tensor`):
+            Mention pairs shaped `[batch, queries, gold, 2]`.
+        mask (`torch.Tensor`):
+            True for real pairs. Same shape as `pairs` without the last axis.
+        text_length (`int`):
+            Word axis length, including the choice prefix.
+    """
     if pairs.shape[:-1] != mask.shape or pairs.shape[-1] != 2:
         raise ValueError(f"pairs {tuple(pairs.shape)} and mask {tuple(mask.shape)} are incompatible")
     if text_length < 0:
@@ -2009,8 +1986,13 @@ def dense_targets_from_pairs(pairs: torch.Tensor, mask: torch.Tensor, text_lengt
     return start_targets, end_targets, inside_targets
 
 
-def build_record_spec(group: dict):
-    """Record schema object `RecordHead.forward_group` reads."""
+def build_record_spec(group: Mapping[str, Any]) -> RecordSpec:
+    """Record schema object `RecordHead.forward_group` reads.
+
+    Args:
+        group (`dict`):
+            Packed record group with `field_query_ids`, `field_scalar`, and `mode`.
+    """
     query_ids = group.get("field_query_ids")
     scalars = group.get("field_scalar")
     if not query_ids or scalars is None or len(query_ids) != len(scalars):
@@ -2019,10 +2001,10 @@ def build_record_spec(group: dict):
     if mode not in ("natural", "latent", "anchorless"):
         raise ValueError(f"unknown record mode {mode!r}")
     fields = [
-        SimpleNamespace(query_id=int(query_id), cardinality=SimpleNamespace(is_scalar=bool(scalar)))
+        RecordFieldSpec(query_id=int(query_id), cardinality=Cardinality(is_scalar=bool(scalar)))
         for query_id, scalar in zip(query_ids, scalars)
     ]
-    return SimpleNamespace(
+    return RecordSpec(
         mode=mode,
         fields=fields,
         anchor_query_id=group.get("anchor_query_id"),
@@ -2030,27 +2012,23 @@ def build_record_spec(group: dict):
     )
 
 
-def build_record_targets(group: dict):
-    """Gold records with `field_for_query`."""
+def build_record_targets(group: Mapping[str, Any]) -> list[RecordTarget]:
+    """Gold records with `field_for_query`.
+
+    Args:
+        group (`dict`):
+            Packed record group whose `records` list holds `fields` by query id.
+    """
     records = []
     for record in group.get("records", ()):
         raw_fields = record.get("fields", {})
-        fields = [SimpleNamespace(query_id=int(query_id), values=values) for query_id, values in raw_fields.items()]
-
-        def field_for_query(query_id, fields=fields):
-            for item in fields:
-                if item.query_id == int(query_id):
-                    return item
-            return None
-
-        records.append(SimpleNamespace(task_index=int(group.get("task_index", 0)), field_for_query=field_for_query))
+        fields = [RecordFieldValue(query_id=int(query_id), values=values) for query_id, values in raw_fields.items()]
+        records.append(RecordTarget(task_index=int(group.get("task_index", 0)), fields=fields))
     return records
 
 
-def _pack_targets(records: Sequence[Mapping[str, Any]], max_gold_per_query: int | None = None) -> dict[str, Any]:
-    """Pad mention, classification, and relation targets."""
-    batch = len(records)
-    supervisions = [record["supervision"] for record in records]
+def _pack_mentions(supervisions: Sequence[Mapping[str, Any]], max_gold_per_query: int | None):
+    batch = len(supervisions)
     query_width = max((item["query_count"] for item in supervisions), default=0)
     grouped: list[dict[int, list[tuple[int, int]]]] = []
     observed = 0
@@ -2084,52 +2062,10 @@ def _pack_targets(records: Sequence[Mapping[str, Any]], max_gold_per_query: int 
             if count:
                 mention_pairs[batch_index, query_id, :count] = torch.tensor(pairs, dtype=torch.long)
                 mention_mask[batch_index, query_id, :count] = True
-    classification_targets = []
-    for item in supervisions:
-        sample = []
-        for labels in item["structure_labels"]:
-            if _is_span_structure(labels):
-                continue
-            if labels and isinstance(labels[0], int) and not isinstance(labels[0], bool):
-                sample.append(torch.tensor([int(value) for value in labels], dtype=torch.float))
-        classification_targets.append(sample)
-    relation_rows = [item["relation_edges"] for item in supervisions]
-    relation_width = max((len(rows) for rows in relation_rows), default=0)
-    edge_width = max((len(edges) for rows in relation_rows for edges in rows), default=0)
-    relation_edges = torch.zeros((batch, relation_width, max(edge_width, 1), 4), dtype=torch.long)
-    relation_edge_mask = torch.zeros((batch, relation_width, max(edge_width, 1)), dtype=torch.bool)
-    for batch_index, rows in enumerate(relation_rows):
-        for relation_index, edges in enumerate(rows):
-            if not edges:
-                continue
-            relation_edges[batch_index, relation_index, : len(edges)] = torch.tensor(edges, dtype=torch.long)
-            relation_edge_mask[batch_index, relation_index, : len(edges)] = True
-    span_structures = []
-    for item in supervisions:
-        row = []
-        for labels in item["structure_labels"]:
-            if _is_span_structure(labels):
-                row.append(labels)
-        span_structures.append(row)
-    text_length = max((len(record["words"]) for record in records), default=0)
-    start_targets, end_targets, inside_targets = dense_targets_from_pairs(mention_pairs, mention_mask, text_length)
-    return {
-        "span_structures": span_structures,
-        "mention_pairs": mention_pairs,
-        "mention_mask": mention_mask,
-        "start_targets": start_targets,
-        "end_targets": end_targets,
-        "inside_targets": inside_targets,
-        "classification_targets": classification_targets,
-        "relation_gold_pairs": relation_edges,
-        "relation_gold_mask": relation_edge_mask,
-        "relation_routing": _relation_routing(supervisions, query_width),
-        "record_groups": _record_groups(records, supervisions),
-    }
+    return mention_pairs, mention_mask, query_width
 
 
-def _relation_routing(supervisions: Sequence[Mapping[str, Any]], query_width: int):
-    """Boolean head/tail membership the relation generator reads."""
+def _pack_routing(supervisions: Sequence[Mapping[str, Any]], query_width: int):
     batch = len(supervisions)
     queries = [item.get("relation_queries") or [] for item in supervisions]
     relation_width = max((len(rows) for rows in queries), default=0)
@@ -2147,36 +2083,1186 @@ def _relation_routing(supervisions: Sequence[Mapping[str, Any]], query_width: in
     return head_member, tail_member, relation_valid, allow_self
 
 
-def _record_groups(records: Sequence[Mapping[str, Any]], supervisions: Sequence[Mapping[str, Any]]):
-    """Record groups in the shape `build_record_spec` reads."""
-    scalar = {"optional_one", "required_one"}
+def _record_supervision(group: FieldGroup, structure: list) -> dict[str, Any]:
+    record = group.record
+    instances = structure[1] if len(structure) > 1 else []
+    gold = []
+    for instance in instances:
+        fields = {}
+        for field_spec, spans in zip(record.fields, instance):
+            half_open = [(int(start), int(end) + 1) for start, end in spans]
+            fields[int(field_spec.query_id)] = [half_open]
+        gold.append({"fields": fields})
+    packed = {
+        "task_index": record.task_index,
+        "task_name": group.name,
+        "mode": record.mode,
+        "anchor_query_id": record.anchor_query_id,
+        "field_query_ids": [int(field.query_id) for field in record.fields],
+        "field_scalar": [field.cardinality in _SCALAR_CARDINALITY for field in record.fields],
+        "records": gold,
+    }
+    packed["spec"] = build_record_spec(packed)
+    packed["targets"] = build_record_targets(packed)
+    return packed
+
+
+def _pack_record_groups(batch_groups: Sequence[Sequence[FieldGroup]], supervisions: Sequence[Mapping[str, Any]]):
     grouped = []
-    for record, item in zip(records, supervisions):
+    for groups, item in zip(batch_groups, supervisions):
         sample = []
-        for spec in record.get("record_specs") or []:
-            structure = item["structure_labels"][spec["task_index"]]
-            instances = structure[1] if len(structure) > 1 else []
-            gold = []
-            for instance in instances:
-                fields = {}
-                for field_spec, spans in zip(spec["fields"], instance):
-                    half_open = [(int(start), int(end) + 1) for start, end in spans]
-                    fields[int(field_spec["query_id"])] = [half_open]
-                gold.append({"fields": fields})
-            packed = {
-                "task_index": spec["task_index"],
-                "task_name": spec["task_name"],
-                "mode": spec["mode"],
-                "anchor_query_id": spec["anchor_query_id"],
-                "field_query_ids": [int(field["query_id"]) for field in spec["fields"]],
-                "field_scalar": [field["cardinality"] in scalar for field in spec["fields"]],
-                "records": gold,
-            }
-            packed["spec"] = build_record_spec(packed)
-            packed["targets"] = build_record_targets(packed)
-            sample.append(packed)
+        for group in groups:
+            if group.record is None:
+                continue
+            sample.append(_record_supervision(group, item["structure_labels"][group.record.task_index]))
         grouped.append(sample)
     return grouped
+
+
+def build_targets(
+    groups: Sequence[FieldGroup] | Sequence[Sequence[FieldGroup]],
+    labels: Mapping[str, Any] | Sequence[Mapping[str, Any]],
+    grid: WordGrid | Sequence[WordGrid],
+    max_gold_per_query: int | None = None,
+    splitter: Callable[..., Iterator[tuple[str, int, int]]] | None = None,
+) -> dict[str, Any]:
+    """Bind labels on the word grid and pack the loss targets.
+
+    One example is a `FieldGroup` sequence. A batch is a sequence of those.
+    The returned keys are the ones the loss reads.
+
+    Args:
+        groups:
+            Compiled groups for one example or a batch.
+        labels:
+            Canonical labels aligned with `groups`.
+        grid:
+            Word grid aligned with `groups`.
+        max_gold_per_query (`int`, *optional*):
+            Cap on gold spans stored per query.
+        splitter (`callable`, *optional*):
+            Word splitter used to locate string mentions.
+    """
+    if groups and isinstance(groups[0], FieldGroup):
+        batch_groups = [groups]
+        batch_labels = [labels]
+        batch_grids = [grid]
+    else:
+        batch_groups = list(groups)
+        batch_labels = list(labels)
+        batch_grids = list(grid)
+    locate = splitter or _whitespace_words
+    supervisions = [
+        _bind_example(example_groups, example_labels, example_grid, locate)
+        for example_groups, example_labels, example_grid in zip(batch_groups, batch_labels, batch_grids)
+    ]
+    mention_pairs, mention_mask, query_width = _pack_mentions(supervisions, max_gold_per_query)
+    classification_targets = []
+    span_structures = []
+    for item in supervisions:
+        classes = []
+        spans = []
+        for block in item["structure_labels"]:
+            if _span_block(block):
+                spans.append(block)
+            elif block and isinstance(block[0], int) and not isinstance(block[0], bool):
+                classes.append(torch.tensor([int(value) for value in block], dtype=torch.float))
+        classification_targets.append(classes)
+        span_structures.append(spans)
+    relation_rows = [item["relation_edges"] for item in supervisions]
+    relation_width = max((len(rows) for rows in relation_rows), default=0)
+    edge_width = max((len(edges) for rows in relation_rows for edges in rows), default=0)
+    batch = len(supervisions)
+    relation_edges = torch.zeros((batch, relation_width, max(edge_width, 1), 4), dtype=torch.long)
+    relation_edge_mask = torch.zeros((batch, relation_width, max(edge_width, 1)), dtype=torch.bool)
+    for batch_index, rows in enumerate(relation_rows):
+        for relation_index, edges in enumerate(rows):
+            if not edges:
+                continue
+            relation_edges[batch_index, relation_index, : len(edges)] = torch.tensor(edges, dtype=torch.long)
+            relation_edge_mask[batch_index, relation_index, : len(edges)] = True
+    text_length = max((example.encoded_length for example in batch_grids), default=0)
+    start_targets, end_targets, inside_targets = dense_targets_from_pairs(mention_pairs, mention_mask, text_length)
+    return {
+        "span_structures": span_structures,
+        "mention_pairs": mention_pairs,
+        "mention_mask": mention_mask,
+        "start_targets": start_targets,
+        "end_targets": end_targets,
+        "inside_targets": inside_targets,
+        "classification_targets": classification_targets,
+        "relation_gold_pairs": relation_edges,
+        "relation_gold_mask": relation_edge_mask,
+        "relation_routing": _pack_routing(supervisions, query_width),
+        "record_groups": _pack_record_groups(batch_groups, supervisions),
+    }
+
+
+def _doc_axis(tensor: torch.Tensor, doc_len: int) -> torch.Tensor:
+    if doc_len <= 0:
+        return tensor[..., :0, :]
+    return tensor[..., -doc_len:, :]
+
+
+def _find_choice_idx(choice: str, tokens: Sequence[str]) -> int:
+    choice_lower = choice.lower()
+    for index, token in enumerate(tokens):
+        if token.lower() == choice_lower:
+            return index
+    return -1
+
+
+def _resolve_classification_config(
+    prompt_str: str, classifications: Sequence[Mapping[str, Any]]
+) -> Mapping[str, Any] | None:
+    """Longest boundary-aware task name for a prompt, including descriptions."""
+    prompt_str = str(prompt_str or "")
+    best = None
+    for config in classifications:
+        task = config.get("task", "")
+        if not task or not prompt_str.startswith(task):
+            continue
+        rest = prompt_str[len(task) :]
+        if rest == "" or rest[0] in (":", " "):
+            if best is None or len(task) > len(best.get("task", "")):
+                best = config
+    if best is None:
+        bare = prompt_str.split(" [DESCRIPTION] ", 1)[0].split(":", 1)[0]
+        best = next((config for config in classifications if config.get("task") == bare), None)
+    if best is None:
+        best = next((config for config in classifications if prompt_str.startswith(config.get("task", ""))), None)
+    return best
+
+
+def _classification_probs(logits: torch.Tensor, multi_label: bool, activation: str) -> torch.Tensor:
+    if activation == "sigmoid":
+        return torch.sigmoid(logits)
+    if activation == "softmax":
+        return torch.softmax(logits, dim=-1)
+    return torch.sigmoid(logits) if multi_label else torch.softmax(logits, dim=-1)
+
+
+def _decode_classification_group(
+    logits: torch.Tensor,
+    config: Mapping[str, Any],
+    threshold: float,
+    temperature: float,
+    activated: bool = False,
+) -> Any:
+    """Decode one classification group to a label pair or a list of pairs."""
+    labels = list(config["labels"])
+    flat = logits.detach().float().cpu().reshape(-1)
+    if flat.numel() != len(labels):
+        raise ValueError(f"classification logits ({flat.numel()}) do not match labels ({len(labels)})")
+    multi_label = bool(config.get("multi_label", False))
+    if activated:
+        probs = flat
+    else:
+        if temperature <= 0:
+            raise ValueError("classification temperature must be > 0")
+        probs = _classification_probs(flat / temperature, multi_label, str(config.get("class_act", "auto")))
+    cls_threshold = config.get("cls_threshold", threshold)
+    if multi_label:
+        chosen = [
+            (labels[index], float(probs[index].item()))
+            for index in range(len(labels))
+            if float(probs[index]) >= cls_threshold
+        ]
+        if not chosen:
+            best = int(torch.argmax(probs).item())
+            chosen = [(labels[best], float(probs[best].item()))]
+        return chosen
+    best = int(torch.argmax(probs).item())
+    return (labels[best], float(probs[best].item()))
+
+
+def _classification_config(group: FieldGroup) -> dict[str, Any]:
+    config: dict[str, Any] = {
+        "task": group.name,
+        "labels": [field.name for field in group.fields],
+        "multi_label": group.multi_label,
+        "class_act": group.activation,
+    }
+    if group.threshold is not None:
+        config["cls_threshold"] = group.threshold
+    if group.prompt is not None:
+        config["prompt"] = group.prompt
+    return config
+
+
+def _span_group_tensors(value: Any, num_groups: int, apply_sigmoid: bool) -> list[torch.Tensor]:
+    if torch.is_tensor(value):
+        tensors = [value]
+    else:
+        tensors = list(value)
+    if len(tensors) != num_groups:
+        raise ValueError(f"expected {num_groups} span tensors, got {len(tensors)}")
+    prepared = []
+    for tensor in tensors:
+        if not torch.is_tensor(tensor):
+            tensor = torch.tensor(tensor, dtype=torch.float)
+        tensor = tensor.detach().float().cpu()
+        if tensor.ndim != 4:
+            raise ValueError("span scores must have shape (count, fields, words, width)")
+        prepared.append(torch.sigmoid(tensor) if apply_sigmoid else tensor)
+    return prepared
+
+
+def _classification_vectors(value: Any, num_groups: int) -> list[torch.Tensor]:
+    if torch.is_tensor(value):
+        vectors = [value]
+    else:
+        vectors = list(value)
+    if len(vectors) != num_groups:
+        raise ValueError(f"expected {num_groups} classification vectors, got {len(vectors)}")
+    prepared = []
+    for vector in vectors:
+        if not torch.is_tensor(vector):
+            vector = torch.tensor(vector, dtype=torch.float)
+        prepared.append(vector.detach().float().cpu().reshape(-1))
+    return prepared
+
+
+def _decode_choice(
+    field: Field, prefix_scores: torch.Tensor, prefix_tokens: Sequence[str], threshold: float, include_confidence: bool
+):
+    field_threshold = field.threshold if field.threshold is not None else threshold
+    if field.dtype == "list":
+        selected = []
+        seen = set()
+        for choice in field.choices:
+            if choice in seen:
+                continue
+            idx = _find_choice_idx(choice, prefix_tokens)
+            if idx >= 0 and idx < prefix_scores.shape[0]:
+                score = float(prefix_scores[idx, 0].item())
+                if score >= field_threshold:
+                    selected.append(format_span(choice, score, 0, 0, include_confidence, False))
+                    seen.add(choice)
+        return selected
+    best = None
+    best_score = -1.0
+    for choice in field.choices:
+        idx = _find_choice_idx(choice, prefix_tokens)
+        if idx >= 0 and idx < prefix_scores.shape[0]:
+            score = float(prefix_scores[idx, 0].item())
+            if score > best_score:
+                best_score = score
+                best = choice
+    if best and best_score >= field_threshold:
+        return format_span(best, best_score, 0, 0, include_confidence, False)
+    return None
+
+
+def _decode_entity_fields(
+    group, scores, text, maps, threshold, include_confidence, include_spans, overlap
+) -> dict[str, Any]:
+    found = {}
+    for index, field in enumerate(group.fields):
+        ent_threshold = field.threshold if field.threshold is not None else threshold
+        found[field.name] = decode_spans(
+            scores[index],
+            {
+                "dtype": field.dtype or "list",
+                "threshold": ent_threshold,
+                "validators": list(field.validators),
+                "include_confidence": include_confidence,
+                "include_spans": include_spans,
+                "empty": "blank",
+            },
+            text,
+            maps,
+            threshold,
+            overlap,
+        )
+    return found
+
+
+def _decode_relation_endpoints(
+    group, scores, count, text, maps, doc_len, threshold, include_confidence, include_spans, overlap
+):
+    rel_threshold = group.threshold if group.threshold is not None else threshold
+    instances = []
+    for inst in range(count):
+        sides = []
+        for index, _field in enumerate(group.fields):
+            sides.append(
+                decode_spans(
+                    _doc_axis(scores[inst, index], doc_len),
+                    {
+                        "dtype": "str",
+                        "threshold": rel_threshold,
+                        "include_confidence": include_confidence,
+                        "include_spans": include_spans,
+                    },
+                    text,
+                    maps,
+                    threshold,
+                    overlap,
+                )
+            )
+        if len(sides) == 2 and sides[0] and sides[1]:
+            if include_spans or include_confidence:
+                instances.append({"head": sides[0], "tail": sides[1]})
+            else:
+                instances.append((sides[0], sides[1]))
+    return instances
+
+
+def _decode_structure_group(
+    group, scores, count, words, text, maps, doc_len, prefix_len, threshold, include_confidence, include_spans, overlap
+):
+    instances = []
+    prefix_tokens = list(words[:prefix_len])
+    for inst in range(count):
+        instance = {}
+        for index, field in enumerate(group.fields):
+            if field.kind == "choice":
+                instance[field.name] = _decode_choice(
+                    field, scores[inst, index, :prefix_len], prefix_tokens, threshold, include_confidence
+                )
+            else:
+                field_threshold = field.threshold if field.threshold is not None else threshold
+                instance[field.name] = decode_spans(
+                    _doc_axis(scores[inst, index], doc_len),
+                    {
+                        "dtype": field.dtype or "list",
+                        "threshold": field_threshold,
+                        "validators": list(field.validators),
+                        "include_confidence": include_confidence,
+                        "include_spans": include_spans,
+                    },
+                    text,
+                    maps,
+                    threshold,
+                    overlap,
+                )
+        if any(value is not None and value != [] for value in instance.values()):
+            instances.append(instance)
+    return instances
+
+
+def _char_span_of(start, end, offset, start_map, end_map, text):
+    """Map a half-open word span onto the normalized text."""
+    token_start, token_end = start - offset, end - offset
+    if not (0 <= token_start < token_end <= len(end_map)):
+        return None
+    char_start = int(start_map[token_start])
+    char_end = int(end_map[token_end - 1])
+    surface = text[char_start:char_end].strip()
+    if not surface:
+        return None
+    return surface, char_start, char_end
+
+
+def _dedupe_relation_edges(edges):
+    """Collapse contained mentions and repeated head/tail text."""
+    if len(edges) < 2:
+        return edges
+
+    def canonical_mentions(side):
+        mentions = {(edge[side][1], edge[side][2]): edge[side] for edge in edges}
+        canonical = {}
+        for coordinates in mentions:
+            start, end = coordinates
+            containing = [
+                candidate for candidate in mentions.values() if candidate[1] <= start and candidate[2] >= end
+            ]
+            canonical[coordinates] = max(
+                containing, key=lambda candidate: (candidate[2] - candidate[1], -candidate[1])
+            )
+        return canonical
+
+    head_canonical = canonical_mentions("head")
+    tail_canonical = canonical_mentions("tail")
+    exact = {}
+    for edge in edges:
+        head = head_canonical[(edge["head"][1], edge["head"][2])]
+        tail = tail_canonical[(edge["tail"][1], edge["tail"][2])]
+        normalized = {**edge, "head": head, "tail": tail}
+        key = (head[1], head[2], tail[1], tail[2])
+        previous = exact.get(key)
+        if previous is None or edge["score"] > previous["score"]:
+            exact[key] = normalized
+
+    def semantic_text(value):
+        return " ".join(value.casefold().split())
+
+    def rank(candidate):
+        _, head_start, head_end = candidate["head"]
+        _, tail_start, tail_end = candidate["tail"]
+        distance = max(head_start - tail_end, tail_start - head_end, 0)
+        return (distance, -candidate["score"], head_start, tail_start)
+
+    semantic = {}
+    for edge in exact.values():
+        key = (semantic_text(edge["head"][0]), semantic_text(edge["tail"][0]))
+        previous = semantic.get(key)
+        if previous is None or rank(edge) < rank(previous):
+            semantic[key] = edge
+    values = list(semantic.values())
+    kept = []
+    for edge in values:
+        head_tokens = set(semantic_text(edge["head"][0]).split())
+        tail_tokens = set(semantic_text(edge["tail"][0]).split())
+        dominated = False
+        for other in values:
+            if other is edge:
+                continue
+            other_head = set(semantic_text(other["head"][0]).split())
+            other_tail = set(semantic_text(other["tail"][0]).split())
+            if (head_tokens < other_head and tail_tokens == other_tail) or (
+                tail_tokens < other_tail and head_tokens == other_head
+            ):
+                dominated = True
+                break
+        if not dominated:
+            kept.append(edge)
+    return sorted(kept, key=lambda edge: (edge["head"][1], edge["tail"][1], -edge["score"]))
+
+
+def _format_relation_edge(edge, include_confidence, include_spans):
+    score = edge["score"]
+    head, head_start, head_end = edge["head"]
+    tail, tail_start, tail_end = edge["tail"]
+    if include_spans:
+        value = {
+            "head": {"text": head, "start": head_start, "end": head_end},
+            "tail": {"text": tail, "start": tail_start, "end": tail_end},
+        }
+        if include_confidence:
+            value["head"]["confidence"] = score
+            value["tail"]["confidence"] = score
+        return value
+    if include_confidence:
+        return {"head": {"text": head, "confidence": score}, "tail": {"text": tail, "confidence": score}}
+    return (head, tail)
+
+
+def _decode_relation_pairs(
+    groups,
+    pairs,
+    logits,
+    text,
+    start_map,
+    end_map,
+    prefix_len,
+    threshold,
+    include_confidence,
+    include_spans,
+    temperature,
+):
+    """Map relation pair logits onto character offsets."""
+    if pairs is None or logits is None or not torch.is_tensor(pairs) or pairs.numel() == 0:
+        return {}
+    probabilities = torch.sigmoid(logits.detach().float().cpu() / temperature)
+    relation_groups = [group for group in groups if group.task == "relations"]
+    aliases = {f"{group.name}: {group.prompt}": group.name for group in relation_groups if group.prompt}
+    edges: dict[str, list] = {}
+    for pair_index, probability in enumerate(probabilities):
+        relation_index = int(pairs[pair_index, 1])
+        if relation_index < 0 or relation_index >= len(relation_groups):
+            continue
+        group = relation_groups[relation_index]
+        relation_name = _result_key(group)
+        relation_type = aliases.get(relation_name, relation_name)
+        relation_threshold = group.threshold if group.threshold is not None else threshold
+        score = float(probability.detach())
+        if score < relation_threshold:
+            continue
+        head = _char_span_of(
+            int(pairs[pair_index, 2]), int(pairs[pair_index, 3]), prefix_len, start_map, end_map, text
+        )
+        tail = _char_span_of(
+            int(pairs[pair_index, 4]), int(pairs[pair_index, 5]), prefix_len, start_map, end_map, text
+        )
+        if head is None or tail is None:
+            continue
+        edges.setdefault(relation_type, []).append({"score": score, "head": head, "tail": tail})
+    return {
+        relation_type: [
+            _format_relation_edge(edge, include_confidence, include_spans)
+            for edge in _dedupe_relation_edges(relation_edges)
+        ]
+        for relation_type, relation_edges in edges.items()
+    }
+
+
+def _apply_relation_pairs(
+    results,
+    groups,
+    span_groups,
+    relation_pairs,
+    relation_logits,
+    text,
+    start_map,
+    end_map,
+    prefix_len,
+    threshold,
+    include_confidence,
+    include_spans,
+    relation_temperature,
+) -> None:
+    """Write pair-decoded relations and keep empty lists for the rest."""
+    paired = _decode_relation_pairs(
+        groups,
+        relation_pairs,
+        relation_logits,
+        text,
+        start_map,
+        end_map,
+        prefix_len,
+        threshold,
+        include_confidence,
+        include_spans,
+        relation_temperature,
+    )
+    if paired or (torch.is_tensor(relation_pairs) and relation_pairs.numel()):
+        results.update(paired)
+        for group in span_groups:
+            if group.task == "relations":
+                results.setdefault(_result_key(group), [])
+
+
+def _decode_span_groups(
+    groups,
+    tensors,
+    counts,
+    words,
+    text,
+    maps,
+    doc_len,
+    prefix_len,
+    threshold,
+    include_confidence,
+    include_spans,
+    overlap,
+):
+    results = {}
+    for index, group in enumerate(groups):
+        scores = tensors[index]
+        count = int(counts[index]) if counts is not None else int(scores.shape[0])
+        count = max(count, 0)
+        scores = scores[:count]
+        key = _result_key(group)
+        if count <= 0:
+            results[key] = [] if group.task in ("entities", "relations") else {}
+            continue
+        if scores.shape[-2] != len(words):
+            raise ValueError(
+                f"span word axis {scores.shape[-2]} != words {len(words)} (include the classification prefix)"
+            )
+        if group.task == "entities":
+            decoded = _decode_entity_fields(
+                group, _doc_axis(scores[0], doc_len), text, maps, threshold, include_confidence, include_spans, overlap
+            )
+            results[key] = [decoded] if decoded else []
+        elif group.task == "relations":
+            results[key] = _decode_relation_endpoints(
+                group, scores, count, text, maps, doc_len, threshold, include_confidence, include_spans, overlap
+            )
+        else:
+            results[key] = _decode_structure_group(
+                group,
+                scores,
+                count,
+                words,
+                text,
+                maps,
+                doc_len,
+                prefix_len,
+                threshold,
+                include_confidence,
+                include_spans,
+                overlap,
+            )
+    return results
+
+
+def _decode_label_groups(groups, classification, threshold, temperature, words_prompt: bool = True) -> dict[str, Any]:
+    if classification is None or not groups:
+        return {}
+    vectors = _classification_vectors(classification, len(groups))
+    configs = [_classification_config(group) for group in groups]
+    decoded = {}
+    for group, vector, config in zip(groups, vectors, configs):
+        prompt = group.tokens[2] if len(group.tokens) > 2 else group.name
+        resolved = _resolve_classification_config(prompt, configs) if words_prompt else config
+        if resolved is None:
+            continue
+        decoded[resolved["task"]] = _decode_classification_group(
+            vector, resolved, threshold, temperature, activated=False
+        )
+    return decoded
+
+
+def _apply_span_groups(
+    results,
+    span_groups,
+    scores,
+    counts,
+    words,
+    text,
+    start_map,
+    end_map,
+    prefix_len,
+    threshold,
+    include_confidence,
+    include_spans,
+    overlap,
+) -> None:
+    """Decode span and choice fields into `results`."""
+    tensors = _span_group_tensors(scores, len(span_groups), apply_sigmoid=True)
+    if counts is not None and not isinstance(counts, (list, tuple)):
+        counts = counts.detach().cpu().tolist()
+    results.update(
+        _decode_span_groups(
+            span_groups,
+            tensors,
+            counts,
+            words,
+            text,
+            {"start": start_map, "end": end_map},
+            len(start_map),
+            prefix_len,
+            threshold,
+            include_confidence,
+            include_spans,
+            overlap,
+        )
+    )
+
+
+def decode_fields(
+    groups: Sequence[FieldGroup],
+    scores,
+    text: str,
+    maps: Mapping[str, Sequence[int]],
+    *,
+    words: Sequence[str] | None = None,
+    prefix_len: int = 0,
+    threshold: float = 0.5,
+    include_confidence: bool = False,
+    include_spans: bool = False,
+    overlap: str | None = None,
+    temperature: float = 1.0,
+    counts=None,
+    classification=None,
+    relation_pairs=None,
+    relation_logits=None,
+    relation_temperature: float = 1.0,
+) -> dict[str, Any]:
+    """Decode one sample from field groups.
+
+    Span fields call `decode_spans`. Choice fields call `format_span`. Label
+    fields use the classification decoder. Relations use pair logits when they
+    are present and per-endpoint `decode_spans` otherwise.
+
+    Args:
+        groups:
+            Field groups for this sample, or only the label groups.
+        scores:
+            Per-group span logits aligned with the non-label groups, or `None`.
+        text (`str`):
+            Normalized document text.
+        maps:
+            `start` and `end` character offsets for document words.
+        words (`Sequence[str]`, *optional*):
+            Encoded words, including the choice prefix.
+        prefix_len (`int`, *optional*, defaults to 0):
+            Choice-prefix length inside `words`.
+        threshold (`float`, *optional*, defaults to 0.5):
+            Score cutoff.
+        include_confidence (`bool`, *optional*, defaults to `False`):
+            Keep scores.
+        include_spans (`bool`, *optional*, defaults to `False`):
+            Keep character offsets.
+        overlap (`str`, *optional*):
+            Overlap policy passed to `decode_spans`.
+        temperature (`float`, *optional*, defaults to 1.0):
+            Classification temperature.
+        counts:
+            Optional instance counts aligned with span groups.
+        classification:
+            Classification logits aligned with label groups.
+        relation_pairs:
+            Relation edges shaped `[pairs, 6]`.
+        relation_logits:
+            One score per relation pair.
+        relation_temperature (`float`, *optional*, defaults to 1.0):
+            Divisor applied before the relation sigmoid.
+    """
+    span_groups = [group for group in groups if group.task != "classifications"]
+    label_groups = [group for group in groups if group.task == "classifications"]
+    start_map = list(maps.get("start") or [])
+    end_map = list(maps.get("end") or [])
+    word_list = list(words or [])
+    results: dict[str, Any] = {}
+    if scores is not None and span_groups:
+        _apply_span_groups(
+            results,
+            span_groups,
+            scores,
+            counts,
+            word_list,
+            text,
+            start_map,
+            end_map,
+            prefix_len,
+            threshold,
+            include_confidence,
+            include_spans,
+            overlap,
+        )
+    if relation_pairs is not None and relation_logits is not None:
+        _apply_relation_pairs(
+            results,
+            groups,
+            span_groups,
+            relation_pairs,
+            relation_logits,
+            text,
+            start_map,
+            end_map,
+            prefix_len,
+            threshold,
+            include_confidence,
+            include_spans,
+            relation_temperature,
+        )
+    results.update(_decode_label_groups(label_groups, classification, threshold, temperature))
+    return results
+
+
+def _group_dict(group: FieldGroup) -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "fields": {
+            field.name: {
+                "dtype": field.dtype,
+                "threshold": field.threshold,
+                "validators": list(field.validators),
+                "choices": list(field.choices),
+            }
+            for field in group.fields
+        }
+    }
+    if group.endpoints:
+        options["endpoints"] = group.endpoints
+    if group.threshold is not None and group.task == "relations":
+        options["threshold"] = group.threshold
+    if group.record is not None:
+        options["record"] = {"mode": group.record.mode, "anchor": group.record.anchor}
+    if group.task == "classifications":
+        options["classification"] = {
+            "multi_label": group.multi_label,
+            "cls_threshold": group.threshold,
+            "class_act": group.activation,
+        }
+    if group.attributes:
+        options["attributes"] = {
+            spec.name: {
+                "labels": list(spec.labels),
+                "applies_to": None if spec.applies_to is None else list(spec.applies_to),
+                "multi_label": spec.multi_label,
+                "threshold": spec.threshold,
+            }
+            for spec in group.attributes
+        }
+    return {
+        "task_type": group.task,
+        "name": _result_key(group),
+        "prompt": group.tokens[2] if len(group.tokens) > 2 else "",
+        "fields": [field.name for field in group.fields],
+        "options": options,
+    }
+
+
+def _record_spec_dict(group: FieldGroup) -> dict[str, Any]:
+    record = group.record
+    return {
+        "task_index": record.task_index,
+        "task_name": group.name,
+        "mode": record.mode,
+        "fields": [
+            {
+                "query_id": field.query_id,
+                "name": field.name,
+                "cardinality": field.cardinality,
+                "is_anchor": field.is_anchor,
+                "exclusive": field.exclusive,
+            }
+            for field in record.fields
+        ],
+        "anchor_query_id": record.anchor_query_id,
+    }
+
+
+def _decoder_view(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Dict view current `decode_*` functions read. Built from `FieldGroup`s."""
+    groups = tuple(row.get("groups") or ())
+    if groups and not isinstance(groups[0], FieldGroup):
+        return dict(row)
+    entity = next((group for group in groups if group.task == "entities"), None)
+    field_metadata = {}
+    cls_fields = {}
+    for group in groups:
+        if group.task != "json_structures":
+            continue
+        for field in group.fields:
+            entry = {}
+            if field.dtype:
+                entry["dtype"] = field.dtype
+            if field.threshold is not None:
+                entry["threshold"] = field.threshold
+            if field.choices:
+                entry["choices"] = list(field.choices)
+            if field.validators:
+                entry["validators"] = list(field.validators)
+            if entry:
+                field_metadata[f"{group.name}.{field.name}"] = entry
+            if field.kind == "choice":
+                cls_fields[f"{group.name}.{field.name}"] = list(field.choices)
+    entity_metadata = {}
+    if entity is not None:
+        for field in entity.fields:
+            entry = {"dtype": field.dtype}
+            if field.threshold is not None:
+                entry["threshold"] = field.threshold
+            if field.validators:
+                entry["validators"] = list(field.validators)
+            if field.choices:
+                entry["choices"] = list(field.choices)
+            entity_metadata[field.name] = entry
+    relation_metadata = {}
+    relation_descriptions = {}
+    for group in groups:
+        if group.task != "relations":
+            continue
+        if group.threshold is not None:
+            relation_metadata.setdefault(group.name, {})["threshold"] = group.threshold
+        if group.prompt:
+            relation_descriptions[group.name] = group.prompt
+    attribute_groups = {}
+    attribute_labels: set[str] = set()
+    attribute_prompts = {}
+    if entity is not None:
+        attribute_labels = set(entity.attribute_labels)
+        attribute_prompts = dict(entity.attribute_prompts)
+        for spec in entity.attributes:
+            attribute_groups[spec.name] = {
+                "labels": list(spec.labels),
+                "multi_label": spec.multi_label,
+                "threshold": spec.threshold,
+            }
+            if spec.applies_to is not None:
+                attribute_groups[spec.name]["applies_to"] = list(spec.applies_to)
+    return {
+        "groups": [_group_dict(group) for group in groups],
+        "text": row.get("text") or "",
+        "start": list(row.get("start") or []),
+        "end": list(row.get("end") or []),
+        "prefix_len": int(row.get("prefix_len") or 0),
+        "words": list(row.get("words") or []),
+        "architecture": row.get("architecture"),
+        "schema": row.get("schema") or {},
+        "constraints": list(row.get("constraints") or []),
+        "classifications": [_classification_config(group) for group in groups if group.task == "classifications"],
+        "record_specs": [_record_spec_dict(group) for group in groups if group.record is not None],
+        "field_metadata": field_metadata,
+        "entity_metadata": entity_metadata,
+        "relation_metadata": relation_metadata,
+        "relation_descriptions": relation_descriptions,
+        "entity_order": [field.name for field in entity.fields] if entity is not None else [],
+        "relation_order": [group.name for group in groups if group.task == "relations"],
+        "classification_tasks": [group.name for group in groups if group.task == "classifications"],
+        "cls_fields": cls_fields,
+        "entity_attribute_groups": attribute_groups,
+        "entity_attribute_labels": attribute_labels,
+        "entity_attribute_prompt_labels": attribute_prompts,
+        "field_orders": {},
+    }
+
+
+def _metadata_rows(metadata: Any) -> list[Mapping[str, Any]]:
+    if metadata is None:
+        return []
+    if isinstance(metadata, Mapping):
+        nested = "metadata" in metadata and "groups" not in metadata
+        metadata = metadata["metadata"] if nested else [metadata]
+    return [item for item in metadata if isinstance(item, Mapping)]
+
+
+def _row_groups(metadata: Any) -> tuple[FieldGroup, ...]:
+    rows = _metadata_rows(metadata)
+    if not rows:
+        return ()
+    groups = rows[0].get("groups") or ()
+    if groups and isinstance(groups[0], FieldGroup):
+        return tuple(groups)
+    return ()
+
+
+def _split_boundary(outputs: Mapping[str, Any], boundary: Mapping[str, Any], batch_size: int) -> list[dict[str, Any]]:
+    candidates = boundary.get("candidates")
+    samples = []
+    for index in range(batch_size):
+        sample = {
+            "candidates": type(candidates)(
+                indices=candidates.indices[index : index + 1],
+                proposal_logits=None
+                if candidates.proposal_logits is None
+                else candidates.proposal_logits[index : index + 1],
+                pair_logits=candidates.pair_logits[index : index + 1],
+                valid_mask=candidates.valid_mask[index : index + 1],
+                query_mask=candidates.query_mask[index : index + 1],
+                candidate_states=(
+                    None if candidates.candidate_states is None else candidates.candidate_states[index : index + 1]
+                ),
+            ),
+            "pair_logits": candidates.pair_logits[index],
+            "null_logits": None if boundary.get("null_logits") is None else boundary["null_logits"][index],
+            "count_log_rates": None if boundary.get("count_log_rates") is None else boundary["count_log_rates"][index],
+        }
+        if outputs.get("classification_logits") is not None:
+            sample["classification_logits"] = outputs["classification_logits"][index]
+        text_states = outputs.get("text_states")
+        query_states = outputs.get("query_states")
+        if text_states is not None:
+            sample["text_states"] = text_states[index : index + 1]
+        if query_states is not None:
+            sample["query_states"] = query_states[index : index + 1]
+        relation_pairs = outputs.get("relation_pairs")
+        relation_logits = outputs.get("relation_logits")
+        if relation_pairs is not None and relation_logits is not None and relation_pairs.numel():
+            keep = relation_pairs[:, 0] == index
+            sample["relation_pairs"] = relation_pairs[keep]
+            sample["relation_logits"] = relation_logits[keep]
+            sample["relation_temperature"] = outputs.get("relation_temperature")
+        if outputs.get("record_logits") is not None:
+            sample["record_logits"] = outputs["record_logits"][index]
+        samples.append(sample)
+    return samples
+
+
+def _split_outputs(outputs: Any, batch_size: int) -> list[Any]:
+    """One mapping per batch row. Boundary candidates stay on that row."""
+    if isinstance(outputs, (list, tuple)):
+        if len(outputs) != batch_size:
+            raise ValueError(f"outputs length ({len(outputs)}) != metadata length ({batch_size})")
+        return list(outputs)
+    if not isinstance(outputs, Mapping):
+        try:
+            outputs = dict(outputs.items())
+        except (AttributeError, TypeError):
+            raise TypeError("outputs must be a mapping or a sequence of sample outputs") from None
+    boundary = outputs.get("boundary")
+    if isinstance(boundary, Mapping) and boundary.get("candidates") is not None:
+        return _split_boundary(outputs, boundary, batch_size)
+    keys = (
+        "span_logits",
+        "counts",
+        "classification_logits",
+        "record_logits",
+        "relation_pairs",
+        "relation_logits",
+        "pair_logits",
+        "grouped_candidates",
+    )
+    present = [key for key in keys if key in outputs and outputs[key] is not None]
+    if not present:
+        raise ValueError(
+            "outputs need span_logits (count, fields, words, width) "
+            "and/or classification_logits (num_labels,). "
+            "Boundary pair_logits require candidates on the forward output."
+        )
+    return [{key: outputs[key][index] for key in present} for index in range(batch_size)]
+
+
+def _decode_sample(sample, row, threshold, include_confidence, include_spans, overlap, temperature) -> dict[str, Any]:
+    groups = tuple(row.get("groups") or ())
+    if groups and not isinstance(groups[0], FieldGroup):
+        groups = ()
+    view = _decoder_view(row)
+    if sample.get("pair_logits") is not None or sample.get("grouped_candidates") is not None:
+        decoded = decode_boundary(
+            sample,
+            view,
+            threshold=threshold,
+            include_confidence=include_confidence,
+            include_spans=include_spans,
+            overlap_policy=overlap,
+            temperature=temperature,
+        )
+        labels = [group for group in groups if group.task == "classifications"]
+        decoded.update(
+            decode_fields(
+                labels,
+                None,
+                view.get("text") or "",
+                {"start": view.get("start") or [], "end": view.get("end") or []},
+                words=view.get("words") or [],
+                prefix_len=int(view.get("prefix_len") or 0),
+                threshold=threshold,
+                include_confidence=include_confidence,
+                include_spans=include_spans,
+                overlap=overlap,
+                temperature=temperature,
+                classification=sample.get("classification_logits"),
+            )
+        )
+        return decoded
+    if sample.get("record_logits") is not None:
+        return decode_records(
+            sample,
+            view,
+            threshold=threshold,
+            include_confidence=include_confidence,
+            include_spans=include_spans,
+            overlap_policy=overlap,
+        )
+    temperature_rel = sample.get("relation_temperature") or 1.0
+    return decode_fields(
+        groups,
+        sample.get("span_logits"),
+        view.get("text") or "",
+        {"start": view.get("start") or [], "end": view.get("end") or []},
+        words=view.get("words") or [],
+        prefix_len=int(view.get("prefix_len") or 0),
+        threshold=threshold,
+        include_confidence=include_confidence,
+        include_spans=include_spans,
+        overlap=overlap,
+        temperature=temperature,
+        counts=sample.get("counts"),
+        classification=sample.get("classification_logits"),
+        relation_pairs=sample.get("relation_pairs"),
+        relation_logits=sample.get("relation_logits"),
+        relation_temperature=float(temperature_rel),
+    )
+
+
+def _task_logit_map(sample: Mapping[str, Any], classifications: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    vectors = sample.get("classification_logits")
+    if vectors is None:
+        vectors = sample.get("classification_probs")
+    if isinstance(vectors, Mapping):
+        return vectors
+    if torch.is_tensor(vectors) and vectors.ndim == 1:
+        grouped = [vectors]
+    elif torch.is_tensor(vectors) and vectors.ndim == 2:
+        grouped = [vectors[index] for index in range(vectors.shape[0])]
+    else:
+        grouped = list(vectors or [])
+    if len(grouped) != len(classifications):
+        raise ValueError(f"expected {len(classifications)} classification rows, got {len(grouped)}")
+    logits = {}
+    for entry, vector in zip(classifications, grouped):
+        flat = vector.detach().float().cpu().reshape(-1) if torch.is_tensor(vector) else vector
+        values = flat.tolist() if torch.is_tensor(flat) else list(flat)
+        logits[entry["task"]] = {label: float(values[index]) for index, label in enumerate(entry["labels"])}
+    return logits
+
+
+def _output_value(value: Any, name: str):
+    if isinstance(value, Mapping) and name in value:
+        return value[name]
+    return None
+
+
+def _states_from(value: Any):
+    if value is None:
+        return None
+    text_states = _output_value(value, "text_states")
+    text_mask = _output_value(value, "text_mask")
+    if text_mask is None:
+        text_mask = _output_value(value, "text_word_mask")
+    query_states = _output_value(value, "query_states")
+    query_mask = _output_value(value, "query_mask")
+    if query_mask is None:
+        query_mask = _output_value(value, "query_marker_mask")
+    tensors = (text_states, text_mask, query_states, query_mask)
+    if any(item is None or not torch.is_tensor(item) for item in tensors):
+        return None
+    return tensors
+
+
+def _cached_states(outputs: Any):
+    states = _states_from(outputs)
+    if states is not None:
+        return states
+    return _states_from(_output_value(outputs, "boundary"))
+
+
+def _batch_states(text_states, text_mask, query_states, query_mask):
+    if text_states.dim() == 2:
+        text_states = text_states.unsqueeze(0)
+    if text_mask.dim() == 1:
+        text_mask = text_mask.unsqueeze(0)
+    if query_states.dim() == 2:
+        query_states = query_states.unsqueeze(0)
+    if query_mask.dim() == 1:
+        query_mask = query_mask.unsqueeze(0)
+    return text_states[:1], text_mask[:1], query_states[:1], query_mask[:1]
+
+
+def _entity_query_index(groups: Sequence[FieldGroup]) -> dict[str, int]:
+    index = {}
+    cursor = 0
+    for group in groups:
+        if group.task == "classifications":
+            continue
+        for field in group.fields:
+            if group.task == "entities":
+                index[field.name] = cursor
+            cursor += 1
+    return index
+
+
+def _entity_nodes(decoded: Mapping[str, Any]):
+    entities = decoded.get("entities") if isinstance(decoded, Mapping) else None
+    if isinstance(entities, Mapping):
+        for name, value in entities.items():
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        yield name, item
+            elif isinstance(value, dict) and "text" in value:
+                yield name, value
+        return
+    if isinstance(entities, list):
+        for item in entities:
+            if isinstance(item, dict):
+                yield str(item.get("type", item.get("label", ""))), item
+
+
+def _word_bounds(char_start: int, char_end: int, start_map, end_map, prefix: int):
+    """Map a character span onto half-open word indices, including the choice prefix."""
+    word_start = None
+    word_end = None
+    for index, (start, end) in enumerate(zip(start_map, end_map)):
+        if int(end) <= char_start or int(start) >= char_end:
+            continue
+        if word_start is None:
+            word_start = index
+        word_end = index
+    if word_start is None or word_end is None:
+        return None
+    return word_start + prefix, word_end + 1 + prefix
+
+
+def _assign_entity_attributes(logits: torch.Tensor, column: int, rows: Sequence[tuple[str, int]], spec: AttributeSpec):
+    labels, indices = zip(*rows)
+    values = logits[list(indices), column]
+    if spec.multi_label:
+        probabilities = torch.sigmoid(values)
+        return [
+            {"label": label, "confidence": float(probabilities[index].item())}
+            for index, label in enumerate(labels)
+            if float(probabilities[index]) >= spec.threshold
+        ]
+    probabilities = torch.softmax(values, dim=-1)
+    best = int(probabilities.argmax())
+    return {"label": labels[best], "confidence": float(probabilities[best].item())}
 
 
 @auto_docstring
@@ -2188,6 +3274,7 @@ class Gliner2Processor(ProcessorMixin):
     CLS or SEP wrapping, and first-subword indexes for token pooling.
     """
 
+    valid_processor_kwargs = Gliner2ProcessorKwargs
     model_input_names = [
         "input_ids",
         "attention_mask",
@@ -2206,23 +3293,28 @@ class Gliner2Processor(ProcessorMixin):
         "group_mask",
     ]
 
-    def __init__(self, tokenizer=None, **kwargs):
+    def __init__(self, tokenizer=None, word_splitter=None, token_pooling: str = "first", **kwargs):
+        r"""
+        word_splitter (`str` or `Callable`, *optional*, defaults to `"whitespace"`):
+            How document text is split into words. `"whitespace"` or `"char"`, or a
+            callable returning `(words, starts, ends)`. Saved with the processor.
+        token_pooling (`str`, *optional*, defaults to `"first"`):
+            Subword pooling mode, one of `"first"`, `"mean"`, or `"max"`. Saved with
+            the processor. Any other value raises `ValueError`.
+        """
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
-        token_pooling = kwargs.pop("token_pooling", "first")
-        word_splitter = kwargs.pop("word_splitter", None)
-        sampling_config = kwargs.pop("sampling_config", None)
+        if token_pooling not in _POOLING:
+            raise ValueError(f"token_pooling must be one of {_POOLING}, got {token_pooling!r}.")
         super().__init__(tokenizer, **kwargs)
-        if token_pooling not in ("first", "mean", "max"):
-            token_pooling = "first"
         self.token_pooling = token_pooling
-        self.word_splitter = _resolve_word_splitter(word_splitter)
-        self.sampling_config = sampling_config if sampling_config is not None else SamplingConfig()
+        self.word_splitter = "whitespace" if word_splitter is None else word_splitter
+        self._splitter = _resolve_word_splitter(self.word_splitter)
         self._piece_ids: dict[str, tuple[int, ...]] = {}
         self._register_special_tokens()
 
     def _register_special_tokens(self) -> None:
-        self.tokenizer.add_special_tokens({"additional_special_tokens": list(SPECIAL_TOKENS)})
+        self.tokenizer.add_special_tokens({"extra_special_tokens": list(SPECIAL_TOKENS)})
         for token in list(SPECIAL_TOKENS) + ["(", ")", ",", "|"]:
             self._encode_piece(token)
 
@@ -2263,7 +3355,7 @@ class Gliner2Processor(ProcessorMixin):
 
     def _split_words(self, text: str) -> tuple[list[str], list[int], list[int]]:
         words, starts, ends = [], [], []
-        for token, start, end in self.word_splitter(text, True):
+        for token, start, end in self._splitter(text, True):
             words.append(token)
             starts.append(start)
             ends.append(end)
@@ -2326,88 +3418,41 @@ class Gliner2Processor(ProcessorMixin):
         }
 
     def _transform_one(
-        self,
-        text: str,
-        schema: Any,
-        max_len: int | None,
-        architecture: str,
-        labels: Any = None,
-        rng: Any = None,
-        sampling_config: SamplingConfig | None = None,
-    ) -> dict[str, Any]:
-        source = schema
+        self, text: str, schema: Any, max_len: int | None, architecture: str, labels: Any = None
+    ) -> dict:
         schema = _canonicalize_schema(schema)
         label_spec = None if labels is None else _canonicalize_labels(labels, schema)
-        config = sampling_config or self.sampling_config
-        if rng is None:
-            prefix = _classification_prefix(schema)
-            compiled = _compile_groups(schema)
-        else:
-            prefix = _classification_prefix(schema, rng)
-            compiled = _sample_groups(schema, label_spec or _empty_labels(), rng, config)
-        _attach_source_options(source, compiled)
-        schema_tokens = [list(group.tokens) for group in compiled]
-        task_types = [group.task for group in compiled]
+        groups, prefix = compile_schema(schema)
+        schema_tokens = [list(group.tokens) for group in groups]
+        task_types = [group.task for group in groups]
         text = _normalize_text(text)
         words, starts, ends = self._split_words(text)
         if max_len is not None:
             words, starts, ends = words[:max_len], starts[:max_len], ends[:max_len]
         text_tokens = list(prefix) + words
         formatted = self._format_input(schema_tokens, text_tokens)
-        groups = []
-        for group in compiled:
-            groups.append(
-                {
-                    "task_type": group.task,
-                    "name": _group_name(group.tokens, group.task),
-                    "prompt": group.tokens[2] if len(group.tokens) > 2 else "",
-                    "fields": [field.name for field in group.fields],
-                    "options": group.options,
-                }
-            )
-        meta = _metadata_from_groups(source, schema, compiled)
-        if rng is not None:
-            for group in compiled:
-                if group.task == "entities":
-                    meta["entity_order"] = [field.name for field in group.fields]
-        supervision = None
-        if label_spec is not None:
-            supervision = _bind_labels(
-                compiled,
-                label_spec,
-                words,
-                starts,
-                ends,
-                text,
-                len(prefix),
-                list(prefix),
-                self.word_splitter,
-            )
-        meta.update(
-            {
-                "groups": groups,
-                "text": text,
-                "start": starts,
-                "end": ends,
-                "prefix_len": len(prefix),
-                "task_types": task_types,
-                "architecture": architecture,
-                "classifications": list(schema.get("classifications", []) or []),
-                "cls_fields": _choice_fields(schema),
-                "schema": schema,
-                "constraints": list(schema.get("constraints", []) or []),
-                "record_specs": _compile_record_specs(groups, schema.get("record_metadata"), _field_dtypes(schema)),
-            }
-        )
+        grid = WordGrid(tuple(words), tuple(starts), tuple(ends), text, len(prefix), tuple(prefix))
         return {
             "input_ids": formatted["input_ids"],
             "text_word_first_positions": formatted["text_word_first_positions"],
             "schema_special_positions": formatted["schema_special_positions"],
             "task_types": list(task_types),
             "words": text_tokens,
-            "schema_meta": meta,
-            "record_specs": meta["record_specs"],
-            "supervision": supervision,
+            "groups": tuple(groups),
+            "grid": grid,
+            "labels": label_spec,
+            "record_specs": [_record_spec_dict(group) for group in groups if group.record is not None],
+            "schema_row": {
+                "groups": tuple(groups),
+                "text": text,
+                "start": starts,
+                "end": ends,
+                "prefix_len": len(prefix),
+                "words": text_tokens,
+                "architecture": architecture,
+                "schema": schema,
+                "constraints": list(schema.get("constraints") or []),
+            },
         }
 
     def _relation_pairs(self, records: Sequence[Mapping[str, Any]]) -> list[list[tuple[int, int, int]]]:
@@ -2425,20 +3470,20 @@ class Gliner2Processor(ProcessorMixin):
             pairs.append(sample)
         return pairs
 
-    def _pack_routes(self, routes: Sequence[Sequence[tuple[int, int]]], batch_size: int):
-        width = max((len(values) for values in routes), default=0)
-        indices = torch.zeros((batch_size, width), dtype=torch.long)
+    def _pack_routes(self, routes: Sequence[Sequence[tuple[int, ...]]], batch_size: int, width_of: int = 2):
+        """Pad route tuples into one column per coordinate plus a mask."""
+        width = max((len(row) for row in routes), default=0)
+        columns = [torch.zeros((batch_size, width), dtype=torch.long) for _ in range(width_of)]
         mask = torch.zeros((batch_size, width), dtype=torch.bool)
-        groups = torch.zeros((batch_size, width), dtype=torch.long)
         for index, values in enumerate(routes):
             if not values:
                 continue
-            positions, group_ids = zip(*values)
             count = len(values)
-            indices[index, :count] = torch.tensor(positions, dtype=torch.long)
-            groups[index, :count] = torch.tensor(group_ids, dtype=torch.long)
+            stacked = torch.tensor(list(values), dtype=torch.long)
+            for column, tensor in enumerate(columns):
+                tensor[index, :count] = stacked[:, column]
             mask[index, :count] = True
-        return indices, mask, groups
+        return (*columns, mask)
 
     def _pack_record_tensors(self, record_specs: Sequence[Sequence[Mapping[str, Any]]]) -> dict[str, torch.Tensor]:
         batch_size = len(record_specs)
@@ -2477,9 +3522,7 @@ class Gliner2Processor(ProcessorMixin):
             "record_mask": record_mask,
         }
 
-    def _collate(
-        self, records: Sequence[Mapping[str, Any]], architecture: str, max_gold_per_query: int | None = None
-    ) -> dict[str, Any]:
+    def _collate(self, records: Sequence[Mapping[str, Any]], architecture: str, max_gold_per_query: int | None = None):
         batch_size = len(records)
         id_rows = [torch.tensor(record["input_ids"], dtype=torch.long) for record in records]
         mask_rows = [torch.ones(len(record["input_ids"]), dtype=torch.long) for record in records]
@@ -2519,9 +3562,9 @@ class Gliner2Processor(ProcessorMixin):
                     continue
                 prompt_row.append((positions[0], group_index))
             prompt_routes.append(prompt_row)
-        query_marker_indices, query_marker_mask, query_group_index = self._pack_routes(query_routes, batch_size)
-        cls_marker_indices, cls_marker_mask, cls_group_index = self._pack_routes(cls_routes, batch_size)
-        prompt_marker_indices, prompt_marker_mask, prompt_group_index = self._pack_routes(prompt_routes, batch_size)
+        query_marker_indices, query_group_index, query_marker_mask = self._pack_routes(query_routes, batch_size)
+        cls_marker_indices, cls_group_index, cls_marker_mask = self._pack_routes(cls_routes, batch_size)
+        prompt_marker_indices, prompt_group_index, prompt_marker_mask = self._pack_routes(prompt_routes, batch_size)
         group_width = max((len(record["task_types"]) for record in records), default=0)
         task_type_ids = torch.zeros((batch_size, group_width), dtype=torch.long)
         group_mask = torch.zeros((batch_size, group_width), dtype=torch.bool)
@@ -2532,20 +3575,9 @@ class Gliner2Processor(ProcessorMixin):
                     [_task_type_id(task) for task in record["task_types"]], dtype=torch.long
                 )
                 group_mask[index, :count] = True
-        relation_pairs = self._relation_pairs(records)
-        relation_width = max((len(sample) for sample in relation_pairs), default=0)
-        relation_head_index = torch.zeros((batch_size, relation_width), dtype=torch.long)
-        relation_tail_index = torch.zeros((batch_size, relation_width), dtype=torch.long)
-        relation_group_index = torch.zeros((batch_size, relation_width), dtype=torch.long)
-        relation_mask = torch.zeros((batch_size, relation_width), dtype=torch.bool)
-        for index, sample in enumerate(relation_pairs):
-            if not sample:
-                continue
-            count = len(sample)
-            relation_head_index[index, :count] = torch.tensor([item[0] for item in sample], dtype=torch.long)
-            relation_tail_index[index, :count] = torch.tensor([item[1] for item in sample], dtype=torch.long)
-            relation_group_index[index, :count] = torch.tensor([item[2] for item in sample], dtype=torch.long)
-            relation_mask[index, :count] = True
+        relation_head_index, relation_tail_index, relation_group_index, relation_mask = self._pack_routes(
+            self._relation_pairs(records), batch_size, width_of=3
+        )
         data = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -2566,27 +3598,31 @@ class Gliner2Processor(ProcessorMixin):
             "relation_tail_index": relation_tail_index,
             "relation_group_index": relation_group_index,
             "relation_mask": relation_mask,
-            "metadata": [{"words": record["words"], "schema_meta": record["schema_meta"]} for record in records],
+            "metadata": [dict(record["schema_row"]) for record in records],
         }
         if architecture == "boundary":
             data.update(self._pack_record_tensors([record["record_specs"] for record in records]))
-        if any(record.get("supervision") is not None for record in records):
-            if any(record.get("supervision") is None for record in records):
+        if any(record.get("labels") is not None for record in records):
+            if any(record.get("labels") is None for record in records):
                 raise ValueError("labels must be provided for every text in the batch")
-            data["targets"] = _pack_targets(records, max_gold_per_query=max_gold_per_query)
+            data["targets"] = build_targets(
+                [record["groups"] for record in records],
+                [record["labels"] for record in records],
+                [record["grid"] for record in records],
+                max_gold_per_query=max_gold_per_query,
+                splitter=self._splitter,
+            )
         return data
 
     @auto_docstring
     def __call__(
         self,
         text: TextInput,
-        schema: Any = None,
+        schema: Gliner2Schema | Sequence[Gliner2Schema] | None = None,
         return_tensors: str = "pt",
         max_len: int | None = None,
         architecture: str = "span",
-        labels: Any = None,
-        rng: Any = None,
-        sampling_config: SamplingConfig | None = None,
+        labels: Gliner2Labels | Sequence[Gliner2Labels] | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Build model tensors from text plus schema.
@@ -2606,26 +3642,18 @@ class Gliner2Processor(ProcessorMixin):
             labels (`dict`, *optional*):
                 Supervision grouped by task. Strings match every occurrence.
                 `{text, start, end}` selects one occurrence.
-            rng (`random.Random`, *optional*):
-                Draw source for `sampling_config`.
-            sampling_config (`SamplingConfig`, *optional*):
-                Task, field, and label sampling.
         """
         merged = self._merge_kwargs(
             Gliner2ProcessorKwargs,
-            tokenizer_init_kwargs=getattr(self.tokenizer, "init_kwargs", None),
+            tokenizer_init_kwargs=self.tokenizer.__dict__.get("init_kwargs"),
             max_len=max_len,
             architecture=architecture,
-            rng=rng,
-            sampling_config=sampling_config,
             labels=labels,
             **kwargs,
         )
         text_kwargs = merged["text_kwargs"]
         max_len = text_kwargs.get("max_len", max_len)
         architecture = text_kwargs.get("architecture", architecture)
-        rng = text_kwargs.get("rng", rng)
-        sampling_config = text_kwargs.get("sampling_config", sampling_config)
         labels = text_kwargs.get("labels", labels)
         max_gold_per_query = text_kwargs.get("max_gold_per_query")
         if return_tensors != "pt":
@@ -2657,19 +3685,11 @@ class Gliner2Processor(ProcessorMixin):
         else:
             label_rows = [labels]
         records = [
-            self._transform_one(
-                item,
-                item_schema,
-                max_len,
-                architecture,
-                label_rows[index],
-                rng,
-                sampling_config,
-            )
+            self._transform_one(item, item_schema, max_len, architecture, label_rows[index])
             for index, (item, item_schema) in enumerate(zip(texts, schemas))
         ]
         skipped = ["metadata"]
-        if any(record.get("supervision") is not None for record in records):
+        if any(record.get("labels") is not None for record in records):
             skipped.append("targets")
         return BatchFeature(
             self._collate(records, architecture, max_gold_per_query),
@@ -2678,13 +3698,32 @@ class Gliner2Processor(ProcessorMixin):
         )
 
     def chunk_words(
-        self,
-        words: str | Sequence[Any],
-        chunk_size: int = 384,
-        chunk_overlap: int = 64,
+        self, words: str | Sequence[Any], chunk_size: int = 384, chunk_overlap: int = 64
     ) -> list[TextChunk]:
         """Split text or words into overlapping windows."""
-        return chunk_words(words, chunk_size=chunk_size, chunk_overlap=chunk_overlap, word_splitter=self.word_splitter)
+        return chunk_words(words, chunk_size=chunk_size, chunk_overlap=chunk_overlap, word_splitter=self._splitter)
+
+    def windows(self, text: str, chunk_size: int | None, chunk_overlap: int | None) -> list[TextChunk]:
+        """One chunk per word window. A short text stays a single window.
+
+        Args:
+            text (`str`):
+                Document text.
+            chunk_size (`int`, *optional*):
+                Word window length. Non-positive values keep the whole document.
+            chunk_overlap (`int`, *optional*):
+                Words shared by neighboring windows.
+        """
+        whole = TextChunk(text=text, start_char=0, end_char=len(text), start_word=0, end_word=0)
+        if chunk_size is None or chunk_size <= 0:
+            return [whole]
+        overlap = 0 if chunk_overlap is None or chunk_overlap < 0 else chunk_overlap
+        if overlap >= chunk_size:
+            overlap = chunk_size - 1
+        chunks = self.chunk_words(text, chunk_size=chunk_size, chunk_overlap=overlap)
+        if len(chunks) <= 1:
+            return [whole]
+        return list(chunks)
 
     def merge_chunk_results(
         self,
@@ -2707,419 +3746,128 @@ class Gliner2Processor(ProcessorMixin):
             overlap_policy=overlap_policy,
         )
 
-    def _span_group_tensors(self, value: Any, num_groups: int, apply_sigmoid: bool) -> list[torch.Tensor]:
-        if torch.is_tensor(value):
-            tensors = [value]
-        else:
-            tensors = list(value)
-        if len(tensors) != num_groups:
-            raise ValueError(f"expected {num_groups} span tensors, got {len(tensors)}")
-        prepared = []
-        for tensor in tensors:
-            if not torch.is_tensor(tensor):
-                tensor = torch.tensor(tensor, dtype=torch.float)
-            tensor = tensor.detach().float().cpu()
-            if tensor.ndim != 4:
-                raise ValueError("span scores must have shape (count, fields, words, width)")
-            prepared.append(torch.sigmoid(tensor) if apply_sigmoid else tensor)
-        return prepared
+    def scalar_entity_labels(self, metadata: Any) -> set[str]:
+        """Entity names declared with a non-list dtype.
 
-    def _classification_vectors(self, value: Any, num_groups: int) -> list[torch.Tensor]:
-        if torch.is_tensor(value):
-            vectors = [value]
-        else:
-            vectors = list(value)
-        if len(vectors) != num_groups:
-            raise ValueError(f"expected {num_groups} classification vectors, got {len(vectors)}")
-        prepared = []
-        for vector in vectors:
-            if not torch.is_tensor(vector):
-                vector = torch.tensor(vector, dtype=torch.float)
-            prepared.append(vector.detach().float().cpu().reshape(-1))
-        return prepared
+        Args:
+            metadata:
+                Processor metadata for one window or a batch.
+        """
+        labels = set()
+        for group in _row_groups(metadata):
+            if group.task != "entities":
+                continue
+            for field in group.fields:
+                if field.dtype != "list":
+                    labels.add(field.name)
+        return labels
 
-    def _decode_entities(
-        self,
-        field_names: Sequence[str],
-        scores: torch.Tensor,
-        raw_logits: torch.Tensor | None,
-        meta: Mapping[str, Any],
-        text: str,
-        start_map: Sequence[int],
-        end_map: Sequence[int],
-        threshold: float,
-        include_confidence: bool,
-        include_spans: bool,
-        overlap_policy: str | None,
-    ) -> list[dict[str, Any]]:
-        doc_len = len(start_map)
-        entity_results: dict[str, Any] = OrderedDict()
-        attribute_labels = set(meta.get("entity_attribute_labels") or ())
-        groups = meta.get("entity_attribute_groups") or {}
-        use_attributes = bool(groups) and raw_logits is not None and attribute_labels
-        if use_attributes:
-            prompt_labels = meta.get("entity_attribute_prompt_labels") or {}
-            group_indices = {}
-            doc_logits = _doc_axis(raw_logits[0], doc_len)
-            for group_name, group in groups.items():
-                labels = list(group.get("labels", []) if isinstance(group, Mapping) else getattr(group, "labels", []))
-                present = [
-                    (label, field_names.index(prompt_labels.get(label, label)))
-                    for label in labels
-                    if prompt_labels.get(label, label) in field_names
-                ]
-                if present:
-                    chosen, indices = zip(*present)
-                    group_indices[group_name] = (list(chosen), torch.tensor(indices, dtype=torch.long), group)
-            content_names = [name for name in field_names if name not in attribute_labels]
-            order = [name for name in meta.get("entity_order", content_names) if name in content_names]
-            for name in order:
-                index = field_names.index(name)
-                entity_meta = (meta.get("entity_metadata") or {}).get(name, {})
-                dtype = entity_meta.get("dtype", "list")
-                ent_threshold = entity_meta.get("threshold")
-                ent_threshold = float(ent_threshold) if ent_threshold is not None else threshold
-                entity_scores = scores[index]
-                found = []
-                starts, widths = torch.where(entity_scores >= ent_threshold)
-                for start, width in zip(starts.tolist(), widths.tolist()):
-                    end = start + width + 1
-                    if not (0 <= start < doc_len and end <= doc_len):
-                        continue
-                    try:
-                        char_start, char_end = start_map[start], end_map[end - 1]
-                        span_text = text[char_start:char_end].strip()
-                    except (IndexError, KeyError):
-                        continue
-                    if not span_text or not _passes_validators(span_text, entity_meta.get("validators", [])):
-                        continue
-                    found.append(
-                        {
-                            "text": span_text,
-                            "confidence": float(entity_scores[start, width].item()),
-                            "start": int(char_start),
-                            "end": int(char_end),
-                            **_assign_entity_attributes(doc_logits, start, width, group_indices, name),
-                        }
-                    )
-                extras = {
-                    (item["start"], item["end"]): {
-                        key: value for key, value in item.items() if key not in _SPAN_RESERVED
-                    }
-                    for item in found
-                }
-                entity_results[name] = decode_spans(
-                    [(item["text"], item["confidence"], item["start"], item["end"]) for item in found],
-                    {
-                        "dtype": dtype,
-                        "include_confidence": include_confidence,
-                        "include_spans": include_spans,
-                        "extras": extras,
-                    },
-                    text,
-                    {"start": start_map, "end": end_map},
-                    threshold,
-                    overlap_policy,
-                )
-            return [entity_results] if entity_results else []
-        order = [name for name in meta.get("entity_order", field_names) if name in field_names]
-        for name in order:
-            index = list(field_names).index(name)
-            entity_meta = (meta.get("entity_metadata") or {}).get(name, {})
-            dtype = entity_meta.get("dtype", "list")
-            ent_threshold = entity_meta.get("threshold")
-            ent_threshold = float(ent_threshold) if ent_threshold is not None else threshold
-            entity_results[name] = decode_spans(
-                scores[index],
-                {
-                    "dtype": dtype,
-                    "threshold": ent_threshold,
-                    "validators": entity_meta.get("validators", []),
-                    "include_confidence": include_confidence,
-                    "include_spans": include_spans,
-                    "empty": "blank",
-                },
-                text,
-                {"start": start_map, "end": end_map},
-                threshold,
-                overlap_policy,
-            )
-        return [entity_results] if entity_results else []
+    def can_rescore_attributes(self, outputs: Any, metadata: Any, model: Any) -> bool:
+        """Return whether this window can rescore attributes without another encoder pass.
 
-    def _decode_relations(
-        self,
-        rel_name: str,
-        field_names: Sequence[str],
-        span_scores: torch.Tensor,
-        count: int,
-        meta: Mapping[str, Any],
-        text: str,
-        start_map: Sequence[int],
-        end_map: Sequence[int],
-        threshold: float,
-        include_confidence: bool,
-        include_spans: bool,
-        overlap_policy: str | None,
-        doc_len: int,
-    ) -> list[Any]:
-        rel_threshold = threshold
-        configured = (meta.get("relation_metadata") or {}).get(rel_name, {}).get("threshold")
-        if configured is not None:
-            rel_threshold = configured
-        ordered = (meta.get("field_orders") or {}).get(rel_name, field_names)
-        instances = []
-        maps = {"start": start_map, "end": end_map}
-        for inst in range(count):
-            sides = []
-            for fname in ordered:
-                if fname not in field_names:
+        Args:
+            outputs:
+                Forward output for the window.
+            metadata:
+                Processor metadata for the window.
+            model:
+                `Gliner2ForSchemaExtraction` instance.
+        """
+        try:
+            head = model.boundary_head
+        except AttributeError:
+            return False
+        if head is None:
+            return False
+        entity = next((group for group in _row_groups(metadata) if group.task == "entities"), None)
+        return bool(entity and entity.attributes) and _cached_states(outputs) is not None
+
+    def rescore_attributes(self, result: dict[str, Any], model: Any, outputs: Any, metadata: Any) -> dict[str, Any]:
+        """Write attribute labels onto kept entity spans using `score_spans`.
+
+        Args:
+            result (`dict`):
+                One window's formatted decode. Spans need character offsets.
+            model:
+                Model whose `score_spans` and `boundary_config.pair_temperature` are used.
+            outputs:
+                Forward output that cached word and query states.
+            metadata:
+                Processor metadata with entity attribute groups and word maps.
+        """
+        if not self.can_rescore_attributes(outputs, metadata, model):
+            return result
+        cached = _cached_states(outputs)
+        if cached is None:
+            return result
+        groups = _row_groups(metadata)
+        entity = next(group for group in groups if group.task == "entities")
+        text_states, text_mask, query_states, query_mask = _batch_states(*cached)
+        query_of = _entity_query_index(groups)
+        prompts = dict(entity.attribute_prompts)
+        attribute_rows = []
+        for spec in entity.attributes:
+            for label in spec.labels:
+                query_id = query_of.get(prompts.get(label, label))
+                if query_id is not None and query_id < query_states.shape[1]:
+                    attribute_rows.append((label, query_id))
+        attribute_rows = list(dict.fromkeys(attribute_rows))
+        hidden = set(entity.attribute_labels)
+        nodes = [(name, item) for name, item in _entity_nodes(result) if name not in hidden]
+        row = _metadata_rows(metadata)[0]
+        start_map = list(row.get("start") or [])
+        end_map = list(row.get("end") or [])
+        prefix = int(row.get("prefix_len") or 0)
+        located = []
+        for name, item in nodes:
+            if "start" not in item or "end" not in item:
+                continue
+            bounds = _word_bounds(int(item["start"]), int(item["end"]), start_map, end_map, prefix)
+            if bounds is not None:
+                located.append((name, item, bounds))
+        unique_pairs = list(dict.fromkeys(bounds for _, _, bounds in located))
+        if not attribute_rows or not unique_pairs:
+            return result
+        device = model.device
+        with torch.no_grad():
+            text_states = text_states.to(device)
+            text_mask = text_mask.to(device)
+            query_ids = torch.tensor([query_id for _, query_id in attribute_rows], dtype=torch.long, device=device)
+            query_states = query_states.to(device).index_select(1, query_ids)
+            query_mask = query_mask.to(device).index_select(1, query_ids)
+            pairs = torch.tensor(unique_pairs, dtype=torch.long, device=device)
+            indices = pairs.view(1, 1, len(unique_pairs), 2).expand(1, len(attribute_rows), len(unique_pairs), 2)
+            logits = model.score_spans(text_states, text_mask, query_states, query_mask, indices.contiguous())
+        logits = logits[0].detach().float().cpu()
+        boundary = model.config.boundary_config
+        pair_temperature = _output_value(boundary, "pair_temperature") if isinstance(boundary, Mapping) else None
+        if pair_temperature is None:
+            try:
+                pair_temperature = boundary.pair_temperature
+            except AttributeError:
+                pair_temperature = 1.0
+        logits = logits / float(pair_temperature or 1.0)
+        row_of = {label: row_index for row_index, (label, _) in enumerate(attribute_rows)}
+        column_of = {pair: index for index, pair in enumerate(unique_pairs)}
+        for name, item, bounds in located:
+            column = column_of[bounds]
+            for spec in entity.attributes:
+                if spec.applies_to is not None and name not in spec.applies_to:
                     continue
-                fidx = list(field_names).index(fname)
-                sides.append(
-                    decode_spans(
-                        _doc_axis(span_scores[inst, fidx], doc_len),
-                        {
-                            "dtype": "str",
-                            "threshold": rel_threshold,
-                            "include_confidence": include_confidence,
-                            "include_spans": include_spans,
-                        },
-                        text,
-                        maps,
-                        threshold,
-                        overlap_policy,
-                    )
-                )
-            if len(sides) == 2 and sides[0] and sides[1]:
-                if include_spans or include_confidence:
-                    instances.append({"head": sides[0], "tail": sides[1]})
-                else:
-                    instances.append((sides[0], sides[1]))
-        return instances
+                present = [(label, row_of[label]) for label in spec.labels if label in row_of]
+                if not present:
+                    continue
+                item[spec.name] = _assign_entity_attributes(logits, column, present, spec)
+        return result
 
-    def _decode_structures(
-        self,
-        struct_name: str,
-        field_names: Sequence[str],
-        span_scores: torch.Tensor,
-        count: int,
-        meta: Mapping[str, Any],
-        words: Sequence[str],
-        text: str,
-        start_map: Sequence[int],
-        end_map: Sequence[int],
-        threshold: float,
-        include_confidence: bool,
-        include_spans: bool,
-        overlap_policy: str | None,
-        doc_len: int,
-        prefix_len: int,
-    ) -> list[dict[str, Any]]:
-        instances = []
-        ordered = (meta.get("field_orders") or {}).get(struct_name, field_names)
-        cls_fields = meta.get("cls_fields") or {}
-        prefix_tokens = list(words[:prefix_len])
-        for inst in range(count):
-            instance: dict[str, Any] = OrderedDict()
-            for fname in ordered:
-                if fname not in field_names:
-                    continue
-                fidx = list(field_names).index(fname)
-                field_key = f"{struct_name}.{fname}"
-                field_meta = (meta.get("field_metadata") or {}).get(field_key, {})
-                field_threshold = field_meta.get("threshold")
-                field_threshold = field_threshold if field_threshold is not None else threshold
-                dtype = field_meta.get("dtype", "list")
-                validators = field_meta.get("validators", [])
-                if field_key in cls_fields:
-                    choices = cls_fields[field_key]
-                    prefix_scores = span_scores[inst, fidx, :prefix_len]
-                    if dtype == "list":
-                        selected = []
-                        seen = set()
-                        for choice in choices:
-                            if choice in seen:
-                                continue
-                            idx = _find_choice_idx(choice, prefix_tokens)
-                            if idx >= 0 and idx < prefix_scores.shape[0]:
-                                score = float(prefix_scores[idx, 0].item())
-                                if score >= field_threshold:
-                                    selected.append(format_span(choice, score, 0, 0, include_confidence, False))
-                                    seen.add(choice)
-                        instance[fname] = selected
-                    else:
-                        best = None
-                        best_score = -1.0
-                        for choice in choices:
-                            idx = _find_choice_idx(choice, prefix_tokens)
-                            if idx >= 0 and idx < prefix_scores.shape[0]:
-                                score = float(prefix_scores[idx, 0].item())
-                                if score > best_score:
-                                    best_score = score
-                                    best = choice
-                        if best and best_score >= field_threshold:
-                            instance[fname] = format_span(best, best_score, 0, 0, include_confidence, False)
-                        else:
-                            instance[fname] = None
-                else:
-                    instance[fname] = decode_spans(
-                        _doc_axis(span_scores[inst, fidx], doc_len),
-                        {
-                            "dtype": dtype,
-                            "threshold": field_threshold,
-                            "validators": validators,
-                            "include_confidence": include_confidence,
-                            "include_spans": include_spans,
-                        },
-                        text,
-                        {"start": start_map, "end": end_map},
-                        threshold,
-                        overlap_policy,
-                    )
-            if any(value is not None and value != [] for value in instance.values()):
-                instances.append(instance)
-        return instances
-
-    def _decode_sample(
-        self,
-        sample_out: Mapping[str, Any],
-        meta: Mapping[str, Any],
-        threshold: float,
-        include_confidence: bool,
-        include_spans: bool,
-        overlap_policy: str | None,
-        temperature: float,
-    ) -> dict[str, Any]:
-        if sample_out.get("pair_logits") is not None or sample_out.get("grouped_candidates") is not None:
-            decoded = decode_boundary(
-                sample_out,
-                meta,
-                threshold=threshold,
-                include_confidence=include_confidence,
-                include_spans=include_spans,
-                overlap_policy=overlap_policy,
-                temperature=temperature,
-            )
-            cls_source = sample_out.get("classification_logits")
-            cls_groups = [group for group in (meta.get("groups") or []) if group["task_type"] == "classifications"]
-            if cls_source is not None and cls_groups:
-                vectors = self._classification_vectors(cls_source, len(cls_groups))
-                classifications = list(meta.get("classifications") or [])
-                for group, vector in zip(cls_groups, vectors):
-                    config = _resolve_classification_config(group["prompt"], classifications)
-                    if config is None:
-                        continue
-                    decoded[config["task"]] = _decode_classification_group(
-                        vector, config, threshold, temperature, activated=False
-                    )
-            return decoded
-        if sample_out.get("record_logits") is not None:
-            return decode_records(
-                sample_out,
-                meta,
-                threshold=threshold,
-                include_confidence=include_confidence,
-                include_spans=include_spans,
-            )
-        groups = list(meta.get("groups") or [])
-        span_groups = [group for group in groups if group["task_type"] != "classifications"]
-        cls_groups = [group for group in groups if group["task_type"] == "classifications"]
-        span_scores = None
-        raw_logits = None
-        if sample_out.get("span_logits") is not None:
-            raw_logits = self._span_group_tensors(sample_out["span_logits"], len(span_groups), apply_sigmoid=False)
-            span_scores = [torch.sigmoid(tensor) for tensor in raw_logits]
-        counts = sample_out.get("counts")
-        if counts is not None and not isinstance(counts, (list, tuple)):
-            counts = counts.detach().cpu().tolist()
-        results: dict[str, Any] = {}
-        words = list(meta.get("words") or [])
-        text = meta.get("text") or ""
-        start_map = list(meta.get("start") or [])
-        end_map = list(meta.get("end") or [])
-        doc_len = len(start_map)
-        prefix_len = int(meta.get("prefix_len") or 0)
-        if span_scores is not None:
-            for index, group in enumerate(span_groups):
-                scores = span_scores[index]
-                count = int(counts[index]) if counts is not None else int(scores.shape[0])
-                count = max(count, 0)
-                scores = scores[:count]
-                if count <= 0:
-                    if group["name"] == "entities" or group["task_type"] == "relations":
-                        results[group["name"]] = []
-                    else:
-                        results[group["name"]] = {}
-                    continue
-                expected_words = len(words)
-                if scores.shape[-2] != expected_words:
-                    raise ValueError(
-                        f"span word axis {scores.shape[-2]} != words {expected_words} "
-                        "(include the classification prefix)"
-                    )
-                if group["task_type"] == "entities":
-                    doc_scores = _doc_axis(scores[0], doc_len)
-                    group_raw = None
-                    if raw_logits is not None:
-                        group_raw = raw_logits[index][:count]
-                    results[group["name"]] = self._decode_entities(
-                        group["fields"],
-                        doc_scores,
-                        group_raw,
-                        meta,
-                        text,
-                        start_map,
-                        end_map,
-                        threshold,
-                        include_confidence,
-                        include_spans,
-                        overlap_policy,
-                    )
-                elif group["task_type"] == "relations":
-                    results[group["name"]] = self._decode_relations(
-                        group["name"],
-                        group["fields"],
-                        scores,
-                        count,
-                        meta,
-                        text,
-                        start_map,
-                        end_map,
-                        threshold,
-                        include_confidence,
-                        include_spans,
-                        overlap_policy,
-                        doc_len,
-                    )
-                else:
-                    results[group["name"]] = self._decode_structures(
-                        group["name"],
-                        group["fields"],
-                        scores,
-                        count,
-                        meta,
-                        words,
-                        text,
-                        start_map,
-                        end_map,
-                        threshold,
-                        include_confidence,
-                        include_spans,
-                        overlap_policy,
-                        doc_len,
-                        prefix_len,
-                    )
-        cls_source = sample_out.get("classification_logits")
-        if cls_source is not None and cls_groups:
-            vectors = self._classification_vectors(cls_source, len(cls_groups))
-            classifications = list(meta.get("classifications") or [])
-            for group, vector in zip(cls_groups, vectors):
-                config = _resolve_classification_config(group["prompt"], classifications)
-                if config is None:
-                    continue
-                decoded = _decode_classification_group(vector, config, threshold, temperature, activated=False)
-                results[config["task"]] = decoded
-        return results
+    def _names(self, metadata: Any, task: str) -> list[str]:
+        groups = _row_groups(metadata)
+        if groups:
+            return [group.name for group in groups if group.task == task]
+        view = _decoder_view(_metadata_rows(metadata)[0]) if _metadata_rows(metadata) else {}
+        if task == "relations":
+            return list(view.get("relation_order") or [])
+        return list(view.get("classification_tasks") or [])
 
     def post_process_extraction(
         self,
@@ -3133,49 +3881,56 @@ class Gliner2Processor(ProcessorMixin):
     ) -> list[dict[str, Any]]:
         """Decode logits into the public extraction payload.
 
-        ``metadata`` is ``encoding["metadata"]``. Each sample needs ``words``
-        and ``schema_meta`` (char ``start``/``end``, ``groups``, ``text``).
+        ``metadata`` is ``encoding["metadata"]``. Each sample carries `FieldGroup`
+        objects plus char ``start``/``end``, ``words``, and ``text``.
 
         Expected ``outputs`` keys, per sample or batched as lists:
 
         - ``span_logits``: pre-sigmoid scores shaped ``(count, fields, words, width)``.
-          One tensor per non-classification group, in ``groups`` order.
+          One tensor per non-classification group, in group order.
           ``words`` includes the classification-choice prefix.
         - ``counts``: optional instance counts. Defaults to ``span_logits`` size 0.
         - ``classification_logits``: one ``(num_labels,)`` vector per
-          classification group, aligned with ``schema_meta["classifications"]``.
+          classification group.
         - ``relation_pairs`` and ``relation_logits``: typed relation edges scored
           in `forward`.
         - ``record_logits``: record-head logits scored in `forward`.
 
         Relations and JSON structures are decoded from the same span scores.
-        ``record_logits`` and boundary ``pair_logits`` / ``grouped_candidates``
-        are delegated to ``decoding_gliner2`` and raise ``NotImplementedError``
-        when that module does not define ``decode_records`` or ``decode_boundary``.
+        Boundary ``pair_logits`` / ``grouped_candidates`` call ``decode_boundary``.
+        ``record_logits`` without boundary candidates call ``decode_records``.
+
+        Args:
+            outputs:
+                Model output or a list of per-sample outputs.
+            metadata:
+                Processor metadata aligned with `outputs`.
+            threshold (`float`, *optional*, defaults to 0.5):
+                Score cutoff.
+            include_confidence (`bool`, *optional*, defaults to `False`):
+                Keep scores.
+            include_spans (`bool`, *optional*, defaults to `False`):
+                Keep character offsets.
+            overlap_policy (`str`, *optional*):
+                Overlap rule. Boundary defaults to `disallow` when unset.
+            temperature (`float`, *optional*, defaults to 1.0):
+                Classification temperature.
         """
-        rows = _batch_rows(metadata)
-        samples = _sample_outputs(outputs, len(rows))
+        rows = _metadata_rows(metadata)
+        samples = _split_outputs(outputs, len(rows))
         formatted = []
         for sample_out, meta in zip(samples, rows):
             chosen = overlap_policy if overlap_policy is not None else meta.get("_overlap_policy")
             if chosen is None and meta.get("architecture") == "boundary":
                 chosen = "disallow"
             policy = None if chosen is None else normalize_overlap_policy(chosen)
-            raw = self._decode_sample(
-                sample_out,
-                meta,
-                threshold,
-                include_confidence,
-                include_spans,
-                policy,
-                temperature,
-            )
+            raw = _decode_sample(sample_out, meta, threshold, include_confidence, include_spans, policy, temperature)
             formatted.append(
                 format_results(
                     raw,
                     include_confidence=include_confidence,
-                    requested_relations=list(meta.get("relation_order") or []),
-                    classification_tasks=list(meta.get("classification_tasks") or []),
+                    requested_relations=self._names(meta, "relations"),
+                    classification_tasks=self._names(meta, "classifications"),
                 )
             )
         return formatted
@@ -3191,39 +3946,64 @@ class Gliner2Processor(ProcessorMixin):
     ) -> list[dict[str, Any]]:
         """Decode classification logits.
 
-        ``decoder="independent"`` (and ``"auto"`` without constraints) scores
-        each task locally: softmax for single-label, sigmoid for multi-label.
-        ``decoder="beam"`` or ``"exact"``, and non-empty schema constraints,
-        call ``decoding_gliner2.decode_classification`` when it exists.
+        ``decoder="beam"`` or ``"exact"``, and non-empty schema constraints, call
+        ``decode_classification``. Other decoders score each label group locally
+        and do not decode span fields.
+
+        Args:
+            outputs:
+                Model output with classification logits.
+            metadata:
+                Processor metadata aligned with `outputs`.
+            threshold (`float`, *optional*, defaults to 0.5):
+                Candidate threshold for the constrained decoder.
+            include_confidence (`bool`, *optional*, defaults to `False`):
+                Keep scores.
+            temperature (`float`, *optional*, defaults to 1.0):
+                Classification temperature.
+            decoder (`str`, *optional*, defaults to `"independent"`):
+                `independent`, `auto`, `beam`, or `exact`.
         """
-        rows = _batch_rows(metadata)
-        needs_solver = decoder in ("beam", "exact") or any(row.get("constraints") for row in rows)
+        rows = _metadata_rows(metadata)
+        views = [_decoder_view(row) for row in rows]
+        needs_solver = decoder in ("beam", "exact") or any(view.get("constraints") for view in views)
         if needs_solver and decoder != "independent":
-            return decode_classification(
-                outputs,
-                rows,
+            solved = []
+            samples = _split_outputs(outputs, len(rows))
+            for sample, view in zip(samples, views):
+                classifications = list(view.get("classifications") or [])
+                schema = {"classifications": classifications, "constraints": list(view.get("constraints") or [])}
+                solved.append(
+                    decode_classification(
+                        _task_logit_map(sample, classifications),
+                        schema,
+                        temperature,
+                        text=view.get("text") or "",
+                        decoder=decoder,
+                        include_confidence=include_confidence,
+                        candidate_threshold=threshold,
+                    )
+                )
+            return solved
+        samples = _split_outputs(outputs, len(rows))
+        results = []
+        for sample_out, meta in zip(samples, rows):
+            labels = [group for group in _row_groups(meta) if group.task == "classifications"]
+            raw = decode_fields(
+                labels,
+                None,
+                meta.get("text") or "",
+                {"start": meta.get("start") or [], "end": meta.get("end") or []},
                 threshold=threshold,
                 include_confidence=include_confidence,
                 temperature=temperature,
-                decoder=decoder,
-            )
-        samples = _sample_outputs(outputs, len(rows))
-        results = []
-        for sample_out, meta in zip(samples, rows):
-            raw = self._decode_sample(
-                sample_out,
-                meta,
-                threshold,
-                include_confidence,
-                include_spans=False,
-                overlap_policy=None,
-                temperature=temperature,
+                classification=sample_out.get("classification_logits"),
             )
             results.append(
                 format_results(
-                    {key: value for key, value in raw.items() if key in set(meta.get("classification_tasks") or [])},
+                    raw,
                     include_confidence=include_confidence,
-                    classification_tasks=list(meta.get("classification_tasks") or []),
+                    classification_tasks=self._names(meta, "classifications"),
                 )
             )
         return results
@@ -3238,20 +4018,37 @@ class Gliner2Processor(ProcessorMixin):
         optimizer: str = "independent",
         overlap_policy: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Decode a joint entity, structure, and relation payload.
+        """Decode a joint entity and relation payload.
 
+        ``optimizer="beam"``, ``"greedy"``, and ``"exact"`` call ``decode_joint``.
         ``optimizer="independent"`` decodes each span group on its own scores.
-        ``optimizer="beam"``, ``"greedy"``, and ``"exact"`` call
-        ``decoding_gliner2.decode_joint``.
+
+        Args:
+            outputs:
+                Model output.
+            metadata:
+                Processor metadata aligned with `outputs`.
+            threshold (`float`, *optional*, defaults to 0.5):
+                Score cutoff.
+            include_confidence (`bool`, *optional*, defaults to `False`):
+                Keep scores.
+            include_spans (`bool`, *optional*, defaults to `False`):
+                Keep character offsets.
+            optimizer (`str`, *optional*, defaults to `"independent"`):
+                `independent`, `auto`, `beam`, `greedy`, or `exact`.
+            overlap_policy (`str`, *optional*):
+                Overlap rule forwarded to the decoder.
         """
         if optimizer in ("beam", "exact", "greedy"):
+            rows = _metadata_rows(metadata)
+            views = [_decoder_view(row) for row in rows]
             return decode_joint(
                 outputs,
-                metadata,
+                views,
                 threshold=threshold,
                 include_confidence=include_confidence,
                 include_spans=include_spans,
-                optimizer=optimizer,
+                optimizer="beam" if optimizer == "exact" else optimizer,
                 overlap_policy=overlap_policy,
             )
         if optimizer not in ("independent", "auto", "none"):
@@ -3266,4 +4063,8 @@ class Gliner2Processor(ProcessorMixin):
         )
 
 
-__all__ = ["Gliner2Processor"]
+__all__ = [
+    "Gliner2Processor",
+    "Gliner2Schema",
+    "Gliner2Labels",
+]

@@ -109,9 +109,9 @@ class Gliner2BoundaryConfig(PreTrainedConfig):
         Score a null class so a query can return nothing.
     enable_count_head (`bool`, *optional*, defaults to `True`):
         Predict how many spans each query has.
-    enable_records (`bool`, *optional*, defaults to `False`):
+    enable_records (`bool`, *optional*, defaults to `True`):
         Score structured records on top of the candidates.
-    enable_relations (`bool`, *optional*, defaults to `False`):
+    enable_relations (`bool`, *optional*, defaults to `True`):
         Score typed relations between candidate spans.
     record_dim (`int`, *optional*, defaults to `128`):
         Width of the record-head states.
@@ -238,8 +238,8 @@ class Gliner2BoundaryConfig(PreTrainedConfig):
     query_attention_layers: int = 1
     enable_abstention: bool = True
     enable_count_head: bool = True
-    enable_records: bool = False
-    enable_relations: bool = False
+    enable_records: bool = True
+    enable_relations: bool = True
     record_dim: int = 128
     record_instance_queries: int = 8
     relation_heads_per_type: int = 32
@@ -391,6 +391,26 @@ class Gliner2Config(PreTrainedConfig):
             raise ValueError("max_width must be >= 1")
         if self.max_len is not None and self.max_len < 1:
             raise ValueError("max_len must be null or >= 1")
+
+
+def classification_temperature_of(config) -> float:
+    """Return the classification temperature for this architecture.
+
+    Boundary models read `boundary_config.classification_temperature`. Span models read the top-level
+    `classification_temperature`.
+
+    Args:
+        config (`Gliner2Config`): Model configuration.
+
+    Returns:
+        `float`: Divisor applied to classification logits before the activation.
+    """
+    if getattr(config, "architecture", "span") == "boundary":
+        boundary = config.boundary_config
+        if isinstance(boundary, dict):
+            return float(boundary["classification_temperature"])
+        return float(boundary.classification_temperature)
+    return float(config.classification_temperature)
 
 
 __all__ = ["Gliner2Config", "Gliner2BoundaryConfig"]

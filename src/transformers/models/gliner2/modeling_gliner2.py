@@ -14,7 +14,8 @@
 
 import math
 from dataclasses import dataclass, field
-from types import SimpleNamespace
+from enum import Enum
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
@@ -23,14 +24,69 @@ from torch import nn
 from transformers import AutoModel
 
 from ...activations import ACT2FN
+from ...integrations.sdpa_attention import sdpa_attention_forward
+from ...loss.loss_gliner2 import (
+    boundary_training_loss,
+    clamp_gold_count,
+    compute_record_group_loss,
+    invalid_span_mask,
+    span_count_loss,
+    span_structure_loss,
+    sparse_relation_loss,
+    supervises_count,
+)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from . import loss_gliner2
 from .configuration_gliner2 import Gliner2Config
 
 
-_CLASSIFICATION_TASK = 4
+class TaskId(int, Enum):
+    """Task ids stored on `task_type_ids`."""
+
+    ENTITY = 1
+    CLASSIFICATION = 4
+
+
+class RecordModeId(int, Enum):
+    """Integer record modes on `record_mode_ids`."""
+
+    NATURAL = 1
+    LATENT = 2
+    ANCHORLESS = 3
+
+
+class RecordMode(str, Enum):
+    """Record decoder modes."""
+
+    NATURAL = "natural"
+    LATENT = "latent"
+    ANCHORLESS = "anchorless"
+
+
+class ExportMode(str, Enum):
+    """How boundary pairs are scored."""
+
+    AUTO = "auto"
+    STREAMING = "streaming"
+    VECTORIZED = "vectorized"
+
+
+class CandidatePool(str, Enum):
+    """Where span candidates are built."""
+
+    PER_QUERY = "per_query"
+    SHARED = "shared"
+
+
+_RECORD_ID_TO_MODE = {
+    RecordModeId.NATURAL: RecordMode.NATURAL,
+    RecordModeId.LATENT: RecordMode.LATENT,
+    RecordModeId.ANCHORLESS: RecordMode.ANCHORLESS,
+}
+
+MASK_LOGIT = -1.0e4
 
 
 def _mlp(input_dim, intermediate_dims, output_dim, dropout=0.0, activation="relu"):
@@ -59,11 +115,62 @@ def _projection(hidden_size, dropout, out_dim=None):
     )
 
 
-def _extract_elements(sequence, indices):
-    """Gather `[B, K, D]` rows from `[B, L, D]`."""
-    hidden = sequence.size(-1)
-    expanded = indices.unsqueeze(2).expand(-1, -1, hidden)
-    return torch.gather(sequence, 1, expanded)
+def mask_invalid_logits(logits: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
+    """Replace rejected logits with a finite sentinel.
+
+    Args:
+        logits: Scores to mask.
+        valid_mask: True where `logits` stay finite.
+
+    Returns:
+        Logits with rejected positions set to `MASK_LOGIT`.
+    """
+    return logits.masked_fill(~valid_mask, MASK_LOGIT)
+
+
+def _resolved_boundary_value(value, settings, name, *, lower, upper=None):
+    """Resolve an annealed boundary hyperparameter.
+
+    `None` reads `name` from `settings` when that field exists, otherwise 1.0.
+    An explicit number is used as given.
+
+    Args:
+        value: Caller override, or None.
+        settings: Boundary config.
+        name: Config field name.
+        lower: Inclusive minimum.
+        upper: Inclusive maximum, if any.
+
+    Returns:
+        The resolved float.
+
+    Raises:
+        ValueError: If the resolved value is out of range.
+    """
+    if value is None:
+        value = getattr(settings, name, 1.0)
+    value = float(value)
+    if upper is None and value < lower:
+        raise ValueError(f"{name} must be >= {lower}, got {value}")
+    if upper is not None and (value < lower or value > upper):
+        raise ValueError(f"{name} must be in [{lower}, {upper}], got {value}")
+    return value
+
+
+def _mask_selects(mask: torch.Tensor | None) -> bool:
+    """Return whether `mask` has any selected entry.
+
+    An empty tensor is unselected from its shape alone.
+
+    Args:
+        mask: Boolean selection, or None.
+
+    Returns:
+        True when at least one entry is selected.
+    """
+    if mask is None or mask.numel() == 0:
+        return False
+    return bool(mask.any())
 
 
 class CompileSafeGRU(nn.Module):
@@ -131,6 +238,26 @@ class DownscaledTransformer(nn.Module):
         return self.out_projector(torch.cat([transformed, inputs], dim=-1))
 
 
+def _count_hidden(module, field_emb, count):
+    """Run the count GRU and broadcast the field state.
+
+    Args:
+        module: Count module with `pos_embedding`, `gru`, and `max_count`.
+        field_emb: Field states `[fields, hidden]`.
+        count: Requested count steps.
+
+    Returns:
+        GRU outputs and the broadcast field state, both `[count, fields, hidden]`.
+    """
+    fields, hidden = field_emb.shape
+    count = min(count, module.max_count)
+    indices = torch.arange(count, device=field_emb.device)
+    positions = module.pos_embedding(indices).unsqueeze(1).expand(count, fields, hidden)
+    output = module.gru(positions, field_emb)
+    broadcast = field_emb.unsqueeze(0).expand_as(output)
+    return output, broadcast
+
+
 class CountLSTM(nn.Module):
     """Count-step embeddings from a learned position and a GRU."""
 
@@ -144,12 +271,7 @@ class CountLSTM(nn.Module):
 
     def forward(self, field_emb, count):
         """Return `(count, fields, hidden)` embeddings."""
-        fields, hidden = field_emb.shape
-        count = min(count, self.max_count)
-        indices = torch.arange(count, device=field_emb.device)
-        positions = self.pos_embedding(indices).unsqueeze(1).expand(count, fields, hidden)
-        output = self.gru(positions, field_emb)
-        broadcast = field_emb.unsqueeze(0).expand_as(output)
+        output, broadcast = _count_hidden(self, field_emb, count)
         return self.projector(torch.cat([output, broadcast], dim=-1))
 
 
@@ -166,12 +288,7 @@ class CountLSTMv2(nn.Module):
 
     def forward(self, field_emb, count):
         """Return `(count, fields, hidden)` embeddings."""
-        fields, _ = field_emb.size()
-        count = min(count, self.max_count)
-        indices = torch.arange(self.max_count, device=field_emb.device)[:count]
-        positions = self.pos_embedding(indices).unsqueeze(1).expand(-1, fields, -1)
-        output = self.gru(positions, field_emb)
-        broadcast = field_emb.unsqueeze(0).expand_as(output)
+        output, broadcast = _count_hidden(self, field_emb, count)
         return self.transformer(output + broadcast)
 
 
@@ -188,8 +305,8 @@ class SpanMarkerV0(nn.Module):
     def forward(self, hidden, span_idx):
         """Return `[B, L, max_width, D]` span states."""
         batch, length, _ = hidden.size()
-        start = _extract_elements(self.project_start(hidden), span_idx[:, :, 0])
-        end = _extract_elements(self.project_end(hidden), span_idx[:, :, 1])
+        start = gather_token_states(self.project_start(hidden), span_idx[:, :, 0], clamp=False)
+        end = gather_token_states(self.project_end(hidden), span_idx[:, :, 1], clamp=False)
         return self.out_project(torch.cat([start, end], dim=-1).relu()).view(batch, length, self.max_width, -1)
 
 
@@ -206,12 +323,37 @@ class SpanRepLayer(nn.Module):  # trf-ignore: TRF026
         return self.span_rep_layer(hidden, span_idx)
 
 
-def _gather(token_embeddings, indices, mask):
-    """Gather rows, clamping pads, then zero them with the mask."""
-    hidden = token_embeddings.shape[-1]
-    safe = indices.clamp(0, token_embeddings.shape[1] - 1)
-    states = token_embeddings.gather(1, safe.unsqueeze(-1).expand(-1, -1, hidden))
-    return states * mask.unsqueeze(-1).to(states.dtype)
+def gather_token_states(states, indices, *, clamp=True, mask=None):
+    """Gather rows from `[B, L, D]` states.
+
+    `indices` is `[B, K]` or `[B, Q, C]`. Clamping and masking follow the caller.
+
+    Args:
+        states: Source states `[B, L, D]`.
+        indices: Row positions.
+        clamp: Clamp indices into the sequence axis.
+        mask: Optional `[B, K]` mask multiplied onto a rank-2 gather.
+
+    Returns:
+        Gathered states. Rank-3 indices keep a `[B, Q, C, D]` layout.
+    """
+    dim = states.shape[-1]
+    length = states.shape[1]
+    trailing = None
+    flat = indices
+    if indices.dim() == 3:
+        batch, queries, count = indices.shape
+        flat = indices.reshape(batch, queries * count)
+        trailing = (queries, count)
+    if clamp:
+        flat = flat.clamp(0, length - 1)
+    gathered = states.gather(1, flat.unsqueeze(-1).expand(-1, -1, dim))
+    if mask is not None:
+        gathered = gathered * mask.unsqueeze(-1).to(gathered.dtype)
+    if trailing is not None:
+        queries, count = trailing
+        gathered = gathered.view(states.shape[0], queries, count, dim)
+    return gathered
 
 
 def _span_indices(length, max_width, device):
@@ -234,39 +376,6 @@ def _rows(states, mask, groups, group):
     return states[keep]
 
 
-def gather_states(states: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-    """Gather `[B, N, D]` states with `[B, Q, C]` indices.
-
-    Args:
-        states: Source states.
-        indices: Per-query candidate positions.
-
-    Returns:
-        Gathered states `[B, Q, C, D]`.
-    """
-    batch, length, dim = states.shape
-    queries, count = indices.shape[1:3]
-    flat = indices.clamp(0, length - 1).reshape(batch, queries * count, 1)
-    flat = flat.expand(batch, queries * count, dim)
-    return states.gather(1, flat).view(batch, queries, count, dim)
-
-
-def gather_rows(states: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-    """Gather `[B, N, D]` states with `[B, K]` indices.
-
-    Args:
-        states: Source states.
-        indices: Row positions.
-
-    Returns:
-        Gathered states `[B, K, D]`.
-    """
-    length = states.shape[1]
-    dim = states.shape[-1]
-    index = indices.clamp(0, length - 1).unsqueeze(-1).expand(-1, -1, dim)
-    return states.gather(1, index)
-
-
 def gather_prefix(prefix: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
     """Gather prefix states for document-level or per-query indices.
 
@@ -278,8 +387,8 @@ def gather_prefix(prefix: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
         Prefix rows aligned with `indices`.
     """
     if indices.dim() == 2:
-        return gather_rows(prefix, indices)
-    return gather_states(prefix, indices)
+        return gather_token_states(prefix, indices)
+    return gather_token_states(prefix, indices)
 
 
 class SpanContentPooler(nn.Module):
@@ -407,9 +516,6 @@ class RotaryBoundaryEmbedding(nn.Module):
         return rotated.flatten(-2).to(states.dtype)
 
 
-MASK_LOGIT = -1.0e4
-
-
 @dataclass
 class BoundaryEncoding:
     """Encoded boundary states and their validity mask.
@@ -499,7 +605,7 @@ def shift_right_with_eos(
     return out
 
 
-class ResidualSwiGLU(nn.Module):
+class ResidualSwiGLU(GradientCheckpointingLayer):
     """Pre-norm residual SwiGLU block.
 
     Args:
@@ -532,7 +638,7 @@ class ResidualSwiGLU(nn.Module):
         return states + self.dropout(update)
 
 
-class BoundaryAttentionBlock(nn.Module):
+class BoundaryAttentionBlock(GradientCheckpointingLayer):
     """Pre-norm self-attention over valid boundary positions.
 
     Args:
@@ -582,14 +688,17 @@ class BoundaryAttentionBlock(nn.Module):
         # Padding rows keep a diagonal key so attention stays finite.
         diagonal = torch.eye(length, dtype=torch.bool, device=states.device)
         allowed = allowed | diagonal.view(1, 1, length, length)
-        attended = F.scaled_dot_product_attention(
+        attended, _ = sdpa_attention_forward(
+            self,
             query,
             key,
             value,
-            attn_mask=allowed,
-            dropout_p=self.dropout_p if self.training else 0.0,
+            attention_mask=allowed,
+            dropout=self.dropout_p if self.training else 0.0,
+            scaling=None,
+            is_causal=False,
         )
-        attended = attended.transpose(1, 2).reshape(batch, length, dim)
+        attended = attended.reshape(batch, length, dim)
         update = self.dropout(self.output_projection(attended))
         return (states + update) * mask.unsqueeze(-1).to(states.dtype)
 
@@ -674,11 +783,6 @@ class BoundaryEncoder(nn.Module):
         return BoundaryEncoding(states=states, mask=mask)
 
 
-def _masked_fill_min(logits: torch.Tensor, keep_mask: torch.Tensor) -> torch.Tensor:
-    """Replace rejected logits with a finite sentinel."""
-    return logits.masked_fill(~keep_mask, MASK_LOGIT)
-
-
 class BoundaryQueryHead(nn.Module):
     """Score start, end, and inside positions for every query.
 
@@ -744,9 +848,9 @@ class BoundaryQueryHead(nn.Module):
 
         boundary_keep = boundary_mask.unsqueeze(1) & query_mask.unsqueeze(-1)
         token_keep = text_mask.unsqueeze(1) & query_mask.unsqueeze(-1)
-        start_logits = _masked_fill_min(start_logits, boundary_keep)
-        end_logits = _masked_fill_min(end_logits, boundary_keep)
-        inside_logits = _masked_fill_min(inside_logits, token_keep)
+        start_logits = mask_invalid_logits(start_logits, boundary_keep)
+        end_logits = mask_invalid_logits(end_logits, boundary_keep)
+        inside_logits = mask_invalid_logits(inside_logits, token_keep)
 
         inside_for_prefix = inside_logits.masked_fill(~token_keep, 0.0).float()
         valid_count = token_keep.sum(-1, keepdim=True).clamp_min(1)
@@ -767,9 +871,6 @@ class BoundaryQueryHead(nn.Module):
             inside_prefix=inside_prefix,
             inside_prefix_mean=inside_mean,
         )
-
-
-MASK_LOGIT = -1.0e4
 
 
 @dataclass
@@ -916,120 +1017,119 @@ def merge_running_topk(
     return top_scores, top_indices
 
 
-def _score_ends_blockwise(
-    sq: torch.Tensor,
-    end_proj_all: torch.Tensor,
-    start_indices: torch.Tensor,
-    start_scores: torch.Tensor,
-    start_valid: torch.Tensor,
+def blockwise_pair_scores(
+    gated: torch.Tensor,
+    projected: torch.Tensor,
+    anchor_indices: torch.Tensor,
+    anchor_scores: torch.Tensor,
+    anchor_valid: torch.Tensor,
     boundary_mask: torch.Tensor,
     query_mask: torch.Tensor,
-    end_marginals: torch.Tensor,
+    other_marginals: torch.Tensor,
     block_size: int,
     top_k: int,
     scale: float,
+    *,
+    direction: Literal["ends", "starts"],
 ) -> tuple[torch.Tensor, torch.Tensor, int, int]:
-    """Stream end blocks and keep the top ends after each selected start.
+    """Stream endpoint blocks and keep the top partners of each anchor.
+
+    Ends must fall after the selected start. Starts must fall before the selected end.
+    The einsum operand order is fixed.
 
     Args:
-        sq: Gated start states `[B, Q, K, D]`.
-        end_proj_all: Projected end states `[B, N, D]`.
-        start_indices: Selected start positions `[B, Q, K]`.
-        start_scores: Selected start scores `[B, Q, K]`.
-        start_valid: Real start slots `[B, Q, K]`.
+        gated: Gated anchor states `[B, Q, K, D]`.
+        projected: Projected partner states `[B, N, D]`.
+        anchor_indices: Selected anchor positions `[B, Q, K]`.
+        anchor_scores: Selected anchor scores `[B, Q, K]`.
+        anchor_valid: Real anchor slots `[B, Q, K]`.
         boundary_mask: Valid boundaries `[B, N]`.
         query_mask: Valid queries `[B, Q]`.
-        end_marginals: End marginals `[B, Q, N]`.
-        block_size: End positions scored together.
-        top_k: Ends retained per start.
+        other_marginals: Partner marginals `[B, Q, N]`.
+        block_size: Partner positions scored together.
+        top_k: Partners retained per anchor.
         scale: Compatibility scale.
+        direction: `"ends"` scores ends after starts. `"starts"` scores starts before ends.
 
     Returns:
-        Top scores, end indices, scored elements, and the largest block.
+        Top scores, partner indices, scored elements, and the largest block.
     """
-    batch, queries, _k, _dim = sq.shape
-    n_boundaries = end_proj_all.shape[1]
-    device = sq.device
-    top_scores = torch.full((batch, queries, _k, top_k), MASK_LOGIT, device=device, dtype=sq.dtype)
-    top_idx = torch.zeros((batch, queries, _k, top_k), device=device, dtype=torch.long)
+    batch, queries, anchors, _dim = gated.shape
+    n_boundaries = projected.shape[1]
+    device = gated.device
+    top_scores = torch.full((batch, queries, anchors, top_k), MASK_LOGIT, device=device, dtype=gated.dtype)
+    top_idx = torch.zeros((batch, queries, anchors, top_k), device=device, dtype=torch.long)
     conditional_elems = 0
     max_block_elems = 0
     for start in range(0, n_boundaries, block_size):
         stop = min(start + block_size, n_boundaries)
         width = stop - start
-        block_compat = torch.einsum("bqkd,bed->bqke", sq, end_proj_all[:, start:stop]) * scale
-        block = block_compat + end_marginals[:, :, start:stop].unsqueeze(2) + start_scores.unsqueeze(-1)
-        end_index = torch.arange(start, stop, device=device)
+        block_compat = torch.einsum("bqkd,bed->bqke", gated, projected[:, start:stop]) * scale
+        block = block_compat + other_marginals[:, :, start:stop].unsqueeze(2) + anchor_scores.unsqueeze(-1)
+        block_index = torch.arange(start, stop, device=device)
+        if direction == "ends":
+            ordered = block_index.view(1, 1, 1, width) > anchor_indices.unsqueeze(-1)
+        else:
+            ordered = block_index.view(1, 1, 1, width) < anchor_indices.unsqueeze(-1)
         keep = (
             boundary_mask[:, start:stop].view(batch, 1, 1, width)
             & query_mask.view(batch, queries, 1, 1)
-            & (end_index.view(1, 1, 1, width) > start_indices.unsqueeze(-1))
-            & start_valid.unsqueeze(-1)
+            & ordered
+            & anchor_valid.unsqueeze(-1)
         )
         block = block.masked_fill(~keep, MASK_LOGIT)
-        block_idx = end_index.view(1, 1, 1, width).expand(batch, queries, _k, width)
+        block_idx = block_index.view(1, 1, 1, width).expand(batch, queries, anchors, width)
         top_scores, top_idx = merge_running_topk(top_scores, top_idx, block, block_idx, top_k)
-        conditional_elems += batch * queries * _k * width
-        max_block_elems = max(max_block_elems, batch * queries * _k * width)
+        conditional_elems += batch * queries * anchors * width
+        max_block_elems = max(max_block_elems, batch * queries * anchors * width)
     return top_scores, top_idx, conditional_elems, max_block_elems
 
 
-def _score_starts_blockwise(
-    eq: torch.Tensor,
-    start_proj_all: torch.Tensor,
-    end_indices: torch.Tensor,
-    end_scores: torch.Tensor,
-    end_valid: torch.Tensor,
-    boundary_mask: torch.Tensor,
-    query_mask: torch.Tensor,
-    start_marginals: torch.Tensor,
-    block_size: int,
-    top_k: int,
-    scale: float,
-) -> tuple[torch.Tensor, torch.Tensor, int, int]:
-    """Stream start blocks and keep the top starts before each selected end.
+def dedup_packed_keys(keys, scores, valid, capacity, invalid_key, *aligned):
+    """Keep the highest-priority copy of each packed key.
+
+    Three stable argsorts order by score, then by key, then by the first copy's score.
+    Aligned tensors follow the same permutation.
 
     Args:
-        eq: Gated end states `[B, Q, K, D]`.
-        start_proj_all: Projected start states `[B, N, D]`.
-        end_indices: Selected end positions `[B, Q, K]`.
-        end_scores: Selected end scores `[B, Q, K]`.
-        end_valid: Real end slots `[B, Q, K]`.
-        boundary_mask: Valid boundaries `[B, N]`.
-        query_mask: Valid queries `[B, Q]`.
-        start_marginals: Start marginals `[B, Q, N]`.
-        block_size: Start positions scored together.
-        top_k: Starts retained per end.
-        scale: Compatibility scale.
+        keys: Packed keys.
+        scores: Priority scores.
+        valid: Real keys.
+        capacity: Output width.
+        invalid_key: Sentinel written over invalid keys.
+        aligned: Extra tensors permuted with `keys`.
 
     Returns:
-        Top scores, start indices, scored elements, and the largest block.
+        Selected keys, their validity mask, and each aligned tensor, padded to `capacity`.
     """
-    batch, queries, _k, _dim = eq.shape
-    n_boundaries = start_proj_all.shape[1]
-    device = eq.device
-    top_scores = torch.full((batch, queries, _k, top_k), MASK_LOGIT, device=device, dtype=eq.dtype)
-    top_idx = torch.zeros((batch, queries, _k, top_k), device=device, dtype=torch.long)
-    conditional_elems = 0
-    max_block_elems = 0
-    for start in range(0, n_boundaries, block_size):
-        stop = min(start + block_size, n_boundaries)
-        width = stop - start
-        block_compat = torch.einsum("bqkd,bed->bqke", eq, start_proj_all[:, start:stop]) * scale
-        block = block_compat + start_marginals[:, :, start:stop].unsqueeze(2) + end_scores.unsqueeze(-1)
-        start_index = torch.arange(start, stop, device=device)
-        keep = (
-            boundary_mask[:, start:stop].view(batch, 1, 1, width)
-            & query_mask.view(batch, queries, 1, 1)
-            & (start_index.view(1, 1, 1, width) < end_indices.unsqueeze(-1))
-            & end_valid.unsqueeze(-1)
-        )
-        block = block.masked_fill(~keep, MASK_LOGIT)
-        block_idx = start_index.view(1, 1, 1, width).expand(batch, queries, _k, width)
-        top_scores, top_idx = merge_running_topk(top_scores, top_idx, block, block_idx, top_k)
-        conditional_elems += batch * queries * _k * width
-        max_block_elems = max(max_block_elems, batch * queries * _k * width)
-    return top_scores, top_idx, conditional_elems, max_block_elems
+    keys = torch.where(valid, keys, torch.full_like(keys, invalid_key))
+    scores = torch.where(valid, scores, torch.full_like(scores, MASK_LOGIT))
+    by_score = torch.argsort(scores, dim=-1, descending=True, stable=True)
+    keys = torch.gather(keys, -1, by_score)
+    scores = torch.gather(scores, -1, by_score)
+    valid = torch.gather(valid, -1, by_score)
+    aligned = tuple(torch.gather(item, -1, by_score) for item in aligned)
+    by_key = torch.argsort(keys, dim=-1, stable=True)
+    keys = torch.gather(keys, -1, by_key)
+    scores = torch.gather(scores, -1, by_key)
+    valid = torch.gather(valid, -1, by_key)
+    aligned = tuple(torch.gather(item, -1, by_key) for item in aligned)
+    first = torch.ones_like(valid)
+    first[..., 1:] = keys[..., 1:] != keys[..., :-1]
+    keep = valid & first
+    scores = torch.where(keep, scores, torch.full_like(scores, MASK_LOGIT))
+    order = torch.argsort(scores, dim=-1, descending=True, stable=True)
+    take = min(capacity, order.shape[-1])
+    order = order[..., :take]
+    selected_keys = torch.gather(keys, -1, order)
+    selected_valid = torch.gather(keep, -1, order)
+    selected_aligned = tuple(torch.gather(item, -1, order) for item in aligned)
+    if take < capacity:
+        pad = capacity - take
+        selected_keys = F.pad(selected_keys, (0, pad))
+        selected_valid = F.pad(selected_valid, (0, pad), value=False)
+        selected_aligned = tuple(F.pad(item, (0, pad), value=False) for item in selected_aligned)
+    return (selected_keys, selected_valid, *selected_aligned)
 
 
 def assemble_candidates(
@@ -1098,37 +1198,14 @@ def assemble_candidates(
         valid = torch.cat((valid, gvalid), dim=-1)
         is_gold = torch.cat((is_gold, gvalid), dim=-1)
 
-    by_score = torch.argsort(scores, dim=-1, descending=True, stable=True)
-    keys = torch.gather(keys, -1, by_score)
-    scores = torch.gather(scores, -1, by_score)
-    valid = torch.gather(valid, -1, by_score)
-    is_gold = torch.gather(is_gold, -1, by_score)
-    by_key = torch.argsort(keys, dim=-1, stable=True)
-    keys = torch.gather(keys, -1, by_key)
-    scores = torch.gather(scores, -1, by_key)
-    valid = torch.gather(valid, -1, by_key)
-    is_gold = torch.gather(is_gold, -1, by_key)
-
-    first = torch.ones_like(valid)
-    first[..., 1:] = keys[..., 1:] != keys[..., :-1]
-    keep = valid & first
-    scores = torch.where(keep, scores, torch.full_like(scores, floor))
-    order = torch.argsort(scores, dim=-1, descending=True, stable=True)
-    take = min(capacity, order.shape[-1])
-    order = order[..., :take]
-    selected_keys = torch.gather(keys, -1, order)
-    selected_valid = torch.gather(keep, -1, order)
-    selected_gold = torch.gather(is_gold, -1, order) & selected_valid
-
+    selected_keys, selected_valid, selected_gold = dedup_packed_keys(
+        keys, scores, valid, capacity, invalid_key, is_gold
+    )
+    selected_gold = selected_gold & selected_valid
     starts = torch.div(selected_keys, n_boundaries, rounding_mode="floor")
     ends = selected_keys - starts * n_boundaries
     indices = torch.stack((starts, ends), dim=-1)
     indices = torch.where(selected_valid.unsqueeze(-1), indices, torch.zeros_like(indices))
-    if take < capacity:
-        pad = capacity - take
-        indices = F.pad(indices, (0, 0, 0, pad))
-        selected_valid = F.pad(selected_valid, (0, pad), value=False)
-        selected_gold = F.pad(selected_gold, (0, pad), value=False)
     return indices, selected_valid, selected_gold, pre_keys, pre_valid
 
 
@@ -1208,10 +1285,222 @@ class SparseBoundaryProposer(nn.Module):
         limit = boundary_states.shape[1] - 1
         starts = indices[..., 0].clamp(0, limit)
         ends = indices[..., 1].clamp(0, limit)
-        start_states = gather_states(start_all, starts) * gate.unsqueeze(2)
-        end_states = gather_states(end_all, ends)
+        start_states = gather_token_states(start_all, starts) * gate.unsqueeze(2)
+        end_states = gather_token_states(end_all, ends)
         compatibility = (start_states * end_states).sum(-1) / math.sqrt(self.boundary_dim)
         return torch.where(valid_mask, compatibility, torch.zeros_like(compatibility))
+
+    def _directional_pair_lists(
+        self,
+        select_start,
+        select_end,
+        select_gate,
+        select_start_logits,
+        select_end_logits,
+        boundary_mask,
+        query_mask,
+        b_valid,
+        start_k,
+        end_k,
+        end_block,
+        scale,
+        batch,
+        queries,
+        settings,
+    ):
+        """Build forward and optional backward pair lists.
+
+        Args:
+            select_start: Detached start states used for proposal search.
+            select_end: Detached end states used for proposal search.
+            select_gate: Detached query gate.
+            select_start_logits: Detached start logits.
+            select_end_logits: Detached end logits.
+            boundary_mask: Valid boundary positions.
+            query_mask: Valid queries.
+            b_valid: Positions eligible for top-k selection.
+            start_k: Starts kept per query.
+            end_k: Ends kept per query.
+            end_block: Block size for the pair scan.
+            scale: Compatibility scale.
+            batch: Batch size.
+            queries: Query count.
+            settings: Boundary proposal settings.
+
+        Returns:
+            Lists of start indices, end indices, scores, and validity masks.
+        """
+        with torch.no_grad():
+            st_scores, st_idx, st_valid = select_top_boundaries(select_start_logits, b_valid, start_k)
+            sq = gather_token_states(select_start, st_idx) * select_gate.unsqueeze(2)
+            fwd_scores, fwd_end_idx, _cond_e1, _maxe1 = blockwise_pair_scores(
+                sq,
+                select_end,
+                st_idx,
+                st_scores,
+                st_valid,
+                boundary_mask,
+                query_mask,
+                select_end_logits,
+                end_block,
+                settings.ends_per_start,
+                scale,
+                direction="ends",
+            )
+        fwd_start = st_idx.unsqueeze(-1).expand(-1, -1, -1, settings.ends_per_start)
+        fwd_pairs_s = fwd_start.reshape(batch, queries, -1)
+        fwd_pairs_e = fwd_end_idx.reshape(batch, queries, -1)
+        fwd_pairs_sc = fwd_scores.reshape(batch, queries, -1)
+        fwd_pairs_valid = (
+            st_valid.unsqueeze(-1)
+            & query_mask.view(batch, queries, 1, 1)
+            & boundary_mask.gather(1, fwd_end_idx.reshape(batch, -1).clamp(0, boundary_mask.shape[1] - 1)).view_as(
+                fwd_end_idx
+            )
+            & (fwd_end_idx > fwd_start)
+        ).reshape(batch, queries, -1)
+
+        pair_starts = [fwd_pairs_s]
+        pair_ends = [fwd_pairs_e]
+        pair_scores = [fwd_pairs_sc]
+        pair_valid = [fwd_pairs_valid]
+        if settings.bidirectional_proposals:
+            with torch.no_grad():
+                en_scores, en_idx, en_valid = select_top_boundaries(select_end_logits, b_valid, end_k)
+                eq = gather_token_states(select_end, en_idx) * select_gate.unsqueeze(2)
+                bwd_scores, bwd_start_idx, _cond_e2, _maxe2 = blockwise_pair_scores(
+                    eq,
+                    select_start,
+                    en_idx,
+                    en_scores,
+                    en_valid,
+                    boundary_mask,
+                    query_mask,
+                    select_start_logits,
+                    end_block,
+                    settings.starts_per_end,
+                    scale,
+                    direction="starts",
+                )
+            bwd_end = en_idx.unsqueeze(-1).expand(-1, -1, -1, settings.starts_per_end)
+            pair_starts.append(bwd_start_idx.reshape(batch, queries, -1))
+            pair_ends.append(bwd_end.reshape(batch, queries, -1))
+            pair_scores.append(bwd_scores.reshape(batch, queries, -1))
+            pair_valid.append(
+                (
+                    en_valid.unsqueeze(-1)
+                    & query_mask.view(batch, queries, 1, 1)
+                    & boundary_mask.gather(
+                        1,
+                        bwd_start_idx.reshape(batch, -1).clamp(0, boundary_mask.shape[1] - 1),
+                    ).view_as(bwd_start_idx)
+                    & (bwd_end > bwd_start_idx)
+                ).reshape(batch, queries, -1)
+            )
+        return pair_starts, pair_ends, pair_scores, pair_valid
+
+    def _assemble_scored_proposals(
+        self,
+        pair_starts,
+        pair_ends,
+        pair_scores,
+        pair_valid,
+        query_mask,
+        capacity,
+        n_boundaries,
+        gold_pairs,
+        gold_mask,
+        gold_injection_prob,
+        generator,
+        training,
+        start_proj_all,
+        end_proj_all,
+        scorer_start_states,
+        scorer_end_states,
+        gate,
+        scale,
+        start_logits,
+        end_logits,
+        return_proposal_logits,
+    ):
+        """Deduplicate pair lists and score the kept spans.
+
+        Args:
+            pair_starts: Start-index lists.
+            pair_ends: End-index lists.
+            pair_scores: Proposal-score lists.
+            pair_valid: Validity-mask lists.
+            query_mask: Valid queries.
+            capacity: Candidate budget.
+            n_boundaries: Boundary count.
+            gold_pairs: Optional gold spans.
+            gold_mask: Mask for `gold_pairs`.
+            gold_injection_prob: Gold injection probability.
+            generator: Optional RNG.
+            training: Whether gold injection is active.
+            start_proj_all: Start projections.
+            end_proj_all: End projections.
+            scorer_start_states: Optional scorer start states.
+            scorer_end_states: Optional scorer end states.
+            gate: Query gate.
+            scale: Compatibility scale.
+            start_logits: Start marginals.
+            end_logits: End marginals.
+            return_proposal_logits: Keep proposal logits on the result.
+
+        Returns:
+            Assembled boundary proposals.
+        """
+        all_s = torch.cat(pair_starts, dim=-1)
+        all_e = torch.cat(pair_ends, dim=-1)
+        all_sc = torch.cat(pair_scores, dim=-1).detach()
+        all_valid = torch.cat(pair_valid, dim=-1)
+        with torch.no_grad():
+            out_idx, out_valid, out_gold, _pre_keys, _pre_valid = assemble_candidates(
+                all_s,
+                all_e,
+                all_sc,
+                all_valid,
+                query_mask,
+                capacity=capacity,
+                n_boundaries=n_boundaries,
+                gold_pairs=gold_pairs if training else None,
+                gold_mask=gold_mask if training else None,
+                gold_injection_prob=gold_injection_prob,
+                generator=generator,
+            )
+
+        si = out_idx[..., 0]
+        ej = out_idx[..., 1]
+        score_start_selected = score_end_selected = None
+        if scorer_start_states is not None and scorer_end_states is not None:
+            prop_dim = start_proj_all.shape[-1]
+            score_dim = scorer_start_states.shape[-1]
+            start_all = torch.cat((start_proj_all, scorer_start_states), dim=-1)
+            end_all = torch.cat((end_proj_all, scorer_end_states), dim=-1)
+            g_s, score_start_selected = gather_token_states(start_all, si).split((prop_dim, score_dim), dim=-1)
+            g_e, score_end_selected = gather_token_states(end_all, ej).split((prop_dim, score_dim), dim=-1)
+        else:
+            g_s = gather_token_states(start_proj_all, si)
+            g_e = gather_token_states(end_proj_all, ej)
+        g_s = g_s * gate.unsqueeze(2)
+        compat = (g_s * g_e).sum(-1) * scale
+        out_logits = None
+        if self.training or return_proposal_logits:
+            sm = torch.gather(start_logits, 2, si.clamp(0, start_logits.shape[2] - 1))
+            em = torch.gather(end_logits, 2, ej.clamp(0, end_logits.shape[2] - 1))
+            logits_diff = compat + sm + em
+            out_logits = torch.where(out_valid, logits_diff, torch.full_like(logits_diff, MASK_LOGIT))
+        out_compat = torch.where(out_valid, compat, torch.zeros_like(compat))
+        return BoundaryProposals(
+            indices=out_idx,
+            logits=out_logits,
+            valid_mask=out_valid,
+            gold_mask=out_gold if training else None,
+            compat_logits=out_compat,
+            score_start_states=score_start_selected,
+            score_end_states=score_end_selected,
+        )
 
     def forward(
         self,
@@ -1252,8 +1541,8 @@ class SparseBoundaryProposer(nn.Module):
             bucket=settings.boundary_top_k_bucket,
         )
         pair_elements = batch * queries * start_k * n_boundaries
-        use_vectorized = settings.export_mode == "vectorized" or (
-            settings.export_mode == "auto" and pair_elements <= settings.vectorized_pair_elements
+        use_vectorized = settings.export_mode == ExportMode.VECTORIZED or (
+            settings.export_mode == ExportMode.AUTO and pair_elements <= settings.vectorized_pair_elements
         )
         end_block = n_boundaries if use_vectorized else settings.end_block_size
         b_valid = boundary_mask.unsqueeze(1) & query_mask.unsqueeze(-1)
@@ -1265,141 +1554,46 @@ class SparseBoundaryProposer(nn.Module):
         select_start_logits = start_logits.detach()
         select_end_logits = end_logits.detach()
 
-        with torch.no_grad():
-            st_scores, st_idx, st_valid = select_top_boundaries(select_start_logits, b_valid, start_k)
-            sq = gather_states(select_start, st_idx) * select_gate.unsqueeze(2)
-            fwd_scores, fwd_end_idx, cond_e1, maxe1 = _score_ends_blockwise(
-                sq,
-                select_end,
-                st_idx,
-                st_scores,
-                st_valid,
-                boundary_mask,
-                query_mask,
-                select_end_logits,
-                end_block,
-                settings.ends_per_start,
-                scale,
-            )
-        fwd_start = st_idx.unsqueeze(-1).expand(-1, -1, -1, settings.ends_per_start)
-        fwd_pairs_s = fwd_start.reshape(batch, queries, -1)
-        fwd_pairs_e = fwd_end_idx.reshape(batch, queries, -1)
-        fwd_pairs_sc = fwd_scores.reshape(batch, queries, -1)
-        fwd_pairs_valid = (
-            st_valid.unsqueeze(-1)
-            & query_mask.view(batch, queries, 1, 1)
-            & boundary_mask.gather(1, fwd_end_idx.reshape(batch, -1).clamp(0, boundary_mask.shape[1] - 1)).view_as(
-                fwd_end_idx
-            )
-            & (fwd_end_idx > fwd_start)
-        ).reshape(batch, queries, -1)
-
-        pair_starts = [fwd_pairs_s]
-        pair_ends = [fwd_pairs_e]
-        pair_scores = [fwd_pairs_sc]
-        pair_valid = [fwd_pairs_valid]
-        cond_e2 = 0
-        maxe2 = 0
-        en_idx = en_valid = None
-        if settings.bidirectional_proposals:
-            with torch.no_grad():
-                en_scores, en_idx, en_valid = select_top_boundaries(select_end_logits, b_valid, end_k)
-                eq = gather_states(select_end, en_idx) * select_gate.unsqueeze(2)
-                bwd_scores, bwd_start_idx, cond_e2, maxe2 = _score_starts_blockwise(
-                    eq,
-                    select_start,
-                    en_idx,
-                    en_scores,
-                    en_valid,
-                    boundary_mask,
-                    query_mask,
-                    select_start_logits,
-                    end_block,
-                    settings.starts_per_end,
-                    scale,
-                )
-            bwd_end = en_idx.unsqueeze(-1).expand(-1, -1, -1, settings.starts_per_end)
-            pair_starts.append(bwd_start_idx.reshape(batch, queries, -1))
-            pair_ends.append(bwd_end.reshape(batch, queries, -1))
-            pair_scores.append(bwd_scores.reshape(batch, queries, -1))
-            pair_valid.append(
-                (
-                    en_valid.unsqueeze(-1)
-                    & query_mask.view(batch, queries, 1, 1)
-                    & boundary_mask.gather(
-                        1,
-                        bwd_start_idx.reshape(batch, -1).clamp(0, boundary_mask.shape[1] - 1),
-                    ).view_as(bwd_start_idx)
-                    & (bwd_end > bwd_start_idx)
-                ).reshape(batch, queries, -1)
-            )
-
-        all_s = torch.cat(pair_starts, dim=-1)
-        all_e = torch.cat(pair_ends, dim=-1)
-        all_sc = torch.cat(pair_scores, dim=-1).detach()
-        all_valid = torch.cat(pair_valid, dim=-1)
-        with torch.no_grad():
-            out_idx, out_valid, out_gold, pre_keys, pre_valid = assemble_candidates(
-                all_s,
-                all_e,
-                all_sc,
-                all_valid,
-                query_mask,
-                capacity=capacity,
-                n_boundaries=n_boundaries,
-                gold_pairs=gold_pairs if training else None,
-                gold_mask=gold_mask if training else None,
-                gold_injection_prob=gold_injection_prob,
-                generator=generator,
-            )
-
-        si = out_idx[..., 0]
-        ej = out_idx[..., 1]
-        score_start_selected = score_end_selected = None
-        if scorer_start_states is not None and scorer_end_states is not None:
-            prop_dim = start_proj_all.shape[-1]
-            score_dim = scorer_start_states.shape[-1]
-            start_all = torch.cat((start_proj_all, scorer_start_states), dim=-1)
-            end_all = torch.cat((end_proj_all, scorer_end_states), dim=-1)
-            g_s, score_start_selected = gather_states(start_all, si).split((prop_dim, score_dim), dim=-1)
-            g_e, score_end_selected = gather_states(end_all, ej).split((prop_dim, score_dim), dim=-1)
-        else:
-            g_s = gather_states(start_proj_all, si)
-            g_e = gather_states(end_proj_all, ej)
-        g_s = g_s * gate.unsqueeze(2)
-        compat = (g_s * g_e).sum(-1) * scale
-        out_logits = None
-        if self.training or return_proposal_logits:
-            sm = torch.gather(start_logits, 2, si.clamp(0, start_logits.shape[2] - 1))
-            em = torch.gather(end_logits, 2, ej.clamp(0, end_logits.shape[2] - 1))
-            logits_diff = compat + sm + em
-            out_logits = torch.where(out_valid, logits_diff, torch.full_like(logits_diff, MASK_LOGIT))
-        out_compat = torch.where(out_valid, compat, torch.zeros_like(compat))
-        return BoundaryProposals(
-            indices=out_idx,
-            logits=out_logits,
-            valid_mask=out_valid,
-            gold_mask=out_gold if training else None,
-            compat_logits=out_compat,
-            score_start_states=score_start_selected,
-            score_end_states=score_end_selected,
+        pair_starts, pair_ends, pair_scores, pair_valid = self._directional_pair_lists(
+            select_start,
+            select_end,
+            select_gate,
+            select_start_logits,
+            select_end_logits,
+            boundary_mask,
+            query_mask,
+            b_valid,
+            start_k,
+            end_k,
+            end_block,
+            scale,
+            batch,
+            queries,
+            settings,
         )
-
-
-MASK_LOGIT = -1.0e4
-
-
-def gather_boundary_states(boundary_states: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-    """Gather boundary states at per-query candidate indices.
-
-    Args:
-        boundary_states: States `[B, N, D]`.
-        indices: Positions `[B, Q, C]`.
-
-    Returns:
-        Gathered states `[B, Q, C, D]`.
-    """
-    return gather_states(boundary_states, indices)
+        return self._assemble_scored_proposals(
+            pair_starts,
+            pair_ends,
+            pair_scores,
+            pair_valid,
+            query_mask,
+            capacity,
+            n_boundaries,
+            gold_pairs,
+            gold_mask,
+            gold_injection_prob,
+            generator,
+            training,
+            start_proj_all,
+            end_proj_all,
+            scorer_start_states,
+            scorer_end_states,
+            gate,
+            scale,
+            start_logits,
+            end_logits,
+            return_proposal_logits,
+        )
 
 
 def interval_prefix_score(
@@ -1428,6 +1622,28 @@ def interval_prefix_score(
     return interval
 
 
+def span_features(
+    starts: torch.Tensor, ends: torch.Tensor, lengths: torch.Tensor, *, dtype: torch.dtype
+) -> torch.Tensor:
+    """Length, relative length, and inverse square-root length.
+
+    Args:
+        starts: Inclusive start positions.
+        ends: Exclusive end positions.
+        lengths: Token counts broadcastable to `ends - starts`.
+        dtype: Feature dtype. The pool scorer keeps its activation dtype.
+
+    Returns:
+        Features with a trailing size of 3.
+    """
+    length = (ends - starts).clamp(min=1).to(dtype)
+    text_length = lengths.to(dtype)
+    while text_length.dim() < length.dim():
+        text_length = text_length.unsqueeze(-1)
+    text_length = text_length.clamp(min=1)
+    return torch.stack((torch.log1p(length), length / text_length, torch.rsqrt(length)), dim=-1)
+
+
 def continuous_length_features(
     starts: torch.Tensor,
     ends: torch.Tensor,
@@ -1441,28 +1657,9 @@ def continuous_length_features(
         text_lengths: Token counts `[B]`.
 
     Returns:
-        Features `[B, Q, C, 3]`.
+        Features `[B, Q, C, 3]` in float32.
     """
-    length = (ends - starts).clamp(min=1).float()
-    batch = starts.shape[0]
-    text_length = text_lengths.view(batch, 1, 1).float().clamp(min=1)
-    return torch.stack(
-        (torch.log1p(length), length / text_length, torch.rsqrt(length)),
-        dim=-1,
-    )
-
-
-def mask_invalid_candidate_logits(logits: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
-    """Replace invalid candidate logits with a finite sentinel.
-
-    Args:
-        logits: Candidate scores.
-        valid_mask: True for real candidates.
-
-    Returns:
-        Masked logits.
-    """
-    return logits.masked_fill(~valid_mask, MASK_LOGIT)
+    return span_features(starts, ends, text_lengths, dtype=torch.float32)
 
 
 class SparseBoundaryPairScorer(nn.Module):
@@ -1609,8 +1806,8 @@ class SparseBoundaryPairScorer(nn.Module):
             e_proj = self.dropout(proposals.score_end_states)
         else:
             start_all, end_all = self.project_endpoints(boundary_states)
-            s_proj = self.dropout(gather_boundary_states(start_all, starts))
-            e_proj = self.dropout(gather_boundary_states(end_all, ends))
+            s_proj = self.dropout(gather_token_states(start_all, starts))
+            e_proj = self.dropout(gather_token_states(end_all, ends))
         gate = torch.sigmoid(self.query_gate(query_states))
         if self.enable_rotary_endpoints:
             gate = gate.repeat_interleave(2, dim=-1)
@@ -1657,10 +1854,8 @@ class SparseBoundaryPairScorer(nn.Module):
         feats = continuous_length_features(starts, ends, text_lengths)
         length_coeff = self.length_query_projection(query_states).unsqueeze(2)
         score = score + (feats.to(length_coeff.dtype) * length_coeff).sum(-1)
-        return mask_invalid_candidate_logits(score, valid)
+        return mask_invalid_logits(score, valid)
 
-
-MASK_LOGIT = -1.0e4
 
 OVERLAP_IDENTICAL = 0
 OVERLAP_NESTED_INSIDE = 1
@@ -1751,32 +1946,7 @@ def _deduplicate_pool(
         Selected keys and their validity mask, padded to `capacity`.
     """
     invalid_key = n_boundaries * n_boundaries
-    keys = torch.where(valid, keys, torch.full_like(keys, invalid_key))
-    scores = torch.where(valid, scores, torch.full_like(scores, MASK_LOGIT))
-    by_score = torch.argsort(scores, dim=-1, descending=True, stable=True)
-    keys = keys.gather(-1, by_score)
-    scores = scores.gather(-1, by_score)
-    valid = valid.gather(-1, by_score)
-    by_key = torch.argsort(keys, dim=-1, stable=True)
-    keys = keys.gather(-1, by_key)
-    scores = scores.gather(-1, by_key)
-    valid = valid.gather(-1, by_key)
-    first = torch.ones_like(valid)
-    first[..., 1:] = keys[..., 1:] != keys[..., :-1]
-    keep = valid & first
-    order = torch.argsort(
-        torch.where(keep, scores, torch.full_like(scores, MASK_LOGIT)),
-        dim=-1,
-        descending=True,
-        stable=True,
-    )[..., :capacity]
-    selected_keys = keys.gather(-1, order)
-    selected_valid = keep.gather(-1, order)
-    if selected_keys.shape[-1] < capacity:
-        pad = capacity - selected_keys.shape[-1]
-        selected_keys = F.pad(selected_keys, (0, pad))
-        selected_valid = F.pad(selected_valid, (0, pad), value=False)
-    return selected_keys, selected_valid
+    return dedup_packed_keys(keys, scores, valid, capacity, invalid_key)
 
 
 class DocumentCandidatePool(nn.Module):
@@ -1803,6 +1973,162 @@ class DocumentCandidatePool(nn.Module):
         self.min_pool_per_query = min_pool_per_query
         self.start_projection = nn.Linear(boundary_dim, boundary_dim)
         self.end_projection = nn.Linear(boundary_dim, boundary_dim)
+
+    def _quota_and_gold_keys(
+        self,
+        pair_s,
+        pair_e,
+        pair_valid,
+        compat,
+        union_pair_score,
+        start_logits,
+        end_logits,
+        query_mask,
+        n_boundaries,
+        gold_pairs,
+        gold_mask,
+        gold_injection_prob,
+        generator,
+        batch,
+        queries,
+        device,
+    ):
+        """Reserve a per-query quota, then append sampled gold spans.
+
+        Args:
+            pair_s: Cartesian start indices.
+            pair_e: Cartesian end indices.
+            pair_valid: Valid cartesian pairs.
+            compat: Pair compatibility.
+            union_pair_score: Document-level pair score.
+            start_logits: Start marginals.
+            end_logits: End marginals.
+            query_mask: Valid queries.
+            n_boundaries: Boundary count.
+            gold_pairs: Optional gold spans.
+            gold_mask: Mask for `gold_pairs`.
+            gold_injection_prob: Fraction of gold spans forced into the pool.
+            generator: Generator for partial gold injection.
+            batch: Batch size.
+            queries: Query count.
+            device: Device for the rank bonus.
+
+        Returns:
+            Packed keys, scores, and a validity mask.
+        """
+        quota = min(self.min_pool_per_query, pair_s.shape[-1])
+        quota_keys = pair_s.new_zeros((batch, 0))
+        quota_scores = union_pair_score.new_zeros((batch, 0))
+        quota_valid = pair_valid.new_zeros((batch, 0))
+        if quota:
+            s_idx = pair_s.clamp(0, start_logits.shape[2] - 1).unsqueeze(1).expand(batch, queries, -1)
+            e_idx = pair_e.clamp(0, end_logits.shape[2] - 1).unsqueeze(1).expand(batch, queries, -1)
+            per_query = start_logits.gather(2, s_idx) + end_logits.gather(2, e_idx) + compat.unsqueeze(1)
+            per_query_valid = pair_valid.unsqueeze(1) & query_mask.unsqueeze(-1)
+            ranked = torch.argsort(
+                per_query.masked_fill(~per_query_valid, MASK_LOGIT),
+                dim=-1,
+                descending=True,
+                stable=True,
+            )[..., :quota]
+            quota_s = s_idx.gather(-1, ranked)
+            quota_e = e_idx.gather(-1, ranked)
+            quota_valid = per_query_valid.gather(-1, ranked).reshape(batch, -1)
+            quota_keys = (quota_s * n_boundaries + quota_e).reshape(batch, -1)
+            rank_bonus = torch.arange(quota, 0, -1, device=device, dtype=union_pair_score.dtype)
+            quota_scores = (
+                union_pair_score.new_full((batch, queries, quota), -MASK_LOGIT * 0.5) + rank_bonus.view(1, 1, quota)
+            ).reshape(batch, -1)
+
+        global_keys = pair_s * n_boundaries + pair_e
+        all_keys = torch.cat((quota_keys, global_keys), -1)
+        all_scores = torch.cat((quota_scores, union_pair_score.detach()), -1)
+        all_valid = torch.cat((quota_valid, pair_valid), -1)
+        if gold_pairs is not None and gold_mask is not None:
+            gvalid = gold_mask & query_mask.unsqueeze(-1)
+            oob = (
+                (gold_pairs[..., 0] >= n_boundaries) | (gold_pairs[..., 1] >= n_boundaries) | (gold_pairs < 0).any(-1)
+            )
+            gvalid = gvalid & ~oob
+            if gold_injection_prob <= 0.0:
+                gvalid = torch.zeros_like(gvalid)
+            elif gold_injection_prob < 1.0:
+                sampled = torch.rand(gvalid.shape, device=gvalid.device, generator=generator)
+                gvalid = gvalid & (sampled < gold_injection_prob)
+            safe_gold = gold_pairs.clamp(0, n_boundaries - 1)
+            gkeys = safe_gold[..., 0] * n_boundaries + safe_gold[..., 1]
+            all_keys = torch.cat((all_keys, gkeys.reshape(batch, -1)), -1)
+            all_valid = torch.cat((all_valid, gvalid.reshape(batch, -1)), -1)
+            gold_priority = union_pair_score.new_full((batch, gkeys.shape[1] * gkeys.shape[2]), -MASK_LOGIT)
+            all_scores = torch.cat((all_scores, gold_priority), -1)
+        return all_keys, all_scores, all_valid
+
+    def _pooled_from_keys(
+        self,
+        all_keys,
+        all_scores,
+        all_valid,
+        start_all,
+        end_all,
+        union_start,
+        union_end,
+        n_boundaries,
+        dim,
+        gold_pairs,
+        gold_mask,
+    ):
+        """Deduplicate packed keys and score the kept spans.
+
+        Args:
+            all_keys: Packed span keys.
+            all_scores: Scores aligned with `all_keys`.
+            all_valid: Validity aligned with `all_keys`.
+            start_all: Start projections.
+            end_all: End projections.
+            union_start: Query-union start marginals.
+            union_end: Query-union end marginals.
+            n_boundaries: Boundary count.
+            dim: Boundary width.
+            gold_pairs: Optional gold spans.
+            gold_mask: Mask for `gold_pairs`.
+
+        Returns:
+            A padded document pool.
+        """
+        with torch.no_grad():
+            selected_keys, selected_valid = _deduplicate_pool(
+                all_keys, all_scores, all_valid, self.pool_size, n_boundaries
+            )
+        selected_keys = torch.where(selected_valid, selected_keys, torch.zeros_like(selected_keys))
+        selected_s = torch.div(selected_keys, n_boundaries, rounding_mode="floor")
+        selected_e = selected_keys - selected_s * n_boundaries
+        indices = torch.stack((selected_s, selected_e), -1)
+        indices = torch.where(selected_valid.unsqueeze(-1), indices, torch.zeros_like(indices))
+
+        gs = gather_token_states(start_all, selected_s)
+        ge = gather_token_states(end_all, selected_e)
+        selected_compat = (gs * ge).sum(-1) / math.sqrt(dim)
+        selected_score = (
+            selected_compat
+            + union_start.gather(1, selected_s.clamp(0, n_boundaries - 1))
+            + union_end.gather(1, selected_e.clamp(0, n_boundaries - 1))
+        )
+        selected_score = selected_score.masked_fill(~selected_valid, MASK_LOGIT)
+        selected_compat = torch.where(selected_valid, selected_compat, torch.zeros_like(selected_compat))
+
+        selected_gold = None
+        if gold_pairs is not None and gold_mask is not None:
+            selected_gold = (indices.unsqueeze(2).unsqueeze(3) == gold_pairs.unsqueeze(1)).all(-1)
+            selected_gold = (selected_gold & gold_mask.unsqueeze(1) & selected_valid.unsqueeze(-1).unsqueeze(-1)).any(
+                -1
+            )
+        return PooledCandidates(
+            indices=indices,
+            mask=selected_valid,
+            proposal_logits=selected_score,
+            gold_mask=selected_gold,
+            compat_logits=selected_compat,
+        )
 
     def forward(
         self,
@@ -1864,8 +2190,8 @@ class DocumentCandidatePool(nn.Module):
 
         start_all = self.start_projection(boundary_states)
         end_all = self.end_projection(boundary_states)
-        selected_start = gather_rows(start_all, pair_s)
-        selected_end = gather_rows(end_all, pair_e)
+        selected_start = gather_token_states(start_all, pair_s)
+        selected_end = gather_token_states(end_all, pair_e)
         compat = (selected_start * selected_end).sum(-1) / math.sqrt(dim)
         union_pair_score = (
             compat
@@ -1873,91 +2199,36 @@ class DocumentCandidatePool(nn.Module):
             + union_end.gather(1, pair_e.clamp(0, n_boundaries - 1))
         )
 
-        quota = min(self.min_pool_per_query, pair_s.shape[-1])
-        quota_keys = pair_s.new_zeros((batch, 0))
-        quota_scores = union_pair_score.new_zeros((batch, 0))
-        quota_valid = pair_valid.new_zeros((batch, 0))
-        if quota:
-            s_idx = pair_s.clamp(0, start_logits.shape[2] - 1).unsqueeze(1).expand(batch, queries, -1)
-            e_idx = pair_e.clamp(0, end_logits.shape[2] - 1).unsqueeze(1).expand(batch, queries, -1)
-            per_query = start_logits.gather(2, s_idx) + end_logits.gather(2, e_idx) + compat.unsqueeze(1)
-            per_query_valid = pair_valid.unsqueeze(1) & query_mask.unsqueeze(-1)
-            ranked = torch.argsort(
-                per_query.masked_fill(~per_query_valid, MASK_LOGIT),
-                dim=-1,
-                descending=True,
-                stable=True,
-            )[..., :quota]
-            quota_s = s_idx.gather(-1, ranked)
-            quota_e = e_idx.gather(-1, ranked)
-            quota_valid = per_query_valid.gather(-1, ranked).reshape(batch, -1)
-            quota_keys = (quota_s * n_boundaries + quota_e).reshape(batch, -1)
-            rank_bonus = torch.arange(
-                quota,
-                0,
-                -1,
-                device=boundary_states.device,
-                dtype=union_pair_score.dtype,
-            )
-            quota_scores = (
-                union_pair_score.new_full((batch, queries, quota), -MASK_LOGIT * 0.5) + rank_bonus.view(1, 1, quota)
-            ).reshape(batch, -1)
-
-        global_keys = pair_s * n_boundaries + pair_e
-        all_keys = torch.cat((quota_keys, global_keys), -1)
-        all_scores = torch.cat((quota_scores, union_pair_score.detach()), -1)
-        all_valid = torch.cat((quota_valid, pair_valid), -1)
-        if gold_pairs is not None and gold_mask is not None:
-            gvalid = gold_mask & query_mask.unsqueeze(-1)
-            oob = (
-                (gold_pairs[..., 0] >= n_boundaries) | (gold_pairs[..., 1] >= n_boundaries) | (gold_pairs < 0).any(-1)
-            )
-            gvalid = gvalid & ~oob
-            if gold_injection_prob <= 0.0:
-                gvalid = torch.zeros_like(gvalid)
-            elif gold_injection_prob < 1.0:
-                sampled = torch.rand(gvalid.shape, device=gvalid.device, generator=generator)
-                gvalid = gvalid & (sampled < gold_injection_prob)
-            safe_gold = gold_pairs.clamp(0, n_boundaries - 1)
-            gkeys = safe_gold[..., 0] * n_boundaries + safe_gold[..., 1]
-            all_keys = torch.cat((all_keys, gkeys.reshape(batch, -1)), -1)
-            all_valid = torch.cat((all_valid, gvalid.reshape(batch, -1)), -1)
-            gold_priority = union_pair_score.new_full((batch, gkeys.shape[1] * gkeys.shape[2]), -MASK_LOGIT)
-            all_scores = torch.cat((all_scores, gold_priority), -1)
-
-        with torch.no_grad():
-            selected_keys, selected_valid = _deduplicate_pool(
-                all_keys, all_scores, all_valid, self.pool_size, n_boundaries
-            )
-        selected_keys = torch.where(selected_valid, selected_keys, torch.zeros_like(selected_keys))
-        selected_s = torch.div(selected_keys, n_boundaries, rounding_mode="floor")
-        selected_e = selected_keys - selected_s * n_boundaries
-        indices = torch.stack((selected_s, selected_e), -1)
-        indices = torch.where(selected_valid.unsqueeze(-1), indices, torch.zeros_like(indices))
-
-        gs = gather_rows(start_all, selected_s)
-        ge = gather_rows(end_all, selected_e)
-        selected_compat = (gs * ge).sum(-1) / math.sqrt(dim)
-        selected_score = (
-            selected_compat
-            + union_start.gather(1, selected_s.clamp(0, n_boundaries - 1))
-            + union_end.gather(1, selected_e.clamp(0, n_boundaries - 1))
+        all_keys, all_scores, all_valid = self._quota_and_gold_keys(
+            pair_s,
+            pair_e,
+            pair_valid,
+            compat,
+            union_pair_score,
+            start_logits,
+            end_logits,
+            query_mask,
+            n_boundaries,
+            gold_pairs,
+            gold_mask,
+            gold_injection_prob,
+            generator,
+            batch,
+            queries,
+            boundary_states.device,
         )
-        selected_score = selected_score.masked_fill(~selected_valid, MASK_LOGIT)
-        selected_compat = torch.where(selected_valid, selected_compat, torch.zeros_like(selected_compat))
-
-        selected_gold = None
-        if gold_pairs is not None and gold_mask is not None:
-            selected_gold = (indices.unsqueeze(2).unsqueeze(3) == gold_pairs.unsqueeze(1)).all(-1)
-            selected_gold = (selected_gold & gold_mask.unsqueeze(1) & selected_valid.unsqueeze(-1).unsqueeze(-1)).any(
-                -1
-            )
-        return PooledCandidates(
-            indices=indices,
-            mask=selected_valid,
-            proposal_logits=selected_score,
-            gold_mask=selected_gold,
-            compat_logits=selected_compat,
+        return self._pooled_from_keys(
+            all_keys,
+            all_scores,
+            all_valid,
+            start_all,
+            end_all,
+            union_start,
+            union_end,
+            n_boundaries,
+            dim,
+            gold_pairs,
+            gold_mask,
         )
 
 
@@ -2203,12 +2474,10 @@ class SharedPoolScorer(nn.Module):
             Scores `[B, C, Q]` and contextual candidate states `[B, C, P]`.
         """
         starts, ends = pooled.indices[..., 0], pooled.indices[..., 1]
-        start_rep = gather_rows(self.start_projection(boundary_states), starts)
-        end_rep = gather_rows(self.end_projection(boundary_states), ends)
+        start_rep = gather_token_states(self.start_projection(boundary_states), starts)
+        end_rep = gather_token_states(self.end_projection(boundary_states), ends)
         feature_dtype = start_rep.dtype
-        length = (ends - starts).clamp_min(1).to(feature_dtype)
-        text_length = text_lengths[:, None].to(feature_dtype).clamp_min(1)
-        length_features = torch.stack((torch.log1p(length), length / text_length, torch.rsqrt(length)), -1)
+        length_features = span_features(starts, ends, text_lengths, dtype=feature_dtype)
         prior = pooled.compat_logits if pooled.compat_logits is not None else pooled.proposal_logits
         if prior is None:
             prior = start_rep.new_zeros(starts.shape)
@@ -2250,11 +2519,7 @@ class SharedPoolScorer(nn.Module):
         score = score + start_logits.gather(2, s_idx).transpose(1, 2)
         score = score + end_logits.gather(2, e_idx).transpose(1, 2)
         if inside_prefix is not None:
-            interval = inside_prefix.gather(2, e_idx.clamp(max=inside_prefix.shape[2] - 1)) - inside_prefix.gather(
-                2, s_idx.clamp(max=inside_prefix.shape[2] - 1)
-            )
-            if inside_prefix_mean is not None:
-                interval = interval + inside_prefix_mean * (e_idx - s_idx).to(interval.dtype)
+            interval = interval_prefix_score(inside_prefix, s_idx, e_idx, inside_prefix_mean)
             score = score + (interval / torch.sqrt((e_idx - s_idx).clamp_min(1).float())).transpose(1, 2).to(
                 score.dtype
             )
@@ -2302,11 +2567,22 @@ class RelationPairBatch:
 
 
 def _query_type(layout, query_id: int) -> str:
-    """Return a query role name, or the id when the layout has no such query."""
+    """Return the role name of one query.
+
+    Args:
+        layout: Query layout.
+        query_id: Query index.
+
+    Returns:
+        The role name.
+
+    Raises:
+        ValueError: If `query_id` is not in `layout`.
+    """
     try:
         return layout.query(query_id).role_name
     except KeyError:
-        return str(query_id)
+        raise ValueError(f"unknown query id {query_id}") from None
 
 
 def safe_relation_indices(relation_indices: torch.Tensor, relation_count: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -2343,6 +2619,214 @@ class TypedRelationPairGenerator:
         self.tails_per_relation = tails_per_relation
         self.pair_cap = pair_cap
         self.argument_threshold = argument_threshold
+
+    def _relation_membership(self, routing, relation_schemas, batch_size, rel_count, queries, device):
+        """Build head and tail membership for each relation.
+
+        Args:
+            routing: Optional precomputed membership tensors.
+            relation_schemas: Per-sample relation specs used when `routing` is None.
+            batch_size: Batch size.
+            rel_count: Relation count.
+            queries: Query count.
+            device: Device for the membership tensors.
+
+        Returns:
+            Head membership, tail membership, relation validity, and allow-self.
+        """
+        if routing is not None:
+            head_member, tail_member, relation_valid, allow_self = routing
+            return (
+                head_member.to(device=device),
+                tail_member.to(device=device),
+                relation_valid.to(device=device),
+                allow_self.to(device=device),
+            )
+        head_member = torch.zeros(batch_size, rel_count, queries, dtype=torch.bool, device=device)
+        tail_member = torch.zeros_like(head_member)
+        relation_valid = torch.zeros(batch_size, rel_count, dtype=torch.bool, device=device)
+        allow_self = torch.zeros_like(relation_valid)
+        for batch_index, schemas in enumerate(relation_schemas):
+            for relation_index, spec in enumerate(schemas):
+                relation_valid[batch_index, relation_index] = True
+                allow_self[batch_index, relation_index] = spec.allow_self
+                valid_h = [q for q in spec.head_query_ids if 0 <= q < queries]
+                valid_t = [q for q in spec.tail_query_ids if 0 <= q < queries]
+                if valid_h:
+                    head_member[batch_index, relation_index, valid_h] = True
+                if valid_t:
+                    tail_member[batch_index, relation_index, valid_t] = True
+        return head_member, tail_member, relation_valid, allow_self
+
+    def _select_relation_slots(self, valid, requested, candidates, flat_prob, flat_spans, floor):
+        """Rank mention slots for one relation argument role.
+
+        Args:
+            valid: Slots that may be selected `[B, R, Q * C]`.
+            requested: Cap for this role.
+            candidates: Candidate batch.
+            flat_prob: Mention probabilities `[B, R, Q * C]`.
+            flat_spans: Spans `[B, Q * C, 2]`.
+            floor: Score written over invalid slots.
+
+        Returns:
+            Probabilities, query slots, spans, and a validity mask.
+        """
+        device = valid.device
+        batch_size, rel_count, _ = valid.shape
+        queries, cand_count = candidates.valid_mask.shape[1:]
+        take = min(requested, queries * cand_count)
+        secondary = torch.arange(queries * cand_count, device=device).view(1, 1, -1).expand(batch_size, rel_count, -1)
+        end_key = flat_spans[..., 1].unsqueeze(1).expand(-1, rel_count, -1)
+        end_order = torch.argsort(end_key.gather(-1, secondary), dim=-1, stable=True)
+        secondary = secondary.gather(-1, end_order)
+        start_key = flat_spans[..., 0].unsqueeze(1).expand(-1, rel_count, -1)
+        start_order = torch.argsort(start_key.gather(-1, secondary), dim=-1, stable=True)
+        secondary = secondary.gather(-1, start_order)
+        ordered_score = flat_prob.gather(-1, secondary)
+        ordered_valid = valid.gather(-1, secondary)
+        rank_in_secondary = torch.argsort(
+            ordered_score.masked_fill(~ordered_valid, floor),
+            dim=-1,
+            descending=True,
+            stable=True,
+        )[..., :take]
+        ranked = secondary.gather(-1, rank_in_secondary)
+        selected_valid = valid.gather(-1, ranked)
+        selected_prob = flat_prob.gather(-1, ranked)
+        if take < requested:
+            pad = requested - take
+            ranked = F.pad(ranked, (0, pad))
+            selected_valid = F.pad(selected_valid, (0, pad), value=False)
+            selected_prob = F.pad(selected_prob, (0, pad))
+        qslot = torch.div(ranked, cand_count, rounding_mode="floor")
+        cslot = ranked - qslot * cand_count
+        qslot = qslot.clamp(0, queries - 1)
+        cslot = cslot.clamp(0, cand_count - 1)
+        batch = torch.arange(batch_size, device=device)[:, None, None]
+        spans = candidates.indices[batch, qslot, cslot]
+        return selected_prob, qslot, spans, selected_valid
+
+    def _capped_relation_pairs(
+        self,
+        hp,
+        hq,
+        hspan,
+        hvalid,
+        tp,
+        tq,
+        tspan,
+        tvalid,
+        allow_self,
+        relation_valid,
+        floor,
+        batch_size,
+        rel_count,
+        device,
+    ):
+        """Keep the top typed pairs and pack them into a batch.
+
+        Args:
+            hp: Head probabilities.
+            hq: Head query slots.
+            hspan: Head spans.
+            hvalid: Head validity.
+            tp: Tail probabilities.
+            tq: Tail query slots.
+            tspan: Tail spans.
+            tvalid: Tail validity.
+            allow_self: Whether a relation may link a span to itself.
+            relation_valid: Relations present in each sample.
+            floor: Score written over invalid pairs.
+            batch_size: Batch size.
+            rel_count: Relation count.
+            device: Device for index tensors.
+
+        Returns:
+            The packed pair batch and the head/tail query ids.
+        """
+        pair_score = hp.unsqueeze(-1) * tp.unsqueeze(-2)
+        pair_valid = hvalid.unsqueeze(-1) & tvalid.unsqueeze(-2)
+        same_span = (hspan.unsqueeze(-2) == tspan.unsqueeze(-3)).all(-1)
+        pair_valid = pair_valid & (allow_self[..., None, None] | ~same_span)
+        pair_valid = pair_valid & relation_valid[..., None, None]
+        flat_pair_score = pair_score.flatten(2)
+        flat_pair_valid = pair_valid.flatten(2)
+        take = min(self.pair_cap, flat_pair_score.shape[-1])
+        keep = torch.argsort(
+            flat_pair_score.masked_fill(~flat_pair_valid, floor),
+            dim=-1,
+            descending=True,
+            stable=True,
+        )[..., :take]
+        kept_valid = flat_pair_valid.gather(-1, keep)
+        if take < self.pair_cap:
+            keep = F.pad(keep, (0, self.pair_cap - take))
+            kept_valid = F.pad(kept_valid, (0, self.pair_cap - take), value=False)
+        hi = torch.div(keep, self.tails_per_relation, rounding_mode="floor")
+        ti = keep - hi * self.tails_per_relation
+        hi = hi.clamp(0, self.heads_per_relation - 1)
+        ti = ti.clamp(0, self.tails_per_relation - 1)
+
+        def gather_selected(values: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
+            return values.gather(
+                2,
+                index.clamp(0, values.shape[2] - 1).unsqueeze(-1).expand(*index.shape, values.shape[-1]),
+            )
+
+        hs = gather_selected(hspan, hi)
+        ts = gather_selected(tspan, ti)
+        hp_out = hp.gather(2, hi.clamp(0, hp.shape[2] - 1))
+        tp_out = tp.gather(2, ti.clamp(0, tp.shape[2] - 1))
+        hq_out = hq.gather(2, hi.clamp(0, hq.shape[2] - 1))
+        tq_out = tq.gather(2, ti.clamp(0, tq.shape[2] - 1))
+        bi = torch.arange(batch_size, device=device)[:, None, None].expand_as(keep)
+        ri = torch.arange(rel_count, device=device)[None, :, None].expand_as(keep)
+        return (
+            bi.reshape(-1),
+            ri.reshape(-1),
+            hs[..., 0].reshape(-1),
+            hs[..., 1].reshape(-1),
+            ts[..., 0].reshape(-1),
+            ts[..., 1].reshape(-1),
+            hp_out.reshape(-1),
+            tp_out.reshape(-1),
+            hq_out.reshape(-1),
+            tq_out.reshape(-1),
+            kept_valid.reshape(-1),
+        )
+
+    def _attach_compact_keys(self, out, tensors, query_layouts, relation_schemas):
+        """Attach Python relation metadata for compact pairs.
+
+        Args:
+            out: Pair batch to update.
+            tensors: Packed pair tensors, including query ids.
+            query_layouts: One query layout per sample.
+            relation_schemas: Per-sample relation specs.
+        """
+        for index in range(len(out)):
+            batch_index = int(out.batch_index[index])
+            relation_index = int(out.relation_index[index])
+            spec = relation_schemas[batch_index][relation_index]
+            layout = query_layouts[batch_index] if batch_index < len(query_layouts) else None
+            out.relation_types.append(spec.relation_type)
+            hquery = int(tensors[8][index])
+            tquery = int(tensors[9][index])
+            out.head_keys.append(
+                (
+                    _query_type(layout, hquery) if layout is not None else str(hquery),
+                    int(out.head_start[index]),
+                    int(out.head_end[index]),
+                )
+            )
+            out.tail_keys.append(
+                (
+                    _query_type(layout, tquery) if layout is not None else str(tquery),
+                    int(out.tail_start[index]),
+                    int(out.tail_end[index]),
+                )
+            )
 
     def generate(
         self,
@@ -2396,28 +2880,9 @@ class TypedRelationPairGenerator:
                 pair_mask=torch.zeros(0, dtype=torch.bool, device=device),
             )
 
-        if routing is not None:
-            head_member, tail_member, relation_valid, allow_self = routing
-            head_member = head_member.to(device=device)
-            tail_member = tail_member.to(device=device)
-            relation_valid = relation_valid.to(device=device)
-            allow_self = allow_self.to(device=device)
-        else:
-            head_member = torch.zeros(batch_size, rel_count, queries, dtype=torch.bool, device=device)
-            tail_member = torch.zeros_like(head_member)
-            relation_valid = torch.zeros(batch_size, rel_count, dtype=torch.bool, device=device)
-            allow_self = torch.zeros_like(relation_valid)
-            for batch_index, schemas in enumerate(relation_schemas):
-                for relation_index, spec in enumerate(schemas):
-                    relation_valid[batch_index, relation_index] = True
-                    allow_self[batch_index, relation_index] = spec.allow_self
-                    valid_h = [q for q in spec.head_query_ids if 0 <= q < queries]
-                    valid_t = [q for q in spec.tail_query_ids if 0 <= q < queries]
-                    if valid_h:
-                        head_member[batch_index, relation_index, valid_h] = True
-                    if valid_t:
-                        tail_member[batch_index, relation_index, valid_t] = True
-
+        head_member, tail_member, relation_valid, allow_self = self._relation_membership(
+            routing, relation_schemas, batch_size, rel_count, queries, device
+        )
         probs = torch.sigmoid(candidates.pair_logits)
         base_valid = candidates.valid_mask & candidates.query_mask.unsqueeze(-1)
         flat_prob = probs.reshape(batch_size, 1, queries * cand_count).expand(-1, rel_count, -1)
@@ -2433,131 +2898,46 @@ class TypedRelationPairGenerator:
         tail_valid = tail_valid & threshold
         floor = torch.finfo(flat_prob.dtype).min
         flat_spans = candidates.indices.reshape(batch_size, queries * cand_count, 2)
-
-        def select(valid: torch.Tensor, requested: int):
-            take = min(requested, queries * cand_count)
-            secondary = (
-                torch.arange(queries * cand_count, device=device).view(1, 1, -1).expand(batch_size, rel_count, -1)
-            )
-            end_key = flat_spans[..., 1].unsqueeze(1).expand(-1, rel_count, -1)
-            end_order = torch.argsort(end_key.gather(-1, secondary), dim=-1, stable=True)
-            secondary = secondary.gather(-1, end_order)
-            start_key = flat_spans[..., 0].unsqueeze(1).expand(-1, rel_count, -1)
-            start_order = torch.argsort(start_key.gather(-1, secondary), dim=-1, stable=True)
-            secondary = secondary.gather(-1, start_order)
-            ordered_score = flat_prob.gather(-1, secondary)
-            ordered_valid = valid.gather(-1, secondary)
-            rank_in_secondary = torch.argsort(
-                ordered_score.masked_fill(~ordered_valid, floor),
-                dim=-1,
-                descending=True,
-                stable=True,
-            )[..., :take]
-            ranked = secondary.gather(-1, rank_in_secondary)
-            selected_valid = valid.gather(-1, ranked)
-            selected_prob = flat_prob.gather(-1, ranked)
-            if take < requested:
-                pad = requested - take
-                ranked = F.pad(ranked, (0, pad))
-                selected_valid = F.pad(selected_valid, (0, pad), value=False)
-                selected_prob = F.pad(selected_prob, (0, pad))
-            qslot = torch.div(ranked, cand_count, rounding_mode="floor")
-            cslot = ranked - qslot * cand_count
-            qslot = qslot.clamp(0, queries - 1)
-            cslot = cslot.clamp(0, cand_count - 1)
-            batch = torch.arange(batch_size, device=device)[:, None, None]
-            spans = candidates.indices[batch, qslot, cslot]
-            return selected_prob, qslot, spans, selected_valid
-
-        hp, hq, hspan, hvalid = select(head_valid, settings.heads_per_relation)
-        tp, tq, tspan, tvalid = select(tail_valid, settings.tails_per_relation)
-        pair_score = hp.unsqueeze(-1) * tp.unsqueeze(-2)
-        pair_valid = hvalid.unsqueeze(-1) & tvalid.unsqueeze(-2)
-        same_span = (hspan.unsqueeze(-2) == tspan.unsqueeze(-3)).all(-1)
-        pair_valid = pair_valid & (allow_self[..., None, None] | ~same_span)
-        pair_valid = pair_valid & relation_valid[..., None, None]
-        flat_pair_score = pair_score.flatten(2)
-        flat_pair_valid = pair_valid.flatten(2)
-        take = min(settings.pair_cap, flat_pair_score.shape[-1])
-        keep = torch.argsort(
-            flat_pair_score.masked_fill(~flat_pair_valid, floor),
-            dim=-1,
-            descending=True,
-            stable=True,
-        )[..., :take]
-        kept_valid = flat_pair_valid.gather(-1, keep)
-        if take < settings.pair_cap:
-            keep = F.pad(keep, (0, settings.pair_cap - take))
-            kept_valid = F.pad(kept_valid, (0, settings.pair_cap - take), value=False)
-        hi = torch.div(keep, settings.tails_per_relation, rounding_mode="floor")
-        ti = keep - hi * settings.tails_per_relation
-        hi = hi.clamp(0, settings.heads_per_relation - 1)
-        ti = ti.clamp(0, settings.tails_per_relation - 1)
-
-        def gather_selected(values: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
-            return values.gather(
-                2,
-                index.clamp(0, values.shape[2] - 1).unsqueeze(-1).expand(*index.shape, values.shape[-1]),
-            )
-
-        hs = gather_selected(hspan, hi)
-        ts = gather_selected(tspan, ti)
-        hp_out = hp.gather(2, hi.clamp(0, hp.shape[2] - 1))
-        tp_out = tp.gather(2, ti.clamp(0, tp.shape[2] - 1))
-        hq_out = hq.gather(2, hi.clamp(0, hq.shape[2] - 1))
-        tq_out = tq.gather(2, ti.clamp(0, tq.shape[2] - 1))
-        bi = torch.arange(batch_size, device=device)[:, None, None].expand_as(keep)
-        ri = torch.arange(rel_count, device=device)[None, :, None].expand_as(keep)
-        flat_mask = kept_valid.reshape(-1)
-        tensors = [
-            bi.reshape(-1),
-            ri.reshape(-1),
-            hs[..., 0].reshape(-1),
-            hs[..., 1].reshape(-1),
-            ts[..., 0].reshape(-1),
-            ts[..., 1].reshape(-1),
-            hp_out.reshape(-1),
-            tp_out.reshape(-1),
-            hq_out.reshape(-1),
-            tq_out.reshape(-1),
-        ]
+        hp, hq, hspan, hvalid = self._select_relation_slots(
+            head_valid, settings.heads_per_relation, candidates, flat_prob, flat_spans, floor
+        )
+        tp, tq, tspan, tvalid = self._select_relation_slots(
+            tail_valid, settings.tails_per_relation, candidates, flat_prob, flat_spans, floor
+        )
+        tensors = self._capped_relation_pairs(
+            hp,
+            hq,
+            hspan,
+            hvalid,
+            tp,
+            tq,
+            tspan,
+            tvalid,
+            allow_self,
+            relation_valid,
+            floor,
+            batch_size,
+            rel_count,
+            device,
+        )
+        flat_mask = tensors[10]
+        packed = list(tensors[:10])
         if compact:
-            tensors = [value[flat_mask] for value in tensors]
-            flat_mask = torch.ones_like(tensors[0], dtype=torch.bool)
+            packed = [value[flat_mask] for value in packed]
+            flat_mask = torch.ones_like(packed[0], dtype=torch.bool)
         out = RelationPairBatch(
-            batch_index=tensors[0],
-            relation_index=tensors[1],
-            head_start=tensors[2],
-            head_end=tensors[3],
-            tail_start=tensors[4],
-            tail_end=tensors[5],
-            head_prob=tensors[6],
-            tail_prob=tensors[7],
+            batch_index=packed[0],
+            relation_index=packed[1],
+            head_start=packed[2],
+            head_end=packed[3],
+            tail_start=packed[4],
+            tail_end=packed[5],
+            head_prob=packed[6],
+            tail_prob=packed[7],
             pair_mask=flat_mask,
         )
         if compact:
-            for index in range(len(out)):
-                batch_index = int(out.batch_index[index])
-                relation_index = int(out.relation_index[index])
-                spec = relation_schemas[batch_index][relation_index]
-                layout = query_layouts[batch_index] if batch_index < len(query_layouts) else None
-                out.relation_types.append(spec.relation_type)
-                hquery = int(tensors[8][index])
-                tquery = int(tensors[9][index])
-                out.head_keys.append(
-                    (
-                        _query_type(layout, hquery) if layout is not None else str(hquery),
-                        int(out.head_start[index]),
-                        int(out.head_end[index]),
-                    )
-                )
-                out.tail_keys.append(
-                    (
-                        _query_type(layout, tquery) if layout is not None else str(tquery),
-                        int(out.tail_start[index]),
-                        int(out.tail_end[index]),
-                    )
-                )
+            self._attach_compact_keys(out, packed, query_layouts, relation_schemas)
         return out
 
 
@@ -2800,16 +3180,22 @@ class RecordHead(nn.Module):
         )
         if query_count <= 0:
             raise ValueError("record routing requires at least one boundary query")
-        valid_query_ids = [0 <= query_id < query_count for query_id in field_query_ids]
-        safe_field_query_ids = [min(max(query_id, 0), query_count - 1) for query_id in field_query_ids]
+        resolved_ids = []
+        for query_id in field_query_ids:
+            if torch.is_tensor(query_id):
+                query_id = int(query_id)
+            if query_id < 0 or query_id >= query_count:
+                raise ValueError(f"record field query id {query_id} is outside [0, {query_count})")
+            resolved_ids.append(query_id)
+        field_query_ids = resolved_ids
 
         field_cand_states: list[torch.Tensor] = []
         field_spans: list[torch.Tensor] = []
         field_cand_mask: list[torch.Tensor] = []
         field_cand_logits: list[torch.Tensor] = []
         cand_states_all = candidates.candidate_states
-        for qid, query_valid in zip(safe_field_query_ids, valid_query_ids):
-            mask = candidates.valid_mask[sample_index, qid] & query_valid
+        for qid in field_query_ids:
+            mask = candidates.valid_mask[sample_index, qid]
             keep = torch.nonzero(mask, as_tuple=False).flatten()
             spans = candidates.indices[sample_index, qid][keep]
             logits = candidates.pair_logits[sample_index, qid][keep]
@@ -2819,11 +3205,11 @@ class RecordHead(nn.Module):
             field_cand_mask.append(torch.ones(keep.shape[0], dtype=torch.bool, device=device))
             field_cand_logits.append(logits)
 
-        fq = query_states[safe_field_query_ids]
+        fq = query_states[field_query_ids]
         instance_seed: list[tuple[int, int] | None] = []
         instance_spans: list[tuple[int, int] | None] = []
 
-        if spec.mode == "natural":
+        if spec.mode == RecordMode.NATURAL:
             anchor_field_idx = field_query_ids.index(spec.anchor_query_id)
             anchor_states = field_cand_states[anchor_field_idx]
             anchor_spans = field_spans[anchor_field_idx]
@@ -2834,7 +3220,7 @@ class RecordHead(nn.Module):
             for cand_idx in range(ni):
                 instance_seed.append((anchor_field_idx, cand_idx))
                 instance_spans.append((int(anchor_spans[cand_idx, 0]), int(anchor_spans[cand_idx, 1])))
-        elif spec.mode == "latent":
+        elif spec.mode == RecordMode.LATENT:
             seed_states: list[torch.Tensor] = []
             seed_scores: list[torch.Tensor] = []
             for f_idx, states in enumerate(field_cand_states):
@@ -2875,9 +3261,49 @@ class RecordHead(nn.Module):
         )
 
 
+@dataclass  # trf-ignore: TRF031
+class RecordFieldSpec:
+    """One record field query read by `RecordHead`."""
+
+    query_id: int
+
+
 @dataclass
-class BoundaryHeadOutput:  # trf-ignore: TRF031
-    """Marginal logits and sparse candidates from `BoundaryHead`."""
+class RecordSpec:
+    """Record schema `RecordHead.forward_group` reads."""
+
+    mode: str
+    fields: tuple[RecordFieldSpec, ...]
+    anchor_query_id: int | None = None
+
+
+@dataclass
+class HeadTargets:
+    """Gold mention spans read by `BoundaryHead`."""
+
+    mention_pairs: torch.Tensor
+    mention_mask: torch.Tensor
+
+
+@auto_docstring
+@dataclass
+class BoundaryHeadOutput(ModelOutput):
+    """
+    start_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, sequence_length)`, *optional*):
+        Score that each word starts a span.
+    end_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, sequence_length)`, *optional*):
+        Score that each word ends a span.
+    inside_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, sequence_length)`, *optional*):
+        Score that each word lies inside a span.
+    candidates (`CandidateTensorBatch`, *optional*):
+        Sparse spans proposed for each query.
+    null_logits (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
+        Score that a query has no span.
+    count_log_rates (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
+        Log expected span count for each query.
+    batch_size (`int`, *optional*):
+        Examples in this forward pass.
+    """
 
     start_logits: torch.Tensor | None = None
     end_logits: torch.Tensor | None = None
@@ -2885,7 +3311,7 @@ class BoundaryHeadOutput:  # trf-ignore: TRF031
     candidates: CandidateTensorBatch | None = None
     null_logits: torch.Tensor | None = None
     count_log_rates: torch.Tensor | None = None
-    batch_size: int = 0
+    batch_size: int | None = None
 
 
 class BoundaryHead(nn.Module):
@@ -2903,9 +3329,6 @@ class BoundaryHead(nn.Module):
         self.hidden_size = hidden_size
         self.settings = settings
         self.query_dim = query_dim if query_dim is not None else hidden_size
-        self._gold_injection_prob = 1.0
-        self._consistency_scale = 1.0
-        self._soft_iou_scale = 1.0
 
         dim = settings.boundary_dim
         self.candidate_encoder = nn.Linear(2 * dim, hidden_size) if build_candidate_states else None
@@ -2971,36 +3394,6 @@ class BoundaryHead(nn.Module):
             text_hidden_size=hidden_size,
         )
         torch.random.set_rng_state(shared_rng_state)
-
-    def set_gold_injection_prob(self, value: float) -> None:  # trf-ignore: TRF033
-        """Set the training gold-injection probability.
-
-        Args:
-            value: Probability in `[0, 1]`.
-        """
-        if not 0.0 <= value <= 1.0:
-            raise ValueError(f"gold_injection_prob must be in [0, 1], got {value}")
-        self._gold_injection_prob = float(value)
-
-    def set_consistency_scale(self, value: float) -> None:  # trf-ignore: TRF033
-        """Set the marginal-consistency loss multiplier.
-
-        Args:
-            value: Non-negative scale. The trainer anneals this during warmup.
-        """
-        if value < 0:
-            raise ValueError(f"consistency_scale must be >= 0, got {value}")
-        self._consistency_scale = float(value)
-
-    def set_soft_iou_scale(self, value: float) -> None:  # trf-ignore: TRF033
-        """Set the soft-IoU loss multiplier.
-
-        Args:
-            value: Non-negative scale. The trainer anneals this over training.
-        """
-        if value < 0:
-            raise ValueError(f"soft_iou_scale must be >= 0, got {value}")
-        self._soft_iou_scale = float(value)
 
     def score_explicit_spans(
         self,
@@ -3072,6 +3465,151 @@ class BoundaryHead(nn.Module):
             inside_prefix_mean=marginals.inside_prefix_mean,
         )
 
+    def _shared_pool_candidates(
+        self,
+        encoding,
+        marginals,
+        query_states,
+        query_mask,
+        token_states,
+        text_mask,
+        text_lengths,
+        inside_prefix,
+        gold_pairs,
+        gold_mask,
+        injection,
+        batch,
+    ):
+        """Score one shared document pool.
+
+        Args:
+            encoding: Boundary encoding.
+            marginals: Start, end, and inside scores.
+            query_states: Query states.
+            query_mask: Valid queries.
+            token_states: Token states.
+            text_mask: Valid tokens.
+            text_lengths: Token counts.
+            inside_prefix: Centered inside prefix, or None.
+            gold_pairs: Optional gold spans.
+            gold_mask: Mask for `gold_pairs`.
+            injection: Gold injection probability.
+            batch: Batch size.
+
+        Returns:
+            Proposals, pair logits, the pool, pool logits, and pooled candidate states.
+        """
+        pooled = self.shared_pool_builder(
+            encoding.states,
+            encoding.mask,
+            query_mask,
+            marginals.start_logits,
+            marginals.end_logits,
+            gold_pairs=gold_pairs,
+            gold_mask=gold_mask,
+            gold_injection_prob=injection if self.training else 0.0,
+        )
+        pooled_logits, _ = self.shared_pool_scorer(
+            encoding.states,
+            query_states,
+            query_mask,
+            pooled,
+            marginals.start_logits,
+            marginals.end_logits,
+            inside_prefix,
+            text_lengths,
+            token_states,
+            text_mask,
+            inside_prefix_mean=marginals.inside_prefix_mean,
+        )
+        queries = query_states.shape[1]
+        count = pooled.indices.shape[1]
+        proposals = BoundaryProposals(
+            indices=pooled.indices.unsqueeze(1).expand(batch, queries, count, 2),
+            logits=(
+                pooled.proposal_logits.unsqueeze(1).expand(batch, queries, count)
+                if pooled.proposal_logits is not None
+                else None
+            ),
+            valid_mask=pooled.mask.unsqueeze(1).expand(batch, queries, count),
+            gold_mask=(pooled.gold_mask.transpose(1, 2) if pooled.gold_mask is not None else None),
+            compat_logits=(
+                pooled.compat_logits.unsqueeze(1).expand(batch, queries, count)
+                if pooled.compat_logits is not None
+                else None
+            ),
+        )
+        pair_logits = pooled_logits.transpose(1, 2)
+        pooled_candidate_states = None
+        if self.candidate_encoder is not None:
+            start_states = gather_token_states(encoding.states, pooled.indices[..., 0])
+            end_states = gather_token_states(encoding.states, pooled.indices[..., 1])
+            pooled_candidate_states = self.candidate_encoder(torch.cat((start_states, end_states), -1)).masked_fill(
+                ~pooled.mask.unsqueeze(-1), 0.0
+            )
+        return proposals, pair_logits, pooled, pooled_logits, pooled_candidate_states
+
+    def _per_query_candidates(
+        self,
+        encoding,
+        marginals,
+        query_states,
+        query_mask,
+        token_states,
+        text_mask,
+        text_lengths,
+        inside_prefix,
+        gold_pairs,
+        gold_mask,
+        injection,
+    ):
+        """Propose and rerank one candidate list per query.
+
+        Args:
+            encoding: Boundary encoding.
+            marginals: Start, end, and inside scores.
+            query_states: Query states.
+            query_mask: Valid queries.
+            token_states: Token states.
+            text_mask: Valid tokens.
+            text_lengths: Token counts.
+            inside_prefix: Centered inside prefix, or None.
+            gold_pairs: Optional gold spans.
+            gold_mask: Mask for `gold_pairs`.
+            injection: Gold injection probability.
+
+        Returns:
+            Proposals and pair logits.
+        """
+        scorer_start_states, scorer_end_states = self.pair_scorer.project_endpoints(encoding.states)
+        proposals = self.boundary_proposer(
+            encoding.states,
+            encoding.mask,
+            query_states,
+            query_mask,
+            marginals.start_logits,
+            marginals.end_logits,
+            gold_pairs=gold_pairs,
+            gold_mask=gold_mask,
+            return_proposal_logits=self.training,
+            gold_injection_prob=injection,
+            scorer_start_states=scorer_start_states,
+            scorer_end_states=scorer_end_states,
+        )
+        pair_logits = self.pair_scorer(
+            encoding.states,
+            query_states,
+            proposals,
+            marginals.start_logits,
+            marginals.end_logits,
+            inside_prefix,
+            text_lengths,
+            token_states,
+            text_mask,
+            inside_prefix_mean=marginals.inside_prefix_mean,
+        )
+        return proposals, pair_logits
+
     def forward(
         self,
         token_states: torch.Tensor,
@@ -3082,8 +3620,24 @@ class BoundaryHead(nn.Module):
         *,
         return_candidates: bool = True,
         gold_injection_prob: float | None = None,
+        consistency_scale: float | None = None,
+        soft_iou_scale: float | None = None,
     ) -> BoundaryHeadOutput:
-        """Propose and rerank boundary spans."""
+        """Propose and rerank boundary spans.
+
+        Args:
+            token_states: Token states `[B, L, H]`.
+            text_mask: Valid tokens `[B, L]`.
+            query_states: Query states `[B, Q, H]`.
+            query_mask: Valid queries `[B, Q]`.
+            targets: Optional gold mention spans.
+            return_candidates: Keep the candidate batch on the output.
+            gold_injection_prob: Gold injection rate. None reads the boundary config.
+            consistency_scale: Accepted so callers can pass the annealed scale. The
+                schema-extraction loss applies it.
+            soft_iou_scale: Accepted so callers can pass the annealed scale. The
+                schema-extraction loss applies it.
+        """
         batch = token_states.shape[0]
         text_lengths = text_mask.sum(dim=1).long()
         encoding = self.boundary_encoder(token_states, text_mask)
@@ -3099,86 +3653,43 @@ class BoundaryHead(nn.Module):
         if targets is not None:
             gold_pairs = targets.mention_pairs
             gold_mask = targets.mention_mask
-        injection = self._gold_injection_prob if gold_injection_prob is None else gold_injection_prob
+        injection = _resolved_boundary_value(
+            gold_injection_prob, self.settings, "gold_injection_prob", lower=0.0, upper=1.0
+        )
+        _resolved_boundary_value(consistency_scale, self.settings, "consistency_scale", lower=0.0)
+        _resolved_boundary_value(soft_iou_scale, self.settings, "soft_iou_scale", lower=0.0)
         inside_prefix = marginals.inside_prefix if self.use_inside_evidence else None
         pooled = None
         pooled_candidate_states = None
         pooled_logits = None
-        if self.settings.candidate_pool == "shared":
-            pooled = self.shared_pool_builder(
-                encoding.states,
-                encoding.mask,
-                query_mask,
-                marginals.start_logits,
-                marginals.end_logits,
-                gold_pairs=gold_pairs,
-                gold_mask=gold_mask,
-                gold_injection_prob=injection if self.training else 0.0,
-            )
-            pooled_logits, _ = self.shared_pool_scorer(
-                encoding.states,
+        if self.settings.candidate_pool == CandidatePool.SHARED:
+            proposals, pair_logits, pooled, pooled_logits, pooled_candidate_states = self._shared_pool_candidates(
+                encoding,
+                marginals,
                 query_states,
                 query_mask,
-                pooled,
-                marginals.start_logits,
-                marginals.end_logits,
-                inside_prefix,
-                text_lengths,
                 token_states,
                 text_mask,
-                inside_prefix_mean=marginals.inside_prefix_mean,
+                text_lengths,
+                inside_prefix,
+                gold_pairs,
+                gold_mask,
+                injection,
+                batch,
             )
-            queries = query_states.shape[1]
-            count = pooled.indices.shape[1]
-            proposals = BoundaryProposals(
-                indices=pooled.indices.unsqueeze(1).expand(batch, queries, count, 2),
-                logits=(
-                    pooled.proposal_logits.unsqueeze(1).expand(batch, queries, count)
-                    if pooled.proposal_logits is not None
-                    else None
-                ),
-                valid_mask=pooled.mask.unsqueeze(1).expand(batch, queries, count),
-                gold_mask=(pooled.gold_mask.transpose(1, 2) if pooled.gold_mask is not None else None),
-                compat_logits=(
-                    pooled.compat_logits.unsqueeze(1).expand(batch, queries, count)
-                    if pooled.compat_logits is not None
-                    else None
-                ),
-            )
-            pair_logits = pooled_logits.transpose(1, 2)
-            if self.candidate_encoder is not None:
-                start_states = gather_rows(encoding.states, pooled.indices[..., 0])
-                end_states = gather_rows(encoding.states, pooled.indices[..., 1])
-                pooled_candidate_states = self.candidate_encoder(
-                    torch.cat((start_states, end_states), -1)
-                ).masked_fill(~pooled.mask.unsqueeze(-1), 0.0)
         else:
-            scorer_start_states, scorer_end_states = self.pair_scorer.project_endpoints(encoding.states)
-            proposals = self.boundary_proposer(
-                encoding.states,
-                encoding.mask,
+            proposals, pair_logits = self._per_query_candidates(
+                encoding,
+                marginals,
                 query_states,
                 query_mask,
-                marginals.start_logits,
-                marginals.end_logits,
-                gold_pairs=gold_pairs,
-                gold_mask=gold_mask,
-                return_proposal_logits=self.training,
-                gold_injection_prob=injection,
-                scorer_start_states=scorer_start_states,
-                scorer_end_states=scorer_end_states,
-            )
-            pair_logits = self.pair_scorer(
-                encoding.states,
-                query_states,
-                proposals,
-                marginals.start_logits,
-                marginals.end_logits,
-                inside_prefix,
-                text_lengths,
                 token_states,
                 text_mask,
-                inside_prefix_mean=marginals.inside_prefix_mean,
+                text_lengths,
+                inside_prefix,
+                gold_pairs,
+                gold_mask,
+                injection,
             )
         null_logits = self.null_projection(query_states).squeeze(-1) if self.null_projection is not None else None
         count_log_rates = self.count_head(query_states).squeeze(-1) if self.count_head is not None else None
@@ -3187,8 +3698,8 @@ class BoundaryHead(nn.Module):
         if return_candidates:
             candidate_states = pooled_candidate_states
             if self.candidate_encoder is not None and pooled is None:
-                gathered_start = gather_boundary_states(encoding.states, proposals.indices[..., 0])
-                gathered_end = gather_boundary_states(encoding.states, proposals.indices[..., 1])
+                gathered_start = gather_token_states(encoding.states, proposals.indices[..., 0])
+                gathered_end = gather_token_states(encoding.states, proposals.indices[..., 1])
                 candidate_states = self.candidate_encoder(torch.cat([gathered_start, gathered_end], dim=-1))
                 candidate_states = candidate_states.masked_fill(~proposals.valid_mask.unsqueeze(-1), 0.0)
             candidates = (
@@ -3219,7 +3730,8 @@ class Gliner2PreTrainedModel(PreTrainedModel):
     config: Gliner2Config
     base_model_prefix = "gliner2"
     input_modalities = ("text",)
-    _no_split_modules = []
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["BoundaryAttentionBlock", "ResidualSwiGLU"]
     # The text encoder is DeBERTa, which rejects SDPA and runs eager.
     _supports_sdpa = False
     _supports_flash_attn = False
@@ -3298,7 +3810,7 @@ class Gliner2SchemaExtractionOutput(ModelOutput):
     classification_logits: list | None = None
     span_logits: list | None = None
     counts: list | None = None
-    boundary: object | None = None
+    boundary: BoundaryHeadOutput | None = None
     text_states: torch.FloatTensor | None = None
     text_mask: torch.Tensor | None = None
     query_states: torch.FloatTensor | None = None
@@ -3377,9 +3889,63 @@ class Gliner2Model(Gliner2PreTrainedModel):
             last_hidden_state=hidden,
             hidden_states=encoded.hidden_states,
             attentions=encoded.attentions,
-            text_states=_gather(hidden, text_word_indices, text_word_mask),
-            query_states=_gather(hidden, query_marker_indices, query_marker_mask),
-            cls_states=_gather(hidden, cls_marker_indices, cls_marker_mask),
+            text_states=gather_token_states(hidden, text_word_indices, mask=text_word_mask),
+            query_states=gather_token_states(hidden, query_marker_indices, mask=query_marker_mask),
+            cls_states=gather_token_states(hidden, cls_marker_indices, mask=cls_marker_mask),
+        )
+
+
+class SpanHead(nn.Module):
+    """Dispatch span representation, counts, and classification.
+
+    The task module owns the checkpoint parameters. References here are not registered.
+    """
+
+    def __init__(self, span_rep, count_embed, count_pred, classifier):
+        super().__init__()
+        object.__setattr__(self, "span_rep", span_rep)
+        object.__setattr__(self, "count_embed", count_embed)
+        object.__setattr__(self, "count_pred", count_pred)
+        object.__setattr__(self, "classifier", classifier)
+
+    def classification_logits(self, cls_states, cls_mask, cls_groups, task_ids, group_mask):
+        """One raw logit vector per classification group."""
+        return _classification_logits(cls_states, cls_mask, cls_groups, task_ids, group_mask, self.classifier)
+
+    def span_logits(
+        self,
+        text_states,
+        text_mask,
+        query_states,
+        query_mask,
+        query_groups,
+        prompt_states,
+        prompt_mask,
+        prompt_groups,
+        task_ids,
+        group_mask,
+        max_width,
+        structures=None,
+        training=False,
+    ):
+        """Count-conditioned span scores using the task-owned modules."""
+        return _span_logits(
+            text_states,
+            text_mask,
+            query_states,
+            query_mask,
+            query_groups,
+            prompt_states,
+            prompt_mask,
+            prompt_groups,
+            task_ids,
+            group_mask,
+            self.span_rep,
+            self.count_pred,
+            self.count_embed,
+            max_width,
+            structures=structures,
+            training=training,
         )
 
 
@@ -3425,7 +3991,12 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 self.relation_scorer = None
                 self.relation_pair_generator = None
         else:
-            self.span_rep = SpanRepLayer(hidden, config.max_width, span_mode="markerV0", dropout=0.1)
+            span_cfg = config.span_head if isinstance(config.span_head, dict) else {}
+            max_width = span_cfg.get("max_width", config.max_width)
+            span_mode = span_cfg.get("span_mode", config.span_mode)
+            span_dropout = span_cfg.get("dropout", 0.1)
+            self.max_width = max_width
+            self.span_rep = SpanRepLayer(hidden, max_width, span_mode=span_mode, dropout=span_dropout)
             if config.counting_layer == "count_lstm_v2":
                 self.count_embed = CountLSTMv2(hidden)
             else:
@@ -3434,7 +4005,10 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             self.boundary_head = None
             self.record_decoder = None
             self.relation_scorer = None
+            self._span_dispatch = SpanHead(self.span_rep, self.count_embed, self.count_pred, None)
         self.classifier = _mlp(hidden, [hidden * 2], 1, dropout=dropout)
+        if self.config.architecture != "boundary":
+            object.__setattr__(self._span_dispatch, "classifier", self.classifier)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -3505,8 +4079,9 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: dict | None = None,
         targets: dict | None = None,
-        soft_iou_scale: float = 1.0,
-        consistency_scale: float = 1.0,
+        gold_injection_prob: float | None = None,
+        soft_iou_scale: float | None = None,
+        consistency_scale: float | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gliner2SchemaExtractionOutput:
         r"""
@@ -3560,10 +4135,12 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             `relation_gold_pairs`. Absent labels keep this call inference-only.
         targets (`dict`, *optional*):
             Extra target tensors merged into `labels`.
-        soft_iou_scale (`float`, *optional*, defaults to 1.0):
-            Multiplier on the soft-IoU term. The trainer anneals this value.
-        consistency_scale (`float`, *optional*, defaults to 1.0):
-            Multiplier on the marginal-consistency term.
+        gold_injection_prob (`float`, *optional*):
+            Probability of injecting each gold span. None reads the boundary config.
+        soft_iou_scale (`float`, *optional*):
+            Multiplier on the soft-IoU term. None reads the boundary config. An explicit 1.0 stays 1.0.
+        consistency_scale (`float`, *optional*):
+            Multiplier on the marginal-consistency term. None reads the boundary config.
         """
         encoder_kwargs = {
             key: kwargs[key] for key in ("output_hidden_states", "output_attentions", "return_dict") if key in kwargs
@@ -3585,15 +4162,19 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 attentions=encoded.attentions,
             )
 
-        text_states = _gather(hidden, text_word_indices, text_word_mask)
-        query_states = _gather(hidden, query_marker_indices, query_marker_mask)
-        cls_states = _gather(hidden, cls_marker_indices, cls_marker_mask)
+        text_states = gather_token_states(hidden, text_word_indices, mask=text_word_mask)
+        query_states = gather_token_states(hidden, query_marker_indices, mask=query_marker_mask)
+        cls_states = gather_token_states(hidden, cls_marker_indices, mask=cls_marker_mask)
+        classification_logits = _classification_logits(
+            cls_states, cls_marker_mask, cls_group_index, task_type_ids, group_mask, self.classifier
+        )
         if self.config.architecture == "boundary":
-            head = self.boundary_head
-            if head is not None and soft_iou_scale == 1.0:
-                soft_iou_scale = head._soft_iou_scale
-            if head is not None and consistency_scale == 1.0:
-                consistency_scale = head._consistency_scale
+            cfg = self.config.boundary_config
+            gold_injection_prob = _resolved_boundary_value(
+                gold_injection_prob, cfg, "gold_injection_prob", lower=0.0, upper=1.0
+            )
+            consistency_scale = _resolved_boundary_value(consistency_scale, cfg, "consistency_scale", lower=0.0)
+            soft_iou_scale = _resolved_boundary_value(soft_iou_scale, cfg, "soft_iou_scale", lower=0.0)
             return self._boundary_forward(
                 hidden,
                 encoded,
@@ -3607,6 +4188,8 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 task_type_ids,
                 group_mask,
                 supervision,
+                classification_logits,
+                gold_injection_prob,
                 soft_iou_scale,
                 consistency_scale,
                 relation_head_index,
@@ -3637,6 +4220,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             task_type_ids,
             group_mask,
             supervision,
+            classification_logits,
         )
 
     def _span_forward(
@@ -3657,6 +4241,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         task_type_ids,
         group_mask,
         supervision,
+        classification_logits,
     ) -> Gliner2SchemaExtractionOutput:
         """Score span groups. Gold counts replace predicted counts when targets exist."""
         mention_mask = None if supervision is None else supervision.get("mention_mask")
@@ -3664,21 +4249,18 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             supervision is not None
             and supervision.get("mention_pairs") is not None
             and mention_mask is not None
-            and bool(mention_mask.any())
+            and _mask_selects(mention_mask)
         ):
             raise ValueError("mention targets require a boundary model")
         if supervision is not None and _has_boundary_targets(supervision):
             raise ValueError("record and relation targets require a boundary model")
-        classification_logits = _classification_logits(
-            cls_states, cls_marker_mask, cls_group_index, task_type_ids, group_mask, self.classifier
-        )
         prompt_states = None
         if prompt_marker_indices is not None:
-            prompt_states = _gather(hidden, prompt_marker_indices, prompt_marker_mask)
+            prompt_states = gather_token_states(hidden, prompt_marker_indices, mask=prompt_marker_mask)
         loss = None
         losses = None
         structures = None if supervision is None else supervision.get("span_structures")
-        span_logits, counts, struct_loss, count_loss = _span_logits(
+        span_logits, counts, struct_loss, count_loss = self._span_dispatch.span_logits(
             text_states,
             text_word_mask,
             query_states,
@@ -3689,30 +4271,19 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             prompt_group_index,
             task_type_ids,
             group_mask,
-            self.span_rep,
-            self.count_pred,
-            self.count_embed,
             self.max_width,
             structures=structures,
             training=self.training,
         )
         if supervision is not None:
-            anchor = text_states.sum() * 0.0
-            cls_loss = anchor
-            if supervision.get("classification_targets") is not None:
-                cls_loss = loss_gliner2.summed_classification_loss(
-                    classification_logits, supervision["classification_targets"]
-                )
-            if structures is None:
-                struct_loss = anchor
-                count_loss = anchor
-            loss = cls_loss + struct_loss + count_loss
-            losses = {
-                "classification_loss": cls_loss,
-                "structure_loss": struct_loss,
-                "count_loss": count_loss,
-                "loss": loss,
-            }
+            loss, losses = self.loss_function(
+                self.config,
+                anchor=text_states.sum() * 0.0,
+                classification_logits=classification_logits,
+                classification_targets=supervision.get("classification_targets"),
+                structure_loss=struct_loss,
+                count_loss=count_loss,
+            )
         return Gliner2SchemaExtractionOutput(
             last_hidden_state=hidden,
             hidden_states=encoded.hidden_states,
@@ -3742,6 +4313,8 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         task_type_ids,
         group_mask,
         supervision,
+        classification_logits,
+        gold_injection_prob,
         soft_iou_scale,
         consistency_scale,
         relation_head_index,
@@ -3761,7 +4334,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         if supervision is not None and supervision.get("mention_pairs") is not None:
             if supervision.get("mention_mask") is None:
                 raise ValueError("mention_pairs require mention_mask")
-            head_targets = SimpleNamespace(
+            head_targets = HeadTargets(
                 mention_pairs=supervision["mention_pairs"].to(text_states.device),
                 mention_mask=supervision["mention_mask"].to(text_states.device),
             )
@@ -3774,12 +4347,12 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
                 query_marker_mask,
                 head_targets,
                 return_candidates=True,
+                gold_injection_prob=gold_injection_prob,
+                consistency_scale=consistency_scale,
+                soft_iou_scale=soft_iou_scale,
             )
         else:
             boundary = None
-        classification_logits = _classification_logits(
-            cls_states, cls_marker_mask, cls_group_index, task_type_ids, group_mask, self.classifier
-        )
         loss = None
         losses = None
         if supervision is not None:
@@ -3843,7 +4416,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             or tail_index is None
             or relation_mask is None
             or query_states.shape[1] == 0
-            or not bool(relation_mask.any())
+            or not _mask_selects(relation_mask)
         ):
             return None, None
         device = text_states.device
@@ -3870,16 +4443,14 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         head_member[batch_index[valid], relation_index[valid], head_slot[valid]] = True
         tail_member[batch_index[valid], relation_index[valid], tail_slot[valid]] = True
         allow_self = torch.zeros(batch, relations, dtype=torch.bool, device=device)
-        pairs = self.relation_pair_generator.generate_batched(
+        pairs, logits = self.propose_and_score_relations(
+            text_states,
+            relation_states,
             boundary.candidates,
-            [None] * batch,
-            [[] for _ in range(batch)],
-            compact=False,
-            routing=(head_member, tail_member, relation_mask, allow_self),
+            (head_member, tail_member, relation_mask, allow_self),
         )
-        logits = self.relation_scorer(text_states, relation_states, boundary.candidates, pairs)
         keep = pairs.pair_mask
-        if keep is None or not bool(keep.any()):
+        if keep is None or keep.numel() == 0:
             return text_states.new_zeros(0, 6).long(), text_states.new_zeros(0)
         coords = torch.stack(
             (
@@ -3916,7 +4487,7 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             or field_query is None
             or field_cardinality is None
             or field_mask is None
-            or not bool(record_mask.any())
+            or not _mask_selects(record_mask)
         ):
             return None
         device = query_states.device
@@ -3941,6 +4512,147 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
             rows.append(sample)
         return rows
 
+    def propose_and_score_relations(self, text_states, relation_states, candidates, routing):
+        """Propose typed pairs and score them.
+
+        Args:
+            text_states: Token states `[B, L, H]`.
+            relation_states: Relation queries `[B, R, H]`.
+            candidates: Boundary candidates.
+            routing: `(head_member, tail_member, relation_valid, allow_self)`.
+
+        Returns:
+            Relation pairs and their logits.
+        """
+        batch = text_states.shape[0]
+        routing = tuple(item.to(text_states.device) for item in routing)
+        pairs = self.relation_pair_generator.generate_batched(
+            candidates,
+            [None] * batch,
+            [[] for _ in range(batch)],
+            compact=False,
+            routing=routing,
+        )
+        logits = self.relation_scorer(text_states, relation_states.to(text_states.device), candidates, pairs)
+        return pairs, logits
+
+    def _boundary_mention_terms(self, text_mask, query_mask, boundary, supervision, soft_iou_scale, consistency_scale):
+        """Boundary training terms, or None when the batch has no mentions.
+
+        Args:
+            text_mask: Valid tokens.
+            query_mask: Valid queries.
+            boundary: Boundary head output.
+            supervision: Training targets.
+            soft_iou_scale: Soft-IoU multiplier.
+            consistency_scale: Marginal-consistency multiplier.
+
+        Returns:
+            The dict from `boundary_training_loss`, or None.
+        """
+        mention_pairs = supervision.get("mention_pairs")
+        if mention_pairs is None:
+            return None
+        if supervision.get("mention_mask") is None:
+            raise ValueError("mention_pairs require mention_mask")
+        if boundary is None or boundary.candidates is None or boundary.start_logits is None:
+            raise ValueError("boundary targets require candidate and marginal logits")
+        candidates = boundary.candidates
+        return boundary_training_loss(
+            start_logits=boundary.start_logits,
+            end_logits=boundary.end_logits,
+            inside_logits=boundary.inside_logits,
+            pair_logits=candidates.pair_logits,
+            candidate_indices=candidates.indices,
+            candidate_valid=candidates.valid_mask,
+            proposal_logits=candidates.proposal_logits,
+            proposal_gold=getattr(candidates, "gold_mask", None),
+            null_logits=boundary.null_logits,
+            count_log_rates=boundary.count_log_rates,
+            mention_pairs=mention_pairs,
+            mention_mask=supervision["mention_mask"],
+            query_mask=query_mask,
+            text_mask=text_mask,
+            settings=self.config.boundary_config,
+            training=self.training,
+            start_targets=supervision.get("start_targets"),
+            end_targets=supervision.get("end_targets"),
+            inside_targets=supervision.get("inside_targets"),
+            soft_iou_scale=soft_iou_scale,
+            consistency_scale=consistency_scale,
+        )
+
+    def _record_part_losses(self, query_states, boundary, record_groups):
+        """Decode each record group and return its unaggregated loss parts.
+
+        Args:
+            query_states: Query states `[B, Q, H]`.
+            boundary: Boundary head output.
+            record_groups: Per-sample record groups.
+
+        Returns:
+            One `compute_record_group_loss` dict per group.
+        """
+        if self.record_decoder is None or boundary is None or boundary.candidates is None:
+            raise ValueError("record_groups require enable_records")
+        if boundary.candidates.candidate_states is None:
+            raise ValueError("record_groups require candidate states")
+        parts = []
+        for sample_index, groups in enumerate(record_groups):
+            for group in groups:
+                spec = group.get("spec")
+                targets = group.get("targets")
+                if spec is None or targets is None:
+                    from .processing_gliner2 import build_record_spec, build_record_targets
+
+                    spec = build_record_spec(group) if spec is None else spec
+                    targets = build_record_targets(group) if targets is None else targets
+                decoded = self.record_decoder.forward_group(
+                    spec,
+                    query_states[sample_index],
+                    boundary.candidates,
+                    sample_index,
+                )
+                parts.append(compute_record_group_loss(decoded, targets))
+        return parts
+
+    def _scored_relation_loss(self, text_states, query_states, boundary, supervision):
+        """Weighted relation loss, or None when the batch has no relation gold.
+
+        Args:
+            text_states: Token states.
+            query_states: Query states.
+            boundary: Boundary head output.
+            supervision: Training targets.
+
+        Returns:
+            The weighted relation loss.
+        """
+        if supervision.get("relation_gold_pairs") is None:
+            return None
+        if self.relation_scorer is None or self.relation_pair_generator is None:
+            raise ValueError("relation targets require enable_relations")
+        if boundary is None or boundary.candidates is None:
+            raise ValueError("relation targets require boundary candidates")
+        routing = supervision.get("relation_routing")
+        rel_states = supervision.get("relation_query_states")
+        if rel_states is None and routing is not None:
+            rel_states = _states_from_routing(
+                query_states,
+                routing,
+                bool(self.config.boundary_config.directional_relation_states),
+            )
+        if routing is None or rel_states is None or supervision.get("relation_gold_mask") is None:
+            raise ValueError("relation targets require routing, query states, and a gold mask")
+        pairs, logits = self.propose_and_score_relations(text_states, rel_states, boundary.candidates, routing)
+        return sparse_relation_loss(
+            logits,
+            pairs,
+            supervision["relation_gold_pairs"],
+            supervision["relation_gold_mask"],
+            self.config.boundary_config.relation_loss_weight,
+        )
+
     def _boundary_loss(
         self,
         text_states,
@@ -3954,126 +4666,21 @@ class Gliner2ForSchemaExtraction(Gliner2PreTrainedModel):
         consistency_scale,
     ):
         """Combine boundary, classification, record, and relation terms."""
-        cfg = self.config.boundary_config
-        total = text_states.sum() * 0.0
-        losses = {}
-        mention_pairs = supervision.get("mention_pairs")
-        if mention_pairs is not None:
-            if supervision.get("mention_mask") is None:
-                raise ValueError("mention_pairs require mention_mask")
-            if boundary.candidates is None or boundary.start_logits is None:
-                raise ValueError("boundary targets require candidate and marginal logits")
-            candidates = boundary.candidates
-            terms = loss_gliner2.boundary_training_loss(
-                start_logits=boundary.start_logits,
-                end_logits=boundary.end_logits,
-                inside_logits=boundary.inside_logits,
-                pair_logits=candidates.pair_logits,
-                candidate_indices=candidates.indices,
-                candidate_valid=candidates.valid_mask,
-                proposal_logits=candidates.proposal_logits,
-                proposal_gold=getattr(candidates, "gold_mask", None),
-                null_logits=boundary.null_logits,
-                count_log_rates=boundary.count_log_rates,
-                mention_pairs=mention_pairs,
-                mention_mask=supervision["mention_mask"],
-                query_mask=query_mask,
-                text_mask=text_mask,
-                settings=cfg,
-                training=self.training,
-                start_targets=supervision.get("start_targets"),
-                end_targets=supervision.get("end_targets"),
-                inside_targets=supervision.get("inside_targets"),
-                soft_iou_scale=soft_iou_scale,
-                consistency_scale=consistency_scale,
-            )
-            losses.update(terms)
-            total = total + terms["loss"]
-        if supervision.get("classification_targets") is not None:
-            cls_loss = loss_gliner2.mean_classification_loss(
-                classification_logits,
-                supervision["classification_targets"],
-                cfg.classification_loss_weight,
-            )
-            losses["classification_loss"] = cls_loss
-            total = total + cls_loss
-        if supervision.get("record_groups") is not None and supervision.get("dense_records") is not None:
-            raise ValueError("pass record_groups or dense_records, not both")
         record_groups = supervision.get("record_groups")
-        if record_groups is not None:
-            if self.record_decoder is None or boundary.candidates is None:
-                raise ValueError("record_groups require enable_records")
-            if boundary.candidates.candidate_states is None:
-                raise ValueError("record_groups require candidate states")
-            parts = []
-            for sample_index, groups in enumerate(record_groups):
-                for group in groups:
-                    spec = group.get("spec")
-                    targets = group.get("targets")
-                    if spec is None or targets is None:
-                        from .processing_gliner2 import build_record_spec, build_record_targets
-
-                        spec = build_record_spec(group) if spec is None else spec
-                        targets = build_record_targets(group) if targets is None else targets
-                    decoded = self.record_decoder.forward_group(
-                        spec,
-                        query_states[sample_index],
-                        boundary.candidates,
-                        sample_index,
-                    )
-                    parts.append(loss_gliner2.compute_record_group_loss(decoded, targets))
-            packed = loss_gliner2.aggregate_record_losses(parts, cfg.record_loss_weight)
-            losses["record_object_loss"] = packed["object"]
-            losses["record_field_loss"] = packed["field"]
-            total = total + packed["total"]
-        dense_records = supervision.get("dense_records")
-        if dense_records is not None:
-            if isinstance(dense_records, dict):
-                dense_records = SimpleNamespace(**dense_records)
-            packed = loss_gliner2.dense_record_batch_loss(dense_records)
-            losses["record_object_loss"] = packed["object_loss"]
-            losses["record_field_loss"] = packed["field_loss"]
-            total = total + cfg.record_loss_weight * (packed["object_loss"] + packed["field_loss"])
-        if supervision.get("relation_gold_pairs") is not None:
-            if self.relation_scorer is None or self.relation_pair_generator is None:
-                raise ValueError("relation targets require enable_relations")
-            if boundary.candidates is None:
-                raise ValueError("relation targets require boundary candidates")
-            routing = supervision.get("relation_routing")
-            rel_states = supervision.get("relation_query_states")
-            if rel_states is None and routing is not None:
-                rel_states = _states_from_routing(
-                    query_states,
-                    routing,
-                    bool(self.config.boundary_config.directional_relation_states),
-                )
-            if routing is None or rel_states is None or supervision.get("relation_gold_mask") is None:
-                raise ValueError("relation targets require routing, query states, and a gold mask")
-            batch = text_states.shape[0]
-            routing = tuple(item.to(text_states.device) for item in routing)
-            pairs = self.relation_pair_generator.generate_batched(
-                boundary.candidates,
-                [None] * batch,
-                [[] for _ in range(batch)],
-                compact=False,
-                routing=routing,
-            )
-            logits = self.relation_scorer(text_states, rel_states.to(text_states.device), boundary.candidates, pairs)
-            rel_loss = loss_gliner2.sparse_relation_loss(
-                logits,
-                pairs,
-                supervision["relation_gold_pairs"],
-                supervision["relation_gold_mask"],
-                cfg.relation_loss_weight,
-            )
-            losses["relation_loss"] = rel_loss
-            total = total + rel_loss
-        total = total + loss_gliner2.head_touch((self.record_decoder, self.relation_scorer), text_states.device)
-        losses["loss"] = total
-        return total, losses
-
-
-_RECORD_ID_TO_MODE = {1: "natural", 2: "latent", 3: "anchorless"}
+        targets = supervision.get("classification_targets")
+        return self.loss_function(
+            self.config,
+            anchor=text_states.sum() * 0.0,
+            classification_logits=classification_logits if targets is not None else None,
+            classification_targets=targets,
+            boundary_terms=self._boundary_mention_terms(
+                text_mask, query_mask, boundary, supervision, soft_iou_scale, consistency_scale
+            ),
+            record_part_losses=None
+            if record_groups is None
+            else self._record_part_losses(query_states, boundary, record_groups),
+            relation_loss=self._scored_relation_loss(text_states, query_states, boundary, supervision),
+        )
 
 
 def _has_boundary_targets(supervision) -> bool:
@@ -4082,7 +4689,7 @@ def _has_boundary_targets(supervision) -> bool:
     if records and any(records):
         return True
     mask = supervision.get("relation_gold_mask")
-    return mask is not None and bool(mask.any())
+    return _mask_selects(mask)
 
 
 def _merged_labels(labels, targets):
@@ -4112,24 +4719,34 @@ def _states_from_routing(query_states, routing, directional):
     return (head + tail) * 0.5
 
 
-def _record_spec(mode_id, anchor, field_query, field_cardinality, field_mask):
-    """Record schema object `RecordHead.forward_group` reads."""
+def _record_spec(mode_id, anchor, field_query, _field_cardinality, field_mask):
+    """Record schema object `RecordHead.forward_group` reads.
+
+    Field rows may be tensors. Invalid entries are skipped without copying the row to a list.
+
+    Args:
+        mode_id: Record mode id.
+        anchor: Anchor query id, or negative when there is no anchor.
+        field_query: Query id of each field.
+        field_cardinality: Cardinality id of each field.
+        field_mask: Valid-field mask.
+
+    Returns:
+        A `RecordSpec`.
+    """
     try:
         mode = _RECORD_ID_TO_MODE[int(mode_id)]
     except KeyError:
         raise ValueError(f"unknown record mode id {mode_id}") from None
-    fields = []
-    for query_id, cardinality, keep in zip(field_query.tolist(), field_cardinality.tolist(), field_mask.tolist()):
-        if not keep:
-            continue
-        fields.append(
-            SimpleNamespace(
-                query_id=int(query_id),
-                cardinality=SimpleNamespace(is_scalar=int(cardinality) in (1, 2)),
-            )
-        )
+    if torch.is_tensor(field_mask):
+        keep = field_mask.to(dtype=torch.bool)
+        query_ids = field_query[keep]
+        pairs = [int(query_ids[index]) for index in range(query_ids.shape[0])]
+    else:
+        pairs = [int(query_id) for query_id, keep in zip(field_query, field_mask) if keep]
+    fields = tuple(RecordFieldSpec(query_id=query_id) for query_id in pairs)
     anchor_id = int(anchor)
-    return SimpleNamespace(
+    return RecordSpec(
         mode=mode,
         fields=fields,
         anchor_query_id=None if anchor_id < 0 else anchor_id,
@@ -4140,22 +4757,41 @@ def _load_encoder(encoder_config):
     """Build the encoder from its config. DeBERTa rejects SDPA and falls back to eager."""
     try:
         return AutoModel.from_config(encoder_config)
-    except (ValueError, RuntimeError):
+    except ValueError:
         encoder_config._attn_implementation = "eager"
         return AutoModel.from_config(encoder_config)
+
+
+def _active_group_ids(group_mask, task_ids, *, classification: bool):
+    """Group indices kept by the span or classification loop.
+
+    The mask is moved once. Classifier calls stay per group so dropout matches.
+
+    Args:
+        group_mask: Valid groups `[B, G]`.
+        task_ids: Task id of each group `[B, G]`.
+        classification: Keep classification groups when True, span groups otherwise.
+
+    Returns:
+        One list of group indices per batch row.
+    """
+    is_classification = task_ids == int(TaskId.CLASSIFICATION)
+    selected = group_mask.bool() & (is_classification if classification else ~is_classification)
+    flags = selected.detach().cpu()
+    rows = []
+    for index in range(flags.shape[0]):
+        rows.append([group for group in range(flags.shape[1]) if bool(flags[index, group])])
+    return rows
 
 
 def _classification_logits(cls_states, cls_mask, cls_groups, task_ids, group_mask, classifier):
     """One raw logit vector per classification group."""
     if cls_groups is None or task_ids is None:
         return None
-    batch = cls_states.shape[0]
     rows = []
-    for index in range(batch):
+    for index, groups in enumerate(_active_group_ids(group_mask, task_ids, classification=True)):
         sample = []
-        for group in range(task_ids.shape[1]):
-            if not bool(group_mask[index, group]) or int(task_ids[index, group]) != _CLASSIFICATION_TASK:
-                continue
+        for group in groups:
             states = _rows(cls_states[index], cls_mask[index], cls_groups[index], group)
             if states.numel() == 0:
                 sample.append(states.new_zeros(0))
@@ -4163,6 +4799,55 @@ def _classification_logits(cls_states, cls_mask, cls_groups, task_ids, group_mas
                 sample.append(classifier(states).squeeze(-1))
         rows.append(sample)
     return rows
+
+
+def _predicted_span_counts(
+    text_states,
+    text_mask,
+    query_states,
+    query_mask,
+    query_groups,
+    prompt_states,
+    prompt_mask,
+    prompt_groups,
+    count_pred,
+    grouped,
+):
+    """Batched count-head argmax for inference groups.
+
+    One argmax keeps the first-max tie break of the per-group call.
+
+    Args:
+        text_states: Word states.
+        text_mask: Valid words.
+        query_states: Field states.
+        query_mask: Valid fields.
+        query_groups: Field group ids.
+        prompt_states: Prompt states.
+        prompt_mask: Valid prompts.
+        prompt_groups: Prompt group ids.
+        count_pred: Count classifier.
+        grouped: Span group indices per batch row.
+
+    Returns:
+        Map of `(batch, group)` to the predicted count.
+    """
+    prompts = []
+    keys = []
+    for index, groups in enumerate(grouped):
+        if text_states[index][text_mask[index]].shape[0] == 0:
+            continue
+        for group in groups:
+            fields = _rows(query_states[index], query_mask[index], query_groups[index], group)
+            prompt = _rows(prompt_states[index], prompt_mask[index], prompt_groups[index], group)
+            if prompt.numel() == 0 or fields.numel() == 0:
+                continue
+            prompts.append(prompt[:1])
+            keys.append((index, group))
+    if not prompts:
+        return {}
+    chosen = count_pred(torch.cat(prompts, dim=0)).argmax(dim=-1)
+    return {key: int(value) for key, value in zip(keys, chosen.tolist())}
 
 
 def count_conditioned_scores(span_rep: torch.Tensor, projected: torch.Tensor) -> torch.Tensor:
@@ -4201,7 +4886,22 @@ def _span_logits(
     struct_loss = text_states.sum() * 0.0 if structures is not None else None
     count_prompt = []
     count_target = []
-    for index in range(text_states.shape[0]):
+    grouped = _active_group_ids(group_mask, task_ids, classification=False)
+    predicted = {}
+    if structures is None:
+        predicted = _predicted_span_counts(
+            text_states,
+            text_mask,
+            query_states,
+            query_mask,
+            query_groups,
+            prompt_states,
+            prompt_mask,
+            prompt_groups,
+            count_pred,
+            grouped,
+        )
+    for index, groups in enumerate(grouped):
         mask = text_mask[index].bool() if structures is not None else text_mask[index]
         words = text_states[index][mask]
         length = words.shape[0]
@@ -4213,9 +4913,7 @@ def _span_logits(
         sample_counts = []
         sample_structures = None if structures is None else structures[index]
         slot = 0
-        for group in range(task_ids.shape[1]):
-            if not bool(group_mask[index, group]) or int(task_ids[index, group]) == _CLASSIFICATION_TASK:
-                continue
+        for group in groups:
             fields = _rows(query_states[index], query_mask[index], query_groups[index], group)
             prompt = _rows(prompt_states[index], prompt_mask[index], prompt_groups[index], group)
             structure = None
@@ -4224,15 +4922,13 @@ def _span_logits(
                     sample_spans.append(text_states.new_zeros(0, fields.shape[0], length, max_width))
                     sample_counts.append(0)
                     continue
-                count = int(count_pred(prompt[:1]).argmax(dim=-1).item())
+                count = predicted[(index, group)]
             else:
                 if slot >= len(sample_structures):
                     raise ValueError("span_structures has fewer groups than the schema")
                 structure = sample_structures[slot]
                 slot += 1
-                count = loss_gliner2.clamp_gold_count(
-                    structure.shape[0] if torch.is_tensor(structure) else structure[0]
-                )
+                count = clamp_gold_count(structure.shape[0] if torch.is_tensor(structure) else structure[0])
             scored = False
             if count > 0 and prompt.numel() > 0 and fields.numel() > 0 and rep is not None:
                 if structures is not None and torch.is_tensor(structure):
@@ -4243,10 +4939,8 @@ def _span_logits(
                 sample_counts.append(count)
                 scored = True
                 if structures is not None:
-                    span_mask = loss_gliner2.invalid_span_mask(length, max_width, scores.device)
-                    struct_loss = struct_loss + loss_gliner2.span_structure_loss(
-                        scores, structure, span_mask, training=training
-                    )
+                    span_mask = invalid_span_mask(length, max_width, scores.device)
+                    struct_loss = struct_loss + span_structure_loss(scores, structure, span_mask, training=training)
             else:
                 sample_spans.append(text_states.new_zeros(0, fields.shape[0], length, max_width))
                 sample_counts.append(0 if structures is not None else count)
@@ -4256,7 +4950,7 @@ def _span_logits(
             if (
                 count > 0
                 and prompt.numel() > 0
-                and loss_gliner2.supervises_count(task_id)
+                and supervises_count(task_id)
                 and (scored or rep is None or fields.numel() == 0)
             ):
                 count_prompt.append(prompt[:1])
@@ -4269,7 +4963,7 @@ def _span_logits(
         return span_rows, count_rows, None, None
     if count_prompt:
         count_logits = count_pred(torch.cat(count_prompt, dim=0))
-        count_loss = loss_gliner2.span_count_loss(
+        count_loss = span_count_loss(
             count_logits, torch.tensor(count_target, dtype=torch.long, device=count_logits.device)
         )
     else:

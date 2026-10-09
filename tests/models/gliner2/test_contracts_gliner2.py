@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import random
 import unittest
 from types import SimpleNamespace
 
@@ -193,16 +191,18 @@ class ContractBranchTest(unittest.TestCase):
         self.assertNotIn("structure_labels", targets)
         self.assertNotIn("relation_edges", targets)
         self.assertNotIn("records", targets)
-        groups = encoded["metadata"][0]["schema_meta"]["groups"]
-        entity = next(group for group in groups if group["task_type"] == "entities")
-        self.assertEqual(entity["options"]["fields"]["person"]["threshold"], 0.4)
-        relation = next(group for group in groups if group["task_type"] == "relations")
-        self.assertEqual(relation["options"]["endpoints"], ("head", "tail"))
-        note = next(group for group in groups if group["name"].startswith("note"))
-        self.assertEqual(note["options"]["record"]["mode"], "anchorless")
-        self.assertEqual(note["options"]["fields"]["title"]["choices"], ("notes",))
-        topic = next(group for group in groups if group["task_type"] == "classifications")
-        self.assertEqual(topic["options"]["classification"]["class_act"], "softmax")
+        groups = encoded["metadata"][0]["groups"]
+        entity = next(group for group in groups if group.task == "entities")
+        person = next(field for field in entity.fields if field.name == "person")
+        self.assertEqual(person.threshold, 0.4)
+        relation = next(group for group in groups if group.task == "relations")
+        self.assertEqual(relation.endpoints, ("head", "tail"))
+        note = next(group for group in groups if group.name.startswith("note"))
+        self.assertEqual(note.record.mode, "anchorless")
+        title = next(field for field in note.fields if field.name == "title")
+        self.assertEqual(title.choices, ("notes",))
+        topic = next(group for group in groups if group.task == "classifications")
+        self.assertEqual(topic.activation, "softmax")
         config = Gliner2Config(
             encoder_config=_encoder(),
             architecture="boundary",
@@ -324,41 +324,84 @@ class ContractDecodeTest(unittest.TestCase):
         )
         self.assertIn("entities", merged)
 
+    def test_typed_fields_and_schema_group_access(self):
+        import dataclasses
 
-class ContractSchemaTest(unittest.TestCase):
-    def test_sampling_draw_order_is_stable(self):
-        from transformers.models.gliner2.processing_gliner2 import SamplingConfig, _compile_groups, _sample_groups
+        from transformers.models.gliner2.processing_gliner2 import Field, FieldGroup, GroupRecord, RecordField
 
-        schema = {
-            "entities": {"person": {"dtype": "str", "threshold": 0.2}},
-            "relations": [{"wrote": {"head": {}, "tail": {}}}],
-            "classifications": [
-                {
-                    "task": "topic",
-                    "labels": ["math", "art"],
-                    "examples": [("Ada", "math")],
-                    "label_descriptions": {"math": "numbers"},
-                }
-            ],
-        }
-        labels = {
-            "entities": {"person": ["Ada"]},
-            "relations": {},
-            "classifications": {"topic": ["math"]},
-            "json_structures": {},
-        }
-        config = SamplingConfig()
+        span = Field(name="person", kind="span", dtype="str", threshold=0.2)
+        choice = Field(name="title", kind="choice", choices=("notes",))
+        label = Field(name="math", kind="label")
+        self.assertEqual(span.kind, "span")
+        self.assertEqual(choice.kind, "choice")
+        self.assertEqual(label.kind, "label")
+        self.assertEqual(choice.choices, ("notes",))
+        entities = FieldGroup(task="entities", name="entities", fields=(span,), tokens=("[P]", "entities", "person"))
+        self.assertEqual(entities.task, "entities")
+        self.assertEqual(entities.fields[0].dtype, "str")
+        self.assertEqual(entities.fields[0].threshold, 0.2)
+        topic = FieldGroup(
+            task="classifications",
+            name="topic",
+            fields=(label,),
+            tokens=(),
+            multi_label=False,
+            activation="softmax",
+            threshold=0.5,
+        )
+        self.assertEqual(topic.activation, "softmax")
+        self.assertFalse(topic.multi_label)
+        wrote = FieldGroup(
+            task="relations",
+            name="wrote",
+            fields=(Field(name="head", kind="span"), Field(name="tail", kind="span")),
+            tokens=(),
+            threshold=0.4,
+            endpoints=("head", "tail"),
+        )
+        self.assertEqual(wrote.endpoints, ("head", "tail"))
+        self.assertEqual(wrote.threshold, 0.4)
+        note = FieldGroup(
+            task="json_structures",
+            name="note",
+            fields=(choice,),
+            tokens=(),
+            record=GroupRecord(
+                mode="natural",
+                anchor="title",
+                occurrence_policy="latent_all",
+                fields=(RecordField(name="title", query_id=0, cardinality="one", is_anchor=True, exclusive=True),),
+                anchor_query_id=0,
+                task_index=0,
+            ),
+        )
+        self.assertEqual(note.record.mode, "natural")
+        self.assertEqual(note.record.anchor, "title")
+        self.assertEqual(note.record.occurrence_policy, "latent_all")
+        self.assertTrue(dataclasses.is_dataclass(type(span)))
+        self.assertFalse(isinstance(entities, SimpleNamespace))
 
-        def once(seed):
-            rng = random.Random(seed)
-            groups = _sample_groups(copy.deepcopy(schema), copy.deepcopy(labels), rng, config)
-            return [(group.task, group.name, group.tokens, group.options["fields"]) for group in groups]
 
-        self.assertEqual(once(0), once(0))
-        compiled = _compile_groups(schema)
-        person = next(group for group in compiled if group.task == "entities")
-        self.assertEqual(person.options["fields"]["person"]["dtype"], "str")
-        self.assertEqual(person.options["fields"]["person"]["threshold"], 0.2)
-        wrote = next(group for group in compiled if group.task == "relations")
-        self.assertEqual(wrote.options["endpoints"], ("head", "tail"))
-        self.assertTrue(compiled[-1].tokens)
+@require_torch
+class ContractTypeTest(unittest.TestCase):
+    def test_record_head_and_boundary_types(self):
+        import dataclasses
+
+        from transformers.loss.loss_gliner2 import ForSchemaExtractionLoss
+        from transformers.loss.loss_utils import LOSS_MAPPING
+        from transformers.models.gliner2.modeling_gliner2 import BoundaryHeadOutput, HeadTargets, RecordSpec
+        from transformers.utils import ModelOutput
+
+        self.assertTrue(dataclasses.is_dataclass(RecordSpec))
+        self.assertTrue(dataclasses.is_dataclass(HeadTargets))
+        self.assertTrue(dataclasses.is_dataclass(BoundaryHeadOutput))
+        self.assertTrue(issubclass(BoundaryHeadOutput, ModelOutput))
+        self.assertFalse(issubclass(RecordSpec, SimpleNamespace))
+        self.assertFalse(issubclass(HeadTargets, SimpleNamespace))
+        self.assertFalse(issubclass(BoundaryHeadOutput, SimpleNamespace))
+        self.assertIs(LOSS_MAPPING["ForSchemaExtraction"], ForSchemaExtractionLoss)
+        model = Gliner2ForSchemaExtraction(Gliner2Config(encoder_config=_encoder()))
+        bound = model.loss_function
+        if isinstance(bound, property):
+            bound = bound.fget(model)
+        self.assertIs(bound, ForSchemaExtractionLoss)

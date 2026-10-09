@@ -50,6 +50,14 @@ extractor(
 
 [[autodoc]] Gliner2BoundaryConfig
 
+## Gliner2Schema
+
+[[autodoc]] Gliner2Schema
+
+## Gliner2Labels
+
+[[autodoc]] Gliner2Labels
+
 ## Gliner2Processor
 
 [[autodoc]] Gliner2Processor

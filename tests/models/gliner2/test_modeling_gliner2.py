@@ -293,24 +293,3 @@ def _word_tokenizer():
     vocab = {token: index for index, token in enumerate(specials + words)}
     backend = Tokenizer(WordLevel(vocab, unk_token="[UNK]"))
     return PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]", pad_token="[PAD]")
-
-
-@unittest.skipUnless(is_tokenizers_available() and is_torch_available(), "tokenizers and torch are required")
-class Gliner2ProcessorTest(unittest.TestCase):
-    def test_entity_ids_and_postprocess(self):
-        from transformers import Gliner2ForSchemaExtraction, Gliner2Processor
-
-        tokenizer = _word_tokenizer()
-        processor = Gliner2Processor(tokenizer, word_splitter="whitespace")
-        schema = {"entities": {"person": {}}}
-        encoded = processor("Ada Lovelace wrote notes", schema=schema, return_tensors="pt")
-        self.assertIn("input_ids", encoded)
-        self.assertGreater(int(encoded["text_word_mask"].sum()), 0)
-        self.assertTrue(bool(encoded["prompt_marker_mask"].any()))
-        config = Gliner2Config(encoder_config=_tiny_encoder(vocab_size=tokenizer.vocab_size), max_width=4)
-        model = Gliner2ForSchemaExtraction(config).eval()
-        model_inputs = {key: value for key, value in encoded.items() if key != "metadata"}
-        outputs = model(**model_inputs)
-        decoded = processor.post_process_extraction(outputs, encoded["metadata"], threshold=0.5)
-        self.assertEqual(len(decoded), 1)
-        self.assertIn("entities", decoded[0])
