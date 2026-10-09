@@ -4158,6 +4158,47 @@ class GenerationIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(sliding_mask[0, 0, -1], torch.tensor([min_dtype, min_dtype, 0.0, 0.0]))
         torch.testing.assert_close(full_mask[0, 0, -1], torch.zeros(4))
 
+    def test_mtp_uses_rope_of_the_mtp_layer_type(self):
+        config = AutoConfig.for_model(
+            "gemma3_text",
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=32,
+            max_position_embeddings=16,
+            sliding_window=2,
+            layer_types=["sliding_attention", "full_attention"],
+            rope_parameters={
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10.0},
+                "full_attention": {"rope_type": "default", "rope_theta": 10000.0},
+            },
+        )
+        config.num_mtp_layers = 2
+        config.mtp_layer_types = ["full_attention", "sliding_attention"]
+        main_model = AutoModelForCausalLM.from_config(config)
+        mtp_model = MtpModel(main_model, num_mtp_layers=2).eval()
+
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        position_ids = torch.arange(4).unsqueeze(0)
+        rotary_layer_types = []
+
+        def record_layer_type(module, args, kwargs):
+            rotary_layer_types.append(kwargs.get("layer_type"))
+
+        mtp_model.rotary_emb.register_forward_pre_hook(record_layer_type, with_kwargs=True)
+        with torch.no_grad():
+            mtp_model(
+                input_ids=input_ids,
+                last_hidden_states=torch.randn(1, 4, config.hidden_size),
+                attention_mask=None,
+                position_ids=position_ids,
+                mtp_cache=MtpCache(config=mtp_model.config),
+            )
+        self.assertEqual(rotary_layer_types, ["full_attention", "sliding_attention"])
+
     @require_torch_multi_accelerator
     def test_mtp_use_correct_device_when_drafting(self):
         """Test that when drafting the new token, mtp puts it back on the correct same device as `input_ids`"""
