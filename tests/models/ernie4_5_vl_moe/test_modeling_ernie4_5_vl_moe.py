@@ -24,7 +24,10 @@ from transformers import (
     Ernie4_5_VLMoeForConditionalGeneration,
     Ernie4_5_VLMoeModel,
     is_torch_available,
-    is_vision_available,
+)
+from transformers.models.ernie4_5_vl_moe.configuration_ernie4_5_vl_moe import (
+    Ernie4_5_VLMoeTextConfig,
+    Ernie4_5_VLMoeVisionConfig,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -35,180 +38,93 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_cv2_available
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
-from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
-
-if is_cv2_available():
-    pass
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
 
+class Ernie4_5_VLMoeVisionText2TextModelTester(VLMModelTester):
+    base_model_class = Ernie4_5_VLMoeModel
+    config_class = Ernie4_5_VLMoeConfig
+    text_config_class = Ernie4_5_VLMoeTextConfig
+    vision_config_class = Ernie4_5_VLMoeVisionConfig
+    conditional_generation_class = Ernie4_5_VLMoeForConditionalGeneration
 
-class Ernie4_5_VLMoeVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=112,
-        video_start_token_id=3,
-        video_end_token_id=4,
-        image_start_token_id=5,
-        image_end_token_id=6,
-        image_token_id=7,
-        video_token_id=8,
-        is_training=True,
-        text_config=None,
-        vision_config=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.num_channels = num_channels
-        self.ignore_index = ignore_index
-        self.image_size = image_size
-        self.bos_token_id = 0
-        self.eos_token_id = 0
-        self.pad_token_id = 0
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.is_training = is_training
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("video_start_token_id", 3)
+        kwargs.setdefault("video_end_token_id", 4)
+        kwargs.setdefault("image_start_token_id", 5)
+        kwargs.setdefault("image_end_token_id", 6)
+        kwargs.setdefault("image_token_id", 7)
+        kwargs.setdefault("video_token_id", 8)
+        kwargs.setdefault("image_size", 112)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("num_image_tokens", 64)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("num_key_value_heads", 1)
+        kwargs.setdefault("tie_word_embeddings", True)
+        kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]})
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("moe_intermediate_size", [32, 32])
+        kwargs.setdefault("moe_norm_min", 1e-12)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("num_heads", 2)
+        kwargs.setdefault("spatial_merge_size", 1)
+        super().__init__(parent, **kwargs)
 
-        self.text_config = text_config
-        if text_config is None:
-            self.text_config = {
-                "vocab_size": 99,
-                "hidden_size": 32,
-                "intermediate_size": 32,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 2,
-                "num_key_value_heads": 1,
-                "hidden_act": "silu",
-                "max_position_embeddings": 512,
-                "tie_word_embeddings": True,
-                "rope_parameters": {"type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]},
-                "mlp_layer_types": ["dense", "sparse"],
-                "moe_intermediate_size": [32, 32],
-                "moe_k": 2,
-                "moe_num_experts": 8,
-                "moe_num_shared_experts": 2,
-                "moe_norm_min": 1e-12,
-            }
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {
+            self.video_token_id,
+            self.video_start_token_id,
+            self.video_end_token_id,
+            self.image_start_token_id,
+            self.image_end_token_id,
+        }
 
-        self.vision_config = vision_config
-        if vision_config is None:
-            self.vision_config = {
-                "depth": 2,
-                "hidden_size": 32,
-                "hidden_act": "silu",
-                "intermediate_size": 32,
-                "num_heads": 2,
-                "spatial_merge_size": 1,
-            }
+    def create_attention_mask(self, input_ids):
+        # The M-RoPE index only counts unmasked tokens, so the default mask would pad out image placeholders
+        return torch.ones_like(input_ids)
 
-        self.hidden_size = self.text_config["hidden_size"]
-        self.num_hidden_layers = self.text_config["num_hidden_layers"]
-        self.num_attention_heads = self.text_config["num_attention_heads"]
-        self.vocab_size = self.text_config["vocab_size"]
-
-        self.num_image_tokens = 64
-        self.seq_length = seq_length + self.num_image_tokens
-
-    def get_config(self):
-        return Ernie4_5_VLMoeConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            video_start_token_id=self.video_start_token_id,
-            video_end_token_id=self.video_end_token_id,
-            image_start_token_id=self.image_start_token_id,
-            image_end_token_id=self.image_end_token_id,
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor(
+            [
+                batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2),
+            ]
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vision_config.patch_size
-        pixel_values = floats_tensor(
-            [self.batch_size * (self.image_size**2) // (patch_size**2), self.num_channels * (patch_size**2)]
-        )
-
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.video_start_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_start_token_id] = self.pad_token_id
-        input_ids[input_ids == self.video_end_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_end_token_id] = self.pad_token_id
-
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
         input_ids[:, 0] = self.image_start_token_id
         input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id
         input_ids[:, 1 + self.num_image_tokens] = self.image_end_token_id
+        return input_ids
 
-        patch_size = config.vision_config.patch_size
-        patches_per_side = self.image_size // patch_size
-
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        patches_per_side = self.image_size // self.patch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
-        inputs_dict = {
-            "pixel_values": pixel_values,
+        return {
             "image_grid_thw": torch.tensor(
-                [[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device
+                [[1, patches_per_side, patches_per_side]] * batch_size, device=torch_device
             ),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
             "mm_token_type_ids": mm_token_type_ids,
         }
-        return config, inputs_dict
 
 
 @require_torch
-class Ernie4_5_VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            Ernie4_5_VLMoeModel,
-            Ernie4_5_VLMoeForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
+class Ernie4_5_VLMoeModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Ernie4_5_VLMoeVisionText2TextModelTester
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     test_all_params_have_gradient = False  # e score correction bias + moe
-    _is_composite = True
-
-    def setUp(self):
-        self.model_tester = Ernie4_5_VLMoeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Ernie4_5_VLMoeConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def _video_features_prepare_config_and_inputs(self):
         """
