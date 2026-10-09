@@ -295,18 +295,29 @@ def causal_conv1d_fn(
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
     activation: str | None = None,
+    seq_idx: torch.Tensor | None = None,
     **kwargs,
 ):
     _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
+    kernel_size = weight.shape[-1]
 
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
+    if seq_idx is None:
+        out = F.conv1d(
+            hidden_states.to(weight.dtype),
+            weight=weight.unsqueeze(1),
+            bias=bias,
+            padding=kernel_size - 1,
+            groups=hidden_size,
+        )[:, :, :seq_len]
+    else:
+        # Packed sequences: each position only reads the inputs of its own sequence, so the window is masked where
+        # `seq_idx` differs from the position's
+        windows = F.pad(hidden_states.to(weight.dtype), (kernel_size - 1, 0)).unfold(-1, kernel_size, 1)
+        window_seq_idx = F.pad(seq_idx, (kernel_size - 1, 0), value=-1).unfold(-1, kernel_size, 1)
+        same_sequence = (window_seq_idx == seq_idx.unsqueeze(-1)).unsqueeze(1)
+        out = (windows * same_sequence * weight[:, None, :]).sum(-1)
+        if bias is not None:
+            out = out + bias[:, None]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)

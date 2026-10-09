@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, Mamba2ForCausalLM, Mamba2Model
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer
+    from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer, mamba2_chunk_scan
 
 
 class Mamba2ConfigTester(ConfigTester):
@@ -319,6 +319,24 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_kwargs_reach_mamba2_mixer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
+
+    def test_chunk_scan_with_seq_idx_matches_each_sequence(self):
+        """With `seq_idx`, the state restarts at each packed sequence, as if each was run on its own."""
+        torch.manual_seed(0)
+        num_heads, head_dim, num_groups, state_size = 4, 8, 2, 16
+        seq_idx = torch.tensor([[0] * 5 + [1] * 9 + [2] * 3], dtype=torch.int32, device=torch_device)
+        hidden_states = torch.randn(1, 17, num_heads, head_dim, device=torch_device)
+        dt = torch.rand(1, 17, num_heads, device=torch_device)
+        A = -torch.rand(num_heads, device=torch_device)
+        B = torch.randn(1, 17, num_groups, state_size, device=torch_device)
+        C = torch.randn(1, 17, num_groups, state_size, device=torch_device)
+        D = torch.randn(num_heads, device=torch_device)
+
+        packed = mamba2_chunk_scan(hidden_states, dt, A, B, C, chunk_size=4, D=D, seq_idx=seq_idx)
+        for start, end in [(0, 5), (5, 14), (14, 17)]:
+            sl = slice(start, end)
+            out = mamba2_chunk_scan(hidden_states[:, sl], dt[:, sl], A, B[:, sl], C[:, sl], chunk_size=4, D=D)
+            torch.testing.assert_close(packed[:, sl], out)
 
     def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
