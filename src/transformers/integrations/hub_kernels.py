@@ -1025,9 +1025,12 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
                 return torch_function(*args, **kwargs)
 
             # The torch references run the whole row as one sequence, so they would silently drop the boundaries of
-            # packed sequences and let them leak into each other
-            if not is_new_implementation and any(
-                kwargs.get(name) is not None and name not in applicable_params for name in ("seq_idx", "cu_seqlens")
+            # packed sequences and let them leak into each other. A single sequence has no boundary to drop.
+            cu_seqlens = kwargs.get("cu_seqlens") if "cu_seqlens" not in applicable_params else None
+            seq_idx = kwargs.get("seq_idx") if "seq_idx" not in applicable_params else None
+            if not is_new_implementation and (
+                (cu_seqlens is not None and cu_seqlens.numel() > 2)
+                or (seq_idx is not None and bool((seq_idx[..., 1:] != seq_idx[..., :-1]).any()))
             ):
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
                 raise ValueError(
