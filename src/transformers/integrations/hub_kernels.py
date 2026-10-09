@@ -92,10 +92,12 @@ _PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
 
 if is_kernels_available():
     from kernels import (
+        CUDAProperties,
         Device,
         LayerRepository,
         LocalLayerRepository,
         Mode,
+        ROCMProperties,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_mapping,
@@ -139,6 +141,17 @@ if is_kernels_available():
                     version=1,
                 )
             },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="biohub/esmfold2-trimul",
+                        layer_name="EsmFold2TriangleMultiplication",
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
+                        trust_remote_code=True,
+                    ),
+                },
+            },
+            """
             # GB10/SM121 GDN fast path (no fla/causal_conv1d build there); dense and MoE share it.
             "Qwen3_5GatedDeltaNet": {
                 Device(
@@ -163,17 +176,6 @@ if is_kernels_available():
                     trust_remote_code=True,
                 ),
             },
-            "EsmFold2TriangleMultiplication": {
-                "cuda": {
-                    Mode.INFERENCE: LayerRepository(
-                        repo_id="biohub/esmfold2-trimul",
-                        layer_name="EsmFold2TriangleMultiplication",
-                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
-                        trust_remote_code=True,
-                    ),
-                },
-            },
-            """
             # TODO: add torch compile flag then
             # TODO: not checked FLA
             "chunk_gated_delta_rule": {
