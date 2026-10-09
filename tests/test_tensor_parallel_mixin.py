@@ -564,6 +564,15 @@ class TensorParallelTesterMixin(ABC):
 
         self._skip_if_tp_distributed_not_enabled()
 
+        # # Skip encoder-decoder models (TP not supported)
+        # if getattr(self, "is_encoder_decoder", False):
+        #     self.skipTest("TP tests not supported for encoder-decoder models")
+
+        # # Skip VLM models for now
+        # config = self.model_tester.get_config()
+        # if hasattr(config, "vision_config") and config.vision_config is not None:
+        #     self.skipTest("VLM models are not yet supported in TP tests")
+
     def test_moe_parallel_plans_shard_experts(self):
         """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
         A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
@@ -575,14 +584,15 @@ class TensorParallelTesterMixin(ABC):
         for model_class in moe_classes:
             model = model_class(copy.deepcopy(config))
             params = dict(model.named_parameters())  # a tied tensor once, under its first name
-            # an experts module (`@use_experts_implementation`) declares its layout: gated experts hold `gate_up_proj`
-            expert_weights = [
-                f"{name}.{projection}"
-                for name, module in model.named_modules()
-                if hasattr(module, "has_gate")
-                for projection in ("gate_up_proj" if module.has_gate else "up_proj", "down_proj")
-                if f"{name}.{projection}" in params
-            ]
+            expert_weights = []
+            for name, module in model.named_modules():
+                # an experts module (`@use_experts_implementation`) declares its layout via `has_gate`
+                if not hasattr(module, "has_gate"):
+                    continue
+                projections = ("gate_up_proj" if module.has_gate else "up_proj", "down_proj")
+                expert_weights += [
+                    f"{name}.{projection}" for projection in projections if f"{name}.{projection}" in params
+                ]
             for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
                 unsharded = sorted(n for n in expert_weights if _get_parameter_plan(n, plan, is_weight=True) is None)
                 self.assertFalse(

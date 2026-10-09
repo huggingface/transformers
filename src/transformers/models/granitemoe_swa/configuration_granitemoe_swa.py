@@ -57,10 +57,6 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
 
     model_type = "granitemoe_swa"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Attention shards like Granite (+ per-head `sinks` colwise to track the head-sharding); the
-    # routed experts shard tensor-parallel (packed gate/up colwise, down rowwise, `moe_tp_experts`)
-    # with the router replicated. The optional shared expert (`shared_mlp`, off by default) is left
-    # replicated -- it is small and its full output sums consistently with the all-reduced MoE output.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",

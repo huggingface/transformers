@@ -1714,8 +1714,12 @@ def convert_and_load_state_dict_in_model(
                 )
                 else None
             )
-            if tensor_idx is not None and empty_param is not None:
-                # the index runs over every stack one converter splits into (Ernie's text, then vision experts)
+            if (
+                tensor_idx is not None
+                and empty_param is not None
+                and any(isinstance(op, ErnieFuseAndSplitTextVisionExperts) for op in mapping.operations)
+            ):
+                # Ernie's converter splits one expert stack into text then vision experts: index within each
                 tensor_idx %= empty_param.shape[0]
 
             # 4. Handle DTensor sharding or device_map placement
