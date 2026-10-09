@@ -652,7 +652,8 @@ class TrainingArguments:
 
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
-            `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
+            `DistributedDataParallel`. Defaults to `True`, except for a `PreTrainedModel` using reentrant or legacy
+            gradient checkpointing, or gradient checkpointing enabled outside `Trainer`, where it defaults to `False`.
         ddp_bucket_cap_mb (`int`, *optional*):
             When using distributed training, the value of the flag `bucket_cap_mb` passed to `DistributedDataParallel`.
         ddp_broadcast_buffers (`bool`, *optional*):

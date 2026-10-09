@@ -153,14 +153,69 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerDDPKwargsTest(TestCasePlus):
     """The `ddp_*` TrainingArguments fields must reach DistributedDataParallelKwargs."""
 
-    def _get_ddp_kwargs(self, **training_args_overrides):
+    def _get_ddp_kwargs(self, model=None, **training_args_overrides):
         """Build a Trainer, run _build_accelerator_args, return the DDP kwargs dict."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(output_dir=tmp_dir, max_steps=1, **training_args_overrides)
-            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            trainer = Trainer(
+                model=model if model is not None else RegressionModel(), args=args, train_dataset=RegressionDataset()
+            )
             accelerator_args = trainer._build_accelerator_args()
             (handler,) = accelerator_args["kwargs_handlers"]
             return handler
+
+    def test_checkpointing_find_unused_parameters(self):
+        cases = [
+            (None, True),
+            ({}, True),
+            ({"every_n_layers": 2}, True),
+            ({"offload": False}, True),
+            ({"use_reentrant": False}, True),
+            ({"use_reentrant": True}, False),
+            ({"use_reentrant": None}, False),
+            ({"preserve_rng_state": False}, False),
+        ]
+        for checkpointing_kwargs, expected in cases:
+            with self.subTest(checkpointing_kwargs=checkpointing_kwargs):
+                model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, vocab_size=32))
+                handler = self._get_ddp_kwargs(
+                    model=model,
+                    gradient_checkpointing=True,
+                    gradient_checkpointing_kwargs=checkpointing_kwargs,
+                )
+                self.assertEqual(handler.find_unused_parameters, expected)
+
+    def test_checkpointing_explicit_find_unused_parameters(self):
+        for use_reentrant in (False, True):
+            for find_unused in (False, True):
+                with self.subTest(use_reentrant=use_reentrant, find_unused=find_unused):
+                    model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, vocab_size=32))
+                    handler = self._get_ddp_kwargs(
+                        model=model,
+                        gradient_checkpointing=True,
+                        gradient_checkpointing_kwargs={"use_reentrant": use_reentrant},
+                        ddp_find_unused_parameters=find_unused,
+                    )
+                    self.assertEqual(handler.find_unused_parameters, find_unused)
+
+    def test_manually_enabled_checkpointing_preserves_find_unused_default(self):
+        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, vocab_size=32))
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
+        self.assertFalse(self._get_ddp_kwargs(model=model).find_unused_parameters)
+
+    def test_without_checkpointing_preserves_find_unused_default(self):
+        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, vocab_size=32))
+        self.assertTrue(self._get_ddp_kwargs(model=model).find_unused_parameters)
+
+    def test_legacy_checkpointing_preserves_find_unused_default(self):
+        class LegacyGPT2LMHeadModel(GPT2LMHeadModel):
+            def _set_gradient_checkpointing(self, module, value=False):
+                if hasattr(module, "gradient_checkpointing"):
+                    module.gradient_checkpointing = value
+
+        model = LegacyGPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, vocab_size=32))
+        handler = self._get_ddp_kwargs(model=model, gradient_checkpointing=True)
+        self.assertFalse(handler.find_unused_parameters)
 
     def test_ddp_static_graph_true_reaches_accelerator(self):
         """ddp_static_graph=True is forwarded as static_graph=True to DistributedDataParallelKwargs."""
