@@ -629,42 +629,36 @@ class ImageProcessingTestMixin:
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
         model_name = test_file_path.parent.name
 
+        module_name = f"transformers.models.{model_name}.image_processing_pil_{model_name}"
+        module = importlib.import_module(module_name)
+
+        # Restore the original module namespace afterwards so other tests keep seeing the original class objects
+        original_namespace = dict(module.__dict__)
+
+        def restore_module():
+            module.__dict__.clear()
+            module.__dict__.update(original_namespace)
+
+        self.addCleanup(restore_module)
+
         # Try to init, save and load back a PIL processor in an env with no torchvision
         with patch.dict(
             import_utils.BACKENDS_MAPPING,
             {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
         ):
-            module = importlib.import_module(f"transformers.models.{model_name}")
+            importlib.reload(module)
+            image_processing_class = getattr(module, image_processing_class.__name__)
 
-            module_name = f"transformers.models.{model_name}.image_processing_pil_{model_name}"
-            module = importlib.import_module(module_name)
+            image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+            pil_processor = image_processing_class(**image_processor_dict)
 
-            # Restore the original module namespace afterwards so other tests keep seeing the original class objects
-            original_namespace = dict(module.__dict__)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pil_processor.save_pretrained(tmpdirname)
+                reloaded_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
 
-            def restore_module():
-                module.__dict__.clear()
-                module.__dict__.update(original_namespace)
-
-            self.addCleanup(restore_module)
-
-            with patch.dict(
-                import_utils.BACKENDS_MAPPING,
-                {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
-            ):
-                importlib.reload(module)
-                image_processing_class = getattr(module, image_processing_class.__name__)
-
-                image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
-                pil_processor = image_processing_class(**image_processor_dict)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pil_processor.save_pretrained(tmpdirname)
-                    reloaded_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
-
-                    # importlib.reload() creates a new class object, so we can't checl `isinstance`
-                    self.assertEqual(reloaded_processor.__class__.__name__, image_processing_class.__name__)
-                    self.assertEqual(reloaded_processor.__class__.__module__, image_processing_class.__module__)
+                # importlib.reload() creates a new class object, so we can't checl `isinstance`
+                self.assertEqual(reloaded_processor.__class__.__name__, image_processing_class.__name__)
+                self.assertEqual(reloaded_processor.__class__.__module__, image_processing_class.__module__)
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processing_classes.values():
