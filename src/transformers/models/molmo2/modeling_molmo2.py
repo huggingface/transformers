@@ -99,7 +99,7 @@ class Molmo2RotaryEmbedding(nn.Module):
     """RoPE from the flat `rope_parameters`; `scaled=False` keeps the theta but skips the scaling, for the
     layers outside `rope_scaling_layers`."""
 
-    def __init__(self, config: Molmo2TextConfig, device=None, scaled: bool = True):
+    def __init__(self, config: Molmo2TextConfig, scaled: bool = True):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
