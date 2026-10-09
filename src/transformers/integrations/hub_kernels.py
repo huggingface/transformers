@@ -84,6 +84,7 @@ if is_kernels_available():
     from kernels import (
         CUDAProperties,
         Device,
+        KernelizeFallback,
         LayerRepository,
         LocalLayerRepository,
         Mode,
@@ -953,13 +954,15 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
 
     mode = (Mode.INFERENCE if not model.training else Mode.TRAINING) if mode is None else mode
     device = Device(type=get_device_type(model.device))
+    # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
+    use_fallback = KernelizeFallback.ALL
 
     if model.kernel_config is not None:
         inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
         with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-            _kernels_kernelize(model, device=device, mode=mode)
+            _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
     else:
-        _kernels_kernelize(model, device=device, mode=mode)
+        _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
 
     model._use_kernels = True
 
