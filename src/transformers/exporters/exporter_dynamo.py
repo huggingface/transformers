@@ -51,7 +51,8 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
-from .configs import DynamoConfig
+from .configs import DynamoConfig, ExportFormat
+from .quantizers.base import QuantizationStage
 from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
 
 
@@ -94,6 +95,8 @@ class DynamoExporter(HfExporter):
             config = DynamoConfig(**config)
         elif not isinstance(config, DynamoConfig):
             raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+        if config.quantizer is not None:
+            config.quantizer.validate_environment(config.export_format)
 
         model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
 
@@ -111,6 +114,7 @@ class DynamoExporter(HfExporter):
         register_cache_pytrees_for_model(model)
 
         with (
+            torch.no_grad(),
             apply_patches("dynamo"),
             reset_model_state(model),
             patch_model_config(model, output_flags),
@@ -125,7 +129,52 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
+        # A Dynamo export's backend model is its FX graph, so it runs quantizers of either stage here.
+        quantizer = config.quantizer
+        if quantizer is not None and (
+            quantizer.stage is QuantizationStage.FX or config.export_format is ExportFormat.DYNAMO
+        ):
+            exported_program = self._quantize_fx(exported_program, config, sample_inputs, dynamic_shapes)
+
         return exported_program
+
+    def _quantize_fx(
+        self,
+        exported_program: ExportedProgram,
+        config: DynamoConfig,
+        sample_inputs: MutableMapping[str, Any],
+        dynamic_shapes: Any,
+    ) -> ExportedProgram:
+        """Quantize the exported program's FX graph with the config's quantizer and re-export the result with the same
+        inputs and dynamic shapes."""
+        with torch.no_grad():
+            quantized = config.quantizer.quantize(
+                exported_program.module(),
+                sample_inputs,
+                lambda sample: _traced_inputs(sample, list(sample_inputs)),
+                config.export_format,
+            )
+            return torch.export.export(
+                quantized,
+                args=(),
+                kwargs=copy.deepcopy(dict(sample_inputs)),
+                strict=config.strict,
+                dynamic_shapes=dynamic_shapes,
+                prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
+            )
+
+
+def _traced_inputs(sample: MutableMapping[str, Any], traced_names: list[str]) -> dict[str, Any]:
+    """A calibration sample's traced inputs, deep-copied (a calibration forward writes the cache in place). Any other
+    key, such as an output flag `prepare_for_export` popped from the sample inputs, is dropped."""
+    missing = [name for name in traced_names if name not in sample]
+    if missing:
+        raise ValueError(
+            f"A calibration sample lacks the traced inputs {missing} (it has {sorted(sample)}). Calibration samples "
+            "are the exported forward's kwargs (`export_for_generation` with a single config is the exception: it "
+            "takes generate kwargs)."
+        )
+    return copy.deepcopy({name: sample[name] for name in traced_names})
 
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────

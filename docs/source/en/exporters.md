@@ -821,6 +821,158 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 </details>
 
+## Quantization
+
+Every export config takes a `quantizer`. The quantizers live in `transformers.exporters.quantizers`, and each one runs
+at a fixed point of the export:
+
+| Quantizer | Quantizes | Backends |
+| --- | --- | --- |
+| [`~exporters.quantizers.PT2EQuantizer`] | the FX graph, with PyTorch 2 Export (PT2E) quantization | Dynamo, ONNX, ExecuTorch, OpenVINO |
+| [`~exporters.quantizers.OnnxRuntimeQuantizer`] | the ONNX model, with `onnxruntime.quantization` | ONNX |
+| [`~exporters.quantizers.NNCFOpenVINOQuantizer`] | the OpenVINO model, with [NNCF](https://github.com/openvinotoolkit/nncf) | OpenVINO |
+| [`~exporters.quantizers.NNCFOnnxQuantizer`] | the ONNX model, with [NNCF](https://github.com/openvinotoolkit/nncf) | ONNX |
+| [`~exporters.quantizers.NNCFTorchFXQuantizer`] | the FX graph, with [NNCF](https://github.com/openvinotoolkit/nncf) | Dynamo, ONNX, ExecuTorch (weight-only), OpenVINO |
+
+The export checks the quantizer against its backend and installed packages before tracing, so a mismatch fails early.
+
+The example below quantizes a sentiment classifier to int8 with ONNX Runtime, then runs it.
+
+```python
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeQuantizer
+
+model_id = "distilbert/distilbert-base-uncased-finetuned-sst-2-english"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForSequenceClassification.from_pretrained(model_id).eval()
+
+texts = [
+    "A wonderful, heartfelt film.",
+    "The plot was dull and the acting worse.",
+    "I would watch it again tomorrow.",
+    "Two hours I will never get back.",
+]
+calibration_dataset = [dict(tokenizer(text, return_tensors="pt")) for text in texts]
+inputs = dict(tokenizer("An absolute delight from start to finish.", return_tensors="pt"))
+
+config = OnnxConfig(dynamic=True, quantizer=OnnxRuntimeQuantizer(calibration_dataset=calibration_dataset))
+onnx_program = OnnxExporter().export(model, inputs, config)
+
+logits = onnx_program(**inputs)[0]
+print(model.config.id2label[int(logits.argmax())])  # POSITIVE
+```
+
+### PT2E
+
+[`~exporters.quantizers.PT2EQuantizer`] wraps a torchao PT2E quantizer and runs it on the FX graph
+(`prepare_pt2e` → calibrate → `convert_pt2e`), so it works with every backend. Each torchao quantizer injects its own quantize/dequantize ops, so pick the one your runtime supports:
+
+| Where you'll run | torchao quantizer | Import from |
+| --- | --- | --- |
+| PyTorch inductor, ONNX Runtime (QDQ), OpenVINO | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
+| ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
+
+Quantize generative models through [`~HfExporter.export_for_generation`]. Here `calibration_dataset` holds generate
+kwargs, like `inputs`, and each component (`prefill`, `decode`, vision or audio encoders) calibrates on the inputs
+captured for it, multimodal models included.
+
+```python
+from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
+    X86InductorQuantizer,
+    get_default_x86_inductor_quantization_config,
+)
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import DynamoConfig, DynamoExporter, PT2EQuantizer
+
+model_id = "meta-llama/Llama-3.2-1B"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id).eval()
+
+prompts = ["The capital of France is", "Photosynthesis turns sunlight into", "The first moon landing was in"]
+calibration_dataset = [dict(tokenizer(prompt, return_tensors="pt")) for prompt in prompts]
+inputs = dict(tokenizer("Once upon a time", return_tensors="pt"))
+
+x86 = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
+config = DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86, calibration_dataset=calibration_dataset))
+components = DynamoExporter().export_for_generation(model, inputs, config)  # {"prefill": ..., "decode": ...}
+```
+
+On OpenVINO, PT2E weights stay in full precision behind quantize/dequantize pairs, which OpenVINO converts to
+`FakeQuantize` and compresses to int8 itself.
+
+### ONNX Runtime
+
+[`~exporters.quantizers.OnnxRuntimeQuantizer`] runs `quantize_static` by default (int8 QDQ activations and weights,
+calibrated on `calibration_dataset`), as in the example above. With `dynamic=True` it runs `quantize_dynamic` (int8
+weights, activations quantized at runtime, no calibration). Other keyword arguments go to that function.
+
+```python
+config = OnnxConfig(quantizer=OnnxRuntimeQuantizer(per_channel=True, calibration_dataset=calibration_dataset))
+config = OnnxConfig(quantizer=OnnxRuntimeQuantizer(dynamic=True))
+```
+
+### NNCF
+
+The three NNCF quantizers in the table above run `nncf.quantize` by default (int8 activations and weights, calibrated
+on `calibration_dataset`, with `model_type=nncf.ModelType.TRANSFORMER` unless you pass another); with
+`weights_only=True` they run `nncf.compress_weights`. Other keyword arguments go to that function. ExecuTorch lowers only
+[`~exporters.quantizers.NNCFTorchFXQuantizer`]'s weight-only result.
+
+```python
+import nncf
+from transformers.exporters import (
+    DynamoConfig,
+    NNCFOnnxQuantizer,
+    NNCFOpenVINOQuantizer,
+    NNCFTorchFXQuantizer,
+    OnnxConfig,
+    OpenVINOConfig,
+    OpenVINOExporter,
+)
+
+# int8 activations and weights
+config = OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(calibration_dataset=calibration_dataset))
+# weight-only int4
+config = OpenVINOConfig(quantizer=NNCFOpenVINOQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT4_SYM))
+ov_model = OpenVINOExporter().export(model, inputs, config)
+
+# weight-only int4 ONNX, as ONNX Runtime's `MatMulNBits`
+config = OnnxConfig(quantizer=NNCFOnnxQuantizer(weights_only=True, mode=nncf.CompressWeightsMode.INT4_SYM))
+
+# on the FX graph, for a Dynamo export
+config = DynamoConfig(quantizer=NNCFTorchFXQuantizer(calibration_dataset=calibration_dataset))
+```
+
+Int8 activations run int8 matmuls, which saturate on CPUs without VNNI (AVX2-only Intel and AMD Zen 2 and older), so
+expect lower accuracy there. Weight-only compression keeps the matmuls in floating point.
+
+### Calibration
+
+A quantizer's `calibration_dataset` is an iterable of input dicts, such as a list or a `DataLoader` whose batches
+collate to model inputs. Omit it and a quantizer that needs data calibrates on the export's own sample inputs, with a
+warning, because one sample can skew the observed ranges. Quantizers that need no data (dynamic ONNX Runtime
+quantization, int8 weight compression) ignore it.
+
+### A different recipe per component
+
+Pass a `{component: config}` dict to [`~HfExporter.export_for_generation`] to quantize each component on its own
+terms. For the model above, static int8 on `prefill` and the lighter dynamic int8 on `decode`:
+
+```python
+dynamic_x86 = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config(is_dynamic=True))
+
+config = {
+    "prefill": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86)),
+    "decode": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(dynamic_x86)),
+}
+components = DynamoExporter().export_for_generation(model, inputs, config)
+```
+
+The dict must name every component [`~exporters.utils.decompose_for_generation`] produces (a multimodal model adds its
+encoders, and may split out `language_model` and `lm_head`). A component whose config sets no quantizer stays in full
+precision. In this dict, a quantizer's `calibration_dataset` holds the component's forward kwargs, not generate
+kwargs.
+
 ## Limitations and workarounds
 
 `torch.export`, `torch.onnx.export`, and ExecuTorch each have rough edges around specific
@@ -837,5 +989,5 @@ For `ExecutorchExporter` with either XNNPACK or MLX, the exporter swaps MoE expe
 
 ## Next steps
 
-- Add export support for a new architecture or backend with the patch and fix registries in
+- Add export support for a new architecture or backend with the patch and fix registries, or a new quantizer, in
 [Extending the exporters](./exporters_extend).

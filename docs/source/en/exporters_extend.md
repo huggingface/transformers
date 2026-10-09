@@ -73,6 +73,37 @@ so the patch only affects export. A few variations:
 - Write a fix instead of a patch when you need to rewrite the graph after tracing. The mechanism is
   the same, a decorated function in the matching registry.
 
+## Add a quantizer
+
+Quantizers live in `transformers.exporters.quantizers`, one class per toolchain and representation. Subclass
+[`~exporters.quantizers.ExportQuantizer`] and declare where it runs:
+
+- `stage`: `QuantizationStage.FX` for the `torch.export` FX graph, before any conversion (so every backend takes the
+  result), or `QuantizationStage.BACKEND` for the model a backend converts it into (`onnx.ModelProto`,
+  `openvino.Model`). A Dynamo export's backend model is its FX graph, so it runs quantizers of either stage.
+- `supported_formats`: the export formats it quantizes. The export rejects any other format before tracing.
+- `required_packages`: what it imports. The export checks they're installed before tracing.
+
+Then implement `_quantize(model, calibration, export_format)`. `model` is the FX graph or backend model for the stage,
+and `calibration` (a [`~exporters.quantizers.CalibrationSet`]) yields the model's own inputs, already mapped by the
+exporter.
+
+```python
+from transformers.exporters import ExportFormat
+from transformers.exporters.quantizers import ExportQuantizer, QuantizationStage
+
+
+class MyOnnxQuantizer(ExportQuantizer):
+    stage = QuantizationStage.BACKEND
+    supported_formats = (ExportFormat.ONNX,)
+    required_packages = ("my_toolkit",)
+
+    def _quantize(self, model, calibration, export_format):
+        import my_toolkit
+
+        return my_toolkit.quantize(model, calibration_feeds=list(calibration))
+```
+
 ## Stage reference
 
 Each exporter's source labels its stages as `# ── Stage N: … ──` comment blocks, so the file and

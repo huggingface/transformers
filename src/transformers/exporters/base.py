@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
@@ -25,7 +26,7 @@ from packaging import version
 from ..utils import logging
 from ..utils.import_utils import _is_package_available, is_torch_available
 from .configs import ExportConfigMixin
-from .utils import decompose_for_generation
+from .utils import capture_calibration_inputs, decompose_for_generation
 
 
 logger = logging.get_logger(__name__)
@@ -191,6 +192,19 @@ class HfExporter(ABC):
             configs = config
         else:
             configs = dict.fromkeys(components, config)
+            quantizer = config.quantizer
+            if quantizer is not None and quantizer.calibration_dataset:
+                # Generate-level samples: capture each component's own forward inputs from them.
+                calibration = capture_calibration_inputs(
+                    model,
+                    quantizer.calibration_dataset,
+                    generation_config=generation_config,
+                    multi_token_decode=multi_token_decode,
+                )
+                configs = {
+                    name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
+                    for name in components
+                }
 
         exported: dict[str, object] = {}
         for name, (submodel, subinputs) in components.items():

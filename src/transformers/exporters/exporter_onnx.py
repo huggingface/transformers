@@ -34,6 +34,9 @@ into an ONNX model via `torch.onnx.export`:
    lowering for specific aten ops where it's buggy or missing.
 5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
    fixes on the `ONNXProgram` IR for ORT compatibility.
+
+A backend-model quantizer (e.g. [`~exporters.quantizers.OnnxRuntimeQuantizer`]) then runs on the fixed model, before
+it's saved.
 """
 
 from __future__ import annotations
@@ -51,6 +54,7 @@ from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import OnnxConfig
 from .exporter_dynamo import DynamoExporter
+from .quantizers.base import QuantizationStage
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
@@ -139,19 +143,27 @@ class OnnxExporter(DynamoExporter):
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
-                f=config.output_path,
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
                 opset_version=config.opset_version,
-                external_data=config.external_data,
-                export_params=config.export_params,
                 optimize=config.optimize,
             )
 
         apply_onnx_ir_fixes(onnx_program)
+
+        if config.quantizer is not None and config.quantizer.stage is QuantizationStage.BACKEND:
+            _quantize_onnx(onnx_program, config, sample_inputs)
+
+        if config.output_path is not None:
+            onnx_program.save(
+                config.output_path,
+                include_initializers=config.export_params,
+                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
+                external_data=config.external_data,
+            )
+
         return onnx_program
 
 
@@ -1129,6 +1141,24 @@ def _aten_masked_fill(self, mask, value):
     return op.Where(mask, value_cast, self)
 
 
+def _quantized_decomposed_dequantize_per_channel(
+    input,
+    scales,
+    zero_points,
+    axis: int,
+    quant_min: int,
+    quant_max: int,
+    dtype: int,
+    out_dtype: int = -1,
+):
+    """`quantized_decomposed.dequantize_per_channel` as `DequantizeLinear` along `axis`; torchlib only translates the
+    per-tensor variants. The zero-point must share the input's integer dtype."""
+    if zero_points is not None:
+        zero_points = op.CastLike(zero_points, input)
+        return op.DequantizeLinear(input, scales, zero_points, axis=axis)
+    return op.DequantizeLinear(input, scales, axis=axis)
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
@@ -1142,6 +1172,13 @@ if is_onnxscript_available():
             torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
             operator.floordiv: _operator_floordiv,
         }
+    )
+
+    # Registers the `quantized_decomposed` ops, so the per-channel dequant resolves as a table key.
+    import torch.ao.quantization.fx._decomposed  # noqa: F401
+
+    _ONNX_TRANSLATION_TABLE[torch.ops.quantized_decomposed.dequantize_per_channel.default] = (
+        _quantized_decomposed_dequantize_per_channel
     )
 
 
@@ -1175,3 +1212,23 @@ def apply_onnx_ir_fixes(onnx_program: ONNXProgram) -> None:
     for fix in _IR_FIXES:
         for graph in graphs:
             fix(graph)
+
+
+# ── Quantization ────────────────────────────────────────────────────────────
+
+
+def _quantize_onnx(onnx_program: ONNXProgram, config: OnnxConfig, sample_inputs) -> None:
+    """Replace `onnx_program`'s model with the config's quantizer's, calibrated on the model's inputs."""
+    model = onnx_program.model_proto
+    names = [graph_input.name for graph_input in model.graph.input]
+    quantized = config.quantizer.quantize(
+        model, sample_inputs, lambda sample: _onnx_feed(names, sample), config.export_format
+    )
+    onnx_program.model = onnx_ir.from_proto(quantized)
+
+
+def _onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
+    """`sample`'s tensor leaves as the ONNX model's inputs, by input name (mutated inputs carry an `input.` prefix)."""
+    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
+    paths = {name: name.removeprefix("input.") for name in input_names}
+    return {name: leaves[path] for name, path in paths.items() if path in leaves}

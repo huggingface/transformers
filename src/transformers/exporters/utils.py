@@ -42,7 +42,7 @@ import enum
 import functools
 import inspect
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Iterable, MutableMapping
 from typing import Any
 
 from ..utils import logging
@@ -957,6 +957,27 @@ def decompose_for_generation(
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
     return components
+
+
+def capture_calibration_inputs(
+    model: PreTrainedModel,
+    calibration_dataset: Iterable[dict[str, Any]],
+    generation_config: Any = None,
+    multi_token_decode: bool = False,
+) -> dict[str, list[dict]]:
+    """Run each generate-style sample through `decompose_for_generation` and collect every component's forward
+    kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component."""
+    calibration: dict[str, list[dict]] = {}
+    for sample in calibration_dataset:
+        components = decompose_for_generation(
+            model, sample, generation_config=generation_config, multi_token_decode=multi_token_decode
+        )
+        for name, (_submodel, forward_inputs) in components.items():
+            calibration.setdefault(name, []).append(forward_inputs)
+        # A multi-token decode graph also serves the prefill step, so it calibrates on the prefill inputs too.
+        if multi_token_decode and "prefill" in components and "decode" in components:
+            calibration["decode"].append(components["prefill"][1])
+    return calibration
 
 
 # ── Cross-backend patches ───────────────────────────────────────────────────
