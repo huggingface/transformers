@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.models.gemma3n import Gemma3nProcessor
 from transformers.testing_utils import (
     require_sentencepiece,
@@ -42,6 +44,35 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.boi_token
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        # Overwritten because Gemma3n needs nested image inputs and its own token type ids
+        images = [[np.random.randint(255, size=(h, w, 3), dtype=np.uint8)] for h, w in image_sizes]
+        inputs = processor(
+            text=[f"This is an image {processor.image_token}"] * len(images),
+            images=images,
+            padding=True,
+            return_tensors="pt",
+        )
+        num_image_tokens_from_call = inputs.token_type_ids.eq(1).sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+        sampling_rate = processor.feature_extractor.sampling_rate
+        audio_lengths = [sampling_rate, 4 * sampling_rate]
+        inputs = processor(
+            text=[f"This is an audio {processor.audio_token}"] * len(audio_lengths),
+            audio=[np.zeros(length, dtype=np.float32) for length in audio_lengths],
+            padding=True,
+            return_tensors="pt",
+        )
+        num_audio_tokens_from_call = inputs.token_type_ids.eq(3).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
     def test_audio_feature_extractor(self):
         processor = self.get_processor()

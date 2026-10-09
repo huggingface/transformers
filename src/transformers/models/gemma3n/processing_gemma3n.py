@@ -17,7 +17,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 
@@ -85,6 +85,8 @@ class Gemma3nProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
+
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) or not isinstance(text[0], str):
@@ -96,10 +98,10 @@ class Gemma3nProcessor(ProcessorMixin):
             if not text:
                 text = [self.audio_token for _ in audio]
 
-            # Expand placeholder audio tokens to the full audio token sequence
-            text = [prompt.replace(self.audio_token, self.full_audio_sequence) for prompt in text]
+            audio_replacements = [self.full_audio_sequence] * len(audio_inputs["input_features"])
         else:
             audio_inputs = {}
+            audio_replacements = []
 
         if images is not None:
             images = self.image_processor.fetch_images(images)
@@ -115,10 +117,16 @@ class Gemma3nProcessor(ProcessorMixin):
                     f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(text)})."
                 )
 
-            # Expand placeholder image tokens to the full image token sequence
-            text = [prompt.replace(self.image_token, self.full_image_sequence) for prompt in text]
+            images_replacements = [self.full_image_sequence] * sum(len(batch) for batch in batched_images)
         else:
             image_inputs = {}
+            images_replacements = []
+
+        text, text_replacement_offsets = self.get_text_with_replacements(
+            list(text),
+            images_replacements=images_replacements,
+            audio_replacements=audio_replacements,
+        )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
@@ -131,7 +139,42 @@ class Gemma3nProcessor(ProcessorMixin):
         token_type_ids[array_ids == self.audio_token_id] = 3
         text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs
         text_inputs["token_type_ids"] = token_type_ids.tolist()
-        return BatchFeature(data={**text_inputs, **image_inputs, **audio_inputs}, tensor_type=return_tensors)
+        if return_text_replacement_offsets:
+            text_inputs["text_replacement_offsets"] = text_replacement_offsets
+        return BatchFeature(
+            data={**text_inputs, **image_inputs, **audio_inputs},
+            tensor_type=return_tensors,
+            skip_tensor_conversion=self.skip_tensor_conversion,
+        )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            audio_lengths (`list[int]`, *optional*):
+                The lengths of audio inputs in number of samples.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            # NOTE: No image cropping supported yet
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if audio_lengths is not None:
+            # NOTE: Every audio is padded or truncated to a fixed window
+            vision_data["num_audio_tokens"] = [self.audio_seq_length] * len(audio_lengths)
+
+        return MultiModalData(**vision_data)
 
     @property
     def model_input_names(self):
