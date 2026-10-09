@@ -35,7 +35,6 @@ from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
 from ..superglue.image_processing_superglue import SuperGlueImageProcessor, SuperGlueImageProcessorKwargs
-from ..superpoint import SuperPointConfig
 
 
 logger = logging.get_logger(__name__)
@@ -76,7 +75,7 @@ class LightGlueConfig(PreTrainedConfig):
         "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
     }
 
-    keypoint_detector_config: dict | SuperPointConfig | None = None
+    keypoint_detector_config: dict | PreTrainedConfig | None = None
     descriptor_dim: int = 256
     num_hidden_layers: int = 9
     num_attention_heads: int = 4

@@ -1617,6 +1617,11 @@ class ModularFileMapper(ModuleMapper):
 
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
 
+        # Functions explicitly imported in the modular are inlined, even if the file of an inherited class imports them
+        # from a sibling file
+        for imported_objects in self.imported_objects_per_file.values():
+            imported_objects.difference_update(self.added_objects_file_mapping)
+
     def merge_model_specific_imports(self, visited_modules):
         """Merge the functions and assignments imported from the modeling files to the modular nodes and dependency graph,
         based on the visited files."""
