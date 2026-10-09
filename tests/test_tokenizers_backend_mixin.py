@@ -591,3 +591,23 @@ Hey how are you doing"""  # noqa: W293
                     text,
                     f"Roundtrip failed for {model_id} on sample {text!r}",
                 )
+
+    def test_cjk_decoding_with_fast_tokenizer(self):
+        """
+        Tests whether fast tokenizers with custom __init__ (like LlamaTokenizerFast)
+        correctly load the full pipeline from tokenizer.json and decode CJK characters.
+        """
+        # "huggyllama/llama-7b" contains a fast tokenizer that triggered the issue.
+        tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=True)
+
+        cjk_text = "你好世界"
+        ascii_text = "hello world"
+
+        cjk_encoded = tokenizer.encode(cjk_text, add_special_tokens=False)
+        ascii_encoded = tokenizer.encode(ascii_text, add_special_tokens=False)
+
+        cjk_decoded = tokenizer.decode(cjk_encoded)
+        ascii_decoded = tokenizer.decode(ascii_encoded)
+
+        self.assertEqual(ascii_decoded, ascii_text, "ASCII text failed to decode correctly.")
+        self.assertEqual(cjk_decoded, cjk_text, "CJK text failed to decode correctly.")
