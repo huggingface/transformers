@@ -20,8 +20,10 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
+from ..utils.loading_report import LoadStateDictInfo
+from .checkpoint import _load_model_checkpoint_distributed, _save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
@@ -32,12 +34,12 @@ from .tensor_parallel import (
 )
 from .utils import (
     TransformersDeviceMesh,
+    _check_distributed_checkpointing_available,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_distributed_mesh,
-    save_model_checkpoint_distributed,
 )
 
 
@@ -240,6 +242,7 @@ class DistributedMixin:
         model_to_save,
         save_directory: str | os.PathLike,
         *,
+        consolidate: bool = True,
         push_to_hub: bool = False,
         save_on_this_rank: bool = True,
         repo_id: str | None = None,
@@ -248,19 +251,21 @@ class DistributedMixin:
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save an FSDP-wrapped model via DCP and optionally push to the Hub."""
-        if not is_torch_greater_or_equal("2.7"):
+        """Save an FSDP- or TP-sharded model as safetensors via DCP and optionally push to the Hub."""
+        if not _check_distributed_checkpointing_available():
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
-        if not is_fsdp_managed_module(model_to_save):
+
+        distributed_config = getattr(model_to_save.config, "distributed_config", None)
+        if distributed_config is None or (distributed_config.tp_size <= 1 and distributed_config.fsdp_size <= 1):
             raise ValueError(
-                "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
+                "save_pretrained(..., distributed_checkpoint=True) requires an FSDP- or TP-sharded model."
             )
         if getattr(model_to_save, "_device_mesh", None) is None:
             raise ValueError(
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
-        save_model_checkpoint_distributed(model_to_save, save_directory)
+        _save_model_checkpoint_distributed(model_to_save, save_directory, consolidate=consolidate)
 
         if push_to_hub and save_on_this_rank:
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
@@ -312,3 +317,27 @@ class DistributedMixin:
             return
         if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1 or distributed_config.ep_size > 1:
             _distributed_barrier()
+
+    def _load_and_finalize_distributed_pretrained_model(self, distributed_checkpoint_dir, device_map, device_mesh):
+        # First, materialize the parameters.
+        self._move_missing_keys_from_meta_to_device(set(self.state_dict()), device_map, device_mesh, None)
+        self.tie_weights(recompute_mapping=False)
+
+        # Load the distributed checkpoint into the model.
+        _load_model_checkpoint_distributed(self, distributed_checkpoint_dir)
+
+        # Everything in the state dict was loaded: only initialize what DCP cannot provide (non-persistent buffers).
+        for tensor in self.state_dict(keep_vars=True).values():
+            tensor._is_hf_initialized = True
+        self.initialize_weights()
+
+        # DCP loads strictly: a missing key raises, so there is nothing to report.
+        loading_info = LoadStateDictInfo(
+            missing_keys=set(),
+            unexpected_keys=set(),
+            mismatched_keys=set(),
+            error_msgs=[],
+            conversion_errors={},
+            skipped_pp_keys=set(),
+        )
+        return loading_info
