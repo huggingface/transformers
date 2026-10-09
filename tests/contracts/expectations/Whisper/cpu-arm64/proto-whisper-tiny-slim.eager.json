@@ -1,0 +1,187 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/Whisper-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "proto-whisper-tiny-slim",
+  "kind": "fixture",
+  "revision": "9877529f05b049732196b574d9d5272cb8dae6e0",
+  "environment": {
+   "python": "3.10.19",
+   "transformers": "5.16.0.dev0",
+   "torch": "2.11.0",
+   "torchvision": "0.26.0",
+   "torchaudio": "2.11.0",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 0.8,
+  "platform": "cpu-arm64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "generated_tokens": [
+   [
+    2182
+   ],
+   [
+    3092
+   ],
+   [
+    3344
+   ],
+   [
+    5566
+   ]
+  ],
+  "generated_text": [
+   " red",
+   " green",
+   " blue",
+   " yellow"
+  ],
+  "label_logprobs": [
+   [
+    -0.0021997320000082254,
+    -0.001545069506391883,
+    -0.0028285279404371977,
+    -0.021372366696596146,
+    -0.002996956231072545
+   ],
+   [
+    -0.0006119524477981031,
+    -0.0004924515378661454,
+    -0.000598251644987613,
+    -0.009474551305174828,
+    -0.0011297041783109307
+   ],
+   [
+    -0.0004782725009135902,
+    -0.0003327769518364221,
+    -0.0003234816831536591,
+    -0.016753101721405983,
+    -0.0007658647373318672
+   ],
+   [
+    -0.0035306992940604687,
+    -0.002205798402428627,
+    -0.0036348719149827957,
+    -0.008426468819379807,
+    -0.0031932813581079245
+   ]
+  ],
+  "timestamped_tokens": [
+   [
+    50384
+   ],
+   [
+    50384
+   ],
+   [
+    50384
+   ],
+   [
+    50384
+   ]
+  ],
+  "timestamped_text": [
+   "<|0.40|>",
+   "<|0.40|>",
+   "<|0.40|>",
+   "<|0.40|>"
+  ],
+  "feature_extractor_config_keys": [
+   "chunk_length",
+   "feature_extractor_type",
+   "feature_size",
+   "hop_length",
+   "mel_filters",
+   "n_fft",
+   "n_samples",
+   "nb_max_frames",
+   "padding_side",
+   "padding_value",
+   "processor_class",
+   "return_attention_mask",
+   "sampling_rate"
+  ],
+  "max_length_tokens": [
+   [
+    2182
+   ],
+   [
+    3092
+   ],
+   [
+    3344
+   ],
+   [
+    5566
+   ]
+  ],
+  "assisted_tokens": [
+   [
+    2182
+   ],
+   [
+    3092
+   ],
+   [
+    3344
+   ],
+   [
+    5566
+   ]
+  ],
+  "longform_tokens": [
+   [
+    50384,
+    50373,
+    2182,
+    2182,
+    2182,
+    2182,
+    2182,
+    2182,
+    2182
+   ],
+   [
+    50384,
+    50373,
+    50259,
+    2182,
+    2182,
+    2182,
+    2182,
+    2182,
+    2182
+   ]
+  ],
+  "training": {
+   "loss": 0.004144709091633558,
+   "gradients": {
+    "model.encoder.conv1.weight": true,
+    "model.decoder.layers.0.encoder_attn.q_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

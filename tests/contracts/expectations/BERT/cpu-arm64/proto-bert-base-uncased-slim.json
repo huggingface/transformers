@@ -1,0 +1,76 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/BERT-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "proto-bert-base-uncased-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.19",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "local_patches": [
+    "masked-spec-embed-init"
+   ]
+  },
+  "seconds": 0.1,
+  "platform": "cpu-arm64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "sdpa"
+  },
+  "predicted_tokens": [
+   5571,
+   5571,
+   5571,
+   11935
+  ],
+  "predicted_text": [
+   "charges",
+   "charges",
+   "charges",
+   "subtropical"
+  ],
+  "answer_logits": [
+   [
+    0.007818898186087608,
+    0.37318217754364014,
+    0.08803119510412216,
+    0.026554366573691368
+   ],
+   [
+    0.008690928108990192,
+    0.37367117404937744,
+    0.0874486044049263,
+    0.026254933327436447
+   ],
+   [
+    0.008095278404653072,
+    0.3739738166332245,
+    0.08767397701740265,
+    0.027107588946819305
+   ],
+   [
+    0.1301426887512207,
+    0.2742495834827423,
+    -0.0649070292711258,
+    0.03800760954618454
+   ]
+  ],
+  "training": {
+   "loss": 10.1921968460083,
+   "gradients": {
+    "bert.encoder.layer.0.attention.self.query.weight": true,
+    "bert.encoder.layer.0.intermediate.dense.weight": true
+   },
+   "updated": true
+  }
+ }
+}

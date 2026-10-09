@@ -1,0 +1,91 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/SmolLM-integration",
+  "target": "SmolLM-135M",
+  "variant": "default",
+  "revision": "1d461723eec654e65efdc40cf49301c89c0c92f4",
+  "framework": "transformers",
+  "contract_revision": "unpublished",
+  "environment": {
+   "python": "3.10.19",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4"
+  },
+  "seconds": 5.82
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "generated_tokens": [
+   [
+    7042,
+    28,
+    260,
+    3575
+   ],
+   [
+    11452,
+    30,
+    198,
+    504
+   ],
+   [
+    7268,
+    30,
+    657,
+    314
+   ],
+   [
+    4528,
+    30,
+    198,
+    504
+   ]
+  ],
+  "generated_text": [
+   " Paris, the capital",
+   " Berlin.\nThe",
+   " Rome. It is",
+   " London.\nThe"
+  ],
+  "next_token_logits": [
+   [
+    13.125,
+    4.65625,
+    7.28125,
+    6.875
+   ],
+   [
+    3.3125,
+    9.3125,
+    2.171875,
+    2.890625
+   ],
+   [
+    8.375,
+    4.78125,
+    15.125,
+    7.09375
+   ],
+   [
+    9.1875,
+    7.46875,
+    8.75,
+    16.625
+   ]
+  ],
+  "training": {
+   "loss": 3.1702964305877686,
+   "gradients": {
+    "model.layers.0.self_attn.q_proj.weight": true,
+    "model.layers.0.mlp.down_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}
