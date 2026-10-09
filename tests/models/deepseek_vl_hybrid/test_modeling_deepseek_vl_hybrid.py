@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
@@ -238,15 +239,15 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 @require_torch
 @require_torch_accelerator
 @slow
-class DeepseekVLHybridIntegrationTest(unittest.TestCase):
+class DeepseekVLHybridIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.model_id = "deepseek-community/deepseek-vl-7b-chat"
 
     def test_model_text_generation(self):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
             self.model_id, dtype="auto", device_map="auto"
         )
-        model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -282,7 +283,6 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
             self.model_id, dtype="auto", device_map="auto"
         )
-        model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -334,7 +334,6 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
             self.model_id, dtype="auto", device_map="auto"
         )
-        model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
