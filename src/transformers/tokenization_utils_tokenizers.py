@@ -156,6 +156,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 local_kwargs["_json_truncation"] = tok_from_file.truncation
             if tok_from_file.padding is not None:
                 local_kwargs["_json_padding"] = tok_from_file.padding
+            if tokenizer_json.get("pre_tokenizer") is not None:
+                local_kwargs["_json_pre_tokenizer_type"] = tokenizer_json["pre_tokenizer"].get("type")
 
             # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
             # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
@@ -368,6 +370,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
         _json_truncation = kwargs.pop("_json_truncation", None)
         _json_padding = kwargs.pop("_json_padding", None)
+        _json_pre_tokenizer_type = kwargs.pop("_json_pre_tokenizer_type", None)
         # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
@@ -426,6 +429,20 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
+
+        if _json_pre_tokenizer_type is not None and self._tokenizer.pre_tokenizer is not None:
+            built_pre_tokenizer = str(self._tokenizer.pre_tokenizer).split("(")[0]
+            if _json_pre_tokenizer_type != built_pre_tokenizer:
+                logger.warning(
+                    f"The tokenizer class you loaded from this checkpoint ({self.__class__.__name__}) uses a "
+                    f"'{built_pre_tokenizer}' pre-tokenizer. "
+                    f"However, the `tokenizer.json` file found in this checkpoint declares a "
+                    f"'{_json_pre_tokenizer_type}' pre-tokenizer. "
+                    f"This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set, "
+                    f"and some characters may be silently dropped at encode time. "
+                    f"If you experience encoding issues, consider changing the `tokenizer_class` to a class "
+                    f"that loads the full `tokenizer.json` pipeline in `tokenizer_config.json`."
+                )
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
