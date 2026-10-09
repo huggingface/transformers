@@ -50,7 +50,6 @@ import torch
 from transformers import WavTokenizerConfig, WavTokenizerFeatureExtractor, WavTokenizerModel, logging
 
 
-logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
@@ -231,6 +230,7 @@ def convert_checkpoint(checkpoint_path: str, output_dir: str, push_to_hub: str |
 
 
 if __name__ == "__main__":
+    logging.set_verbosity_info()
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, help="Path to the original .ckpt file")
     parser.add_argument("--output_dir", required=True, help="Where to save the converted model")
