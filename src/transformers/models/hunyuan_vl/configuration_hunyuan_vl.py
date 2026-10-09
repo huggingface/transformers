@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -258,7 +258,10 @@ class HunYuanVLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "hunyuan_vl"
-    sub_configs = {"vision_config": HunYuanVLVisionConfig, "text_config": HunYuanVLTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=HunYuanVLVisionConfig),
+        "text_config": SubConfigSpec(config_class=HunYuanVLTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -275,30 +278,21 @@ class HunYuanVLConfig(PreTrainedConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_config_class = self.sub_configs["text_config"]
-        text_keys = (
-            set(text_config_class.__dataclass_fields__)
-            | set(text_config_class.attribute_map)
-            | {"rope_scaling", "rope_theta"}
-        )
-        text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = text_config_class(**{**self.text_config, **text_kwargs})
-        elif self.text_config is None:
-            self.text_config = text_config_class(**text_kwargs)
+        if self.text_config is None:
+            text_config_class = self.sub_configs_defaults["text_config"].config_class
+            text_keys = (
+                set(text_config_class.__dataclass_fields__)
+                | set(text_config_class.attribute_map)
+                | {"rope_scaling", "rope_theta"}
+            )
+            self.text_config = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
+        super().__post_init__(**kwargs)
 
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
-
         # The attr is saved inside `text_config` on most VLMs, use it if available
-        kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
-        super().__post_init__(**kwargs)
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
 
 __all__ = ["HunYuanVLConfig", "HunYuanVLVisionConfig", "HunYuanVLTextConfig"]

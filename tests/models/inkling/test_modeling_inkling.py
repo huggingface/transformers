@@ -77,6 +77,17 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
     def test_training_overfit(self):
         pass
 
+    def test_dense_intermediate_size_keeps_expert_width(self):
+        # Official checkpoints: `intermediate_size` is the routed experts' width and
+        # `dense_intermediate_size` is the dense MLP's width.
+        config = InklingTextConfig.from_dict({"intermediate_size": 2048, "dense_intermediate_size": 16384})
+        self.assertEqual(config.intermediate_size, 16384)
+        self.assertEqual(config.moe_intermediate_size, 2048)
+
+        config = InklingTextConfig.from_dict({"intermediate_size": 3072, "dense_intermediate_size": 24576})
+        self.assertEqual(config.intermediate_size, 24576)
+        self.assertEqual(config.moe_intermediate_size, 3072)
+
 
 class InklingAudio2TextModelTester:
     def __init__(
