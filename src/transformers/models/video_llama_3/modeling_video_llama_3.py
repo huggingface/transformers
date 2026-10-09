@@ -759,6 +759,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
