@@ -190,6 +190,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForKeypointMatching
 
+### AutoModelForSchemaExtraction
+
+[[autodoc]] AutoModelForSchemaExtraction
+
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling

@@ -42,6 +42,17 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    # Boundary fields are read as `settings.*` on the boundary config object, and the
+    # loss weights are read by ForSchemaExtractionLoss outside modeling_*.py.
+    "Gliner2BoundaryConfig": True,
+    "Gliner2Config": [
+        "architecture_version",  # checkpoint round-trip
+        "classification_temperature",  # read by the schema-extraction pipeline
+        "config_version",  # checkpoint round-trip
+        "max_len",  # processor window length
+        "model_name",  # checkpoint round-trip
+        "token_pooling",  # processor subword selection
+    ],
     "NemotronH_Omni_Reasoning_V3_Config": [
         "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
     ],

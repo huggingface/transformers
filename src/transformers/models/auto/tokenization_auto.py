@@ -138,6 +138,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gemma3n", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma3n_text", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("git", "BertTokenizer" if is_tokenizers_available() else None),
+        ("gliner2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4_moe", "TokenizersBackend" if is_tokenizers_available() else None),

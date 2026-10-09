@@ -178,6 +178,7 @@ if TYPE_CHECKING:
     from .gemma4_unified import *
     from .gemma4_unified_assistant import *
     from .git import *
+    from .gliner2 import *
     from .glm import *
     from .glm4 import *
     from .glm4_moe import *

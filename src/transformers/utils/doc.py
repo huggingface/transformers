@@ -885,6 +885,24 @@ IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE = r"""
 """
 
 
+SCHEMA_EXTRACTION_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import AutoProcessor, {model_class}
+
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
+    >>> inputs = processor(
+    ...     "Ada Lovelace wrote notes about the analytical engine.",
+    ...     {{"entities": {{"person": {{}}, "work": {{}}}}}},
+    ...     return_tensors="pt",
+    ... )
+    >>> outputs = model(**{{key: value for key, value in inputs.items() if key != "metadata"}})
+    ```
+"""
+
+
 PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
     [
         ("text-to-audio-spectrogram", TEXT_TO_AUDIO_SPECTROGRAM_SAMPLE),
@@ -912,6 +930,7 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
         ("fill-mask", FILL_MASK_SAMPLE),
         ("mask-generation", MASK_GENERATION_SAMPLE),
         ("pretraining", PRETRAINING_SAMPLE),
+        ("schema-extraction", SCHEMA_EXTRACTION_SAMPLE),
     ]
 )
 
@@ -948,6 +967,7 @@ MODELS_TO_PIPELINE = OrderedDict(
         ("MODEL_FOR_MASKED_LM_MAPPING_NAMES", "fill-mask"),
         ("MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "mask-generation"),
         ("MODEL_FOR_PRETRAINING_MAPPING_NAMES", "pretraining"),
+        ("MODEL_FOR_SCHEMA_EXTRACTION_MAPPING_NAMES", "schema-extraction"),
     ]
 )
 
