@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import os
 import unittest
 
 from transformers import (
@@ -66,6 +67,174 @@ class ReplaceWithQuantLayersTest(unittest.TestCase):
         replace_with_quant_layers(model, quantization_config=cfg)
         self.assertIsInstance(model.lin, QuantizedLinear)
         self.assertIsInstance(model.emb, QuantizedEmbedding)
+
+
+@require_torch_accelerator
+class GemmaQuantKernelsTest(unittest.TestCase):
+    """Unit tests verifying fused Triton low-bit GEMV/GEMM kernels against eager PyTorch."""
+
+    def _create_layer(self, in_features, out_features, num_bits, bias=False, dtype=torch.bfloat16):
+        from transformers.integrations.gemma_quant import QuantizedLinear
+
+        layer = QuantizedLinear(in_features, out_features, bias=bias, num_bits=num_bits).to(
+            device=torch_device, dtype=dtype
+        )
+        layer.weight_scale.data = torch.randn(out_features, 1, dtype=torch.float32, device=torch_device)
+        if num_bits == 2:
+            layer.weight.data = torch.randint(
+                0, 256, (out_features, (in_features + 3) // 4), dtype=torch.uint8, device=torch_device
+            )
+        elif num_bits == 4:
+            layer.weight.data = torch.randint(
+                0, 256, (out_features, (in_features + 1) // 2), dtype=torch.uint8, device=torch_device
+            )
+        else:
+            layer.weight.data = torch.randint(
+                -128, 127, (out_features, in_features), dtype=torch.int8, device=torch_device
+            )
+        if bias:
+            layer.bias.data = torch.randn(out_features, dtype=dtype, device=torch_device)
+        return layer
+
+    def test_gemv_int4(self):
+        layer = self._create_layer(512, 256, num_bits=4, bias=True)
+        x = torch.randn(1, 512, dtype=torch.bfloat16, device=torch_device)
+
+        # Fused Triton output
+        out_fused = layer(x)
+
+        # Eager reference output
+        w_ref = layer._dequantize_weights(x.dtype)
+        out_ref = torch.nn.functional.linear(x, w_ref, layer.bias)
+
+        cos_sim = torch.nn.functional.cosine_similarity(out_fused.float().flatten(), out_ref.float().flatten(), dim=0)
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_gemv_int2(self):
+        layer = self._create_layer(512, 256, num_bits=2, bias=True)
+        x = torch.randn(1, 512, dtype=torch.bfloat16, device=torch_device)
+
+        out_fused = layer(x)
+        w_ref = layer._dequantize_weights(x.dtype)
+        out_ref = torch.nn.functional.linear(x, w_ref, layer.bias)
+
+        cos_sim = torch.nn.functional.cosine_similarity(out_fused.float().flatten(), out_ref.float().flatten(), dim=0)
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_gemv_int8(self):
+        layer = self._create_layer(512, 256, num_bits=8, bias=True)
+        x = torch.randn(1, 512, dtype=torch.bfloat16, device=torch_device)
+
+        out_fused = layer(x)
+        w_ref = layer._dequantize_weights(x.dtype)
+        out_ref = torch.nn.functional.linear(x, w_ref, layer.bias)
+
+        cos_sim = torch.nn.functional.cosine_similarity(out_fused.float().flatten(), out_ref.float().flatten(), dim=0)
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_gemm_int4(self):
+        layer = self._create_layer(512, 256, num_bits=4, bias=True)
+        x = torch.randn(16, 512, dtype=torch.bfloat16, device=torch_device)
+
+        out_fused = layer(x)
+        w_ref = layer._dequantize_weights(x.dtype)
+        out_ref = torch.nn.functional.linear(x, w_ref, layer.bias)
+
+        cos_sim = torch.nn.functional.cosine_similarity(out_fused.float().flatten(), out_ref.float().flatten(), dim=0)
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_gemm_int2(self):
+        layer = self._create_layer(512, 256, num_bits=2, bias=True)
+        x = torch.randn(16, 512, dtype=torch.bfloat16, device=torch_device)
+
+        out_fused = layer(x)
+        w_ref = layer._dequantize_weights(x.dtype)
+        out_ref = torch.nn.functional.linear(x, w_ref, layer.bias)
+
+        cos_sim = torch.nn.functional.cosine_similarity(out_fused.float().flatten(), out_ref.float().flatten(), dim=0)
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_gemm_int8(self):
+        layer = self._create_layer(512, 256, num_bits=8, bias=True)
+        x = torch.randn(16, 512, dtype=torch.bfloat16, device=torch_device)
+
+        out_fused = layer(x)
+        w_ref = layer._dequantize_weights(x.dtype)
+        out_ref = torch.nn.functional.linear(x, w_ref, layer.bias)
+
+        cos_sim = torch.nn.functional.cosine_similarity(out_fused.float().flatten(), out_ref.float().flatten(), dim=0)
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_multidimensional_and_unaligned(self):
+        # 3D input: (B=2, S=7, K=330) to test batching and unaligned dimensions
+        layer = self._create_layer(330, 150, num_bits=4, bias=True)
+        x = torch.randn(2, 7, 330, dtype=torch.bfloat16, device=torch_device)
+
+        out = layer(x)
+        self.assertEqual(out.shape, (2, 7, 150))
+
+        w_ref = layer._dequantize_weights(x.dtype)
+        out_ref = torch.nn.functional.linear(x, w_ref, layer.bias)
+        cos_sim = torch.nn.functional.cosine_similarity(out.float().flatten(), out_ref.float().flatten(), dim=0)
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_dispatch_fallback_equivalence(self):
+        import os
+
+        layer = self._create_layer(512, 256, num_bits=4, bias=True)
+        x = torch.randn(1, 512, dtype=torch.bfloat16, device=torch_device)
+
+        # 1. Fast path (Triton)
+        out_triton = layer(x)
+
+        # 2. Disabled via env var -> Eager fallback
+        os.environ["TRANSFORMERS_GEMMA_DISABLE_TRITON"] = "1"
+        try:
+            out_eager = layer(x)
+        finally:
+            del os.environ["TRANSFORMERS_GEMMA_DISABLE_TRITON"]
+
+        cos_sim = torch.nn.functional.cosine_similarity(
+            out_triton.float().flatten(), out_eager.float().flatten(), dim=0
+        )
+        self.assertGreater(cos_sim.item(), 0.999)
+
+    def test_dtypes_supported(self):
+        for dtype in [torch.bfloat16, torch.float16, torch.float32]:
+            layer = self._create_layer(256, 128, num_bits=4, bias=False, dtype=dtype)
+            x = torch.randn(1, 256, dtype=dtype, device=torch_device)
+            out = layer(x)
+            self.assertEqual(out.dtype, dtype)
+
+    def test_quantized_experts_equivalence(self):
+        from transformers.integrations.gemma_quant import QuantizedGemma4TextExperts
+
+        num_experts = 4
+        hidden = 128
+        inter = 64
+        experts = QuantizedGemma4TextExperts(
+            num_experts=num_experts,
+            hidden_dim=hidden,
+            intermediate_dim=inter,
+            num_bits=4,
+        ).to(device=torch_device, dtype=torch.bfloat16)
+
+        x = torch.randn(2, hidden, dtype=torch.bfloat16, device=torch_device)
+        top_k_index = torch.tensor([[0, 2], [1, 3]], device=torch_device)
+        top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3]], dtype=torch.bfloat16, device=torch_device)
+
+        out_triton = experts(x, top_k_index, top_k_weights)
+
+        os.environ["TRANSFORMERS_GEMMA_DISABLE_TRITON"] = "1"
+        try:
+            out_eager = experts(x, top_k_index, top_k_weights)
+        finally:
+            del os.environ["TRANSFORMERS_GEMMA_DISABLE_TRITON"]
+
+        cos_sim = torch.nn.functional.cosine_similarity(
+            out_triton.float().flatten(), out_eager.float().flatten(), dim=0
+        )
+        self.assertGreater(cos_sim.item(), 0.999)
 
 
 @slow
