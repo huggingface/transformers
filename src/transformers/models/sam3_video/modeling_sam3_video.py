@@ -979,7 +979,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             else:
                 # Correction mode: detector corrects drift, replace tracker mask with detection mask
                 new_mask = det_out["mask"][det_idx : det_idx + 1].unsqueeze(1)
-                reconditioned_masks[obj_idx] = new_mask >= 0.5
+                reconditioned_masks[obj_idx] = new_mask
                 reconditioned_obj_ids.add(trk_obj_id)
 
         return reconditioned_masks, reconditioned_obj_ids

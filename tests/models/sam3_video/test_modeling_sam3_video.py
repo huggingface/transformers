@@ -15,11 +15,13 @@
 
 import gc
 import unittest
+from types import SimpleNamespace
 
 from transformers.testing_utils import (
     backend_empty_cache,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
+    require_torch,
     slow,
     torch_device,
 )
@@ -37,6 +39,27 @@ def prepare_video():
     video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
     raw_video, _ = load_video(video_url)
     return raw_video
+
+
+@require_torch
+class Sam3VideoModelTest(unittest.TestCase):
+    def test_recondition_correction_masks_preserve_detector_logits(self):
+        model = SimpleNamespace(recondition_on_trk_masks=False, high_conf_thresh=0.8)
+        inference_session = SimpleNamespace(obj_id_to_idx=lambda obj_id: obj_id)
+        detector_logits = torch.tensor([[[-8.0, 6.0], [6.0, -8.0]]])
+
+        reconditioned_masks, reconditioned_obj_ids = Sam3VideoModel._prepare_recondition_masks(
+            model,
+            inference_session,
+            frame_idx=0,
+            det_out={"mask": detector_logits},
+            trk_masks=torch.zeros_like(detector_logits),
+            trk_id_to_max_iou_high_conf_det={0: 0},
+            tracker_obj_scores_global=torch.tensor([0.95]),
+        )
+
+        torch.testing.assert_close(reconditioned_masks[0], detector_logits.unsqueeze(1))
+        self.assertEqual(reconditioned_obj_ids, {0})
 
 
 @slow
