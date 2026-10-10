@@ -20,6 +20,7 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -378,6 +379,18 @@ class Qwen3TTSTokenizerEncoderModel(MimiModel):
         self.decoder_transformer = None
         setattr(self, "upsample", None)
 
+    @can_return_tuple
+    @auto_docstring
+    def forward(self, input_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+            Input audio waveform.
+        """
+        embeddings = self.encoder(input_values)
+        embeddings = self.encoder_transformer(embeddings.transpose(1, 2), use_cache=False)[0].transpose(1, 2)
+        embeddings = self.downsample(embeddings)
+        return BaseModelOutput(last_hidden_state=embeddings)
+
 
 #  Top-level Model
 
@@ -414,12 +427,8 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
-        encoded_frames = self.encoder.encode(
-            input_values=input_values.unsqueeze(1),
-            num_quantizers=self.config.encoder_config.valid_num_quantizers,
-            return_dict=True,
-        )
-        audio_codes = encoded_frames.audio_codes
+        embeddings = self.encoder(input_values.unsqueeze(1)).last_hidden_state
+        audio_codes = self.quantizer.encode(embeddings).transpose(0, 1)
         audio_codes = [
             code[..., : -(-mask.sum() // self.encoder.config.frame_size)].transpose(0, 1)
             for code, mask in zip(audio_codes, padding_mask)

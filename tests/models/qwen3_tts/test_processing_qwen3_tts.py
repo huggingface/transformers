@@ -80,7 +80,7 @@ def _build_tiny_audio_tokenizer(num_quantizers=4):
         "intermediate_size": 32,
         "num_quantizers": num_quantizers,
         "codebook_size": 8,
-        "codebook_dim": 8,
+        "codebook_dim": 16,
         "latent_dim": 16,
         "decoder_dim": 32,
         "upsample_rates": [2, 2],
