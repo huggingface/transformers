@@ -21,8 +21,21 @@ from pathlib import Path
 
 from huggingface_hub.utils import httpx
 
-from transformers import AutoTokenizer, BertTokenizer, BertTokenizerFast, GPT2TokenizerFast, is_tokenizers_available
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers
+from transformers import (
+    AutoTokenizer,
+    BertTokenizer,
+    BertTokenizerFast,
+    GPT2TokenizerFast,
+    SentencePieceBackend,
+    is_tokenizers_available,
+)
+from transformers.testing_utils import (
+    TOKEN,
+    TemporaryHubRepo,
+    is_staging_test,
+    require_sentencepiece,
+    require_tokenizers,
+)
 from transformers.tokenization_python import ExtensionsTrie, Trie
 
 
@@ -216,6 +229,16 @@ class TokenizersBackendTest(unittest.TestCase):
         # With BPE guard, cleanup=True also preserves the text
         decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
         self.assertEqual(decoded_with_cleanup, text)
+
+
+class SentencePieceBackendTest(unittest.TestCase):
+    @require_sentencepiece
+    def test_byte_fallback_decoding(self):
+        tokenizer = SentencePieceBackend.from_pretrained("hf-internal-testing/llama-tokenizer")
+        text = "hello 🤗 world"
+
+        token_ids = tokenizer.encode(text, add_special_tokens=False)
+        self.assertEqual(tokenizer.decode(token_ids), text)
 
 
 class TrieTest(unittest.TestCase):
