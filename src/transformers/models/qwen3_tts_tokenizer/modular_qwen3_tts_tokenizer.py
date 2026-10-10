@@ -51,8 +51,6 @@ logger = logging.get_logger(__name__)
 @strict
 class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
     r"""
-    codebook_dim (`int`, *optional*, defaults to 256):
-        Dimension of each codebook vector.
     frame_rate (`int`, *optional*, defaults to 0):
         Frame rate used by the vector quantizers.
     num_quantizers (`int`, *optional*, defaults to 16):
