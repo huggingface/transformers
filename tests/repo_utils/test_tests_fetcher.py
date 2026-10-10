@@ -45,7 +45,6 @@ from tests_fetcher import (  # noqa: E402
     get_repo_utils_tests,
     get_tree_starting_at,
     infer_tests_to_run,
-    init_test_examples_dependencies,
     parse_commit_message,
     print_tree_deps_of,
     should_run_conftest_tests,
@@ -155,18 +154,7 @@ def create_tmp_repo(tmp_dir, models=None):
                 f"from transformers import {cls}Config, {cls}Model\nfrom ...test_modeling_common import ModelTesterMixin\n\ncode"
             )
 
-    example_dir = tmp_dir / "examples"
-    example_dir.mkdir(exist_ok=True)
-    framework_dir = example_dir / "pytorch"
-    framework_dir.mkdir(exist_ok=True)
-    with open(framework_dir / "test_pytorch_examples.py", "w", encoding="utf-8") as f:
-        f.write("""test_args = "run_glue.py"\n""")
-    glue_dir = framework_dir / "text-classification"
-    glue_dir.mkdir(exist_ok=True)
-    with open(glue_dir / "run_glue.py", "w", encoding="utf-8") as f:
-        f.write("from transformers import BertModel\n\ncode")
-
-    repo.index.add(["examples", "src", "tests"])
+    repo.index.add(["src", "tests"])
     repo.index.commit("Initial commit")
     if "main" not in repo.heads:
         repo.create_head("main")
@@ -183,14 +171,12 @@ def patch_transformer_repo_path(new_folder):
     """
     old_repo_path = tests_fetcher.PATH_TO_REPO
     tests_fetcher.PATH_TO_REPO = Path(new_folder).resolve()
-    tests_fetcher.PATH_TO_EXAMPLES = tests_fetcher.PATH_TO_REPO / "examples"
     tests_fetcher.PATH_TO_TRANSFORMERS = tests_fetcher.PATH_TO_REPO / "src/transformers"
     tests_fetcher.PATH_TO_TESTS = tests_fetcher.PATH_TO_REPO / "tests"
     try:
         yield
     finally:
         tests_fetcher.PATH_TO_REPO = old_repo_path
-        tests_fetcher.PATH_TO_EXAMPLES = tests_fetcher.PATH_TO_REPO / "examples"
         tests_fetcher.PATH_TO_TRANSFORMERS = tests_fetcher.PATH_TO_REPO / "src/transformers"
         tests_fetcher.PATH_TO_TESTS = tests_fetcher.PATH_TO_REPO / "tests"
 
@@ -525,17 +511,6 @@ class TestFetcherTester(unittest.TestCase):
             with patch_transformer_repo_path(tmp_folder):
                 assert get_module_dependencies(BERT_MODELING_FILE) == expected_bert_dependencies
 
-            # Test with an example
-            create_tmp_repo(tmp_folder)
-
-            expected_example_dependencies = ["src/transformers/models/bert/modeling_bert.py"]
-
-            with patch_transformer_repo_path(tmp_folder):
-                assert (
-                    get_module_dependencies("examples/pytorch/text-classification/run_glue.py")
-                    == expected_example_dependencies
-                )
-
     def test_create_reverse_dependency_tree(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -621,28 +596,6 @@ src/transformers/configuration_utils.py
 
             assert cs.out.strip() in [expected_std_out, expected_std_out_2]
 
-    def test_init_test_examples_dependencies(self):
-        with tempfile.TemporaryDirectory() as tmp_folder:
-            tmp_folder = Path(tmp_folder).resolve()
-            create_tmp_repo(tmp_folder)
-
-            expected_example_deps = {
-                "examples/pytorch/test_pytorch_examples.py": [
-                    "examples/pytorch/text-classification/run_glue.py",
-                    "examples/pytorch/test_pytorch_examples.py",
-                ],
-            }
-
-            expected_examples = {
-                "examples/pytorch/test_pytorch_examples.py",
-                "examples/pytorch/text-classification/run_glue.py",
-            }
-
-            with patch_transformer_repo_path(tmp_folder):
-                example_deps, all_examples = init_test_examples_dependencies()
-                assert example_deps == expected_example_deps
-                assert {str(f.relative_to(tmp_folder)) for f in all_examples} == expected_examples
-
     def test_create_reverse_dependency_map(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -655,8 +608,6 @@ src/transformers/configuration_utils.py
                 "src/transformers/__init__.py",
                 "src/transformers/models/bert/__init__.py",
                 "tests/models/bert/test_modeling_bert.py",
-                "examples/pytorch/test_pytorch_examples.py",
-                "examples/pytorch/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/models/bert/modeling_bert.py"]) == expected_bert_deps
 
@@ -672,8 +623,6 @@ src/transformers/configuration_utils.py
                 "src/transformers/modeling_utils.py",
                 "tests/test_modeling_common.py",
                 "tests/models/bert/test_modeling_bert.py",
-                "examples/pytorch/test_pytorch_examples.py",
-                "examples/pytorch/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/__init__.py"]) == expected_init_deps
 
@@ -682,8 +631,6 @@ src/transformers/configuration_utils.py
                 "src/transformers/models/bert/configuration_bert.py",
                 "src/transformers/models/bert/modeling_bert.py",
                 "tests/models/bert/test_modeling_bert.py",
-                "examples/pytorch/test_pytorch_examples.py",
-                "examples/pytorch/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
 
@@ -698,8 +645,6 @@ src/transformers/configuration_utils.py
                 "src/transformers/models/bert/configuration_bert.py",
                 "src/transformers/models/bert/modeling_bert.py",
                 "tests/models/bert/test_modeling_bert.py",
-                "examples/pytorch/test_pytorch_examples.py",
-                "examples/pytorch/text-classification/run_glue.py",
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
 
@@ -774,19 +719,12 @@ src/transformers/configuration_utils.py
 
             commit_changes("src/transformers/models/bert/modeling_bert.py", BERT_MODEL_FILE_NEW_CODE, repo)
 
-            example_tests = {
-                "examples/pytorch/test_pytorch_examples.py",
-            }
-
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
                 with open(tmp_folder / "test-output.txt", encoding="utf-8") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
-                    example_tests_to_run = f.read()
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
-            assert set(example_tests_to_run.split(" ")) == example_tests
 
             # Fake a new model addition
             repo = create_tmp_repo(tmp_folder, models=models)
@@ -823,8 +761,6 @@ src/transformers/configuration_utils.py
                 infer_tests_to_run(tmp_folder / "test-output.txt")
                 with open(tmp_folder / "test-output.txt", encoding="utf-8") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
-                    example_tests_to_run = f.read()
 
             expected_tests = {
                 "tests/models/bert/test_modeling_bert.py",
@@ -833,19 +769,15 @@ src/transformers/configuration_utils.py
                 "tests/test_modeling_common.py",
             }
             assert set(tests_to_run.split(" ")) == expected_tests
-            assert set(example_tests_to_run.split(" ")) == example_tests
 
             with patch_transformer_repo_path(tmp_folder):
                 infer_tests_to_run(tmp_folder / "test-output.txt")
                 with open(tmp_folder / "test-output.txt", encoding="utf-8") as f:
                     tests_to_run = f.read()
-                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
-                    example_tests_to_run = f.read()
 
             expected_tests = [f"tests/models/{name}/test_modeling_{name}.py" for name in models + ["t5"]]
             expected_tests = set(expected_tests + ["tests/test_modeling_common.py"])
             assert set(tests_to_run.split(" ")) == expected_tests
-            assert set(example_tests_to_run.split(" ")) == example_tests
 
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run_with_test_modifs(self):
@@ -866,42 +798,6 @@ src/transformers/configuration_utils.py
                     tests_to_run = f.read()
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
-
-    @unittest.skip("Broken for now TODO @ArthurZucker")
-    def test_infer_tests_to_run_with_examples_modifs(self):
-        with tempfile.TemporaryDirectory() as tmp_folder:
-            tmp_folder = Path(tmp_folder)
-            models = ["bert", "gpt2"]
-            repo = create_tmp_repo(tmp_folder, models=models)
-
-            # Modification in one example trigger the corresponding test
-            commit_changes(
-                "examples/pytorch/text-classification/run_glue.py",
-                "from transformers import BertModeln\n\ncode1",
-                repo,
-            )
-
-            with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
-                    example_tests_to_run = f.read()
-
-            assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
-
-            # Modification in one test example file trigger that test
-            repo = create_tmp_repo(tmp_folder, models=models)
-            commit_changes(
-                "examples/pytorch/test_pytorch_examples.py",
-                """test_args = "run_glue.py"\nmore_code""",
-                repo,
-            )
-
-            with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
-                with open(tmp_folder / "examples_test_list.txt", encoding="utf-8") as f:
-                    example_tests_to_run = f.read()
-
-            assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
 
     def test_parse_commit_message(self):
         assert parse_commit_message("Normal commit") == {"skip": False, "no_filter": False, "test_all": False}

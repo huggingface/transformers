@@ -2588,7 +2588,7 @@ def mockenv_context(*remove, **update):
 
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation if several conftest.py files call it - make sure it's called only once
 pytest_opt_registered = {}
 
 

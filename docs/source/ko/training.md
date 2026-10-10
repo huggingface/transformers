@@ -306,6 +306,4 @@ torch.cuda.empty_cache()
 
 더 많은 미세 튜닝 예제는 다음을 참조하세요:
 
-- [🤗 Trnasformers 예제](https://github.com/huggingface/transformers/tree/main/examples)에는 PyTorch 및 텐서플로우에서 일반적인 NLP 작업을 훈련할 수 있는 스크립트가 포함되어 있습니다.
-
 - [🤗 Transformers 노트북](notebooks)에는 PyTorch 및 텐서플로우에서 특정 작업을 위해 모델을 미세 튜닝하는 방법에 대한 다양한 노트북이 포함되어 있습니다.

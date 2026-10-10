@@ -77,8 +77,6 @@ XLM 有十个不同的检查点，其中只有一个是单语言的。剩下的�
 >>> outputs = model(input_ids, langs=langs)
 ```
 
-[run_generation.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation/run_generation.py) 脚本可以使用 `xlm-clm` 检查点生成带有语言嵌入的文本。
-
 ### 不带语言嵌入的 XLM
 
 以下 XLM 模型在推理时不需要语言嵌入：

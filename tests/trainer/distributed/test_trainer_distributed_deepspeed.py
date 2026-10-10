@@ -23,7 +23,6 @@ import dataclasses
 import itertools
 import json
 import os
-import subprocess
 import unittest
 from copy import deepcopy
 from functools import partial
@@ -45,7 +44,6 @@ from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
-    get_tests_dir,
     get_torch_dist_unique_port,
     mockenv_context,
     read_json_file,
@@ -1065,8 +1063,7 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
     """
     Distributed DeepSpeed tests using ``accelerate launch``.
 
-    Some tests use a simple training script (train.py), others use example
-    scripts (run_translation.py, run_clm.py) for broader integration coverage.
+    Some tests use a simple training script (train.py).
     """
 
     # -------------------------------------------------------------------
@@ -1579,128 +1576,3 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
                 self.assertEqual(buf.item(), -42.0, f"{name} was not loaded from checkpoint")
             elif "layer_scalar" in name:
                 self.assertEqual(buf.item(), 0.5, f"{name} was not loaded from checkpoint")
-
-
-# ---------------------------------------------------------------------------
-# Model Zoo — test many architectures with DeepSpeed + zero_to_fp32 recovery
-# ---------------------------------------------------------------------------
-
-_ZOO_MODELS = {
-    "albert": "hf-internal-testing/tiny-albert",
-    "bart": "sshleifer/bart-tiny-random",
-    "bert": "hf-internal-testing/tiny-bert",
-    "bigbird_pegasus": "hf-internal-testing/tiny-random-bigbird_pegasus",
-    "blenderbot": "hf-internal-testing/tiny-random-blenderbot",
-    "bloom": "bigscience/bigscience-small-testing",
-    "deberta": "hf-internal-testing/tiny-random-deberta",
-    "deberta-v2": "hf-internal-testing/tiny-random-deberta-v2",
-    "distilbert": "sshleifer/tiny-distilbert-base-cased",
-    "electra": "hf-internal-testing/tiny-electra",
-    "funnel": "hf-internal-testing/tiny-random-funnel",
-    "gpt2": GPT2_TINY,
-    "gpt_neo": "hf-internal-testing/tiny-random-gpt_neo",
-    "gptj": GPTJ_TINY,
-    "layoutlm": "hf-internal-testing/tiny-layoutlm",
-    "led": "hf-internal-testing/tiny-random-led",
-    "longformer": "hf-internal-testing/tiny-random-longformer",
-    "m2m_100": "stas/tiny-m2m_100",
-    "mobilebert": "hf-internal-testing/tiny-random-mobilebert",
-    "mpnet": "hf-internal-testing/tiny-random-mpnet",
-    "prophetnet": "hf-internal-testing/tiny-random-prophetnet",
-    "roberta": "sshleifer/tiny-distilroberta-base",
-    "squeezebert": "hf-internal-testing/tiny-random-squeezebert",
-    "t5": T5_TINY,
-    "t5_v1": "hf-internal-testing/tiny-random-t5-v1.1",
-    "vit": "hf-internal-testing/tiny-random-vit",
-    "xlm-roberta": "hf-internal-testing/tiny-xlm-roberta",
-    "xlnet": "sshleifer/tiny-xlnet-base-cased",
-}
-
-_ZOO_FIXTURE_DIR = get_tests_dir("fixtures")
-_ZOO_SAMPLES_DIR = f"{_ZOO_FIXTURE_DIR}/tests_samples"
-_ZOO_SCRIPTS_DIR = f"{os.path.join(os.path.dirname(get_tests_dir()))}/examples/pytorch"
-_ZOO_VIT_FEATURE_EXTRACTOR = os.path.join(SCRIPTS_DIR, "vit_feature_extractor.json")
-
-
-def _make_zoo_tasks():
-    """Build {task_model: (script, script_args)} for each task/model combo."""
-    tasks2models = {
-        "trans": ["bart", "m2m_100", "t5", "t5_v1"],
-        "clm": ["bigbird_pegasus", "blenderbot", "bloom", "gpt2", "gpt_neo", "gptj", "xlm-roberta", "prophetnet"],
-        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "layoutlm"],
-        "qa": ["led", "longformer", "mobilebert", "mpnet", "roberta", "squeezebert"],
-        "clas": ["bert", "xlnet"],
-        "img_clas": ["vit"],
-    }
-
-    # task -> (script_path, task-specific args)
-    task_defs = {
-        "trans": (
-            f"{_ZOO_SCRIPTS_DIR}/translation/run_translation.py",
-            f"--train_file {_ZOO_SAMPLES_DIR}/wmt_en_ro/train.json --source_lang en --target_lang ro "
-            f"--max_source_length 12 --max_target_length 12".split(),
-        ),
-        "clm": (
-            f"{_ZOO_SCRIPTS_DIR}/language-modeling/run_clm.py",
-            f"--train_file {_ZOO_FIXTURE_DIR}/sample_text.txt --block_size 8".split(),
-        ),
-        "mlm": (
-            f"{_ZOO_SCRIPTS_DIR}/language-modeling/run_mlm.py",
-            f"--train_file {_ZOO_FIXTURE_DIR}/sample_text.txt".split(),
-        ),
-        "qa": (
-            f"{_ZOO_SCRIPTS_DIR}/question-answering/run_qa.py",
-            f"--train_file {_ZOO_SAMPLES_DIR}/SQUAD/sample.json".split(),
-        ),
-        "clas": (
-            f"{_ZOO_SCRIPTS_DIR}/text-classification/run_glue.py",
-            f"--train_file {_ZOO_SAMPLES_DIR}/MRPC/train.csv --max_seq_length 12 --task_name MRPC".split(),
-        ),
-        "img_clas": (
-            f"{_ZOO_SCRIPTS_DIR}/image-classification/run_image_classification.py",
-            f"--dataset_name hf-internal-testing/cats_vs_dogs_sample --remove_unused_columns False "
-            f"--max_steps 10 --image_processor_name {_ZOO_VIT_FEATURE_EXTRACTOR} "
-            f"--label_column_name labels".split(),
-        ),
-    }
-
-    common_args = "--do_train --max_train_samples 4 --per_device_train_batch_size 2 --num_train_epochs 1 --fp16 --save_steps 1".split()
-
-    result = {}
-    for task, models in tasks2models.items():
-        script, task_args = task_defs[task]
-        for model in models:
-            model_args = ["--model_name_or_path", _ZOO_MODELS[model]]
-            result[f"{task}_{model}"] = (script, task_args + model_args + common_args)
-
-    return result
-
-
-_zoo_tasks = _make_zoo_tasks()
-_zoo_params = list(itertools.product(stages, _zoo_tasks.keys()))
-
-
-@slow
-@require_deepspeed
-@require_torch_accelerator
-class TestDeepSpeedModelZoo(DeepSpeedCommandsMixin, TestCasePlus):
-    """Test many model architectures with DeepSpeed (fp16 mixed precision) via example scripts + zero_to_fp32 recovery."""
-
-    @parameterized.expand(_zoo_params, name_func=_parameterized_custom_name_func)
-    def test_zero_to_fp32(self, stage, task):
-        script, script_args = _zoo_tasks[task]
-        output_dir = self.get_auto_remove_tmp_dir()
-
-        # 1. Train and save a checkpoint
-        cmd = self.get_accelerate_cmd(
-            script,
-            config_file=DS_CONFIGS[stage],
-            script_args=script_args + ["--output_dir", output_dir],
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
-
-        # 2. Recover FP32 weights from the ZeRO checkpoint
-        chkpt_dir = f"{output_dir}/checkpoint-1"
-        recovered_model_path = f"{chkpt_dir}/out.bin"
-        subprocess.check_call(f"{chkpt_dir}/zero_to_fp32.py {chkpt_dir} {recovered_model_path}", shell=True)
-        assert os.path.exists(recovered_model_path), f"{recovered_model_path} was not found"

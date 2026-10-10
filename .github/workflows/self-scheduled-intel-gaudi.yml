@@ -183,81 +183,6 @@ jobs:
           name: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
           path: reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
 
-  run_examples_gpu:
-    permissions:
-      contents: read
-    if: ${{ inputs.job == 'run_examples_gpu' }}
-    name: Examples directory
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [1gaudi]
-    runs-on:
-      group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
-    container:
-      image: vault.habana.ai/gaudi-docker/1.21.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana
-        -v /mnt/cache/.cache/huggingface:/mnt/cache/.cache/huggingface
-        --env OMPI_MCA_btl_vader_single_copy_mechanism=none
-        --env HABANA_VISIBLE_DEVICES
-        --env HABANA_VISIBLE_MODULES
-        --cap-add=sys_nice
-        --shm-size=64G
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Install dependencies
-        run: |
-          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn librosa soundfile
-
-      - name: HL-SMI
-        run: |
-          hl-smi
-          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
-          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
-
-      - name: Environment
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        run: |
-          pip freeze
-
-      - name: Set `machine_type` for report and artifact names
-        shell: bash
-        run: |
-          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
-            machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
-            machine_type=multi-gpu
-          else
-            machine_type=${{ matrix.machine_type }}
-          fi
-          echo "machine_type=$machine_type" >> $GITHUB_ENV
-
-      - name: Run examples tests on Intel Gaudi
-        run: |
-          pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports="${machine_type}_run_examples_gpu_test_reports" examples/pytorch -m "not not_device_test"
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: |
-          cat "reports/${machine_type}_run_examples_gpu_test_reports/failures_short.txt"
-
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gpu_test_reports"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ env.machine_type }}_run_examples_gpu_test_reports
-          path: reports/${{ env.machine_type }}_run_examples_gpu_test_reports
-
   run_torch_cuda_extensions_gpu:
     permissions:
       contents: read
@@ -318,7 +243,7 @@ jobs:
 
       - name: Run all deepspeed tests on intel Gaudi
         run: |
-          python3 -m pytest -v --make-reports="${machine_type}_run_torch_cuda_extensions_gpu_test_reports" tests/deepspeed -m "not not_device_test"
+          python3 -m pytest -v --make-reports="${machine_type}_run_torch_cuda_extensions_gpu_test_reports" tests/trainer/distributed/test_trainer_distributed_deepspeed.py -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -427,7 +352,6 @@ jobs:
       [
         setup,
         run_models_gpu,
-        run_examples_gpu,
         run_torch_cuda_extensions_gpu,
         run_pipelines_torch_gpu,
         run_trainer_and_fsdp_gpu,

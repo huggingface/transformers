@@ -57,7 +57,6 @@ deps = {
     "ruff": "ruff==0.14.10",
     "transformers-mlinter": "transformers-mlinter==0.1.5",
     "ty": "ty==0.0.20",
-    "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.8.0",
     "sagemaker": "sagemaker>=2.31.0",
