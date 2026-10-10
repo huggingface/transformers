@@ -38,7 +38,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed._functional_collectives import all_to_all_single
+    from torch.distributed._functional_collectives import all_to_all_single, wait_tensor
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -891,6 +891,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 tokens, expert_ids, order, send_sizes, recv_sizes = self._dispatch_tokens(
                     hidden_states, top_k_index, module.num_experts, ep_group, ep_size
                 )
+                # the received rows' pointer is null until a torch op waits on them; quantized experts read raw pointers
+                if getattr(module, "_hf_quantized_needs_local_tp", False):
+                    tokens = wait_tensor(tokens)
                 expert_output = self._run_local_experts(experts_forward, tokens, expert_ids)
                 output = self._combine_tokens(
                     expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
