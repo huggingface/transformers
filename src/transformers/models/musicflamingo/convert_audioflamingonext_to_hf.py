@@ -252,7 +252,7 @@ python src/transformers/models/musicflamingo/convert_audioflamingonext_to_hf.py 
   --dst_dir audio-flamingo-next-hf
 ```
 
-3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
+3) Convert and push directly to the Hub (requires `hf auth login` or `HF_TOKEN`):
 
 ```
 python src/transformers/models/musicflamingo/convert_audioflamingonext_to_hf.py \

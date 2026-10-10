@@ -29,7 +29,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..glm.modeling_glm import rotate_half
@@ -64,7 +64,13 @@ def apply_rotary_pos_emb(
 
 
 class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
-    pass
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # DSV4: norm weights are kept in float32, so multiply in float32 and cast once at the end
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 class DeepseekV4UnweightedRMSNorm(nn.Module):
@@ -121,13 +127,9 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
         # the doubled dim and `rotate_half` is local and obvious.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * attention_scaling
+        sin = freqs.sin() * attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -833,7 +835,7 @@ class DeepseekV4HyperConnection(nn.Module):
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.hc_mult = config.hc_mult  # number of streams, refered as N below
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
@@ -864,7 +866,7 @@ class DeepseekV4HyperConnection(nn.Module):
         flattened = self.input_norm(flattened)
         # Mix the streams together to infer the weight coefficients
         flattened = F.linear(flattened, self.fn.float())
-        # Split the weight cofficients
+        # Split the weight coefficients
         pre_w, post_w, comb_w = flattened.split([hc, hc, hc * hc], dim=-1)
         pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
@@ -1244,7 +1246,8 @@ class DeepseekV4Model(LlamaModel):
 
 
 class DeepseekV4ForCausalLM(MixtralForCausalLM):
-    pass
+    # Deepseek V4 ships only an EP plan
+    _tp_plan = AttributeError()
 
 
 __all__ = [

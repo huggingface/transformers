@@ -15,8 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -52,7 +51,13 @@ class TableTransformerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "table-transformer"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="resnet",
+            init_kwargs={"out_features": ["stage4"]},
+        ),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -92,25 +97,22 @@ class TableTransformerConfig(PreTrainedConfig):
     eos_coefficient: float = 0.1
 
     def __post_init__(self, **kwargs):
-        backbone_kwargs = kwargs.get("backbone_kwargs", {})
-        timm_default_kwargs = {
-            "num_channels": backbone_kwargs.get("num_channels", self.num_channels),
-            "features_only": True,
-            "use_pretrained_backbone": False,
-            "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
-        }
-        if self.dilation:
-            timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_backbone="resnet50",
-            default_config_type="resnet",
-            default_config_kwargs={"out_features": ["stage4"]},
-            timm_default_kwargs=timm_default_kwargs,
-            **kwargs,
-        )
-
+        if (
+            self.backbone_config is None
+            and kwargs.pop("use_timm_backbone", True)
+            and not kwargs.get("backbone_kwargs")
+        ):
+            backbone_kwargs = kwargs.get("backbone_kwargs", {})
+            self.backbone_config = {
+                "model_type": "timm_backbone",
+                "backbone": kwargs.pop("backbone", None) or "resnet50",
+                "num_channels": backbone_kwargs.get("num_channels", self.num_channels),
+                "features_only": True,
+                "use_pretrained_backbone": False,
+                "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
+            }
+            if self.dilation:
+                self.backbone_config["output_stride"] = backbone_kwargs.get("output_stride", 16)
         super().__post_init__(**kwargs)
 
 

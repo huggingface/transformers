@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import OPENAI_CLIP_MEAN
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -30,80 +31,24 @@ if is_vision_available():
 
 
 class JanusImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=384,
-        min_resolution=30,
-        max_resolution=200,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-        do_convert_rgb=True,
-    ):
-        size = size if size is not None else {"height": 384, "width": 384}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("image_size", 384)
+        kwargs.setdefault("max_resolution", 200)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "min_size": 14,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 384, "width": 384})
+        # Passing the mean explicitly also selects the padding background color.
+        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN.copy())
+        kwargs.setdefault("do_convert_rgb", True)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = JanusImageProcessingTester(self)
-
-    @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 384, "width": 384})
-            self.assertEqual(list(image_processor.image_mean), [0.48145466, 0.4578275, 0.40821073])
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, image_mean=[1.0, 2.0, 1.0]
-            )
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-            self.assertEqual(list(image_processor.image_mean), [1.0, 2.0, 1.0])
+    image_processor_tester_class = JanusImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

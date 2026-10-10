@@ -500,7 +500,12 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        score = torch.gather(scores, 1, self.encoder_input_ids)
+        encoder_input_ids = (
+            self.encoder_input_ids.repeat_interleave(scores.shape[0] // self.encoder_input_ids.shape[0], dim=0)
+            if scores.shape[0] > self.encoder_input_ids.shape[0]
+            else self.encoder_input_ids
+        )
+        score = torch.gather(scores, 1, encoder_input_ids)
         if self.normalize:
             lse = torch.logsumexp(scores, dim=-1, keepdim=True)
             score = score - lse
@@ -510,7 +515,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         if self.normalize:
             score = score + lse
-        scores_processed = scores.scatter(1, self.encoder_input_ids, score)
+        scores_processed = scores.scatter(1, encoder_input_ids, score)
         return scores_processed
 
 
@@ -1346,9 +1351,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         for sequence_ids, sequence_bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:  # the sequence is of length 1, already applied
                 continue
-            if len(sequence_ids) > input_ids.shape[1]:  # the sequence is longer than the context, ignore
-                continue
             prefix_length = len(sequence_ids) - 1
+            if prefix_length > input_ids.shape[1]:  # the prefix is longer than the context, ignore
+                continue
             last_token = sequence_ids[-1]
             matching_rows = torch.eq(
                 input_ids[:, -prefix_length:],
@@ -1417,7 +1422,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         def all_token_bias_pairs_are_valid(sequence):
             return (
                 isinstance(sequence[0], list)
-                and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in sequence[0])
+                and all(isinstance(token_id, (int, np.integer)) and token_id >= 0 for token_id in sequence[0])
                 and isinstance(sequence[1], float)
             )
 
@@ -1596,6 +1601,9 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
                 mask[batch_id * self._num_beams + beam_id, prefix_allowed_tokens] = 0
 
         scores_processed = scores + mask
+        # If the allowed tokens of every beam are already `-inf`, force them with a score of 0 so the constraint holds
+        unsatisfiable = scores_processed.amax(dim=-1).isneginf().view(batch_size, -1).all(dim=-1, keepdim=True)
+        scores_processed = torch.where(unsatisfiable.repeat_interleave(self._num_beams, dim=0), mask, scores_processed)
         return scores_processed
 
 
@@ -1817,6 +1825,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             penalty_idx = cur_len - self.regulation_start
             # To support negative logits we compute the penalty of the absolute value and add to the original logit
             penalty = torch.abs(scores[:, self.eos_token_id]) * (pow(self.regulation_factor, penalty_idx) - 1)
+            penalty = penalty.masked_fill(~torch.isfinite(scores[:, self.eos_token_id]), 0.0)
             penalties[:, self.eos_token_id] = penalty
             scores_processed = scores + penalties
         return scores_processed
@@ -2049,9 +2058,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         scores_processed[:, self.no_timestamps_token_id] = -float("inf")
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
-        for k in range(input_ids.shape[0]):
-            sampled_tokens = input_ids[k, self.begin_index :]
-            seq = list(sampled_tokens.tolist())
+        timestamps_last = []
+        for k, seq in enumerate(input_ids.tolist()):
+            seq = seq[self.begin_index :]
 
             last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
             penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
@@ -2062,8 +2071,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 else:  # cannot be normal text tokens
                     scores_processed[k, : self.eos_token_id] = -float("inf")
 
-            timestamps = sampled_tokens[sampled_tokens.ge(self.timestamp_begin)]
-            if timestamps.numel() > 0:
+            timestamp_last = self.timestamp_begin  # no timestamp is forbidden until one is sampled
+            timestamps = [token for token in seq if token >= self.timestamp_begin]
+            if timestamps:
                 # `timestamps` shouldn't decrease; forbid timestamp tokens smaller than the last
                 # The following lines of code are copied from: https://github.com/openai/whisper/pull/914/files#r1137085090
                 if last_was_timestamp and not penultimate_was_timestamp:
@@ -2071,8 +2081,14 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 else:
                     # Avoid to emit <|0.00|> again
                     timestamp_last = timestamps[-1] + 1
+            timestamps_last.append(timestamp_last)
 
-                scores_processed[k, self.timestamp_begin : timestamp_last] = -float("inf")
+        # Forbid the timestamps below each row's `timestamp_last`
+        vocab_ids = torch.arange(scores_processed.shape[-1], device=scores_processed.device)
+        timestamps_last = torch.tensor(timestamps_last, device=scores_processed.device).unsqueeze(-1)
+        scores_processed.masked_fill_(
+            (vocab_ids >= self.timestamp_begin) & (vocab_ids < timestamps_last), -float("inf")
+        )
 
         # apply the `max_initial_timestamp` option
         if input_ids.shape[1] == self.begin_index:
@@ -2083,12 +2099,13 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 scores_processed[:, last_allowed + 1 :] = -float("inf")
 
         # if sum of probability over timestamps is above any other token, sample timestamp
-        logprobs = torch.nn.functional.log_softmax(scores_processed.float(), dim=-1)
-        for k in range(input_ids.shape[0]):
-            timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
-            max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
-            if timestamp_logprob > max_text_token_logprob and self._detect_timestamp_from_logprob:
-                scores_processed[k, : self.timestamp_begin] = -float("inf")
+        # (checked for the whole batch at once: a check per row would sync with the device for every row)
+        if self._detect_timestamp_from_logprob:
+            logprobs = torch.nn.functional.log_softmax(scores_processed.float(), dim=-1)
+            timestamp_logprob = logprobs[:, self.timestamp_begin :].logsumexp(dim=-1)
+            max_text_token_logprob = logprobs[:, : self.timestamp_begin].max(dim=-1).values
+            sample_timestamp = (timestamp_logprob > max_text_token_logprob).unsqueeze(-1)
+            scores_processed[:, : self.timestamp_begin].masked_fill_(sample_timestamp, -float("inf"))
 
         return scores_processed
 

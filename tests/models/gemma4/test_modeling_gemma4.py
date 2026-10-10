@@ -22,8 +22,10 @@ from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
+    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4TextConfig,
+    Gemma4VisionConfig,
     is_torch_available,
     logging,
     set_seed,
@@ -42,11 +44,11 @@ from transformers.testing_utils import (
 )
 from transformers.utils import ModelOutput
 
+from ...alm_tester import ALMModelTest, ALMModelTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -190,114 +192,88 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-class Gemma4Audio2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=4,
-        boi_token_id=5,
-        eoi_token_id=6,
-        audio_token_id=7,
-        boa_token_id=8,
-        eoa_token_index=9,
-        video_token_id=10,
-        seq_length=50,
-        audio_seq_length=96,
-        audio_num_channels=16,
-        is_training=True,
-        audio_config={
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "hidden_act": "silu",
-            "subsampling_conv_channels": [16, 8],
-            "conv_kernel_size": 3,
-            "attention_chunk_size": 4,
-            "attention_context_left": 5,
-            "attention_context_right": 0,
-            "output_proj_dims": 32,
-            # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
-            # comparison logic (inf - inf = NaN). Disable for testing.
-            "use_clipped_linears": False,
-        },
-    ):
-        self.parent = parent
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.audio_token_id = audio_token_id
-        self.boa_token_id = boa_token_id
-        self.eoa_token_index = eoa_token_index
-        self.video_token_id = video_token_id
-        self.llm_tester = Gemma4TextModelTester(self.parent)
-        self.llm_tester.use_bidirectional_attention = None
-        self.text_config = self.llm_tester.get_config()
-        self.audio_config = audio_config
-        self.seq_length = seq_length
-        self.audio_seq_length = audio_seq_length
-        self.audio_num_channels = audio_num_channels
-        self.pad_token_id = self.text_config.pad_token_id
+class Gemma4Audio2TextModelTester(ALMModelTester):
+    base_model_class = Gemma4Model
+    conditional_generation_class = Gemma4ForConditionalGeneration
+    config_class = Gemma4Config
+    text_config_class = Gemma4TextConfig
+    audio_config_class = Gemma4AudioConfig
+    audio_mask_key = "input_features_mask"
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.encoder_seq_length = seq_length
-
-    def get_config(self):
-        return Gemma4Config(
-            text_config=self.text_config,
-            vision_config=None,
-            audio_config=self.audio_config,
-            image_token_id=self.image_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            audio_token_id=self.audio_token_id,
-            boa_token_id=self.boa_token_id,
-            eoa_token_index=self.eoa_token_index,
-            video_token_id=self.video_token_id,
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("boi_token_id", 5)
+        kwargs.setdefault("eoi_token_id", 6)
+        kwargs.setdefault("audio_token_id", 7)
+        kwargs.setdefault("boa_token_id", 8)
+        kwargs.setdefault("eoa_token_index", 9)
+        kwargs.setdefault("video_token_id", 10)
+        kwargs.setdefault("pad_token_id", 0)
+        kwargs.setdefault("seq_length", 50)
+        kwargs.setdefault("feat_seq_length", 96)
+        kwargs.setdefault("num_mel_bins", 16)
+        kwargs.setdefault("num_hidden_layers", 4)
+        kwargs.setdefault("num_kv_shared_layers", 2)
+        kwargs.setdefault(
+            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
         )
-
-    def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, self.audio_seq_length, self.audio_num_channels])
-        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool, device=torch_device)
-        config = self.get_config()
-        return config, input_features, input_features_mask
-
-    def prepare_config_and_inputs_for_common(self):
-        config, input_features, input_features_mask = self.prepare_config_and_inputs()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-
-        # The audio encoder produces audio_seq_length / 4 tokens per audio sample after subsampling.
-        # We need that many audio placeholder tokens per sequence in input_ids.
-        num_audio_tokens = self.audio_seq_length // 4
-        input_ids[:, :num_audio_tokens] = config.audio_token_id
-
-        inputs_dict = {
-            "input_features": input_features,
-            "input_features_mask": input_features_mask,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+        kwargs.setdefault("vocab_size_per_layer_input", 99)
+        kwargs.setdefault("hidden_size_per_layer_input", 16)
+        kwargs.setdefault("enable_moe_block", True)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("top_k_experts", 2)
+        kwargs.setdefault("subsampling_conv_channels", [16, 8])
+        kwargs.setdefault("conv_kernel_size", 3)
+        kwargs.setdefault("attention_chunk_size", 4)
+        kwargs.setdefault("attention_context_left", 5)
+        kwargs.setdefault("attention_context_right", 0)
+        kwargs.setdefault("output_proj_dims", 32)
+        # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
+        # comparison logic (inf - inf = NaN). Disable for testing.
+        kwargs.setdefault("use_clipped_linears", False)
+        super().__init__(parent, **kwargs)
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
         }
-        return config, inputs_dict
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.image_token_id, self.video_token_id}
+
+    @property
+    def text_config_args(self):
+        return super().text_config_args + ["per_layer_config"]
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_audio_features(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        # (num_audios, num_frames, num_mel_bins)
+        return floats_tensor([batch_size, self.feat_seq_length, self.num_mel_bins])
+
+    def create_audio_mask(self, batch_size: int | None = None):
+        return super().create_audio_mask(batch_size).bool()
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # Each of the two stride-2 subsampling convs keeps every other mask position
+        return audio_mask[:, ::4]
 
 
 @require_torch
-class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
+class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
+    model_tester_class = Gemma4Audio2TextModelTester
 
-    def setUp(self):
-        self.model_tester = Gemma4Audio2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
 
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_hidden_states(self):
@@ -371,134 +347,87 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         torch.testing.assert_close(pos, expected)
 
 
-class Gemma4Vision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_id=4,
-        video_token_id=7,
-        audio_token_id=8,
-        boi_token_id=5,
-        eoi_token_id=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
-            "use_labels": True,
-            "image_size": 20,
-            "patch_size": 5,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "num_key_value_heads": 1,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
-    ):
-        self.parent = parent
-        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.audio_token_id = audio_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.llm_tester = Gemma4TextModelTester(self.parent)
-        self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
+class Gemma4Vision2TextModelTester(VLMModelTester):
+    base_model_class = Gemma4Model
+    conditional_generation_class = Gemma4ForConditionalGeneration
+    config_class = Gemma4Config
+    text_config_class = Gemma4TextConfig
+    vision_config_class = Gemma4VisionConfig
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
-
-    def get_config(self):
-        return Gemma4Config(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            audio_token_id=self.audio_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            mm_tokens_per_image=self.mm_tokens_per_image,
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("boi_token_id", 5)
+        kwargs.setdefault("eoi_token_id", 6)
+        kwargs.setdefault("video_token_id", 7)
+        kwargs.setdefault("audio_token_id", 8)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("pooling_kernel_size", 2)
+        kwargs.setdefault("num_image_tokens", 5)
+        kwargs.setdefault("seq_length", 25)
+        kwargs.setdefault("num_hidden_layers", 4)
+        kwargs.setdefault("num_kv_shared_layers", 2)
+        kwargs.setdefault(
+            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
         )
+        kwargs.setdefault("vocab_size_per_layer_input", 99)
+        kwargs.setdefault("hidden_size_per_layer_input", 16)
+        kwargs.setdefault("enable_moe_block", True)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("top_k_experts", 2)
+        kwargs.setdefault("use_bidirectional_attention", "vision")
+        kwargs.setdefault("tie_word_embeddings", True)
+        super().__init__(parent, **kwargs)
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        config.vision_config.pooling_kernel_size = 2
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.video_token_id, self.audio_token_id}
 
+    @property
+    def text_config_args(self):
+        return super().text_config_args + ["per_layer_config"]
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # (num_images, max_num_patches, patch_size * patch_size * num_channels)
-        patch_size = config.vision_config.patch_size
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                self.vision_config["image_size"],
-                patch_size * patch_size * self.vision_config["num_channels"],
-            ]
-        )
-        # (num_images, max_num_patches, 2) for height/width positions. Let it be all ones for testign
-        pixel_position_ids = torch.ones(self.vision_config["image_size"], device=torch_device, dtype=torch.long)
-        pixel_position_ids = pixel_position_ids[None, :, None].repeat(self.batch_size, 1, 2)
+        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
+        return floats_tensor([batch_size, num_patches, self.patch_size**2 * self.num_channels])
 
-        # create (h*w, 2) grid of (x, y) coords for a non-square input image
-        num_patches = self.vision_config["image_size"]
+    def create_image_position_ids(self, num_images):
+        # (num_images, max_num_patches, 2) grid of (x, y) coords for a non-square image
+        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
         h = int(num_patches**0.5)
         w = num_patches // h
-
         xs = torch.arange(w).repeat(h)
         ys = torch.arange(h).repeat_interleave(w)
-        pixel_position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
-        pixel_position_ids = pixel_position_ids.unsqueeze(0).repeat(self.batch_size, 1, 1)
+        position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
+        return position_ids.unsqueeze(0).repeat(num_images, 1, 1)
 
-        return config, pixel_values, pixel_position_ids
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, pixel_position_ids = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-        input_ids[:, :5] = config.image_token_id
-
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == config.image_token_id] = 1
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_position_ids": pixel_position_ids,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+        return {
+            "image_position_ids": self.create_image_position_ids(batch_size),
             "mm_token_type_ids": mm_token_type_ids,
         }
-        return config, inputs_dict
 
 
 @require_torch
-class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
+class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma4Vision2TextModelTester
     additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
-        self.model_tester = Gemma4Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+        super().setUp()
         self.skip_flash_attn_inference_equivalence_tests()
 
     def skip_flash_attn_inference_equivalence_tests(self):

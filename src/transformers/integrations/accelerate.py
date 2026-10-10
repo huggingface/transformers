@@ -329,7 +329,7 @@ def get_balanced_memory(
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        min_zero = max(0, module_sizes[""] - sum(max_memory[i] for i in range(1, num_devices)))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
@@ -738,7 +738,7 @@ def infer_auto_device_map(
 
         # Then we keep track of all the parameters that are tied to the current module, but not in the current module
         tied_params = sum(
-            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups], []
+            ([p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups), []
         )
 
         if verbose and len(tied_params) > 0:

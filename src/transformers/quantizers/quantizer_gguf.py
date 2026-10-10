@@ -54,6 +54,7 @@ class GgufHfQuantizer(HfQuantizer):
         self.header = None
         self.kernel = None
         self.dtype = None
+        self.attn_requested = True
         # TODO: only for the legacy loader — drop this, and every hook that guards on it, once all
         # architectures go through this path and there is no fallback left
         self.supported = False
@@ -94,6 +95,11 @@ class GgufHfQuantizer(HfQuantizer):
             device_map = {"": torch.device("mps")}
             logger.info(f"No `device_map` was passed; loading the GGUF weights on {device_map['']}.")
         return device_map
+
+    def update_attn_implementation(self, config):
+        """Remember whether an attention was asked for. The default itself is set once the weights are loaded."""
+        self.attn_requested = config._attn_implementation is not None
+        return config
 
     def read_header(self, gguf_file: str):
         """Parse the file's metadata, once `from_pretrained` knows where the file is."""
@@ -153,6 +159,15 @@ class GgufHfQuantizer(HfQuantizer):
             if permutation is not None:
                 module.input_permutation = permutation.to(module.weight.device)
         kernelize_ggml_layers(model)
+        if not self.quantization_config.dequantize and not self.attn_requested:
+            GGML_ATTN = "ggml-org/ggml-attn"
+            try:
+                model.set_attn_implementation(GGML_ATTN)
+            except Exception as error:
+                logger.warning(
+                    f"Could not use the `{GGML_ATTN}` attention kernel ({error}); keeping "
+                    f"`{model.config._attn_implementation}`. Pass `attn_implementation=` to choose one explicitly."
+                )
         # Dropping the weight_conversions related to GGUF ops. When saving, it will fetch back the original specific ops of the model.
         model._weight_conversions = None
         return model

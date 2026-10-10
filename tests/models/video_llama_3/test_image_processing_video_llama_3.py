@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.models.video_llama_3.image_processing_video_llama_3 import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -41,52 +40,17 @@ if is_vision_available():
 
 
 class VideoLlama3ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_frames=10,
-        min_resolution=56,
-        max_resolution=1024,
-        min_pixels=14 * 14 * 16,
-        max_pixels=14 * 14 * 16384,
-        do_normalize=True,
-        image_mean=IMAGENET_STANDARD_MEAN,
-        image_std=IMAGENET_STANDARD_STD,
-        do_resize=True,
-        patch_size=14,
-        merge_size=1,
-        do_convert_rgb=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.num_channels = num_channels
-        self.num_frames = num_frames
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_frames", 10)
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "min_pixels": self.min_pixels,
-            "max_pixels": self.max_pixels,
-            "patch_size": self.patch_size,
-            "merge_size": self.merge_size,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("min_pixels", 14 * 14 * 16)
+        kwargs.setdefault("max_pixels", 14 * 14 * 16384)
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -116,24 +80,7 @@ class VideoLlama3ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = VideoLlama3ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "merge_size"))
+    image_processor_tester_class = VideoLlama3ImageProcessingTester
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
