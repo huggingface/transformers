@@ -632,9 +632,17 @@ class ParakeetForTDTModelTester:
 
     def create_and_check_use_kernels(self, config, inputs_dict):
         """`use_kernels=True` swaps `tdt_loss` for the `kernels-community/tdt-loss` kernel, with the same loss."""
+        from transformers import KernelConfig
+        from transformers.integrations.hub_kernels import get_kernel_mapping_transformers
+
         model = ParakeetForTDT(config).to(torch_device).eval()
         with torch.no_grad():
             expected = model(**inputs_dict).loss
+
+        # Only kernelize `tdt_loss`, so that the test does not depend on the other kernels of the model
+        model.kernel_config = KernelConfig(
+            kernel_mapping={"tdt_loss": get_kernel_mapping_transformers()["tdt_loss"]}, inherit_mapping=False
+        )
 
         with preserve_module_forwards(model):
             model.set_use_kernels(True)
