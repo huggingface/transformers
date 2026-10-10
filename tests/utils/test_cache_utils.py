@@ -69,6 +69,7 @@ if is_torch_available():
         DynamicIndexedLayer,
         DynamicLayer,
         DynamicSlidingWindowLayer,
+        Fp8QuantizedLayer,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
@@ -132,6 +133,28 @@ class CacheTest(unittest.TestCase):
         cached_keys, cached_values = mqa_static_cache.update(*_random_kvs(mqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    def test_fp8_quantized_layer(self):
+        """
+        Tests that `Fp8QuantizedLayer` appends new tokens to a single contiguous FP8 tensor, using the scale
+        calibrated on the states of the first `update` call.
+        """
+        layer = Fp8QuantizedLayer()
+
+        keys, values = torch.randn(1, 2, 5, 8), torch.randn(1, 2, 5, 8)
+        layer.update(keys, values)
+        self.assertEqual(layer._quantized_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(layer._quantized_keys.shape, keys.shape)
+        calibrated_scale = layer._key_scale.clone()
+
+        # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
+        cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8) * 100, torch.randn(1, 2, 1, 8))
+        self.assertEqual(cached_keys.shape, (1, 2, 6, 8))
+        self.assertEqual(cached_keys.dtype, keys.dtype)
+        self.assertTrue(torch.equal(layer._key_scale, calibrated_scale))
+        # The quantized states are stored contiguously, so that they can be consumed by FP8 attention kernels
+        self.assertTrue(layer._quantized_keys.is_contiguous())
+        self.assertEqual(layer._quantized_keys.shape, (1, 2, 6, 8))
 
     def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
         """
@@ -256,6 +279,49 @@ class CacheTest(unittest.TestCase):
         keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
         self.assertEqual(keys.shape[-2], 3)
         self.assertEqual(layer.get_seq_length(), 3)
+
+    def test_fp8_quantized_layer_beam_reorder(self):
+        """
+        Same contract as `test_quantized_layer_beam_reorder`, for the FP8 backend. The scale being per-tensor, the
+        reordering is applied to the quantized states right away rather than deferred to the next `update`.
+        """
+        layer = Fp8QuantizedLayer()
+        # Row `i` of the states holds a constant that is exactly representable in `float8_e4m3fn` once divided by
+        # the calibrated scale, so the beam order can be read back off the cache without any rounding slack
+        row_values = torch.tensor([1.0, 2.0, 4.0, 8.0]).view(4, 1, 1, 1)
+
+        def states(order, seq_len):
+            return row_values.index_select(0, order).expand(4, 2, seq_len, 8).clone()
+
+        order = torch.arange(4)
+        layer.update(states(order, 5), states(order, 5))
+
+        for beam_idx in [[1, 0, 3, 2], [2, 2, 0, 1], [3, 1, 2, 0], [0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 1, 3]]:
+            beam_idx = torch.tensor(beam_idx)
+            layer.reorder_cache(beam_idx)
+            order = order.index_select(0, beam_idx)
+            keys, values = layer.update(states(order, 1), states(order, 1))
+            expected = row_values.index_select(0, order).expand_as(keys)
+            torch.testing.assert_close(keys, expected, rtol=0, atol=0)
+            torch.testing.assert_close(values, expected, rtol=0, atol=0)
+
+    def test_fp8_quantized_layer_reset(self):
+        """`reset` must drop the quantized states and the calibrated scales, so the next `update` starts over."""
+        layer = Fp8QuantizedLayer()
+
+        # Calibrate on states with a large amplitude, so a stale scale would be obvious on the next calibration
+        layer.update(torch.rand(4, 2, 5, 8) * 100, torch.rand(4, 2, 5, 8) * 100)
+        calibrated_scale = layer._key_scale.clone()
+        layer.reset()
+
+        self.assertEqual(layer.get_seq_length(), 0)
+        self.assertIsNone(layer._quantized_keys)
+        self.assertIsNone(layer._key_scale)
+
+        keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
+        self.assertEqual(keys.shape[-2], 3)
+        self.assertEqual(layer.get_seq_length(), 3)
+        self.assertLess(layer._key_scale.item(), calibrated_scale.item())
 
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
@@ -576,20 +642,25 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    @parameterized.expand([("quanto"), ("hqq")])
+    @parameterized.expand([("quanto"), ("hqq"), ("fp8")])
     def test_quantized_cache_generation(self, backend):
-        """Tests that QuantizedCache works as expected for both `quanto` and `hqq` backends."""
+        """Tests that QuantizedCache works as expected for the `quanto`, `hqq` and `fp8` backends."""
+        # The group-wise integer backends share the same options, while `fp8` quantizes per-tensor
+        cache_config = {"backend": backend, "nbits": 4, "q_group_size": 16, "residual_length": 4}
         if backend == "quanto":
             if not is_optimum_quanto_available():
                 self.skipTest("Quanto is not available")
-            axis_key, axis_value = 0, 0
+            cache_config.update({"axis_key": 0, "axis_value": 0})
             # This output is taken from a run with the same parameters, and is known to be correct
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
         elif backend == "hqq":
             if not is_hqq_available():
                 self.skipTest("HQQ is not available")
-            axis_key, axis_value = 1, 1
+            cache_config.update({"axis_key": 1, "axis_value": 1})
             # HQQ has slightly different numerics
+            expected_generation = ["The cat's whiskers are also a sign of anxiety."]
+        elif backend == "fp8":
+            cache_config = {"backend": backend}
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
         else:
             return
@@ -602,14 +673,7 @@ class CacheIntegrationTest(unittest.TestCase):
             max_new_tokens=10,
             return_dict_in_generate=True,
             cache_implementation="quantized",
-            cache_config={
-                "backend": backend,
-                "nbits": 4,
-                "q_group_size": 16,
-                "residual_length": 4,
-                "axis_key": axis_key,
-                "axis_value": axis_value,
-            },
+            cache_config=cache_config,
             disable_compile=True,
         )
 
