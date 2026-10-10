@@ -17,7 +17,6 @@ import unittest
 from pathlib import Path
 
 import torch
-from torch.nn.utils.rnn import pad_sequence
 
 from transformers import (
     Qwen3TTSTokenizerConfig,
@@ -146,7 +145,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    def test_forward_pads_codes_and_truncates_audio(self):
+    def test_forward_returns_encode_codes_and_truncates_audio(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         inputs_dict["padding_mask"][0, self.model_tester.audio_samples // 2 :] = False
         model = Qwen3TTSTokenizerModel(config).to(torch_device).eval()
@@ -155,10 +154,9 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             outputs = model(**inputs_dict)
             encoded = model.encode(**inputs_dict)
 
-        expected_codes = pad_sequence(encoded.audio_codes, batch_first=True, padding_value=-1)
-        self.assertIsInstance(outputs.audio_codes, torch.Tensor)
-        self.assertIsInstance(outputs.audio_values, torch.Tensor)
-        torch.testing.assert_close(outputs.audio_codes, expected_codes)
+        torch.testing.assert_close(outputs.audio_codes, encoded.audio_codes)
+        torch.testing.assert_close(outputs.audio_codes_mask, encoded.audio_codes_mask)
+        self.assertLess(outputs.audio_codes_mask[0].sum(), outputs.audio_codes_mask[1].sum())
         self.assertEqual(outputs.audio_values.shape, inputs_dict["input_values"].shape)
 
     def test_model_outputs_equivalence(self):
