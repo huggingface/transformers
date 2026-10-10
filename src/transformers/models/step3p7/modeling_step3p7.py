@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
 from ...utils.generic import merge_with_config_defaults
@@ -1198,8 +1198,9 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
+        hidden_states = hidden_states
         logits = self.lm_head(hidden_states)
 
         loss = None

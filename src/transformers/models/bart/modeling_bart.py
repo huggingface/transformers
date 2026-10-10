@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1280,9 +1280,9 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

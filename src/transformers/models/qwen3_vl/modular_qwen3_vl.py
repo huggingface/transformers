@@ -29,7 +29,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import auto_docstring, is_torchvision_available, logging
 from ...utils.generic import (
@@ -865,9 +865,9 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
         hidden_states = outputs[0]
 
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

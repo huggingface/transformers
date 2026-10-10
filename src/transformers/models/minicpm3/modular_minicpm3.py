@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
@@ -317,8 +317,9 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
         hidden_states = outputs.last_hidden_state
         # MiniCPM3 scales hidden states down before the LM head (not present in Llama).
         hidden_states = hidden_states / self.config.logits_scaling
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

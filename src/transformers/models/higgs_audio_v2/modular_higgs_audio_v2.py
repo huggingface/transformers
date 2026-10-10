@@ -21,7 +21,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -528,9 +528,9 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.audio_lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
+        logits = self.audio_lm_head(hidden_states)
 
         loss = None
         if audio_labels is not None:
@@ -551,7 +551,7 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
 
         if labels is not None:
             if self.text_lm_head is not None:
-                text_logits = self.text_lm_head(hidden_states[:, slice_indices, :])
+                text_logits = self.text_lm_head(hidden_states)
                 text_loss = self.loss_function(text_logits, labels, self.config.vocab_size, **kwargs)
                 loss = text_loss if loss is None else loss + text_loss
             else:

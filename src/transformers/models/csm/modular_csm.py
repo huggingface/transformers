@@ -341,7 +341,10 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
+        # Note: unlike other ForCausalLM/ForConditionalGeneration models, this does not support a bool-mask
+        # `logits_to_keep`, since `CsmCodebooksHead` assigns a different weight per sequence *position* shared
+        # across the whole batch, which a ragged (per-row) mask would break.
         if isinstance(logits_to_keep, int):
             if logits_to_keep == 0:
                 # skip idx 0 logits since it's for the concatenated backbone last hidden state

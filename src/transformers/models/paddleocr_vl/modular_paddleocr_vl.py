@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import SubConfigSpec
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ...processing_utils import (
@@ -877,8 +877,9 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         )
         hidden_states = outputs.last_hidden_state
 
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

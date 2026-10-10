@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_xlm import XLMConfig
@@ -1013,10 +1013,10 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
         outputs = self.pred_layer(
-            hidden_states[:, slice_indices, :],
+            hidden_states,
             labels,
         )  # (loss, logits) or (logits,) depending on if labels are provided.
 

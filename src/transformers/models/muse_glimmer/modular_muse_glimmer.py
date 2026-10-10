@@ -31,7 +31,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -1125,8 +1125,9 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
+        logits = self.lm_head(hidden_states)
 
         # MuseGlimmer pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.

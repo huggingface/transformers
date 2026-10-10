@@ -4985,6 +4985,27 @@ def is_accelerator_device(device: str | int | torch.device) -> bool:
         return torch.device(device).type not in ["meta", "cpu"]
 
 
+def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torch.Tensor) -> torch.Tensor:
+    """
+    Slice `hidden_states` according to `logits_to_keep`, before the `lm_head` projection, so logits are only
+    computed for the positions that are actually needed.
+
+    `logits_to_keep` can be:
+        - an `int`: keep only the last `logits_to_keep` positions (e.g. during `generate`'s prefill step)
+        - a 1D `torch.Tensor`: keep the given positions, broadcast across the whole batch
+        - a 2D boolean `torch.Tensor` of shape `(batch_size, sequence_length)`: keep a set of positions that can
+          differ per sample (e.g. for packed training). The output is flattened across the batch and sequence
+          dimensions in this case, matching the number of `True` values in the mask.
+    """
+    if isinstance(logits_to_keep, int):
+        slice_indices = slice(-logits_to_keep, None)
+        return hidden_states[:, slice_indices, :]
+    elif logits_to_keep.dtype == torch.bool:
+        return hidden_states[logits_to_keep]
+    else:
+        return hidden_states[:, logits_to_keep, :]
+
+
 def get_total_byte_count(
     model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: HfQuantizer | None = None
 ):
