@@ -435,6 +435,12 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
 
+    def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
+        # Keep CSM's structural codebook tie, which the core method drops when `tie_word_embeddings` is disabled.
+        if not all_submodels:
+            return dict(self._tied_weights_keys or {}) if self.config.tie_codebooks_embeddings else {}
+        return super().get_expanded_tied_weights_keys(all_submodels=True)
+
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         if kwargs.get("output_loading_info", False):
