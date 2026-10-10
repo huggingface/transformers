@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     mockenv_context,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -564,6 +565,20 @@ class TestTrainerDistributedFSDPCommon(
     # -------------------------------------------------------------------
     # Context parallel tests
     # -------------------------------------------------------------------
+    @parameterized.expand([1, 2])
+    @require_torch_bf16
+    def test_cp_prediction(self, cp_size):
+        output_dir = self.get_auto_remove_tmp_dir()
+        cmd = self.get_accelerate_cmd(
+            os.path.join(SCRIPTS_DIR, "context_parallel_predict.py"),
+            config_file=FSDP2_CP_CONFIG_FILE if cp_size > 1 else FSDP2_CONFIG_FILE,
+            num_processes=2,
+            script_args=["--output_dir", output_dir, "--expected_cp_size", str(cp_size)],
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+        with open(os.path.join(output_dir, "prediction_checks.json"), encoding="utf-8") as result_file:
+            self.assertEqual(json.load(result_file)["cp_size"], cp_size)
+
     def test_cp_equivalence(self):
         """Test that CP produces the same losses as without CP."""
 
