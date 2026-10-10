@@ -86,11 +86,7 @@ def _build_tiny_audio_tokenizer(num_quantizers=4):
         "upsample_rates": [2, 2],
         "upsampling_ratios": [2, 2],
     }
-    config = Qwen3TTSTokenizerConfig(
-        encoder_config=encoder_config,
-        decoder_config=decoder_config,
-        encoder_valid_num_quantizers=num_quantizers,
-    )
+    config = Qwen3TTSTokenizerConfig(encoder_config=encoder_config, decoder_config=decoder_config)
     return Qwen3TTSTokenizerModel(config).eval()
 
 
@@ -597,7 +593,7 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with torch.no_grad():
             codes = processor.audio_tokenizer.encode(input_values).audio_codes[0]
             audio = processor.decode(codes)
-        self.assertEqual(codes.shape[-1], processor.audio_tokenizer.config.encoder_config.valid_num_quantizers)
+        self.assertEqual(codes.shape[-1], processor.audio_tokenizer.config.quantizer_config.n_codebooks)
         self.assertEqual(audio.ndim, 1)
         self.assertGreaterEqual(audio.numel(), sampling_rate)
         self.assertTrue(torch.isfinite(audio).all())
