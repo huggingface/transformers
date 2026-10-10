@@ -25,14 +25,14 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
@@ -161,6 +161,12 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": HunYuanMoEV1DecoderLayer,
+        "attentions": HunYuanMoEV1Attention,
+        "router_logits": OutputRecorder(HunYuanMoEV1Gate, index=0),
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -191,11 +197,11 @@ class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     pass
 
 
-class HunYuanMoEV1Model(LlamaModel):
+class HunYuanMoEV1Model(DeepseekV2Model):
     pass
 
 
-class HunYuanMoEV1ForCausalLM(LlamaForCausalLM):
+class HunYuanMoEV1ForCausalLM(DeepseekV2ForCausalLM):
     pass
 
 

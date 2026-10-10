@@ -101,7 +101,6 @@ _deps = [
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
-    "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
     "peft>=0.20.0",
@@ -148,7 +147,7 @@ _deps = [
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.23.1,<0.24.0",
-    "torch>=2.5",
+    "torch>=2.6",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",

@@ -92,6 +92,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 2048
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     n_routed_experts: int = 256
     routed_scaling_factor: float | None = 1.0
     n_group: int = 1
@@ -103,7 +104,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     # MiMo-V2-Flash specific
     head_dim: int = 192
     v_head_dim: int = 128
-    sliding_window: int = 128
+    sliding_window: int = 129
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     attention_value_scale: float | None = 0.707
@@ -127,6 +128,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
+        # The reference SGLang implementation attends to `sliding_window_size` previous tokens plus the query.
+        if kwargs.get("sliding_window_size") is not None:
+            self.sliding_window = kwargs["sliding_window_size"] + 1
 
         super().__post_init__(**kwargs)
 
