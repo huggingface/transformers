@@ -233,7 +233,7 @@ class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_speculative_generation(self):
         expectations = Expectations(
             {
-                (None, None): "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl",
+                (None, None): "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl",
                 ("xpu", 5): "To be or not to be, that is the question. The answer is to be, but not to be in the way",
             }
         )  # fmt: skip
