@@ -72,6 +72,13 @@ OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 @strict
 class OpenAIPrivacyFilterConfig(GptOssConfig):
     model_type = "openai_privacy_filter"
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
     vocab_size: int = 200064
     hidden_size: int = 640
     intermediate_size: int = 640
