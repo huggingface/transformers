@@ -65,6 +65,10 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         Final dimensionality of the decoder's output before waveform generation.
     latent_dim (`int`, *optional*, defaults to 1024):
         Latent dimension used between pre-conv and transformer.
+    decoder_chunk_size (`int`, *optional*, defaults to 300):
+        Number of frames the decoder processes per chunk.
+    decoder_left_context_size (`int`, *optional*, defaults to 25):
+        Number of preceding frames prepended to each decoder chunk as context and dropped from its output.
     input_sampling_rate (`int`, *optional*, defaults to 24000):
         Sampling rate, in hertz (Hz), of the encoder's input audio waveform.
     output_sampling_rate (`int`, *optional*, defaults to 24000):
@@ -105,6 +109,8 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     head_dim: int = 64
     codebook_dim: int = 512
     latent_dim: int = 1024
+    decoder_chunk_size: int = 300
+    decoder_left_context_size: int = 25
 
     def __post_init__(self, **kwargs):
         encoder_valid_num_quantizers = kwargs.pop("encoder_valid_num_quantizers", None)
