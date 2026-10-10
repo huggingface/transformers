@@ -15,19 +15,38 @@
 # Run the test: CUDA_VISIBLE_DEVICES=0 RUN_SLOW=1 pytest -sv tests/kernels/test_kernels.py
 
 
+import ast
 import copy
+import importlib
+import inspect
 import os
 import sys
 import tempfile
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import torch
 from huggingface_hub import snapshot_download
 from parameterized import parameterized
 
+import transformers
 from tests.test_memory_cleanup_mixin import MemoryCleanupTestCase
-from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    HunYuanVLImageProcessor,
+    KernelConfig,
+    LevitImageProcessor,
+    PaddleOCRVLImageProcessor,
+    Qwen2VLImageProcessor,
+    Qwen2VLVideoProcessor,
+    Sam2ImageProcessor,
+    ViTImageProcessor,
+)
+from transformers.image_processing_backends import TorchvisionBackend
+from transformers.image_utils import PILImageResampling, SizeDict, load_image
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
@@ -35,6 +54,13 @@ from transformers.integrations.hub_kernels import (
     lazy_load_kernel,
     load_and_register_attn_kernel,
     use_kernel_func_from_hub_with_fallback,
+)
+from transformers.integrations.hub_processing_kernels import (
+    _PROCESSING_KERNEL_ADAPTERS,
+    _connected_component_areas_kernel,
+    _resize_normalize_kernel,
+    _resize_normalize_patchify_kernel,
+    run_processing_kernel,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -44,11 +70,13 @@ from transformers.testing_utils import (
     require_kernels,
     require_rocm,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
 from transformers.utils.import_utils import is_kernels_available
 from transformers.utils.kernel_config import add_to_mapping_local
+from transformers.video_processing_utils import BaseVideoProcessor
 
 
 if is_kernels_available():
@@ -904,3 +932,465 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 
         result_mapping = kernel_config.kernel_mapping
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
+
+
+def connected_component_areas_reference(regions):
+    """Area of the 8-connected component of every pixel, by label propagation. Slow, for tests only."""
+    flat_regions = regions.flatten(1)
+    labels = torch.arange(1, flat_regions.shape[1] + 1, dtype=torch.float32, device=regions.device)
+    labels = (labels * flat_regions).view(regions.shape)
+    while True:
+        propagated = torch.nn.functional.max_pool2d(labels, kernel_size=3, stride=1, padding=1) * regions
+        if torch.equal(propagated, labels):
+            break
+        labels = propagated
+    areas = torch.zeros_like(labels, dtype=torch.int32)
+    for index in range(labels.shape[0]):
+        _, inverse, counts = labels[index].unique(return_inverse=True, return_counts=True)
+        areas[index] = counts[inverse].to(torch.int32) * regions[index]
+    return areas
+
+
+def patchify_kernel_layout_reference(
+    frames,
+    target_sizes,
+    items,
+    resample,
+    rescale_factor,
+    image_mean,
+    image_std,
+    patch_size,
+    merge_size,
+    temporal_patch_size,
+):
+    """What `resize_normalize_patchify` writes for frames that are already at their target size."""
+    mean = torch.tensor(image_mean).view(-1, 1, 1)
+    std = torch.tensor(image_std).view(-1, 1, 1)
+    item_patches = []
+    for item in items:
+        padded_item = list(item) + [item[-1]] * (-len(item) % temporal_patch_size)
+        video = (torch.stack([frames[index] for index in padded_item]).float() * rescale_factor - mean) / std
+        frame_count, channels, height, width = video.shape
+        patches = video.reshape(
+            frame_count // temporal_patch_size,
+            temporal_patch_size,
+            channels,
+            height // (patch_size * merge_size),
+            merge_size,
+            patch_size,
+            width // (patch_size * merge_size),
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
+        item_patches.append(patches.reshape(-1, channels * temporal_patch_size * patch_size * patch_size))
+    return torch.cat(item_patches)
+
+
+def processors_calling_the_patchify_kernel():
+    """Torchvision image and video processor classes whose module mentions the `resize_normalize_patchify` kernel."""
+    classes = []
+    for path in sorted(Path(transformers.__file__).parent.glob("models/*/*_processing_*.py")):
+        if "resize_normalize_patchify" not in path.read_text() or path.stem.startswith("modular_"):
+            continue
+        module = importlib.import_module(f"transformers.models.{path.parent.name}.{path.stem}")
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__ == module.__name__ and issubclass(cls, TorchvisionBackend):
+                classes.append(cls)
+    return classes
+
+
+class ReferenceConnectedComponentsKernel:
+    """Stand-in for `kernels-community/cv-utils`: records the input of `connected_component_areas`, answers the reference."""
+
+    def __init__(self):
+        self.inputs = []
+
+    def connected_component_areas(self, mask):
+        self.inputs.append(mask)
+        return connected_component_areas_reference(mask)
+
+
+class TestProcessingKernels(TestCasePlus):
+    """Dispatch and gating of processing kernels. Runs on CPU, `kernels` is not needed."""
+
+    def setUp(self):
+        super().setUp()
+        # One 8x8 object with a 2x2 hole, and a 1 pixel island away from it.
+        self.mask_logits = torch.full((1, 1, 16, 16), -1.0)
+        self.mask_logits[..., 2:10, 2:10] = 1.0
+        self.mask_logits[..., 5:7, 5:7] = -1.0
+        self.mask_logits[..., 13, 13] = 1.0
+
+    def post_process(self, use_kernels, **kwargs):
+        processor = Sam2ImageProcessor(use_kernels=use_kernels)
+        return processor.post_process_masks([self.mask_logits.clone()], [(16, 16)], **kwargs)[0]
+
+    def test_registration_records_repo_and_adapter(self):
+        self.assertEqual(
+            _PROCESSING_KERNEL_ADAPTERS["connected_component_areas"],
+            ("cv-utils", _connected_component_areas_kernel),
+        )
+        self.assertEqual(_HUB_KERNEL_MAPPING["cv-utils"]["repo_id"], "kernels-community/cv-utils")
+
+    def test_run_processing_kernel_calls_adapter(self):
+        sentinel = types.ModuleType("sentinel_kernel_module")
+        with (
+            patch.object(torch.cuda, "is_available", return_value=True),
+            patch.dict(
+                _PROCESSING_KERNEL_ADAPTERS,
+                {"dummy_op": ("dummy-kernel", lambda kernel, value: (kernel, value))},
+                clear=True,
+            ),
+            patch.multiple(
+                "transformers.integrations.hub_kernels",
+                _kernels_enabled=True,
+                lazy_load_kernel={"dummy-kernel": sentinel}.get,
+            ),
+        ):
+            self.assertEqual(run_processing_kernel("dummy_op", 3), (sentinel, 3))
+
+    def test_run_processing_kernel_falls_back(self):
+        regions = self.mask_logits > 0
+        with patch.object(torch.cuda, "is_available", return_value=True):
+            # Unknown op, `USE_HUB_KERNELS=0`, and a kernel that cannot be loaded all keep the default path.
+            self.assertIsNone(run_processing_kernel("not_a_registered_op"))
+            with patch("transformers.integrations.hub_kernels._kernels_enabled", False):
+                self.assertIsNone(run_processing_kernel("connected_component_areas", regions))
+            with patch("transformers.integrations.hub_kernels.lazy_load_kernel", lambda name: None):
+                self.assertIsNone(run_processing_kernel("connected_component_areas", regions))
+
+    def test_run_processing_kernel_needs_accelerator(self):
+        with patch.object(torch.cuda, "is_available", return_value=False):
+            with patch("transformers.integrations.hub_kernels.lazy_load_kernel", self.fail):
+                self.assertIsNone(run_processing_kernel("connected_component_areas", self.mask_logits > 0))
+
+    def test_connected_component_areas_adapter_calls_the_kernel(self):
+        kernel = ReferenceConnectedComponentsKernel()
+        regions = torch.zeros(2, 1, 5, 7, dtype=torch.bool)
+        regions[:, :, 1:3, 1:4] = True
+        # The kernel is CUDA only; pretend CPU is its device so the adapter can be tested without a GPU.
+        with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
+            areas = _connected_component_areas_kernel(kernel, regions)
+        self.assertIs(kernel.inputs[0], regions)
+        self.assertTrue(torch.equal(areas, connected_component_areas_reference(regions)))
+
+    def test_connected_component_areas_adapter_needs_cuda_tensors(self):
+        kernel = ReferenceConnectedComponentsKernel()
+        self.assertIsNone(_connected_component_areas_kernel(kernel, self.mask_logits > 0))
+        self.assertEqual(kernel.inputs, [])
+
+    def test_sam2_fills_holes_and_removes_sprinkles(self):
+        with patch(
+            "transformers.models.sam2.image_processing_sam2.run_processing_kernel",
+            side_effect=lambda name, regions: connected_component_areas_reference(regions),
+        ):
+            masks = self.post_process(use_kernels=True, max_hole_area=4, max_sprinkle_area=1)
+            too_small_thresholds = self.post_process(use_kernels=True, max_hole_area=3, max_sprinkle_area=0)
+        expected = torch.zeros(1, 1, 16, 16, dtype=torch.bool)
+        expected[..., 2:10, 2:10] = True
+        self.assertTrue(torch.equal(masks, expected))
+        self.assertTrue(torch.equal(too_small_thresholds, self.post_process(use_kernels=False)))
+
+    def test_sam2_keeps_masks_without_the_kernel(self):
+        default = self.post_process(use_kernels=False)
+        self.assertTrue(default[0, 0, 5, 5].item() is False and default[0, 0, 13, 13].item() is True)
+        self.assertTrue(torch.equal(self.post_process(False, max_hole_area=4, max_sprinkle_area=1), default))
+        with patch.object(torch.cuda, "is_available", return_value=False):
+            self.assertTrue(torch.equal(self.post_process(True, max_hole_area=4, max_sprinkle_area=1), default))
+
+    def run_resize_adapter(self, images=None, **overrides):
+        kernel = MagicMock()
+        arguments = {
+            "size": SizeDict(height=8, width=8),
+            "crop_size": None,
+            "resample": PILImageResampling.BICUBIC,
+            "rescale_factor": 1 / 255,
+            "image_mean": [0.5, 0.5, 0.5],
+            "image_std": [0.5, 0.5, 0.5],
+        }
+        images = (
+            [torch.randint(0, 255, (3, 40, 60), dtype=torch.uint8) for _ in range(2)] if images is None else images
+        )
+        with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
+            result = _resize_normalize_kernel(kernel, images, **{**arguments, **overrides})
+        return kernel, result
+
+    def test_resize_adapter_translates_arguments(self):
+        kernel, result = self.run_resize_adapter()
+        self.assertIs(result, kernel.resize_normalize.return_value)
+        arguments, keyword_arguments = kernel.resize_normalize.call_args
+        self.assertEqual(arguments[1:], ([0.5, 0.5, 0.5], [0.5, 0.5, 0.5], 1 / 255, "bicubic"))
+        self.assertEqual(keyword_arguments, {"crop_size": None, "size": (8, 8)})
+
+        kernel, _ = self.run_resize_adapter(
+            size=SizeDict(shortest_edge=8), crop_size=SizeDict(height=6, width=6), image_mean=0.5, image_std=0.5
+        )
+        arguments, keyword_arguments = kernel.resize_normalize.call_args
+        self.assertEqual(arguments[1:3], (0.5, 0.5))
+        self.assertEqual(keyword_arguments, {"crop_size": (6, 6), "shortest_edge": 8})
+
+    def test_resize_adapter_falls_back(self):
+        unsupported = {
+            "lanczos": {"resample": PILImageResampling.LANCZOS},
+            "crop_larger_than_resize": {"crop_size": SizeDict(height=12, width=12)},
+            "empty_crop": {"crop_size": SizeDict()},
+            "shortest_edge_without_crop": {"size": SizeDict(shortest_edge=8)},
+            "bounded_resize": {"size": SizeDict(shortest_edge=8, longest_edge=16)},
+            "float_images": {"images": [torch.rand(3, 40, 60)]},
+            "mixed_channels": {
+                "images": [torch.zeros(3, 4, 4, dtype=torch.uint8), torch.zeros(1, 4, 4, dtype=torch.uint8)]
+            },
+        }
+        for name, overrides in unsupported.items():
+            with self.subTest(name):
+                kernel, result = self.run_resize_adapter(**overrides)
+                self.assertIsNone(result)
+                kernel.resize_normalize.assert_not_called()
+        # Outside the patch the kernel device is CUDA, and these images are on CPU.
+        kernel = MagicMock()
+        self.assertIsNone(
+            _resize_normalize_kernel(
+                kernel,
+                [torch.zeros(3, 4, 4, dtype=torch.uint8)],
+                SizeDict(height=2, width=2),
+                None,
+                3,
+                1 / 255,
+                0.5,
+                0.5,
+            )
+        )
+        kernel.resize_normalize.assert_not_called()
+
+    def test_patchify_adapter_translates_arguments(self):
+        kernel = MagicMock()
+        frames = [torch.zeros(3, 30, 40, dtype=torch.uint8), torch.zeros(3, 20, 20, dtype=torch.uint8)]
+        with patch("transformers.integrations.hub_processing_kernels._KERNEL_DEVICE_TYPE", "cpu"):
+            result = _resize_normalize_patchify_kernel(
+                kernel, frames, [(28, 28), (28, 28)], 3, 1 / 255, [0.5] * 3, [0.5] * 3, 14, 2, 2
+            )
+        self.assertIs(result, kernel.resize_normalize_patchify.return_value)
+        arguments, keyword_arguments = kernel.resize_normalize_patchify.call_args
+        self.assertEqual(arguments[1:], ([(28, 28), (28, 28)], [0.5] * 3, [0.5] * 3, 1 / 255, "bicubic", 14, 2, 2))
+        self.assertEqual(keyword_arguments, {"items": None})
+
+    def test_qwen2_vl_uses_the_patchify_kernel_output(self):
+        images = [torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)]
+        pixel_values = torch.zeros(24, 3 * 2 * 14 * 14)
+        with patch(
+            "transformers.integrations.hub_processing_kernels.run_processing_kernel",
+            return_value=(pixel_values, torch.tensor([[1, 4, 6]])),
+        ) as run_kernel:
+            output = Qwen2VLImageProcessor(use_kernels=True)(images, return_tensors="pt")
+            Qwen2VLImageProcessor(use_kernels=False)(images, return_tensors="pt")
+        self.assertEqual(run_kernel.call_count, 1)
+        self.assertEqual(run_kernel.call_args[0][0], "resize_normalize_patchify")
+        self.assertIs(output["pixel_values"], pixel_values)
+        self.assertEqual(output["image_grid_thw"].tolist(), [[1, 4, 6]])
+
+    def test_qwen2_vl_video_groups_frames_per_video(self):
+        videos = [
+            torch.randint(0, 255, (3, 3, 64, 96), dtype=torch.uint8),
+            torch.randint(0, 255, (2, 3, 32, 32), dtype=torch.uint8),
+        ]
+        with patch(
+            "transformers.integrations.hub_processing_kernels.run_processing_kernel",
+            return_value=(torch.zeros(1, 1), torch.tensor([[2, 4, 6], [1, 2, 2]])),
+        ) as run_kernel:
+            output = Qwen2VLVideoProcessor(use_kernels=True)(
+                videos, do_sample_frames=False, cap_pixels_per_frame=False, return_tensors="pt"
+            )
+        frames, target_sizes = run_kernel.call_args.args[1:3]
+        items = run_kernel.call_args.kwargs["items"]
+        self.assertEqual(len(frames), 5)
+        self.assertEqual(items, [[0, 1, 2], [3, 4]])
+        self.assertEqual(len(set(target_sizes[:3])), 1)
+        self.assertEqual(output["video_grid_thw"].tolist(), [[2, 4, 6], [1, 2, 2]])
+
+    def test_processor_overriding_resize_does_not_use_the_resize_kernel(self):
+        with (
+            patch.object(torch.cuda, "is_available", return_value=True),
+            patch.dict(_PROCESSING_KERNEL_ADAPTERS, {"resize_normalize": ("cv-utils", self.fail)}, clear=True),
+            patch.multiple(
+                "transformers.integrations.hub_kernels",
+                _kernels_enabled=True,
+                lazy_load_kernel=lambda name: types.ModuleType("sentinel_kernel_module"),
+            ),
+        ):
+            output = LevitImageProcessor(use_kernels=True)([torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)])
+        self.assertIn("pixel_values", output)
+
+    def test_processors_reaching_the_patchify_kernel_use_its_layout(self):
+        processor_classes = processors_calling_the_patchify_kernel()
+        for processor_class in (Qwen2VLImageProcessor, PaddleOCRVLImageProcessor, HunYuanVLImageProcessor):
+            self.assertIn(processor_class, processor_classes)
+        qwen3_vl_image_settings = {"patch_size": 16, "image_mean": [0.5, 0.5, 0.5], "image_std": [0.5, 0.5, 0.5]}
+        cases = [(processor_class, {}) for processor_class in processor_classes]
+        cases.append((Qwen2VLImageProcessor, qwen3_vl_image_settings))
+        for processor_class, settings in cases:
+            with self.subTest(processor_class=processor_class.__name__, **settings):
+                processor = processor_class(use_kernels=True, **settings)
+                is_video = issubclass(processor_class, BaseVideoProcessor)
+                recorded_arguments = []
+
+                def run(height, width):
+                    recorded_arguments.clear()
+                    if is_video:
+                        videos = [torch.randint(0, 256, (3, 3, height, width), dtype=torch.uint8)]
+                        return processor(videos, do_sample_frames=False, return_tensors="pt")["pixel_values_videos"]
+                    images = [torch.randint(0, 256, (3, height, width), dtype=torch.uint8)]
+                    return processor(images, return_tensors="pt")["pixel_values"]
+
+                with (
+                    patch.object(torch.cuda, "is_available", return_value=True),
+                    patch.dict(
+                        _PROCESSING_KERNEL_ADAPTERS,
+                        {
+                            "resize_normalize_patchify": (
+                                "cv-utils",
+                                lambda kernel, frames, target_sizes, *arguments, items=None: recorded_arguments.append(
+                                    (
+                                        frames,
+                                        target_sizes,
+                                        items or [[index] for index in range(len(frames))],
+                                        *arguments,
+                                    )
+                                ),
+                            )
+                        },
+                        clear=True,
+                    ),
+                    patch.multiple(
+                        "transformers.integrations.hub_kernels",
+                        _kernels_enabled=True,
+                        lazy_load_kernel=lambda name: types.ModuleType("sentinel_kernel_module"),
+                    ),
+                ):
+                    height, width = 112, 168
+                    pixel_values = run(height, width)
+                    if not recorded_arguments:
+                        continue
+                    for _ in range(3):
+                        if recorded_arguments[0][1][0] == (height, width):
+                            break
+                        height, width = recorded_arguments[0][1][0]
+                        pixel_values = run(height, width)
+                frames, target_sizes = recorded_arguments[0][:2]
+                self.assertEqual([tuple(frame.shape[-2:]) for frame in frames], [tuple(size) for size in target_sizes])
+                torch.testing.assert_close(
+                    pixel_values.reshape(-1), patchify_kernel_layout_reference(*recorded_arguments[0]).reshape(-1)
+                )
+
+    def test_image_and_video_processors_run_through_preprocess(self):
+        """`use_processing_kernel` decorates `_preprocess`, so a processor whose entry point skips it never runs a kernel."""
+        allowed = {"timm_wrapper.TimmWrapperImageProcessor"}
+        bypassing = []
+        for path in sorted(Path(transformers.__file__).parent.glob("models/*/*_processing_*.py")):
+            if path.stem.startswith("modular_"):
+                continue
+            for node in ast.parse(path.read_text()).body:
+                if not isinstance(node, ast.ClassDef) or not node.name.endswith(
+                    ("ImageProcessor", "ImageProcessorPil", "VideoProcessor")
+                ):
+                    continue
+                for method in node.body:
+                    if not isinstance(method, ast.FunctionDef) or method.name not in ("preprocess", "__call__"):
+                        continue
+                    source = ast.unparse(method)
+                    name = f"{path.parent.name}.{node.name}"
+                    if "_preprocess" not in source and "super()" not in source and name not in allowed:
+                        bypassing.append(f"{name}.{method.name}")
+        self.assertEqual(bypassing, [], "these processors do not reach `_preprocess`")
+
+    def test_use_kernels_is_a_runtime_flag(self):
+        processor = Sam2ImageProcessor(use_kernels=True)
+        self.assertNotIn("use_kernels", processor.to_dict())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            self.assertFalse(Sam2ImageProcessor.from_pretrained(tmp_dir).use_kernels)
+            self.assertTrue(Sam2ImageProcessor.from_pretrained(tmp_dir, use_kernels=True).use_kernels)
+
+
+@require_kernels
+@require_torch_gpu
+@slow
+class TestConnectedComponentsKernel(TestCasePlus):
+    """The `kernels-community/cv-utils` connected components kernel against the reference, through the processor."""
+
+    def test_matches_reference(self):
+        generator = torch.Generator().manual_seed(0)
+        masks = torch.randn(4, 3, 63, 65, generator=generator).to(torch_device)
+        processor = Sam2ImageProcessor(use_kernels=True)
+        regions = (masks.flatten(0, 1) > 0).unsqueeze(1)
+        areas = run_processing_kernel("connected_component_areas", regions)
+        self.assertIsNotNone(areas, "the kernel did not run")
+        torch.testing.assert_close(areas.to(torch.int32).cpu(), connected_component_areas_reference(regions.cpu()))
+        filled = processor.post_process_masks([masks], [(63, 65)], max_hole_area=8, max_sprinkle_area=8)[0]
+        with patch(
+            "transformers.models.sam2.image_processing_sam2.run_processing_kernel",
+            side_effect=lambda name, regions: connected_component_areas_reference(regions),
+        ):
+            expected = processor.post_process_masks([masks], [(63, 65)], max_hole_area=8, max_sprinkle_area=8)[0]
+        self.assertTrue(torch.equal(filled, expected))
+
+
+@require_kernels
+@require_torch_gpu
+@slow
+class TestResizeKernels(TestCasePlus):
+    """The resize kernels of `kernels-community/cv-utils` against the default torchvision path, on photos."""
+
+    def setUp(self):
+        super().setUp()
+        image = torch.from_numpy(np.array(load_image("http://images.cocodataset.org/val2017/000000039769.jpg")))
+        image = image.permute(2, 0, 1).contiguous().to(torch_device)
+        self.images = [image, image[:, :300, :500].contiguous(), image[:, 100:, 50:].contiguous()]
+
+    def assert_kernel_matches_default(self, operation, processor_class, call):
+        kernel_name, adapter = _PROCESSING_KERNEL_ADAPTERS[operation]
+        if not hasattr(lazy_load_kernel(kernel_name), operation):
+            self.skipTest(f"`{operation}` is not available in `{kernel_name}`")
+        kernel_outputs = []
+
+        def recording_adapter(*args, **kwargs):
+            kernel_outputs.append(adapter(*args, **kwargs))
+            return kernel_outputs[-1]
+
+        with patch.dict(_PROCESSING_KERNEL_ADAPTERS, {operation: (kernel_name, recording_adapter)}):
+            with_kernels = call(processor_class(use_kernels=True))
+        self.assertTrue(
+            kernel_outputs and kernel_outputs[0] is not None, "the adapter fell back, the kernel never ran"
+        )
+        without_kernels = call(processor_class(use_kernels=False))
+        for key in without_kernels:
+            self.assertEqual(with_kernels[key].shape, without_kernels[key].shape)
+        # Both paths round to uint8 after each resize pass, in a different order of operations.
+        one_level = 1 / 255 / min(processor_class().image_std)
+        difference = (
+            with_kernels.data[list(without_kernels)[0]] - without_kernels.data[list(without_kernels)[0]]
+        ).abs()
+        self.assertLess(difference.mean().item(), one_level / 4)
+        self.assertLess((difference > one_level * 1.01).float().mean().item(), 1e-3)
+
+    def test_resize_normalize(self):
+        self.assert_kernel_matches_default(
+            "resize_normalize", ViTImageProcessor, lambda processor: processor(self.images, return_tensors="pt")
+        )
+
+    def test_resize_normalize_patchify_images(self):
+        self.assert_kernel_matches_default(
+            "resize_normalize_patchify",
+            Qwen2VLImageProcessor,
+            lambda processor: processor(self.images, return_tensors="pt"),
+        )
+
+    def test_resize_normalize_patchify_video(self):
+        video = torch.stack([self.images[0]] * 5)
+        self.assert_kernel_matches_default(
+            "resize_normalize_patchify",
+            Qwen2VLVideoProcessor,
+            lambda processor: processor(
+                [video], do_sample_frames=False, cap_pixels_per_frame=False, return_tensors="pt"
+            ),
+        )

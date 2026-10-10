@@ -138,6 +138,11 @@ class ImageProcessingMixin(PushToHubMixin):
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            use_kernels (`bool`, *optional*, defaults to `False`):
+                Whether to run the processing ops with Hub kernels when one is registered for them, and to fall
+                back to the default implementation otherwise. Requires the torchvision backend and a CUDA device.
+                This is a runtime flag, it is not saved by
+                [`~image_processing_utils.ImageProcessingMixin.save_pretrained`].
             kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
@@ -382,8 +387,11 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        use_kernels = kwargs.pop("use_kernels", None)
         image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         image_processor = cls(**image_processor_dict)
+        if use_kernels is not None:
+            image_processor.use_kernels = use_kernels
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
         extra_keys = []
@@ -412,6 +420,7 @@ class ImageProcessingMixin(PushToHubMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this image processor instance.
         """
         output = copy.deepcopy(self.__dict__)
+        output.pop("use_kernels", None)  # runtime flag, not part of the saved config
         output["image_processor_type"] = self.__class__.__name__
 
         return output

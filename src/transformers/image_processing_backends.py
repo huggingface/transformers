@@ -53,6 +53,7 @@ from .image_utils import (
     is_valid_image,
     load_image_as_tensor,
 )
+from .integrations.hub_processing_kernels import resize_normalize_with_kernel, use_processing_kernel
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
@@ -87,6 +88,7 @@ class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        self.use_kernels = kwargs.pop("use_kernels", False)
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 
@@ -367,6 +369,7 @@ class TorchvisionBackend(BaseImageProcessor):
         crop_left = int((image_width - crop_width) / 2.0)
         return tvF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
+    @use_processing_kernel(resize_normalize_with_kernel, default_methods_of="TorchvisionBackend")
     def _preprocess(
         self,
         images: list["torch.Tensor"],

@@ -24,14 +24,14 @@ from huggingface_hub.dataclasses import strict
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
-from ...utils import auto_docstring, is_torchvision_available, logging
+from ...utils import auto_docstring, logging
 from ...utils.generic import (
     merge_with_config_defaults,
 )
@@ -69,10 +69,6 @@ from ..qwen3.modeling_qwen3 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -1013,21 +1009,11 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
     def _standardize_kwargs(self, **super_kwargs):
         raise NotImplementedError("No need to override, fallback to base class implementation")
 
-    def resize(
-        self,
-        videos: "torch.Tensor",
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        factor: int,
-        temporal_factor: int,
-        cap_pixels_per_frame: bool | None = None,
-        **kwargs,
-    ) -> "torch.Tensor":
-        """Resize dynamically based on input video aspect ratio."""
+    def _resized_size(self, height, width, num_frames, size, factor, temporal_factor, cap_pixels_per_frame):
+        """Frame size a video of `num_frames` frames of `height` x `width` pixels is resized to."""
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
-        num_frames = videos.shape[1]
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
             # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
@@ -1035,8 +1021,7 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
             pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
             max_pixels = pixels_per_frame * num_frames
 
-        height, width = videos.shape[-2:]
-        resized_height, resized_width = smart_resize(
+        return smart_resize(
             height=height,
             width=width,
             num_frames=num_frames,
@@ -1044,12 +1029,6 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
             temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
             max_pixels=max_pixels,
-        )
-        return BaseVideoProcessor.resize(
-            self,
-            image=videos,
-            size=SizeDict(height=resized_height, width=resized_width),
-            resample=resample,
         )
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):

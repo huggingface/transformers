@@ -30,6 +30,7 @@ from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -409,6 +410,15 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
         )
 
         return flatten_patches, grid_h, grid_w
+
+    @use_processing_kernel(
+        resize_normalize_patchify_images_with_kernel,
+        compute_resized_height_and_width=smart_resize,
+        merge_patches=False,
+        forced_resample=PILImageResampling.BICUBIC,
+    )
+    def _preprocess(self, **super_kwargs):
+        return super()._preprocess(**super_kwargs)
 
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None

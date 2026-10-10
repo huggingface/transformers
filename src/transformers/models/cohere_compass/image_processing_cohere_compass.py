@@ -29,6 +29,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -203,6 +204,7 @@ class CohereCompassImageProcessor(TorchvisionBackend):
         )
         return flatten_patches, grid_h, grid_w
 
+    @use_processing_kernel(resize_normalize_patchify_images_with_kernel, compute_resized_height_and_width=smart_resize)
     def _preprocess(
         self,
         images: list["torch.Tensor"],

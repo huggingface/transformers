@@ -318,6 +318,66 @@ Set the `USE_HUB_KERNELS` environment variable to disable Hub kernels everywhere
 export USE_HUB_KERNELS=0  # or OFF or NO
 ```
 
+## Processor kernels
+
+Image and video processors can run some of their operations with Hub kernels from [kernels-community/cv-utils](https://huggingface.co/kernels-community/cv-utils). Pass `use_kernels=True` when loading the processor. The flag is not saved with the processor configuration.
+
+| Operation | What the kernel does | Processors |
+|---|---|---|
+| Resize and normalize | Resizes a batch of images of different sizes in one launch, then rescales and normalizes in the same pass. | Processors that use the default [`TorchvisionBackend`] preprocessing, such as ViT, CLIP and SigLIP |
+| Resize, normalize and patchify | Writes each resized and normalized pixel directly at its place in the flattened patch sequence, for images and video frames. | Qwen2-VL and Qwen3-VL image and video processors, and the processors built on them (Cohere Compass, ERNIE 4.5 VL, GLM-Image, HunYuanVL, MiniMax-M3-VL, PaddleOCR-VL) |
+| Connected components | Measures the area of every connected region of a mask, to fill small holes and remove small islands. | SAM 2 and SAM 3 image processors (`max_hole_area`, `max_sprinkle_area`) |
+
+```py
+from transformers import AutoProcessor
+
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct", use_kernels=True)
+inputs = processor(text=prompt, images=images, return_tensors="pt", device="cuda")
+```
+
+[`AutoProcessor`] passes the flag to its image and video processors. Kernels run on the device of the inputs, so pass `device="cuda"`. The processor keeps its default implementation when the inputs are on CPU, when the kernel fails to load, or when the kernel does not support the arguments.
+
+The resize kernels round to `uint8` after each pass, like the torchvision path, but in a different order. On photos the mean difference stays below a quarter of a `uint8` level. Bicubic resampling can differ by several levels on a few pixels near sharp edges.
+
+### Adding a processing kernel
+
+A processing kernel has two levels in `integrations/hub_processing_kernels.py`.
+
+`register_processing_kernel` maps an operation to a kernel of `_HUB_KERNEL_MAPPING`. The adapter receives the loaded kernel module and the arguments of the operation. It translates them to the kernel call and returns `None` for arguments the kernel cannot handle.
+
+```py
+from transformers.integrations.hub_processing_kernels import register_processing_kernel
+
+
+@register_processing_kernel("my_op", kernel_name="my-processing-kernel")
+def my_op_kernel(kernel, images):
+    if images[0].device.type != "cuda":
+        return None
+    return kernel.my_op(images)
+```
+
+`use_processing_kernel` connects a processor to it. It decorates `_preprocess` with a function that receives the processor, the named arguments of `_preprocess` and the options of the decorator. That function owns everything the kernel needs, such as the target sizes and the output `BatchFeature`, so the processor code does not change. When `use_kernels=True` and the function returns a result, `_preprocess` returns it. Otherwise `_preprocess` runs as usual.
+
+```py
+from transformers import BatchFeature, TorchvisionBackend
+from transformers.integrations.hub_processing_kernels import run_processing_kernel, use_processing_kernel
+
+
+def my_op_with_kernel(processor, images, return_tensors, **kwargs):
+    pixel_values = run_processing_kernel("my_op", images)
+    if pixel_values is None:
+        return None
+    return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+
+
+class MyImageProcessor(TorchvisionBackend):
+    @use_processing_kernel(my_op_with_kernel)
+    def _preprocess(self, images, return_tensors, **kwargs):
+        ...
+```
+
+Subclasses that keep `_preprocess` keep the kernel. In a modular file, a model passes its own options by redefining `_preprocess` with the decorator and a call to `super()._preprocess(**super_kwargs)`. A model that replaces `_preprocess` with a different pipeline marks it with `@no_inherit_decorator`.
+
 ## Troubleshooting
 
 Kernel integration depends on hardware, drivers, and package versions working together. The following sections cover common failures.

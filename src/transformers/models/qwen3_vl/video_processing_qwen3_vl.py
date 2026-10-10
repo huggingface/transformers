@@ -25,6 +25,7 @@ import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_videos_with_kernel, use_processing_kernel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
@@ -190,15 +191,25 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
-        temporal_factor: int,
+        temporal_factor: int = 2,
         cap_pixels_per_frame: bool | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
+        resized_height, resized_width = self._resized_size(
+            *videos.shape[-2:], videos.shape[1], size, factor, temporal_factor, cap_pixels_per_frame
+        )
+        return super().resize(
+            image=videos,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def _resized_size(self, height, width, num_frames, size, factor, temporal_factor, cap_pixels_per_frame):
+        """Frame size a video of `num_frames` frames of `height` x `width` pixels is resized to."""
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
-        num_frames = videos.shape[1]
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
             # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
@@ -206,8 +217,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
             pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
             max_pixels = pixels_per_frame * num_frames
 
-        height, width = videos.shape[-2:]
-        resized_height, resized_width = smart_resize(
+        return smart_resize(
             height=height,
             width=width,
             num_frames=num_frames,
@@ -215,11 +225,6 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
             temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
             max_pixels=max_pixels,
-        )
-        return super().resize(
-            image=videos,
-            size=SizeDict(height=resized_height, width=resized_width),
-            resample=resample,
         )
 
     def patchify(
@@ -262,6 +267,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
 
         return flatten_patches, grid_t, grid_h, grid_w
 
+    @use_processing_kernel(resize_normalize_patchify_videos_with_kernel)
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
