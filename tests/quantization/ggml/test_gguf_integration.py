@@ -497,6 +497,13 @@ class Lfm2GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
 
 
 @slow
+class Lfm2GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "LiquidAI/LFM2.5-230M-GGUF"
+    quantized_gguf_file = "LFM2.5-230M-Q4_K_M.gguf"
+    reference_repo = "LiquidAI/LFM2.5-230M"
+
+
+@slow
 class Qwen3GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "unsloth/Qwen3-0.6B-GGUF"
     quantized_gguf_file = "Qwen3-0.6B-Q8_0.gguf"
