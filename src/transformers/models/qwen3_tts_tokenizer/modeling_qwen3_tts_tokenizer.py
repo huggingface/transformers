@@ -2062,9 +2062,6 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         super().__init__(config)
         self.config = config
 
-        self.input_sampling_rate = config.input_sampling_rate
-        self.output_sampling_rate = config.output_sampling_rate
-
         self.encoder = Qwen3TTSTokenizerEncoderModel(self.config.encoder_config)
         self.quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(self.config.quantizer_config)
         self.decoder = Qwen3TTSTokenizerDecoder(config)
