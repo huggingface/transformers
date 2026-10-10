@@ -297,9 +297,9 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
         np.ndarray: np array of frame indices that will be sampled.
     """
     if num_frames is not None:
-        indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
+        indices = np.arange(num_frames, dtype=int) * total_num_frames // num_frames
     else:
-        indices = np.arange(0, total_num_frames).astype(int)
+        indices = np.arange(0, total_num_frames, dtype=int)
     return indices
 
 
