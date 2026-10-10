@@ -31,8 +31,6 @@ logger = logging.get_logger(__name__)
 @strict
 class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
     r"""
-    frame_rate (`int`, *optional*, defaults to 0):
-        Frame rate used by the vector quantizers.
     num_quantizers (`int`, *optional*, defaults to 16):
         Total number of residual vector quantizers.
     num_semantic_quantizers (`int`, *optional*, defaults to 1):
@@ -46,7 +44,6 @@ class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
 
     codebook_size: int = 2048
     codebook_dim: int = 256
-    frame_rate: int = 0
     num_quantizers: int = 16
     num_semantic_quantizers: int = 1
     vector_quantization_hidden_dimension: int = 256
