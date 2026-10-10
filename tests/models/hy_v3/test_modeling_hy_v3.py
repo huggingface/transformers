@@ -43,7 +43,6 @@ class HYV3ModelTester(CausalLMModelTester):
 @require_torch
 class HYV3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = HYV3ModelTester
-    test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     def test_router_logits_and_no_aux_loss(self):

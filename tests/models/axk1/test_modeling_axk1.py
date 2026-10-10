@@ -78,7 +78,6 @@ class AXK1ModelTester(CausalLMModelTester):
 @require_torch
 class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     # Routed experts that receive no token in a step get no gradient.
-    test_all_params_have_gradient = False
     model_tester_class = AXK1ModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
