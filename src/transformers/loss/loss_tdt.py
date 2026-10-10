@@ -14,12 +14,14 @@
 
 import torch
 
+from ..integrations import use_kernel_forward_from_hub
 from ..utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@use_kernel_forward_from_hub("tdt_loss")
 def tdt_loss(
     token_logits: torch.Tensor,
     duration_logits: torch.Tensor,
@@ -37,6 +39,9 @@ def tdt_loss(
     Ported from NeMo's `TDTLossPytorch` with anti-diagonal processing. Unlike standard RNNT loss, this loss trains both
     the token prediction head and the duration prediction head. It uses vectorized anti-diagonal processing for
     efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in parallel as batched tensor operations.
+
+    With `use_kernels=True`, CUDA models use the [`kernels-community/tdt-loss`](https://huggingface.co/kernels/kernels-community/tdt-loss)
+    kernel instead, which computes the same loss with fused CUDA kernels.
 
     Args:
         token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
