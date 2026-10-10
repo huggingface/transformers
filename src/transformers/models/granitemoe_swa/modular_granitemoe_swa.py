@@ -25,7 +25,6 @@ import copy
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -82,10 +81,6 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
     ```"""
 
     model_type = "granitemoe_swa"
-    # Attention shards like Granite (+ per-head `sinks` colwise to track the head-sharding); the
-    # routed experts shard tensor-parallel (packed gate/up colwise, down rowwise, `moe_tp_experts`)
-    # with the router replicated. The optional shared expert (`shared_mlp`, off by default) is left
-    # replicated -- it is small and its full output sums consistently with the all-reduced MoE output.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -94,14 +89,6 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
-    }
-    # Expert-parallel plan: shard the routed experts across ranks (each rank owns a slice of the
-    # experts) with the router driving the dispatch. The optional shared expert is left replicated.
-    base_model_ep_plan = {
-        "layers.*.block_sparse_moe.router": "ep_router",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
         "layers.*.block_sparse_moe.experts": "moe_tp_experts",
     }
 
@@ -124,24 +111,11 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
 
 
 class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Only different return order (router_logits, router_scores, router_indices) to enable EP
-        # TODO: refactor older granitemoe models to enable EP as well and remove this override
-        router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
-        top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
-        top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
-        return router_logits, top_k_weights, top_k_index
+    pass
 
 
 class GraniteMoeSWAMoE(GraniteMoeMoE):
-    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
-        # Only different return order (router_logits, router_scores, router_indices) to enable EP
-        # TODO: refactor older granitemoe models to enable EP as well and remove this override
-        bsz, length, emb_size = layer_input.size()
-        hidden_states = layer_input.reshape(-1, emb_size)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
-        return layer_output.view(bsz, length, self.input_size)
+    pass
 
 
 class GraniteMoeSWAAttention(GraniteSWAAttention):

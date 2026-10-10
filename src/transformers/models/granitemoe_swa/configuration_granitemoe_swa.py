@@ -57,6 +57,21 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
 
     model_type = "granitemoe_swa"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "colwise",
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts": "ep_dispatch_experts",
+    }
 
     vocab_size: int = 32000
     hidden_size: int = 4096
@@ -85,28 +100,6 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001
     shared_intermediate_size: int = 0
-    # Attention shards like Granite (+ per-head `sinks` colwise to track the head-sharding); the
-    # routed experts shard tensor-parallel (packed gate/up colwise, down rowwise, `moe_tp_experts`)
-    # with the router replicated. The optional shared expert (`shared_mlp`, off by default) is left
-    # replicated -- it is small and its full output sums consistently with the all-reduced MoE output.
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.sinks": "colwise",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
-    }
-    # Expert-parallel plan: shard the routed experts across ranks (each rank owns a slice of the
-    # experts) with the router driving the dispatch. The optional shared expert is left replicated.
-    base_model_ep_plan = {
-        "layers.*.block_sparse_moe.router": "ep_router",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
-    }
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None

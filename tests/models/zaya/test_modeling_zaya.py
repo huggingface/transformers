@@ -57,6 +57,13 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
     test_all_params_have_gradient = False
 
+    @unittest.skip(
+        reason="Zaya disables tensor parallelism on purpose (`base_model_tp_plan = AttributeError()`): its 2 KV "
+        "heads cap the useful degree, so its experts have no TP plan to check."
+    )
+    def test_moe_parallel_plans_shard_experts(self):
+        pass
+
     def _get_conv_state_shape(self, batch_size: int, config):
         conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim
         conv_kernel_size = config.cca_time0 + config.cca_time1 - 2
