@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import threading
 import traceback
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -1266,11 +1267,27 @@ class WeightConverter(WeightTransform):
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
+# The PyTorch MPS backend (Apple Metal) is not thread-safe for concurrent device
+# transfers with dtype conversion. Loading a bf16 checkpoint as float32 onto MPS
+# from several ThreadPoolExecutor workers segfaults/hangs (see #48029), while a
+# single worker never fails. Serialise only the MPS `tensor.to(...)` call so async
+# loading keeps its speedup on all other devices.
+_MPS_MATERIALIZE_LOCK = threading.Lock()
+
+
+def _is_mps_device(device) -> bool:
+    return device == "mps" or getattr(device, "type", None) == "mps"
+
+
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
     # This slicing is what actually loads the tensor from the safetensors slice object
     tensor = tensor[...]
     if dtype is not None or device is not None:
-        tensor = tensor.to(device=device, dtype=dtype)
+        if _is_mps_device(device):
+            with _MPS_MATERIALIZE_LOCK:
+                tensor = tensor.to(device=device, dtype=dtype)
+        else:
+            tensor = tensor.to(device=device, dtype=dtype)
     return tensor
 
 

@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import threading
+import time
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 import torch
 import torch.nn as nn
@@ -40,6 +43,8 @@ from transformers.core_model_loading import (
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
+    _is_mps_device,
+    _materialize_copy,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
     rename_source_key,
@@ -1707,6 +1712,81 @@ class TestConversionMapping(unittest.TestCase):
         # Only one unscoped transform (from the root); child must be suppressed.
         self.assertEqual(len(transforms), 1)
         self.assertIsNone(transforms[0].scope_prefix)
+
+
+class TestMpsMaterializeSerialization(unittest.TestCase):
+    def test_is_mps_device(self):
+        self.assertTrue(_is_mps_device("mps"))
+        self.assertTrue(_is_mps_device(torch.device("mps")))
+        self.assertTrue(_is_mps_device(torch.device("mps:0")))
+        self.assertFalse(_is_mps_device("cpu"))
+        self.assertFalse(_is_mps_device(torch.device("cpu")))
+        self.assertFalse(_is_mps_device("cuda"))
+        self.assertFalse(_is_mps_device(torch.device("cuda:0")))
+        self.assertFalse(_is_mps_device(None))
+
+    def test_materialize_copy_mps_holds_lock(self):
+        class FakeTensor:
+            def __init__(self):
+                self.to_kwargs = None
+
+            def __getitem__(self, _):
+                return self
+
+            def to(self, device=None, dtype=None):
+                self.to_kwargs = {"device": device, "dtype": dtype}
+                return self
+
+        fake = FakeTensor()
+        with mock.patch("transformers.core_model_loading._MPS_MATERIALIZE_LOCK") as lock:
+            out = _materialize_copy(fake, device="mps", dtype=torch.float32)
+        self.assertIs(out, fake)
+        self.assertEqual(fake.to_kwargs, {"device": "mps", "dtype": torch.float32})
+        lock.__enter__.assert_called_once()
+
+    def test_materialize_copy_cpu_skips_lock(self):
+        class FakeTensor:
+            def __getitem__(self, _):
+                return self
+
+            def to(self, device=None, dtype=None):
+                return self
+
+        fake = FakeTensor()
+        with mock.patch("transformers.core_model_loading._MPS_MATERIALIZE_LOCK") as lock:
+            _materialize_copy(fake, device="cpu", dtype=torch.float32)
+        lock.__enter__.assert_not_called()
+
+    def test_materialize_copy_mps_serializes_concurrent_conversions(self):
+        # Hardware-independent: fake `.to()` tracks overlap while holding the
+        # real module lock path for MPS targets. Concurrent MPS conversions
+        # must never overlap (the Metal/MPS race in #48029); the CPU path keeps
+        # the old fully-parallel behaviour.
+        state = {"in_flight": 0, "max_in_flight": 0}
+        state_lock = threading.Lock()
+
+        class FakeTensor:
+            def __getitem__(self, _):
+                return self
+
+            def to(self, device=None, dtype=None):
+                with state_lock:
+                    state["in_flight"] += 1
+                    state["max_in_flight"] = max(state["max_in_flight"], state["in_flight"])
+                time.sleep(0.01)
+                with state_lock:
+                    state["in_flight"] -= 1
+                return self
+
+        def run(device):
+            _materialize_copy(FakeTensor(), device=device, dtype=torch.float32)
+
+        threads = [threading.Thread(target=run, args=("mps",)) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(state["max_in_flight"], 1)
 
 
 if __name__ == "__main__":
