@@ -39,6 +39,9 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 _FUSION_DISCOVERY_CACHE: dict[str, dict[type, dict[str, type[nn.Module]]]] = {}
+# Source patterns a given fusion already contributed to a model type's conversion mapping, so that
+# registering it again (e.g. loading the same checkpoint twice) replaces them instead of colliding.
+_REGISTERED_FUSION_SOURCE_PATTERNS: dict[tuple[str, str], set[tuple[str, ...]]] = {}
 
 
 class ModuleFusionSpec:
@@ -210,10 +213,21 @@ def _register_module_fusion(
     if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
         raise ValueError(f"Model {cls.__name__} has no config class or model type")
     model_type = cls.config_class.model_type
-    converters = spec.make_transforms(config)
+    fusion_converters = spec.make_transforms(config)
+    converters = fusion_converters
 
     existing_converters = get_checkpoint_conversion_mapping(model_type)
     if existing_converters is not None:
+        # Registering the same fusion again (e.g. loading the checkpoint a second time in the same
+        # process) must replace the converters it contributed before, not conflict with them. The
+        # converters are rebuilt from `config`, so a different checkpoint of the same model type
+        # correctly overrides them rather than reusing stale ones. Matching is done on source
+        # patterns because the registry hands back deep copies, not the registered objects.
+        previous_sources = _REGISTERED_FUSION_SOURCE_PATTERNS.get((model_type, fusion_name), set())
+        existing_converters = [
+            existing for existing in existing_converters if tuple(existing.source_patterns) not in previous_sources
+        ]
+
         # WeightConverter matching stops at the first matching source pattern, so
         # conflicting converters must fail fast instead of being appended.
         existing_converter_sources = {tuple(existing.source_patterns): existing for existing in existing_converters}
@@ -229,6 +243,9 @@ def _register_module_fusion(
         # TODO: allow compatible fusions mentioned https://github.com/huggingface/transformers/pull/45041#discussion_r3028989716
         converters = existing_converters + converters
 
+    _REGISTERED_FUSION_SOURCE_PATTERNS[(model_type, fusion_name)] = {
+        tuple(converter.source_patterns) for converter in fusion_converters
+    }
     register_checkpoint_conversion_mapping(model_type, converters, overwrite=True)
 
 
