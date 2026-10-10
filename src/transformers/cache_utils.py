@@ -1878,7 +1878,10 @@ class DynamicCache(Cache):
                 if config is None:
                     # If there is a sliding window tensor, use it to initialize the layer
                     if sliding_window_tensor is not None:
-                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window_tensor.item()))
+                        # After DataParallel gather the 0-dim config tensor is stacked to 1-D; take the first element
+                        layers.append(
+                            DynamicSlidingWindowLayer(sliding_window=sliding_window_tensor.flatten()[0].item())
+                        )
                     else:
                         layers.append(DynamicLayer())
                 # Update the layer with the data if any
