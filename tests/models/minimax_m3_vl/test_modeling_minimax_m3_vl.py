@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniMax-M3-VL model."""
 
-import copy
 import unittest
 
 from parameterized import parameterized
@@ -25,7 +24,9 @@ from transformers import (
     MiniMaxM3VLImageProcessorFast,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,
+    MiniMaxM3VLTextConfig,
     MiniMaxM3VLVideoProcessor,
+    MiniMaxM3VLVisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -35,17 +36,14 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
-    ModelTesterMixin,
     _test_eager_matches_batched_and_grouped_inference,
     floats_tensor,
     ids_tensor,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -62,153 +60,74 @@ if is_vision_available():
     from PIL import Image
 
 
-class MiniMaxM3VLVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        ignore_index=-100,
-        image_token_index=4,
-        video_token_index=5,
-        is_training=True,
-        text_config={
-            "hidden_size": 32,
-            "intermediate_size": 64,
-            "dense_intermediate_size": 128,
-            "shared_intermediate_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "head_dim": 32,
-            "rotary_dim": 16,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
-            "rms_norm_eps": 1e-6,
-            "vocab_size": 99,
-            "bos_token_id": 0,
-            "eos_token_id": 1,
-            "pad_token_id": 2,
-            "num_local_experts": 4,
-            "num_experts_per_tok": 2,
-            "n_shared_experts": 1,
-            "moe_layer_freq": [0, 1],
-            "layer_types": [
-                "full_attention",
-                "minimax_m3_sparse",
-            ],
-            "use_routing_bias": True,
-            "routed_scaling_factor": 2.0,
-            "swiglu_alpha": 1.702,
-            "swiglu_limit": 7.0,
-            "tie_word_embeddings": False,
-            "rope_parameters": {
-                "rope_type": "default",
-                "rope_theta": 5000000.0,
-                "partial_rotary_factor": 0.5,
-            },
-            "index_n_heads": 2,
-            "index_head_dim": 16,
-            "index_block_size": 8,
-            "index_topk_blocks": 4,
-            "index_local_blocks": 1,
-        },
-        vision_config={
-            "hidden_size": 32,
-            "intermediate_size": 64,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_channels": 3,
-            "image_size": 14,
-            "patch_size": 14,
-            "temporal_patch_size": 2,
-            "spatial_merge_size": 1,
-            "rope_theta": 10000.0,
-        },
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
-        self.is_training = is_training
-        self.text_config = text_config
-        self.vision_config = vision_config
+class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
+    base_model_class = MiniMaxM3VLModel
+    config_class = MiniMaxM3VLConfig
+    text_config_class = MiniMaxM3VLTextConfig
+    vision_config_class = MiniMaxM3VLVisionConfig
+    conditional_generation_class = MiniMaxM3SparseForConditionalGeneration
 
-        self.pad_token_id = text_config["pad_token_id"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
-        self.vocab_size = text_config["vocab_size"]
-
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.patch_size = vision_config["patch_size"]
-        self.temporal_patch_size = vision_config["temporal_patch_size"]
-        self.spatial_merge_size = vision_config["spatial_merge_size"]
-
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("video_token_id", 5)
+        kwargs.setdefault("bos_token_id", 0)
+        kwargs.setdefault("eos_token_id", 1)
+        kwargs.setdefault("pad_token_id", 2)
+        kwargs.setdefault("image_size", 14)
+        kwargs.setdefault("patch_size", 14)
         # One patch per image (grid [1, 1, 1]) so that the generation common tests, which crop
         # all inputs along the batch dim, keep ``pixel_values`` and ``image_grid_thw`` consistent.
-        self.num_patches = 1
-        self.num_image_tokens = self.num_patches // (self.spatial_merge_size**2)
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("spatial_merge_size", 1)
+        kwargs.setdefault("projector_hidden_size", 32)
+        kwargs.setdefault("intermediate_size", 64)
+        kwargs.setdefault("dense_intermediate_size", 128)
+        kwargs.setdefault("shared_intermediate_size", 32)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 32)
+        kwargs.setdefault("rotary_dim", 16)
+        kwargs.setdefault("rms_norm_eps", 1e-6)
+        kwargs.setdefault("num_experts", 4)
+        kwargs.setdefault("num_experts_per_tok", 2)
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("layer_types", ["full_attention", "minimax_m3_sparse"])
+        kwargs.setdefault("routed_scaling_factor", 2.0)
+        kwargs.setdefault("swiglu_alpha", 1.702)
+        kwargs.setdefault("swiglu_limit", 7.0)
+        kwargs.setdefault(
+            "rope_parameters", {"rope_type": "default", "rope_theta": 5000000.0, "partial_rotary_factor": 0.5}
+        )
+        kwargs.setdefault("index_n_heads", 2)
+        kwargs.setdefault("index_head_dim", 16)
+        kwargs.setdefault("index_block_size", 8)
+        kwargs.setdefault("index_topk_blocks", 4)
+        kwargs.setdefault("index_local_blocks", 1)
+        super().__init__(parent, **kwargs)
 
-    def get_config(self):
-        return MiniMaxM3VLConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_index=self.image_token_index,
-            video_token_index=self.video_token_index,
-            projector_hidden_size=self.text_config["hidden_size"],
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.video_token_id}
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor(
+            [
+                batch_size * self.num_image_tokens,
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
+            ]
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_dim = self.num_channels * (self.patch_size**2) * self.temporal_patch_size
-        pixel_values = floats_tensor([self.batch_size * self.num_patches, patch_dim])
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config, pixel_values = self.prepare_config_and_inputs()
-
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-        input_ids[input_ids == self.image_token_index] = self.pad_token_id
-        input_ids[input_ids == self.video_token_index] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = self.image_token_index
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)}
 
 
 @require_torch
-class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    """
-    Model tester for `MiniMaxM3SparseForConditionalGeneration`.
-    """
+class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = MiniMaxM3VLVisionText2TextModelTester
 
-    all_model_classes = (
-        (
-            MiniMaxM3VLModel,
-            MiniMaxM3SparseForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "image-text-to-text": MiniMaxM3SparseForConditionalGeneration,
-        }
-        if is_torch_available()
-        else {}
-    )
-    _is_composite = True
     # The vision tower packs every image's (and video frame's) patches into a single sequence
     # (batch dim 1), so ``last_hidden_state`` does not carry a per-item batch axis to shape-check.
     skip_test_image_features_output_shape = True
@@ -218,10 +137,6 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     # which is non-differentiable — their gradients flow through a separate objective in
     # the upstream training recipe, not the main causal-LM loss (same as DeepSeek-V4).
     test_all_params_have_gradient = False
-
-    def setUp(self):
-        self.model_tester = MiniMaxM3VLVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MiniMaxM3VLConfig, has_text_modality=False)
 
     def test_indexer_selects_blocks_per_head(self):
         """The lightning indexer must select key blocks *per head* (one selection per KV / GQA group),
@@ -260,9 +175,6 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         # impossible if the head axis had been max-collapsed into a single shared selection.
         heads_differ = (block_indices[0, 0] != block_indices[0, 1]).any()
         self.assertTrue(bool(heads_differ), "indexer heads selected identical blocks -- head axis was collapsed")
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="IDK exactly why, can be adressed later")
     def test_reverse_loading_mapping(self):
@@ -329,7 +241,7 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         vocab = config.text_config.vocab_size
         pad_id = config.text_config.pad_token_id
         # Text-only inputs: keep ids clear of the image/video placeholder ids so no vision tower runs.
-        low = max(self.model_tester.image_token_index, self.model_tester.video_token_index) + 1
+        low = max(self.model_tester.image_token_id, self.model_tester.video_token_id) + 1
         torch.manual_seed(0)
         lengths = [self.model_tester.seq_length + 6, self.model_tester.seq_length + 1]
         seqs = [torch.randint(low, vocab - 2, (n,), device=torch_device) for n in lengths]
@@ -357,40 +269,6 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         for i, seq in enumerate(seqs):
             torch.testing.assert_close(batched_logits[i, : len(seq)], per_seq_logits[i], rtol=1e-4, atol=1e-4)
 
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs raise an explicit error when the number of images doesn't match the number
-        of image tokens in the text, and that genuine multi-image cases are accepted.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        num_patches = self.model_tester.num_patches
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successful forward with no modifications
-
-            # remove one image but leave its image tokens in text
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][:-num_patches, ...]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][:-1, ...]
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(**curr_input_dict)
-
-            # simulate multi-image case by concatenating inputs where each has exactly one image
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:num_patches]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # two image-token groups but one image raises an error
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-
-            # two images and two image-token groups don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-
     def test_video_forward(self):
         """Video frames flow through the same vision tower as images and scatter into the video-token slots."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -416,11 +294,11 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         self.assertEqual(pixel_values_videos.shape[0], int(video_grid_thw.prod(dim=1).sum()))
 
         input_ids = ids_tensor([batch_size, self.model_tester.seq_length], config.text_config.vocab_size - 2) + 2
-        input_ids[input_ids == self.model_tester.image_token_index] = self.model_tester.pad_token_id
-        input_ids[input_ids == self.model_tester.video_token_index] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
         # Carve out one contiguous block of video-token slots per sequence.
         self.assertLessEqual(tokens_per_video, self.model_tester.seq_length)
-        input_ids[:, :tokens_per_video] = self.model_tester.video_token_index
+        input_ids[:, :tokens_per_video] = self.model_tester.video_token_id
         attention_mask = torch.ones_like(input_ids)
 
         for model_class in self.all_model_classes:
@@ -459,10 +337,10 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         video_grid_thw = torch.tensor([[grid_t, grid_h, grid_w]] * batch_size, device=torch_device)
 
         input_ids = ids_tensor([batch_size, self.model_tester.seq_length], config.text_config.vocab_size - 2) + 2
-        input_ids[input_ids == self.model_tester.image_token_index] = self.model_tester.pad_token_id
-        input_ids[input_ids == self.model_tester.video_token_index] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
         # One fewer video-token slot than features -> mismatch.
-        input_ids[:, : tokens_per_video - 1] = self.model_tester.video_token_index
+        input_ids[:, : tokens_per_video - 1] = self.model_tester.video_token_id
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)

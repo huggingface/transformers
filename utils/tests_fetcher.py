@@ -55,9 +55,12 @@ import json
 import os
 import re
 from contextlib import contextmanager
+from functools import cache
 from pathlib import Path
 
 from git import Repo
+
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING, model_type_to_module_name
 
 
 # List here the models not to be filtered by `filter_tests`.
@@ -560,6 +563,54 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
+def _iter_descendants(config, seen: set[str]):
+    """Yield the model_type of every sub-config under `config`, at any depth, each once."""
+    specs = getattr(config, "sub_configs_defaults", None) or {}
+    for spec in specs.values():
+        model_type = getattr(spec, "model_type", None)
+        if not model_type or model_type in seen:
+            continue
+        seen.add(model_type)
+        yield model_type
+        yield from _iter_descendants(spec, seen)
+
+
+@cache
+def _get_backbone_map() -> dict[str, frozenset[str]]:
+    """
+    {composite_model_dir: {backbone_model_dir, ...}} built from `sub_configs_defaults[...].model_type`,
+    following nesting at any depth (`a` -> `b` -> `c` gives `a: {b, c}`).
+    Cached: the config imports are the expensive part, so do them at most once per process.
+    """
+    mapping = {}
+    for model_type in CONFIG_MAPPING:
+        parent = model_type_to_module_name(model_type)
+        config_cls = CONFIG_MAPPING[model_type]  # imports only this config module
+        children = {
+            model_type_to_module_name(descendant) for descendant in _iter_descendants(config_cls, {model_type})
+        }
+        children.discard(parent)
+        if children:
+            mapping[parent] = frozenset(children)
+    return mapping
+
+
+def existing_backbone_files(model: str) -> list[str]:
+    # processors aren't used as backbones
+    paths = (PATH_TO_TRANSFORMERS / "models" / model / f"{kind}_{model}.py" for kind in ("configuration", "modeling"))
+    return [path.as_posix() for path in paths if (PATH_TO_REPO / path).is_file()]
+
+
+def create_backbone_edges() -> list[tuple[str, str]]:
+    return [
+        (dep, target)
+        for parent, children in _get_backbone_map().items()
+        for target in existing_backbone_files(parent)
+        for child in children
+        for dep in existing_backbone_files(child)
+    ]
+
+
 def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
     """
     Get the imports a given module makes.
@@ -735,7 +786,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
-
+    edges += create_backbone_edges()
     return list(set(edges))
 
 
@@ -883,6 +934,16 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
         direct_deps = get_module_dependencies(m, cache=cache)
         deps = sum((reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")), direct_deps)
         reverse_map[m] = list(set(deps) - {m})
+
+    # Each key is a multimodal model name mapped to a set of its subconfigs (e.g. `llava: set(llama, clip)`)
+    # We have to reverse the mapping so that a modification on `clip` triggers a test of `llava`
+    for parent_model, children_models in _get_backbone_map().items():
+        # processors aren't used as backbones
+        for kind in ("configuration", "modeling"):
+            for child_model in children_models:
+                child_file = PATH_TO_TRANSFORMERS / "models" / child_model / f"{kind}_{child_model}.py"
+                if (PATH_TO_REPO / child_file).is_file():
+                    reverse_map.setdefault(child_file.as_posix(), []).extend(existing_backbone_files(parent_model))
 
     return reverse_map
 

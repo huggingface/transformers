@@ -562,8 +562,9 @@ if is_kernels_available():
                         repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
+                # Inference only, like xpu and rocm: the kernel's backward does not match the rotary embedding's
                 "cuda": {
-                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
