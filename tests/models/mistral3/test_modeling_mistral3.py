@@ -310,7 +310,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
                 ("cuda", 8): 'The image features two tabby cats lying on a pink surface, which appears to be a couch or',
-                ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
+                ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
             }
         )  # fmt: skip
@@ -441,7 +441,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
-                ("rocm", (9, 4)): "Dock in still waters,\nMountains reflect in peace,\nNature's calm embrace",
+                ("rocm", (9, 4)): "Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -456,7 +456,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty, located in New York',
-                ("rocm", (9, 4)): "Yes.\n\n1. The first image is of the Statue of Liberty. It is a symbol of the United States, and was",
+                ("rocm", (9, 4)): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

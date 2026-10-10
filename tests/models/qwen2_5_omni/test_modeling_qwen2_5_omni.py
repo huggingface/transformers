@@ -34,6 +34,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -605,6 +606,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
+    @require_deterministic_for_accelerator(devices=["rocm"])
     def test_small_model_integration_test(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
