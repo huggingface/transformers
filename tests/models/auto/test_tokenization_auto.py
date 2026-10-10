@@ -469,6 +469,38 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertEqual(tokenizer2.vocab_size, 12)
 
+    @require_tokenizers
+    def test_auto_tokenizer_custom_vocab_txt_not_overridden_by_tokenizer_json(self):
+        """Regression test for #48967.
+
+        Models fine-tuned with a custom/extended vocabulary stored in vocab.txt should load
+        their vocabulary from that file, not from the upstream tokenizer.json (which may
+        contain the base model's smaller vocabulary). AutoTokenizer must respect the custom
+        vocab.txt when tokenizer_config.json specifies tokenizer_class="BertTokenizer".
+        """
+        base_tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
+        self.assertIsInstance(base_tokenizer, BertTokenizer)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_tokenizer.save_pretrained(tmp_dir)
+
+            custom_tokens = [f"[CUSTOM_{i}]" for i in range(5)]
+            sorted_vocab = sorted(base_tokenizer.get_vocab().items(), key=lambda x: x[1])
+            vocab_file_path = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file_path, "w", encoding="utf-8") as f:
+                f.writelines(token + "\n" for token, _ in sorted_vocab)
+                f.writelines(token + "\n" for token in custom_tokens)
+
+            tokenizer_reloaded = AutoTokenizer.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(tokenizer_reloaded, BertTokenizer)
+        self.assertEqual(
+            tokenizer_reloaded.vocab_size,
+            len(sorted_vocab) + len(custom_tokens),
+            "AutoTokenizer must load the extended vocab.txt rather than the tokenizer.json "
+            "when a custom/extended vocabulary is present (regression for issue #48967).",
+        )
+
     def test_auto_tokenizer_from_local_folder_mistral_detection(self):
         """See #42374 and #45444 for reference, ensuring proper mistral detection on local tokenizers"""
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
