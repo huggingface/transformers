@@ -640,10 +640,9 @@ class Qwen3TTSTokenizerVectorQuantization(nn.Module):
 class Qwen3TTSTokenizerResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
 
-    def __init__(self, config: Qwen3TTSTokenizerConfig, num_quantizers: int | None = None):
+    def __init__(self, config, num_quantizers: int | None = None):
         super().__init__()
         self.codebook_size = config.codebook_size
-        self.frame_rate = config.frame_rate
         self.num_quantizers = num_quantizers if num_quantizers is not None else config.num_quantizers
         self.layers = nn.ModuleList([Qwen3TTSTokenizerVectorQuantization(config) for _ in range(self.num_quantizers)])
 
@@ -694,10 +693,9 @@ class Qwen3TTSTokenizerResidualVectorQuantizer(nn.Module):
 class Qwen3TTSTokenizerSplitResidualVectorQuantizer(nn.Module):
     """Split Residual Vector Quantizer."""
 
-    def __init__(self, config: Qwen3TTSTokenizerConfig):
+    def __init__(self, config):
         super().__init__()
         self.codebook_size = config.codebook_size
-        self.frame_rate = config.frame_rate
         self.max_num_quantizers = config.num_quantizers
 
         self.num_semantic_quantizers = config.num_semantic_quantizers
