@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch Qwen3TTS Multi-Codebook Tokenizer model."""
 
+from dataclasses import dataclass
+
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
@@ -23,14 +25,13 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..dac.modeling_dac import DacDecoderOutput
 from ..encodec.modeling_encodec import EncodecOutput
 from ..mimi.modeling_mimi import (
     MimiConv1d,
     MimiEncoder,
-    MimiEncoderOutput,
     MimiEuclideanCodebook,
     MimiPreTrainedModel,
     MimiResidualVectorQuantizer,
@@ -207,8 +208,18 @@ class Qwen3TTSTokenizerConvNeXtBlock(Qwen3OmniMoeConvNeXtBlock):
     pass
 
 
-class Qwen3TTSTokenizerEncoderOutput(MimiEncoderOutput):
-    pass
+@auto_docstring
+@dataclass
+class Qwen3TTSTokenizerEncoderOutput(ModelOutput):
+    r"""
+    audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
+        Discrete code indices computed using `model.encode`.
+    audio_codes_mask (`torch.Tensor` of shape `(batch_size, codes_length)`, *optional*):
+        Downsampled `padding_mask` indicating the valid frames in `audio_codes`.
+    """
+
+    audio_codes: torch.LongTensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
 class Qwen3TTSTokenizerDecoderOutput(DacDecoderOutput):
@@ -425,18 +436,17 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Padding mask used to pad `input_values`.
         """
-
-        if padding_mask is None:
-            padding_mask = torch.ones_like(input_values).bool()
-
         embeddings = self.encoder(input_values.unsqueeze(1)).last_hidden_state
-        audio_codes = self.quantizer.encode(embeddings).transpose(0, 1)
-        audio_codes = [
-            code[..., : -(-mask.sum() // self.encoder.config.frame_size)].transpose(0, 1)
-            for code, mask in zip(audio_codes, padding_mask)
-        ]
+        audio_codes = self.quantizer.encode(embeddings).permute(1, 2, 0)
 
-        return Qwen3TTSTokenizerEncoderOutput(audio_codes=audio_codes)
+        audio_codes_mask = None
+        if padding_mask is not None:
+            frame_size = self.config.encoder_config.frame_size
+            codes_length = (padding_mask.sum(dim=-1, keepdim=True) + frame_size - 1) // frame_size
+            frame_index = torch.arange(audio_codes.shape[1], device=padding_mask.device).view(1, -1)
+            audio_codes_mask = (frame_index < codes_length).to(padding_mask.dtype)
+
+        return Qwen3TTSTokenizerEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
 
     @can_return_tuple
     @auto_docstring
