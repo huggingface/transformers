@@ -314,7 +314,7 @@ class Gemma4AudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
-        attention_mask: torch.BoolTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, None]:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, self.num_heads, self.head_dim)
@@ -349,9 +349,7 @@ class Gemma4AudioAttention(nn.Module):
         attn_weights = attn_weights * self.softcap
 
         if attention_mask is not None:
-            attn_weights = attn_weights.masked_fill(
-                attention_mask.logical_not(), self.config.attention_invalid_logits_value
-            )
+            attn_weights = attn_weights.masked_fill(attention_mask != 0, self.config.attention_invalid_logits_value)
 
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(value_states.dtype)
         attn_output = attn_weights @ value_states.permute(0, 3, 1, 2, 4)
@@ -1894,6 +1892,11 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
     config: Gemma4AudioConfig
     main_input_name = "input_features"
     base_model_prefix = "model.audio_tower"  # prefix for Gemma4ForConditionalGeneration saved checkpoints, required for Gemma4AudioModel.from_pretrained()
+    # The chunked local attention is only implemented in eager
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+    _supports_attention_backend = False
     _can_record_outputs = {
         "hidden_states": Gemma4AudioLayer,
         "attentions": Gemma4AudioAttention,
@@ -1928,9 +1931,10 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
         padded_seq_len = num_blocks * chunk_size
         pad_amount = padded_seq_len - seq_len
 
-        mask_4d = F.pad(mask_4d, (0, pad_amount, 0, pad_amount), value=False)
+        min_dtype = torch.finfo(mask_4d.dtype).min
+        mask_4d = F.pad(mask_4d, (0, pad_amount, 0, pad_amount), value=min_dtype)
         mask_5d = mask_4d.reshape(batch_size, 1, num_blocks, chunk_size, padded_seq_len)
-        mask_5d = F.pad(mask_5d, (max_past_horizon, max_future_horizon), value=False)
+        mask_5d = F.pad(mask_5d, (max_past_horizon, max_future_horizon), value=min_dtype)
 
         block_starts = torch.arange(num_blocks, device=device) * chunk_size
         offsets = torch.arange(chunk_size + max_past_horizon + max_future_horizon, device=device)

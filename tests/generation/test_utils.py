@@ -50,7 +50,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -1722,7 +1721,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
     @pytest.mark.generate
     @pytest.mark.torch_compile_test
-    @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
     def test_generate_compile_model_forward_fullgraph(self):
         """
         Tests that `.generate` is compatible with torch.compile, keeping the same results. Also confirms that
@@ -2659,8 +2657,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 weight_filename = os.path.join(tmpdirname, "model.safetensors")
                 saved_state_dict = load_file(weight_filename)
                 # add mtp weights and resave
+                num_hidden_layers = config.get_text_config().num_hidden_layers
                 layer_mapped_mtp_dict = {
-                    k.replace(".0.", f".{config.num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    k.replace(".0.", f".{num_hidden_layers}.").replace(".mtp_block.", "."): v
                     for k, v in mtp_non_shared_state_dict.items()
                 }
                 saved_state_dict.update(
@@ -2671,7 +2670,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 with patch.object(
                     model_class,
                     "_keys_to_ignore_on_load_unexpected",
-                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.num_hidden_layers}"],
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{num_hidden_layers}"],
                 ):
                     # Reload model WITHOUT mtp
                     reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)

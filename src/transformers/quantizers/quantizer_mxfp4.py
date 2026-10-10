@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import Mxfp4Config
 
 from ..utils import (
+    get_current_accelerator,
     is_accelerate_available,
     is_kernels_available,
     is_torch_available,
@@ -76,7 +77,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
 
-        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        device = get_current_accelerator() or torch.device("cpu")
         if device.type not in ["cuda", "xpu", "cpu"]:
             if self.pre_quantized:
                 logger.warning_once(
@@ -187,7 +188,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         # only CPU and XPU kernels can work with pre-quantized models
-        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        device = get_current_accelerator() or torch.device("cpu")
         if use_kernels and device.type not in ["cpu", "xpu"]:
             logger.warning_once(
                 "You are using full precision kernels, we will dequantize the model to bf16. "
