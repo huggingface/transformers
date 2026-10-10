@@ -1596,13 +1596,14 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
     def decode(
         self,
         audio_codes: torch.Tensor,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen3TTSTokenizerDecoderOutput:
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
             Discrete code indices computed using `model.encode`.
         """
         quantized_representation = self.quantizer.decode(audio_codes.transpose(1, 2))
-        audio_values = self.decoder(quantized_representation).squeeze(1)
+        audio_values = self.decoder(quantized_representation, **kwargs).squeeze(1)
 
         return Qwen3TTSTokenizerDecoderOutput(audio_values=audio_values)
 
