@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, mock_open, patch
 
 
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -108,37 +109,67 @@ class FormatDurationTest(unittest.TestCase):
 
 
 class RenderBadgeTest(unittest.TestCase):
-    def test_render_ci_badge(self):
-        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
-        lines = badge.split("\n")
-        self.assertEqual(lines[0], BADGE_START)
-        self.assertEqual(lines[-1], BADGE_END)
-        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123", badge)
-        self.assertIn("https://dash.example/d/x?var-pr=123", badge)
+    def test_static_badge_links_to_the_requested_pr(self):
+        for pr in (123, 999):
+            url = f"https://dash.example/d/x?var-pr={pr}"
+            badge = render_ci_badge(url)
+            self.assertEqual(
+                badge,
+                f"{BADGE_START}\n[![🤗 Transformers CI]({recap_mod.BADGE_URL})]({url})\n{BADGE_END}",
+            )
+            self.assertNotIn("event=", badge)
+            self.assertNotIn("/badge/pr", badge)
 
-    def test_render_ci_badge_emits_both_ci_streams(self):
-        """PR CI and run-slow GPU runs have separate verdicts, so each gets its
-        own badge asking the exporter for its own stream."""
-        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
-        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=pr-ci", badge)
-        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=run-slow", badge)
-        self.assertIn("![CPU CI]", badge)
-        self.assertIn("![GPU run-slow]", badge)
+    def test_static_badge_replaces_old_cpu_gpu_header_without_changing_description(self):
+        old = (
+            f"{BADGE_START}\n[![CPU CI](https://old/badge/pr?pr=123&event=pr-ci)](https://dash) "
+            f"[![GPU run-slow](https://old/badge/pr?pr=123&event=run-slow)](https://dash)\n{BADGE_END}"
+        )
+        description = "## What changed\n\nA description with a [link](https://example.com)."
+        badge = render_ci_badge("https://dash.example/d/x?var-pr=123")
+        updated = inject_ci_badge(f"{old}\n\n{description}", badge)
+        self.assertEqual(updated, f"{badge}\n\n{description}")
+        self.assertEqual(inject_ci_badge(updated, badge), updated)
 
-    def test_render_ci_badge_keeps_both_badges_on_one_line(self):
-        """The two badges must sit side by side; a newline between them would
-        stack them and push the PR description further down."""
-        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
-        lines = badge.split("\n")
-        self.assertEqual(len(lines), 3)
-        self.assertEqual(lines[1].count("!["), 2)
 
-    def test_render_ci_badge_always_emits_the_run_slow_badge(self):
-        """It is unconditional by design: the body is only rewritten when PR CI
-        completes, so a run-slow that no push follows would otherwise never get a
-        badge. The exporter renders "not run" until a run-slow run exists."""
-        badge = render_ci_badge(999, "https://dash.example/d/x?var-pr=999")
-        self.assertIn("event=run-slow", badge)
+class BadgeUpdateTest(unittest.TestCase):
+    def run_main(self, body):
+        request = Mock()
+        metrics = Mock(side_effect=RuntimeError("Grafana unavailable"))
+        event = {"workflow_run": {"id": 1, "event": "pull_request", "head_sha": "abc", "html_url": "https://gh/run/1"}}
+        pr = {"number": 123, "html_url": "https://gh/pr/123", "body": body}
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_TOKEN": "test", "GITHUB_REPOSITORY": "test/repo", "GITHUB_EVENT_PATH": "event.json"},
+            ),
+            patch("builtins.open", mock_open(read_data=json.dumps(event))),
+            patch.multiple(
+                recap_mod,
+                find_open_pr_for_sha=Mock(return_value=pr),
+                delete_old_dashboard_comments=Mock(),
+                get_ci_recap=metrics,
+                quality_job_failed=Mock(return_value=False),
+                recreate_ci_recap_comment=Mock(),
+                github_request=request,
+            ),
+        ):
+            recap_mod.main()
+        return request
+
+    def test_updates_header_even_when_grafana_is_unavailable(self):
+        request = self.run_main("Description")
+        request.assert_called_once()
+        self.assertEqual(request.call_args.kwargs["method"], "PATCH")
+        body = request.call_args.kwargs["payload"]["body"]
+        self.assertIn("![🤗 Transformers CI]", body)
+        self.assertIn("?var-pr=123", body)
+        self.assertTrue(body.endswith("Description"))
+
+    def test_does_not_rewrite_an_unchanged_header(self):
+        badge = render_ci_badge(f"{recap_mod.DASHBOARD_URL}?var-pr=123")
+        request = self.run_main(f"{badge}\n\nDescription")
+        request.assert_not_called()
 
 
 class RenderRecapTest(unittest.TestCase):

@@ -81,7 +81,6 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
-from .pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -1027,10 +1026,8 @@ class Trainer:
             "persistent_workers": self.args.dataloader_persistent_workers,
             "multiprocessing_context": self.args.dataloader_multiprocessing_context,
             "prefetch_factor": self.args.dataloader_prefetch_factor,
+            "in_order": self.args.dataloader_in_order,
         }
-        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
-        if is_torch_greater_or_equal_than_2_6:
-            dataloader_params["in_order"] = self.args.dataloader_in_order
 
         sampler = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):

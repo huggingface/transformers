@@ -35,8 +35,8 @@ from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    get_current_accelerator,
     is_accelerate_available,
-    is_torch_accelerator_available,
     logging,
 )
 from ..auto import AutoModel
@@ -1315,9 +1315,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
 
-        device_type = "cuda"
-        if is_torch_accelerator_available():
-            device_type = torch.accelerator.current_accelerator().type
+        device_type = (get_current_accelerator() or torch.device("cuda")).type
         device = torch.device(f"{device_type}:{accelerator_id}")
 
         torch_accelerator_module = getattr(torch, device_type)

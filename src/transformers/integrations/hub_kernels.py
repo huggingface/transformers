@@ -705,9 +705,12 @@ if is_kernels_available():
                         repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
-                "cuda": LayerRepository(
-                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
-                ),
+                # Inference only, like xpu and rocm: the kernel's backward does not match the rotary embedding's
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
+                    )
+                },
                 "rocm": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=2
