@@ -238,11 +238,6 @@ class Tipsv2TextConfig(Siglip2TextConfig):
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         PreTrainedConfig.validate_architecture(self)
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
-            )
 
 
 @auto_docstring(checkpoint="google/tipsv2-b14")
