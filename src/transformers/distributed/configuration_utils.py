@@ -165,6 +165,10 @@ class DistributedConfig:
             raise ValueError(
                 "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
             )
+        elif "megamoe_experts" in ep_plan.values() and self.ep_size != self.tp_size:
+            raise ValueError(
+                "DeepGEMM Mega MoE expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
+            )
 
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":

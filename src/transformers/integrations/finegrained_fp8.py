@@ -621,6 +621,7 @@ class FP8Experts(nn.Module):
     # about impl-specific TP needs — extend this dict when adding new impls.
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {
+            "ep_dispatch_experts": "megamoe_experts",
             "moe_tp_experts": "megamoe_experts",
             "ep_router": "megamoe_router",
         },
