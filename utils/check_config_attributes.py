@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +26,11 @@ CHECKER_CONFIG = {
     "label": "Config attributes",
     # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
     # in each config's directory via os.listdir(). Deprecated models are skipped.
-    "cache_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "cache_globs": [
+        "src/transformers/configuration_utils.py",
+        "src/transformers/models/**/configuration_*.py",
+        "src/transformers/models/**/modeling_*.py",
+    ],
     "check_args": [],
     "fix_args": None,
 }
@@ -306,6 +311,8 @@ ATTRIBUTES_TO_ALLOW = (
     "problem_type",
     "tokenizer_class",
     "is_encoder_decoder",
+    "layer_execution_plan",  # consumed by the shared executor and PreTrainedModel.post_init
+    "layer_execution_options",  # execution dependency policy, consumed by LayerExecutionPlan
     "output_hidden_states",
     "output_router_logits",  # read by `capture_outputs`, not by the modeling code
     "return_dict",

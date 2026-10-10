@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2024 The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -21,7 +22,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import timedelta
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.distributed as dist
@@ -46,6 +47,10 @@ from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, stream_context
+
+
+if TYPE_CHECKING:
+    from ..._typing import GenerativePreTrainedModel
 
 
 """
@@ -403,7 +408,7 @@ class ContinuousBatchProcessor:
     def __del__(self) -> None:
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
-        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+        if hasattr(device_module := torch.get_device_module(getattr(self, "model_device", "cpu")), "empty_cache"):
             device_module.empty_cache()
 
     def reset(self) -> None:
@@ -857,7 +862,8 @@ class ContinuousBatchingManager:
 
         # In all cases, a little cleanup is good
         gc.collect()
-        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+        device = getattr(getattr(self, "model", None), "device", "cpu")
+        if hasattr(device_module := torch.get_device_module(device), "empty_cache"):
             device_module.empty_cache()
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
@@ -1247,11 +1253,12 @@ class ContinuousMixin:
     two.
     """
 
+    config: PretrainedConfig
     generation_config: GenerationConfig
 
     @torch.no_grad()
     def init_continuous_batching(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         workload_hints: WorkloadHints | None = None,
@@ -1269,6 +1276,38 @@ class ContinuousMixin:
         # Mandatory attributes
         if not hasattr(self, "config") or not hasattr(self, "device") or not hasattr(self, "dtype"):
             raise AttributeError("Model must have 'config', 'device', and 'dtype' attributes.")
+        if self.config._get_layer_execution_config() is not None:
+            from ...layer_execution.continuous import LayerExecutionContinuousBatchingManager
+
+            generation_config, _ = self._prepare_generation_config(generation_config or self.generation_config)
+            if generation_config.cache_implementation == "paged" and getattr(self, "_pp_stage", None) is not None:
+                raise ValueError(
+                    "Pipeline layer execution uses portable continuous batching; select a non-paged cache."
+                )
+            cached = getattr(self, "_cached_continuous_batching_manager", None)
+            if isinstance(cached, LayerExecutionContinuousBatchingManager):
+                same_configuration = (
+                    cached.plan == self.get_layer_execution_plan()
+                    and cached.generation_config == generation_config
+                    and (
+                        continuous_batching_config is None
+                        or cached.continuous_batching_config == continuous_batching_config
+                    )
+                )
+                if same_configuration:
+                    return cached
+                if cached.is_running():
+                    raise ValueError("Stop continuous batching before changing its configuration.")
+                cached.destroy()
+            if generation_config.cache_implementation != "paged":
+                manager = LayerExecutionContinuousBatchingManager(
+                    self,
+                    generation_config,
+                    continuous_batching_config,
+                    workload_hints,
+                )
+                setattr(self, "_cached_continuous_batching_manager", manager)
+                return manager
 
         # If a persistent manager is found we return it
         cached_manager = getattr(self, "_cached_continuous_batching_manager", None)
@@ -1314,7 +1353,8 @@ class ContinuousMixin:
         cached_manager = getattr(self, "_cached_continuous_batching_manager", None)
         if isinstance(cached_manager, ContinuousBatchingManager):
             cached_manager.destroy()
-            delattr(self, "_cached_continuous_batching_manager")
+            if getattr(self, "_cached_continuous_batching_manager", None) is cached_manager:
+                delattr(self, "_cached_continuous_batching_manager")
 
     @contextmanager
     @torch.no_grad()

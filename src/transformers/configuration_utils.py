@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -362,6 +363,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         tie_last_hidden_states (`bool`, *optional*):
             Whether `hidden_states[-1]` should be the post-final-norm `last_hidden_state` rather than the pre-final-norm
             hidden state. If unset, the model's built-in default is used.
+        layer_execution_plan (`list[int]`, *optional*):
+            Zero-based source layer indices for a supported constant-width decoder-only text stack. Repeated indices
+            share parameters but use independent cache states. If unset, the original layer order is used.
+        layer_execution_options (`dict`, *optional*):
+            Optional execution policies saved with the plan, including native cross-layer KV dependency bindings.
 
         > Parameters for fine-tuning tasks
 
@@ -415,6 +421,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     dtype: str | torch.dtype | None = None
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
+    layer_execution_plan: list[int] | None = None
+    layer_execution_options: dict | None = None
 
     # Fine-tuning task arguments
     id2label: dict[int, str] | dict[str, str] | None = None
@@ -1494,6 +1502,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 generation_params[key] = getattr(self, key)
 
         return generation_params
+
+    def _get_layer_execution_config(self) -> PreTrainedConfig | None:
+        """Find an active decoder execution config without resolving unrelated or ambiguous text configs."""
+        if self.layer_execution_plan is not None:
+            return self
+        for name in dict.fromkeys(("decoder", "generator", "text_config", *self.sub_configs)):
+            config = getattr(self, name, None)
+            if isinstance(config, PreTrainedConfig) and config.layer_execution_plan is not None:
+                return config
+        return None
 
     def get_text_config(self, decoder=None, encoder=None) -> PreTrainedConfig:
         """

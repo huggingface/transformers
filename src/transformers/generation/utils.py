@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -1858,7 +1859,7 @@ class GenerationMixin(ContinuousMixin):
                     "num_return_sequences has to be 1 when doing assisted generate, "
                     f"but is {generation_config.num_return_sequences}."
                 )
-            if self._is_stateful:
+            if self._is_stateful and self.config._get_layer_execution_config() is None:
                 # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
                 # which is not possible with stateful models (they can't reset to a previous subset of generated text)
                 raise ValueError(
@@ -2234,6 +2235,13 @@ class GenerationMixin(ContinuousMixin):
         is_linear_attn_cache = "mamba" in self.__class__.__name__.lower()
         cache_name = "past_key_values" if not is_linear_attn_cache else "cache_params"
 
+        execution_config = self.config._get_layer_execution_config()
+        if execution_config is not None:
+            from ..layer_execution.executor import _get_model_and_decoder
+
+            _, execution_decoder = _get_model_and_decoder(self)
+            cache_name = execution_decoder._layer_execution_adapter.cache_name
+
         # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting `generate` arguments
         user_defined_cache = model_kwargs.get(cache_name)
         if user_defined_cache is not None:
@@ -2253,6 +2261,24 @@ class GenerationMixin(ContinuousMixin):
         # Quick escape route 2: if the user specifies no cache is to be used. (conflicting arguments are handled in
         # `generation_config.validate()`)
         if generation_config.use_cache is False:
+            return
+
+        if execution_config is not None:
+            from ..layer_execution import LayerExecutionCache
+
+            implementation = generation_config.cache_implementation or "dynamic"
+            options = copy.deepcopy(generation_config.cache_config or {})
+            options.pop("config", None)
+            maximum = max(max_cache_length, generation_config.max_cache_len or 0)
+            model_kwargs[cache_name] = LayerExecutionCache(
+                execution_config,
+                cache_implementation=implementation,
+                max_cache_len=maximum,
+                cache_config=options,
+                steps=execution_decoder._layer_execution_steps,
+            )
+            if generation_config.is_assistant:
+                model_kwargs[cache_name].activate_past_recording()
             return
 
         # Quick escape route 3: model that supply it in `prepare_inputs_for_generation` (mamba, zamba, ...)
@@ -2428,6 +2454,13 @@ class GenerationMixin(ContinuousMixin):
         # Override: honor `disable_compile` flag
         if generation_config.disable_compile:
             return False
+        if self.config._get_layer_execution_config() is not None:
+            from ..layer_execution.executor import _get_model_and_decoder
+
+            _, decoder = _get_model_and_decoder(self)
+            pipeline = getattr(self, "_pp_stage", None)
+            if pipeline is not None or not decoder._layer_execution_adapter.supports_compile:
+                return False
 
         cache = model_kwargs.get("past_key_values", model_kwargs.get("cache_params"))
 
@@ -4145,6 +4178,8 @@ class GenerationMixin(ContinuousMixin):
             # to call it still
             number_of_tokens_to_crop = candidate_length - n_matches
             outputs.past_key_values.crop(-number_of_tokens_to_crop)
+            if self.config._get_layer_execution_config() is not None:
+                outputs.past_key_values.commit_past()
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)

@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2018 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -814,7 +815,7 @@ class TrainerSamplerTest(unittest.TestCase):
         overriding args."""
         from unittest.mock import MagicMock
 
-        def build(per_device_train_batch_size, n_gpu, world_size, grad_accum=2):
+        def build(per_device_train_batch_size, n_gpu, world_size, grad_accum=2, pp_size=1):
             n = 32
             fake_trainer = MagicMock()
             fake_trainer.args.train_sampling_strategy = "batch_rebalance"
@@ -826,6 +827,7 @@ class TrainerSamplerTest(unittest.TestCase):
             fake_trainer.args.gradient_accumulation_steps = grad_accum
             fake_trainer.args.length_column_name = "length"
             fake_trainer.args.dataloader_drop_last = True
+            fake_trainer._get_pp_size.return_value = pp_size
             fake_trainer.processing_class = None
             fake_trainer.train_dataset = [{"input_ids": list(range((i % 5) + 1))} for i in range(n)]
             return fake_trainer
@@ -841,6 +843,10 @@ class TrainerSamplerTest(unittest.TestCase):
         # formula used per_device directly and returned 8, dropping the n_gpu factor.
         sampler = Trainer._get_train_sampler(build(per_device_train_batch_size=4, n_gpu=4, world_size=1))
         self.assertEqual(sampler.effective_batch_size, 32)
+
+        # Pipeline stages consume the same batch, so they do not multiply its effective size.
+        sampler = Trainer._get_train_sampler(build(per_device_train_batch_size=4, n_gpu=1, world_size=2, pp_size=2))
+        self.assertEqual(sampler.effective_batch_size, 8)
 
 
 # ---------------------------------------------------------------------------

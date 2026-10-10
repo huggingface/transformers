@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -457,6 +458,17 @@ else:
     ]
 
     _import_structure["integrations.hub_kernels"] = ["kernelize"]
+    _import_structure["layer_execution"] = [
+        "DecoderLayerExecutionAdapter",
+        "LayerExecutionCache",
+        "LayerExecutionPlan",
+        "LayerExecutionState",
+        "LayerExecutionStep",
+        "RepeatRange",
+        "get_layer_execution_plan",
+        "register_layer_execution_adapter",
+        "set_layer_execution_plan",
+    ]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["model_debugging_utils"] = ["model_addition_debugger_context"]
     _import_structure["modeling_flash_attention_utils"] = []
@@ -643,6 +655,15 @@ if TYPE_CHECKING:
     from .integrations.executorch import TorchExportableModuleWithStaticCache as TorchExportableModuleWithStaticCache
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
     from .integrations.hub_kernels import kernelize as kernelize
+    from .layer_execution import DecoderLayerExecutionAdapter as DecoderLayerExecutionAdapter
+    from .layer_execution import LayerExecutionCache as LayerExecutionCache
+    from .layer_execution import LayerExecutionPlan as LayerExecutionPlan
+    from .layer_execution import LayerExecutionState as LayerExecutionState
+    from .layer_execution import LayerExecutionStep as LayerExecutionStep
+    from .layer_execution import RepeatRange as RepeatRange
+    from .layer_execution import get_layer_execution_plan as get_layer_execution_plan
+    from .layer_execution import register_layer_execution_adapter as register_layer_execution_adapter
+    from .layer_execution import set_layer_execution_plan as set_layer_execution_plan
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
