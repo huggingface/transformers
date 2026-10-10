@@ -2001,6 +2001,59 @@ class CacheCroppingTests(unittest.TestCase):
                 self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
                 self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
 
+    def test_crop_static_layers(self):
+        """Test that `crop` rolls the write offset of the static layers back, in-place"""
+        keys = torch.rand(*self.attention_shape)
+        values = torch.rand(*self.attention_shape)
+        # `max_cache_len <= sliding_window`, so the sliding layer never slides and stays croppable
+        layer_kwargs = {"max_cache_len": self.seq_len, "sliding_window": self.seq_len}
+        for layer_cls in (StaticLayer, StaticSlidingWindowLayer):
+            layer = layer_cls(**layer_kwargs)
+            self.assertTrue(layer.is_croppable)
+
+            # Prefill, then draft 3 more tokens
+            layer.update(keys[..., :-3, :], values[..., :-3, :])
+            layer.update(keys[..., -3:, :], values[..., -3:, :])
+            self.assertEqual(layer.get_seq_length(), self.seq_len)
+            keys_data_ptr, values_data_ptr = layer.keys.data_ptr(), layer.values.data_ptr()
+
+            # Reject the 3 drafted tokens
+            layer.crop(-3)
+
+            # The backing tensors keep their shape and their static address, only the offset moved back
+            self.assertEqual(layer.get_seq_length(), self.seq_len - 3)
+            self.assertEqual(layer.keys.shape[-2], self.seq_len)
+            self.assertEqual(layer.values.shape[-2], self.seq_len)
+            self.assertEqual(layer.keys.data_ptr(), keys_data_ptr)
+            self.assertEqual(layer.values.data_ptr(), values_data_ptr)
+
+            # The next `update` overwrites the rejected slots, so the live states match a run that never drafted
+            new_keys, new_values = (
+                torch.rand(*self.attention_shape[:-2], 1, 32),
+                torch.rand(*self.attention_shape[:-2], 1, 32),
+            )
+            layer.update(new_keys, new_values)
+            live = layer.get_seq_length()
+            self.assertTrue((layer.keys[..., : live - 1, :] == keys[..., : self.seq_len - 3, :]).all())
+            self.assertTrue((layer.values[..., : live - 1, :] == values[..., : self.seq_len - 3, :]).all())
+            self.assertTrue((layer.keys[..., live - 1 : live, :] == new_keys).all())
+            self.assertTrue((layer.values[..., live - 1 : live, :] == new_values).all())
+
+    def test_static_sliding_window_layer_is_croppable_only_without_eviction(self):
+        """Test that a static sliding layer only advertises itself as croppable while the window cannot slide"""
+        self.assertTrue(StaticSlidingWindowLayer(max_cache_len=10, sliding_window=10).is_croppable)
+        self.assertTrue(StaticSlidingWindowLayer(max_cache_len=10, sliding_window=20).is_croppable)
+        # Here the window slides, so the evicted states cannot be recovered by `crop`
+        self.assertFalse(StaticSlidingWindowLayer(max_cache_len=20, sliding_window=10).is_croppable)
+
+    def test_crop_static_layers_with_positive_value(self):
+        """Test that `crop` on the static layers raises when called with a positive value"""
+        for layer_cls in (StaticLayer, StaticSlidingWindowLayer):
+            layer = layer_cls(max_cache_len=self.seq_len, sliding_window=self.seq_len)
+            layer.update(torch.rand(*self.attention_shape), torch.rand(*self.attention_shape))
+            with self.assertRaises(RuntimeError):
+                layer.crop(3)
+
     def test_update_with_recording_returns_advertised_kv_width(self):
         """Test that with past recording activated, `update` returns exactly the states advertised by `get_mask_sizes`"""
         sliding_window = 4

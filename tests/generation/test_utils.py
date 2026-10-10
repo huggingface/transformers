@@ -782,6 +782,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             for output in (output_greedy, output_assisted):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
+            # The same must hold with a static cache, where a rejected draft is rolled back by moving the write
+            # offset instead of by slicing the state tensors. `assistant_type == "random"` rejects every draft, so
+            # `crop` runs on each round. Models that cannot use a static cache at all are skipped, see
+            # `test_generate_with_static_cache`.
+            if model_class._can_compile_fullgraph and not config.is_encoder_decoder:
+                output_static = model.generate(
+                    **generation_kwargs, **inputs_dict, **logits_processor_kwargs, cache_implementation="static"
+                )
+                assert_similar_generate_outputs(output_assisted, output_static, atol=atol, rtol=rtol)
+
     @pytest.mark.generate
     @is_flaky
     def test_prompt_lookup_decoding_matches_greedy_search(self):

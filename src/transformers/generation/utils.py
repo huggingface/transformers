@@ -3952,22 +3952,17 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        # The cache must be dynamic for assisted generation, and the check must happen AFTER preparing cache
+        # The cache must be able to roll back the drafts we reject, and the check must happen AFTER preparing cache
         if not model_kwargs["use_cache"]:
             raise ValueError("assisted generate requires `use_cache=True`")
-        if (
-            generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]
-            or type(model_kwargs.get("past_key_values")) is StaticCache
-        ):
-            raise ValueError("assisted generate is not supported with Static cache classes`")
+        cache = model_kwargs.get("past_key_values")
+        if cache is None:
+            raise RuntimeError("assisted decoding requires a cache")
 
         # Same tensor the stopping criteria are built from
         eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
 
         # Make sure we can record past on the cache
-        cache = model_kwargs.get("past_key_values")
-        if cache is None:
-            raise RuntimeError("assisted decoding requires a cache")
         cache.activate_past_recording()
 
         # Get the candidate generator, given the parameterization
@@ -4013,6 +4008,13 @@ class GenerationMixin(ContinuousMixin):
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
         outputs = None
         n_matches = 0
+
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
+
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
@@ -4062,10 +4064,23 @@ class GenerationMixin(ContinuousMixin):
             if candidate_generator.requires_model_outputs:
                 model_inputs |= candidate_generator.model_kwargs_overrides
 
-            # 2.2. Run a forward pass on the candidate sequence
-            outputs = self(**model_inputs)
+            # 2.2. Run a forward pass on the candidate sequence. Verification forwards are short, like the decode
+            # steps of `_sample`, so they want the same MoE experts kernel — `_optimize_model_for_decode` swaps
+            # `grouped_mm` for `batched_mm`. The prefill is exempt: it would materialize one expert weight per
+            # prompt token. This also keeps the forward capturable, as `grouped_mm` reads its offsets on the host.
+            if is_first_iteration:
+                outputs = self(**model_inputs)
+            else:
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs)
 
-            # 2.3. Process the new logits
+            # 2.3. The cache must be able to roll back the drafts we are about to reject. Some layers only know whether
+            # they can once they hold states (e.g. linear attention, which cannot roll back a recurrent state), so this
+            # is checked after prefill and before the first `crop`.
+            if is_first_iteration and not cache.is_croppable:
+                raise ValueError(f"assisted generate is not supported with a non-croppable cache, got {type(cache)}")
+
+            # 2.4. Process the new logits
             # .float() is needed to retain precision for later logits manipulations
             new_logits = outputs.logits[:, -candidate_length - 1 :].to(
                 dtype=torch.float32, device=input_ids.device
