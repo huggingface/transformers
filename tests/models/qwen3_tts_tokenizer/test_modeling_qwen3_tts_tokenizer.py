@@ -84,7 +84,7 @@ class Qwen3TTSTokenizerModelTester:
             "intermediate_size": 32,
             "num_quantizers": num_quantizers,
             "codebook_size": 8,
-            "codebook_dim": 8,
+            "codebook_dim": 16,  # must match encoder hidden_size, the quantizer input
             "latent_dim": 16,
             "decoder_dim": 32,  # must be divisible by upsample groups
             "upsample_rates": [2, 12],
