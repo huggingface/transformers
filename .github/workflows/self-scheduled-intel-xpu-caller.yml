@@ -1,0 +1,75 @@
+name: Self-hosted runner scale set (Intel XPU scheduled CI caller)
+
+# Note: For every job in this workflow, the name of the runner scale set is finalized in the runner yaml i.e. huggingface/hf-workflows/.github/workflows/transformers_intel_xpu_ci_scheduled.yaml
+# For example, 1gpu scale set: hfc-intel-b60-1gpu
+#              2gpu scale set: hfc-intel-b60-2gpu
+# Important: Do not pin the reusable workflow ref to a SHA. Intel XPU runner groups only route jobs for
+# workflows referenced at @main; a pinned SHA causes jobs to wait for a runner until the 24h timeout.
+# TEST 11
+
+on:
+  workflow_run:
+    workflows: ["Self-hosted runner (Intel scheduled CI caller)"]
+    branches: ["main"]
+    types: [completed]
+  push:
+    branches:
+      - run_intel_scheduled_ci_caller*
+      - add_xpu_ci
+  workflow_dispatch:
+    inputs:
+      prev_workflow_run_id:
+        description: 'previous workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+      other_workflow_run_id:
+        description: 'other workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+
+
+# Used for `push` to easily modify the target workflow runs to compare against
+env:
+    prev_workflow_run_id: ""
+    other_workflow_run_id: ""
+
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    permissions: {}
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup
+        env:
+          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
+          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
+        run: |
+          mkdir "setup_values"
+          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
+          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: setup_values
+          path: setup_values
+
+  model-ci:
+    name: Model CI
+    uses: huggingface/hf-workflows/.github/workflows/transformers_intel_xpu_ci_scheduled.yaml@fix_xpu_workflow
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#intel-xpu-hf-ci"
+      runner_group: hfc-intel-b60
+      docker: huggingface/xpu_ci
+      ci_event: Scheduled CI (Intel) - XPU
+      report_repo_id: optimum-intel-internal-testing/transformers_xpu_daily_ci
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+      subdirs: '["bert", "gpt2", "vit", "t5"]'
+    secrets: inherit
