@@ -240,9 +240,14 @@ class FuyuProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
+        return_legacy_image_output: bool = True,
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "BatchFeature":
         r"""
+        return_legacy_image_output (`bool`, *optional*, defaults to `True`):
+            Whether to return image inputs in legacy format or not. Note that legacy format is
+            deprecated and will be removed in v5.23.
+
         Returns:
             [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
 
@@ -278,7 +283,9 @@ class FuyuProcessor(ProcessorMixin):
         processed_images = {}
         images_replacements = []
         if images is not None and hasattr(self, "image_processor"):
-            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+            processed_images, images_replacements = self._process_images(
+                images, return_legacy_image_output=return_legacy_image_output, **merged_kwargs["images_kwargs"]
+            )
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
@@ -392,7 +399,7 @@ class FuyuProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
-    def _process_images(self, images: ImageInput, **kwargs):
+    def _process_images(self, images: ImageInput, return_legacy_image_output: bool = True, **kwargs):
         processed_images = self.image_processor(images, **kwargs)
 
         batch_image_patches = []
@@ -424,7 +431,14 @@ class FuyuProcessor(ProcessorMixin):
             )
             image_replacements.append(replacement_text)
 
-        processed_images["image_patches"] = torch.cat(batch_image_patches, dim=0)
+        if return_legacy_image_output:
+            processed_images["image_patches"] = torch.cat(batch_image_patches, dim=0)
+            logger.warning_once(
+                "returning `image_patches` is deprecated, and we'll be returning `pixel_values` from v5.23. "
+                "Please pass `return_legacy_image_output=False` to get `pixel_values` in inputs."
+            )
+        else:
+            processed_images["pixel_values"] = torch.cat(batch_image_patches, dim=0)
         return processed_images, image_replacements
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:

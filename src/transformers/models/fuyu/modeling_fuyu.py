@@ -23,6 +23,7 @@ from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_fuyu import FuyuConfig
 
 
@@ -144,11 +145,13 @@ class FuyuModel(FuyuPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_patches", version="v5.24", new_name="pixel_values")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
         image_patches: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -179,8 +182,8 @@ class FuyuModel(FuyuPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
-        if mm_encoder_outputs.get("image") is None and image_patches is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(image_patches, return_dict=True)
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
             patch_embeddings = mm_encoder_outputs["image"].last_hidden_state.to(
@@ -219,11 +222,13 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_patches", version="v5.23", new_name="pixel_values")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
         image_patches: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -270,7 +275,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
         outputs = self.model(
             input_ids=input_ids,
-            image_patches=image_patches,
+            pixel_values=pixel_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,

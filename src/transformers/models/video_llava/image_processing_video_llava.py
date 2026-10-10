@@ -35,10 +35,21 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
+
+
+class VideoLlavaImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    return_legacy_image_output (`bool`, *optional*, defaults to `True`):
+        Whether to return outputs in lagacy format or not. From v5.20
+        the legacy path will be dropped.
+    """
+
+    return_legacy_image_output: bool
 
 
 class VideoLlavaImageProcessor(BaseImageProcessor):
@@ -81,6 +92,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = VideoLlavaImageProcessorKwargs
 
     def __init__(
         self,
@@ -182,6 +194,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension | None = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
+        return_legacy_image_output: bool = True,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -272,7 +285,14 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             )
             for image in images
         ]
-        data = {"pixel_values_images": pixel_values_images}
+        if return_legacy_image_output:
+            data = {"pixel_values_images": pixel_values_images}
+            logger.warning_once(
+                "returning `pixel_values_images` is deprecated, and we'll be returning `pixel_values` from v5.23. "
+                "Please pass `return_legacy_image_output=False` to get `pixel_values` in inputs."
+            )
+        else:
+            data = {"pixel_values": pixel_values_images}
         encoded_outputs = BatchFeature(data, tensor_type=return_tensors)
 
         return encoded_outputs

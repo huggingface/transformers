@@ -35,10 +35,8 @@ from ...utils.import_utils import requires
 
 logger = logging.get_logger(__name__)
 
-if TYPE_CHECKING:
-    import torch
 
-if is_torch_available():
+if TYPE_CHECKING and is_torch_available():
     import torch
 
 
@@ -243,20 +241,15 @@ class FuyuImageProcessorPil(PilBackend):
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
         return num_patches
 
-    def patchify_image(
-        self, image: "np.ndarray | torch.Tensor", patch_size: SizeDict | None = None
-    ) -> "np.ndarray | torch.Tensor":
+    def patchify_image(self, image: "np.ndarray", patch_size: SizeDict | None = None) -> "np.ndarray":
         """
         Convert an image into a tensor of patches using numpy operations.
         Args:
-            image (`np.ndarray` or `torch.Tensor`):
+            image (`np.ndarray`):
                 Image to convert. Shape: [batch, channels, height, width] or [channels, height, width]
             patch_size (`SizeDict`, *optional*):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
         """
-        requires_backends(self, ["torch"])
-        import torch
-
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):
                 patch_size = self.patch_size
@@ -264,25 +257,16 @@ class FuyuImageProcessorPil(PilBackend):
                 patch_size = SizeDict(**self.patch_size)
         patch_height, patch_width = patch_size.height, patch_size.width
 
-        # Handle torch tensors by converting to numpy
-        is_torch = isinstance(image, torch.Tensor)
-        if is_torch:
-            image_np = image.cpu().numpy()
-            device = image.device
-        else:
-            image_np = image
-            device = None
-
         # Handle batch dimension
-        if len(image_np.shape) == 4:
-            batch_size, channels, height, width = image_np.shape
-        elif len(image_np.shape) == 3:
+        if len(image.shape) == 4:
+            batch_size, channels, height, width = image.shape
+        elif len(image.shape) == 3:
             batch_size = 1
-            channels, height, width = image_np.shape
-            image_np = image_np[np.newaxis, ...]
+            channels, height, width = image.shape
+            image = image[np.newaxis, ...]
         else:
             raise ValueError(
-                f"Expected image shape [batch, channels, height, width] or [channels, height, width], got {image_np.shape}"
+                f"Expected image shape [batch, channels, height, width] or [channels, height, width], got {image.shape}"
             )
 
         # Extract patches using numpy operations to match torch unfold behavior exactly
@@ -300,7 +284,7 @@ class FuyuImageProcessorPil(PilBackend):
             # After reshape: (num_patches, channels * patch_height * patch_width)
 
             # Reshape to extract patches: (channels, num_patches_h, patch_height, num_patches_w, patch_width)
-            img_reshaped = image_np[b].reshape(channels, num_patches_h, patch_height, num_patches_w, patch_width)
+            img_reshaped = image[b].reshape(channels, num_patches_h, patch_height, num_patches_w, patch_width)
             # Transpose to (channels, num_patches, patch_height, patch_width) where num_patches = num_patches_h * num_patches_w
             img_reshaped = img_reshaped.transpose(0, 1, 3, 2, 4).reshape(
                 channels, num_patches, patch_height, patch_width
@@ -312,11 +296,6 @@ class FuyuImageProcessorPil(PilBackend):
             patches_list.append(patches)
 
         patches_array = np.stack(patches_list, axis=0) if batch_size > 1 else patches_list[0]
-
-        # Convert back to torch if input was torch
-        if is_torch:
-            patches_array = torch.from_numpy(patches_array).to(device)
-
         return patches_array
 
     def preprocess_with_tokenizer_info(
@@ -355,9 +334,7 @@ class FuyuImageProcessorPil(PilBackend):
         requires_backends(self, ["torch"])
         import torch
 
-        logger.warning(
-            "`image_processor.preprocess_with_tokenizer_info` is deprecated and will be removed in future versions."
-        )
+        logger.warning("`image_processor.preprocess_with_tokenizer_info` is deprecated and will be removed in v5.20.")
 
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):
@@ -400,8 +377,8 @@ class FuyuImageProcessorPil(PilBackend):
                         [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
                     )
                     # Patchify the image - convert to numpy, patchify, convert back
-                    image_np = image.cpu().numpy()
-                    patches_np = self.patchify_image(image_np, patch_size=patch_size)
+                    image = image.cpu().numpy()
+                    patches_np = self.patchify_image(image, patch_size=patch_size)
                     patches = torch.from_numpy(patches_np).to(image_input.device)
                     assert num_patches == patches.shape[0]
                     if variable_sized:
