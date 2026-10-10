@@ -595,9 +595,18 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
 
         # This part differs from other models because BLOOM needs a 2D mask to construct alibi tensor
         # The only difference is the usage of 2D instead of 4D mask, but the shape will be static
-        if isinstance(past_key_values, StaticCache) and attention_mask is not None:
+        # Note that `super()` already replaced the mask by a 4D one (even when none was provided), so we always
+        # need to overwrite it here, otherwise `build_alibi_tensor` receives a 4D mask and fails
+        if isinstance(past_key_values, StaticCache):
             target_length = past_key_values.get_max_length()
-            batch_size, seq_length = attention_mask.shape
+            if attention_mask is None:
+                input_tensor = input_ids if input_ids is not None else inputs_embeds
+                batch_size, seq_length = input_tensor.shape[:2]
+                attention_mask = torch.ones(
+                    batch_size, seq_length, device=input_tensor.device, dtype=torch.long
+                )
+            else:
+                batch_size, seq_length = attention_mask.shape
             diff = target_length - seq_length
 
             new_attn_mask = torch.zeros(batch_size, diff, device=attention_mask.device, dtype=attention_mask.dtype)
