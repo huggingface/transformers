@@ -2875,6 +2875,12 @@ class Trainer:
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
+        if self.get_cp_size() > 1 and not prediction_loss_only:
+            raise ValueError(
+                "Returning predictions with context parallelism is not supported. "
+                "Set `prediction_loss_only=True` to evaluate loss only."
+            )
+
         # if eval is called w/o train, handle model prep here
         if self.is_deepspeed_enabled and self.deepspeed is None:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
@@ -3238,7 +3244,8 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    with self.compute_loss_context_manager():
+                    cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+                    with self.compute_loss_context_manager(), cp_context():
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
