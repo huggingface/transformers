@@ -51,8 +51,6 @@ logger = logging.get_logger(__name__)
 @strict
 class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
     r"""
-    num_quantizers (`int`, *optional*, defaults to 16):
-        Total number of residual vector quantizers.
     num_semantic_quantizers (`int`, *optional*, defaults to 1):
         Number of quantizers assigned to semantic codes.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
@@ -61,10 +59,11 @@ class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
 
     model_type = "qwen3_tts_tokenizer_quantizer"
     base_config_key = "quantizer_config"
+    attribute_map = {"num_quantizers": "n_codebooks"}
 
     codebook_size: int = 2048
     codebook_dim: int = 256
-    num_quantizers: int = 16
+    n_codebooks: int = 16
     num_semantic_quantizers: int = 1
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
@@ -192,7 +191,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
             self.quantizer_config = Qwen3TTSTokenizerQuantizerConfig(
                 codebook_size=self.decoder_config.codebook_size,
                 codebook_dim=self.decoder_config.codebook_dim // 2,
-                num_quantizers=self.decoder_config.num_quantizers,
+                n_codebooks=self.decoder_config.num_quantizers,
                 num_semantic_quantizers=self.decoder_config.num_semantic_quantizers,
                 vector_quantization_hidden_dimension=self.decoder_config.codebook_dim // 2,
                 hidden_size=self.decoder_config.codebook_dim,
