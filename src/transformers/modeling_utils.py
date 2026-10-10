@@ -111,6 +111,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    get_current_accelerator,
     get_device_type,
     has_file,
     is_accelerate_available,
@@ -1703,10 +1704,7 @@ class PreTrainedModel(
                 ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
         if not is_torch_flex_attn_available():
-            raise ImportError(
-                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0 and"
-                " run on a device other than TPU."
-            )
+            raise ImportError("PyTorch Flex Attention is not supported on TPU.")
 
         # If no error raise by this point, we can return `True`
         return True
@@ -3137,9 +3135,9 @@ class PreTrainedModel(
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
-            # `current_accelerator()` is None when no accelerator is available, in which case the
+            # `get_current_accelerator()` is None when no accelerator is available, in which case the
             # activations already live on the host and there is nothing to copy off a device.
-            device_type = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
+            device_type = (get_current_accelerator() or torch.device("cpu")).type
 
             def checkpoint_func(function, *args, **kwargs):
                 with save_on_cpu(pin_memory=True, device_type=device_type):
