@@ -272,8 +272,9 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
-        proj_dtype = self.embedding_proj_layer.weight.dtype
-        embeddings = self.embedding_proj_layer(last_hidden_states.to(proj_dtype))  # (batch_size, sequence_length, dim)
+        # Use the model's compute dtype (not the weight dtype), which is int8/uint8 under 8-bit quantization
+        # and would otherwise be passed to the quantized linear layer as the input dtype.
+        embeddings = self.embedding_proj_layer(last_hidden_states.to(self.dtype))  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
