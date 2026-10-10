@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,19 +49,22 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
     We would get two groups: {"sliding_attention": [0, 3], "full_attention": [1, 2, 4, 5, 6, 7]}.
     """
     layer_types = getattr(config, "layer_types", None)
+    count = len(layer_types) if layer_types is not None else config.num_hidden_layers
+    indices = getattr(config, "_layer_execution_cache_owners", range(count))
 
     # If the config has no layer_type attribute, it means all layers are the same attention type
     if layer_types is None:
         # If there is a sliding window, assume all layers are sliding attention
         sliding_window = getattr(config, "sliding_window", None)
         if sliding_window is not None:
-            return {SLIDING_ATTENTION: list(range(config.num_hidden_layers))}
+            return {SLIDING_ATTENTION: list(indices)}
         # Otherwise, assume all layers are full attention
-        return {FULL_ATTENTION: list(range(config.num_hidden_layers))}
+        return {FULL_ATTENTION: list(indices)}
 
     # Otherwise simply count the number of layers of each type, making sure they are supported at the same time
     layer_counts = {}
-    for i, layer_type in enumerate(layer_types):
+    for i in indices:
+        layer_type = layer_types[i]
         if layer_type not in ATTN_TYPE_TO_ALLOCATOR:
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
@@ -136,6 +140,10 @@ class PagedAttentionCache:
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
         """
+        if config.layer_execution_plan is not None:
+            from ...layer_execution.paged import execution_cache_config
+
+            config = execution_cache_config(config)
         self.config = config
         self.dtype = dtype
         self.device = device

@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -931,10 +932,13 @@ def create_causal_mask(
     # are properly index-based as required by our implementation).
     use_vmap = False
 
-    # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
-    # prefill is not compiled)
+    # Single-token static decoding must mask unused capacity, including backends that cannot be compiled.
     allow_is_causal_skip = allow_is_causal_skip and not (
-        getattr(past_key_values, "is_compileable", False) and q_length == 1
+        (
+            getattr(past_key_values, "is_compileable", False)
+            or getattr(past_key_values, "requires_explicit_mask", False)
+        )
+        and q_length == 1
     )
 
     # Allow slight deviations from causal mask
@@ -1163,10 +1167,13 @@ def create_sliding_window_causal_mask(
     # users passing custom mask functions (as we cannot guarantee that they
     # are properly index-based as required by our implementation).
     use_vmap = False
-    # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
-    # prefill is not compiled)
+    # Single-token static decoding must mask unused capacity, including backends that cannot be compiled.
     allow_is_causal_skip = allow_is_causal_skip and not (
-        getattr(past_key_values, "is_compileable", False) and q_length == 1
+        (
+            getattr(past_key_values, "is_compileable", False)
+            or getattr(past_key_values, "requires_explicit_mask", False)
+        )
+        and q_length == 1
     )
 
     # Allow slight deviations from causal mask
@@ -1389,10 +1396,13 @@ def create_chunked_causal_mask(
     # users passing custom mask functions (as we cannot guarantee that they
     # are properly index-based as required by our implementation).
     use_vmap = False
-    # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
-    # prefill is not compiled)
+    # Single-token static decoding must mask unused capacity, including backends that cannot be compiled.
     allow_is_causal_skip = allow_is_causal_skip and not (
-        getattr(past_key_values, "is_compileable", False) and q_length == 1
+        (
+            getattr(past_key_values, "is_compileable", False)
+            or getattr(past_key_values, "requires_explicit_mask", False)
+        )
+        and q_length == 1
     )
 
     # Allow slight deviations from causal mask

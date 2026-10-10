@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +15,7 @@
 from __future__ import annotations
 
 import inspect
-from functools import wraps
+from functools import partial, wraps
 from typing import TYPE_CHECKING
 
 from ..modeling_outputs import CausalLMOutputWithPast
@@ -125,6 +126,21 @@ class PipelineStage:
 
     def find_rank_for_key(self, key: str, num_layers: int, base_model_prefix: str) -> int | None:
         """Return the PP rank that owns a checkpoint parameter key, or ``None`` if unknown."""
+        if hasattr(self, "execution_layer_prefix"):
+            for prefix, owner in self.execution_boundary_owners.items():
+                if key.startswith(prefix + "."):
+                    return owner
+            prefix = self.execution_layer_prefix + "."
+            if key.startswith(prefix):
+                index = int(key[len(prefix) :].split(".", 1)[0])
+                return next(
+                    rank
+                    for rank in range(self.pp_size)
+                    if self.layer_range_for_rank(rank, num_layers)[0]
+                    <= index
+                    < self.layer_range_for_rank(rank, num_layers)[1]
+                )
+            return None
         base_prefix = f"{base_model_prefix}."
 
         if key.startswith(f"{base_prefix}embed_tokens."):
@@ -182,28 +198,50 @@ class PipelineStage:
 
 def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
     """Naive even split of `base_model.layers` across PP ranks."""
+    if pp_mesh is None:
+        raise ValueError("Pipeline parallelism requires a device mesh.")
+    execution_config = model.config._get_layer_execution_config()
     # TODO(3outeille): involves pp_plan to do the split ?
     stage = PipelineStage(pp_mesh)
     model._pp_stage = stage
 
-    base_model = getattr(model, model.base_model_prefix)
-    layers = base_model.layers
+    if execution_config is not None:
+        from ..layer_execution.executor import _get_model_and_decoder
+
+        _, base_model = _get_model_and_decoder(model)
+        layers = base_model._layer_execution_adapter.get_layers(base_model)
+    else:
+        base_model = getattr(model, model.base_model_prefix)
+        layers = base_model.layers
+    base_model._pp_stage = stage
     num_layers = len(layers)
+    stage.num_source_layers = num_layers
+    stage.embedding_width = base_model.get_input_embeddings().weight.shape[-1]
+    if execution_config is not None:
+        modules = {id(module): name for name, module in model.named_modules()}
+        stage.execution_layer_prefix = modules[id(layers)]
+        stage.execution_boundary_owners = {modules[id(base_model.get_input_embeddings())]: 0}
+        if hasattr(base_model, "norm"):
+            stage.execution_boundary_owners[modules[id(base_model.norm)]] = stage.pp_size - 1
+        if hasattr(model, "lm_head"):
+            stage.execution_boundary_owners[modules[id(model.lm_head)]] = stage.pp_size - 1
 
     start_layer, end_layer = stage.layer_range_for_rank(stage.pp_rank, num_layers)
     tied = getattr(model.config, "tie_word_embeddings", False)
+    stage.original_tied_weights_keys = dict(model.all_tied_weights_keys)
 
     # When tied, keep embed_tokens on the last stage too so _finalize_model_loading in modeling_utils.py can tie lm_head locally.
     keep_embed_tokens = stage.pp_is_first_stage or (tied and stage.pp_is_last_stage)
     if not keep_embed_tokens:
-        base_model.embed_tokens = PipelineIdentityLayer()
+        base_model.set_input_embeddings(PipelineIdentityLayer())
 
     for layer_idx in range(num_layers):
         if layer_idx < start_layer or layer_idx >= end_layer:
             layers[layer_idx] = PipelineIdentityLayer()
 
     if not stage.pp_is_last_stage:
-        base_model.norm = PipelineIdentityLayer()
+        if hasattr(base_model, "norm"):
+            base_model.norm = PipelineIdentityLayer()
         model.lm_head = PipelineIdentityLayer()
 
     # let _finalize_model_loading know that we want to tie the lm_head only in the last rank
@@ -211,7 +249,16 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
         model.all_tied_weights_keys = {}
 
     # TODO(3outeille): dispatch to different pipeline parallelism schedules (gpipe, 1f1b, etc.)
-    if not getattr(model, "_pp_forward_wrapped", False):
+    original_forward = model.forward
+    model._pp_original_forward = original_forward
+    model._pp_native_forward = partial(
+        pipeline_parallel_naive_forward, model, original_forward, inspect.signature(original_forward)
+    )
+    if execution_config is not None:
+        from ..layer_execution.pipeline import configure_pipeline
+
+        configure_pipeline(model, stage)
+    elif not getattr(model, "_pp_forward_wrapped", False):
         original_forward = model.forward
         forward_signature = inspect.signature(original_forward)
 

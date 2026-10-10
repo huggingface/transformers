@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2018 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +46,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
+    LlamaConfig,
+    LlamaForCausalLM,
     Trainer,
     TrainerCallback,
     TrainerState,
@@ -630,6 +633,169 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
 # ---------------------------------------------------------------------------
 # Auto batch size finder tests
 # ---------------------------------------------------------------------------
+
+
+@require_torch
+@require_accelerate
+class TrainerConvertedCheckpointTest(TestCasePlus):
+    def test_export_conversions_preserve_trainer_checkpoint_reload(self):
+        from safetensors.torch import load_file
+
+        from transformers.core_model_loading import WeightRenaming
+
+        for loop in (False, True):
+            with self.subTest(loop=loop):
+                model = LlamaForCausalLM(
+                    LlamaConfig(
+                        vocab_size=32,
+                        hidden_size=16,
+                        intermediate_size=32,
+                        num_hidden_layers=3,
+                        num_attention_heads=2,
+                        num_key_value_heads=1,
+                    )
+                )
+                if loop:
+                    model.set_layer_execution_plan((0, 1, 1, 2))
+                model._weight_conversions = [WeightRenaming(r"^legacy_backbone\.", "model.")]
+                directory = self.get_auto_remove_tmp_dir()
+                exported = os.path.join(directory, "exported")
+                model.save_pretrained(exported)
+                self.assertTrue(
+                    any(key.startswith("legacy_backbone.") for key in load_file(exported + "/model.safetensors"))
+                )
+                trainer = Trainer(
+                    model=model,
+                    args=TrainingArguments(output_dir=directory, use_cpu=True, report_to="none"),
+                )
+                checkpoint = os.path.join(directory, "checkpoint")
+                trainer.save_model(checkpoint)
+                expected = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+                self.assertEqual(set(load_file(checkpoint + "/model.safetensors")), set(model.state_dict()))
+                reloaded = LlamaForCausalLM.from_pretrained(checkpoint)
+                self.assertEqual(reloaded.get_layer_execution_plan(), model.get_layer_execution_plan())
+                for name, parameter in reloaded.named_parameters():
+                    torch.testing.assert_close(parameter, expected[name], atol=0, rtol=0)
+                ids = tuple(id(parameter) for parameter in model.parameters())
+                plan = model.get_layer_execution_plan()
+                with torch.no_grad():
+                    for parameter in model.parameters():
+                        parameter.add_(1)
+                trainer._load_from_checkpoint(checkpoint)
+                self.assertEqual(tuple(id(parameter) for parameter in model.parameters()), ids)
+                self.assertEqual(model.get_layer_execution_plan(), plan)
+                for name, parameter in model.named_parameters():
+                    torch.testing.assert_close(parameter, expected[name], atol=0, rtol=0)
+
+
+@require_torch
+@require_accelerate
+@require_peft
+class TrainerPeftPrecisionTest(TestCasePlus):
+    def make_model(self, precision, loop=False, multiple=False):
+        from peft import LoraConfig, get_peft_model
+
+        model = (
+            LlamaForCausalLM(
+                LlamaConfig(
+                    vocab_size=32,
+                    hidden_size=16,
+                    intermediate_size=32,
+                    num_hidden_layers=3,
+                    num_attention_heads=2,
+                    num_key_value_heads=1,
+                    use_cache=False,
+                )
+            )
+            .cpu()
+            .bfloat16()
+        )
+        if loop:
+            model.set_layer_execution_plan((0, 1, 1, 2))
+        config = LoraConfig(task_type="CAUSAL_LM", r=2, target_modules=["down_proj"])
+        adapter_name = "main" if multiple == "named" else "default"
+        model = get_peft_model(model, config, adapter_name=adapter_name, autocast_adapter_dtype=False)
+        if multiple:
+            model.add_adapter("other", config)
+            model.set_adapter("other" if multiple == "root_other" else adapter_name)
+        for name, parameter in model.named_parameters():
+            if "lora_" in name and (precision == "fp32" or (precision == "mixed" and ".layers.0." in name)):
+                parameter.data = parameter.data.float()
+        return model
+
+    def test_existing_adapter_precision_survives_checkpoint_loading(self):
+        for precision in ("bf16", "fp32", "mixed"):
+            for loop in (False, True):
+                for loading in (
+                    "resume",
+                    "multiple",
+                    "multiple_default",
+                    "multiple_default_other",
+                    "best",
+                    "best_multiple",
+                    "best_multiple_default",
+                    "best_multiple_default_other",
+                ):
+                    with self.subTest(precision=precision, loop=loop, loading=loading):
+                        multiple = {
+                            "multiple": "named",
+                            "multiple_default": "root",
+                            "multiple_default_other": "root_other",
+                            "best_multiple": "named",
+                            "best_multiple_default": "root",
+                            "best_multiple_default_other": "root_other",
+                        }.get(loading, False)
+                        model = self.make_model(precision, loop, multiple=multiple)
+                        directory = self.get_auto_remove_tmp_dir()
+                        model.save_pretrained(directory)
+                        values = {
+                            name: parameter.detach().clone()
+                            for name, parameter in model.named_parameters()
+                            if "lora_" in name
+                        }
+                        ids = tuple(id(parameter) for parameter in model.parameters())
+                        flags = {name: parameter.requires_grad for name, parameter in model.named_parameters()}
+                        plan = model.get_layer_execution_plan()
+                        with torch.no_grad():
+                            for name, parameter in model.named_parameters():
+                                if name in values and (
+                                    not loading.startswith("best") or f".{model.active_adapters[0]}." in name
+                                ):
+                                    parameter.add_(1)
+                        trainer = Trainer(
+                            model=model,
+                            args=TrainingArguments(
+                                output_dir=os.path.join(directory, "run"), use_cpu=True, report_to="none"
+                            ),
+                        )
+                        if loading.startswith("best"):
+                            trainer.state.best_model_checkpoint = directory
+                            trainer.state.best_metric = 1.0
+                            trainer._load_best_model()
+                        else:
+                            trainer._load_from_checkpoint(directory)
+                        self.assertEqual(tuple(id(parameter) for parameter in model.parameters()), ids)
+                        self.assertEqual(model.get_layer_execution_plan(), plan)
+                        for name, parameter in model.named_parameters():
+                            self.assertEqual(parameter.requires_grad, flags[name])
+                            if name in values:
+                                torch.testing.assert_close(parameter, values[name], atol=0, rtol=0)
+
+    def test_new_adapter_keeps_peft_default_precision_policy(self):
+        model = self.make_model("bf16")
+        directory = self.get_auto_remove_tmp_dir()
+        model.save_pretrained(directory)
+        trainer = Trainer(
+            model=model,
+            args=TrainingArguments(output_dir=os.path.join(directory, "run"), use_cpu=True, report_to="none"),
+        )
+        trainer._load_peft_adapter(model, directory, "new", is_trainable=True)
+        self.assertEqual(
+            {parameter.dtype for name, parameter in model.named_parameters() if ".new." in name}, {torch.float32}
+        )
+        self.assertEqual(
+            {parameter.dtype for name, parameter in model.named_parameters() if ".default." in name}, {torch.bfloat16}
+        )
 
 
 @require_torch

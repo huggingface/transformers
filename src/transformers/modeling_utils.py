@@ -1,3 +1,4 @@
+# Modified by bebetterest in 2026 for configurable decoder layer execution.
 # Copyright 2018 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -23,7 +24,7 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial, wraps
@@ -148,6 +149,7 @@ if TYPE_CHECKING:
     from kernels.layer.mode import Mode
 
     from ._typing import DeviceMeshLike
+    from .layer_execution import LayerExecutionPlan, RepeatRange
 
 
 if is_sagemaker_mp_enabled():
@@ -1342,6 +1344,11 @@ class PreTrainedModel(
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
+        if self.config.layer_execution_plan is not None:
+            from .layer_execution import LayerExecutionPlan, set_layer_execution_plan
+
+            set_layer_execution_plan(self, LayerExecutionPlan.from_config(self.config))
+
     def dequantize(self, dtype=None):
         """
         Potentially dequantize the model in case it has been quantized by a quantization method that support
@@ -2250,6 +2257,47 @@ class PreTrainedModel(
                 self.base_model.set_encoder(encoder, modality=modality)
             else:
                 self.model = encoder
+
+    def set_layer_execution_plan(
+        self,
+        plan: "LayerExecutionPlan | Sequence[int] | None" = None,
+        *,
+        repeats: "Sequence[RepeatRange] | None" = None,
+    ):
+        """Configure shared-parameter execution on the text decoder, or restore its original forward.
+
+        Args:
+            plan (`LayerExecutionPlan`, `Sequence[int]` or `None`, *optional*): Explicit zero-based layer order.
+                Omitting both `plan` and `repeats` disables the plan.
+            repeats (`Sequence[RepeatRange]`, *optional*): Non-overlapping ranges to repeat. The source layer count
+                is inferred from the decoder. Pass either `plan` or `repeats`.
+
+        Returns:
+            `PreTrainedModel`: This model, preserving its original parameters and weight keys.
+        """
+        from .layer_execution import set_layer_execution_plan
+
+        return set_layer_execution_plan(self, plan, repeats=repeats)
+
+    def get_layer_execution_plan(self) -> "LayerExecutionPlan | None":
+        """Return an immutable snapshot of the text decoder's execution plan, or `None` when disabled."""
+        from .layer_execution import get_layer_execution_plan
+
+        return get_layer_execution_plan(self)
+
+    def _replicate_for_data_parallel(self):
+        replica = super()._replicate_for_data_parallel()
+        if hasattr(self, "_layer_execution_adapter"):
+            # DataParallel shallow-copies callables that capture the original decoder.
+            from types import MethodType
+
+            from .layer_execution.executor import _bind_execution_forward
+
+            replica.forward = _bind_execution_forward(replica)
+            original = self._layer_execution_original_forward
+            if isinstance(original, MethodType):
+                replica._layer_execution_original_forward = MethodType(original.__func__, replica)
+        return replica
 
     def get_decoder(self):
         """
@@ -3451,7 +3499,14 @@ class PreTrainedModel(
         )
 
         # Remove tied weights as safetensors do not handle them
-        state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
+        stage = getattr(model_to_save, "_pp_stage", None)
+        tied_keys = model_to_save.all_tied_weights_keys
+        if stage is not None and getattr(stage, "layer_execution", False):
+            model_to_save.all_tied_weights_keys = stage.original_tied_weights_keys
+        try:
+            state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
+        finally:
+            model_to_save.all_tied_weights_keys = tied_keys
 
         # Revert all renaming and/or weight operations. In general, due to potential many-weights-to-one conversion patterns,
         # we need to revert the whole state_dict at once to make sure all weights are available. For offloaded models though,
