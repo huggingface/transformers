@@ -220,6 +220,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "ctc"
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
+        if self.model.config.model_type == "qwen3_asr" and self.processor is None:
+            from ..models.qwen3_asr import Qwen3ASRProcessor
+
+            self.processor = Qwen3ASRProcessor(
+                self.feature_extractor, self.tokenizer, chat_template=self.tokenizer.chat_template
+            )
         if self.type == "tdt":
             # The pipeline defaults (e.g. beam search) target seq2seq models, transducers decode with their own
             # generation config
@@ -472,6 +478,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise TypeError(f"We expect a numpy ndarray or torch tensor as input, got `{type(inputs)}`")
         inputs = _to_mono(inputs)
 
+        if self.model.config.model_type == "qwen3_asr":
+            if chunk_length_s or stride is not None:
+                raise ValueError("Chunking and stride are not supported for Qwen3 ASR.")
+            processed = self.processor.apply_transcription_request(audio=inputs, return_tensors="pt")
+            if self.dtype is not None:
+                processed = processed.to(dtype=self.dtype)
+            yield {"is_last": True, **processed, **extra}
+            return
+
         if chunk_length_s:
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
@@ -532,7 +547,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if stride is not None and num_frames is not None:
             raise ValueError("num_frames must be used only when stride is None")
 
-        if self.type in {"seq2seq", "seq2seq_whisper"}:
+        if self.model.config.model_type == "qwen3_asr":
+            inputs = {key: model_inputs.pop(key) for key in ("input_ids", "input_features", "input_features_mask")}
+            tokens = self.model.generate(
+                **inputs, attention_mask=attention_mask, **self._prepare_generate_kwargs(generate_kwargs)
+            )
+            if hasattr(tokens, "sequences"):
+                tokens = tokens.sequences
+            out = {"tokens": tokens[:, inputs["input_ids"].shape[-1] :]}
+        elif self.type in {"seq2seq", "seq2seq_whisper"}:
             # Consume values so we can let extra information flow freely through
             # the pipeline (important for `partial` in microphone)
             if "input_features" in model_inputs:
@@ -710,6 +733,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 offsets = []
                 for word, (start_offset, end_offset) in chunk_offset:
                     offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
+        elif self.model.config.model_type == "qwen3_asr":
+            text = self.processor.decode(items, return_format="transcription_only")
         elif self.type != "seq2seq_whisper":
             skip_special_tokens = self.type != "ctc"
             # CTC collapses consecutive identical tokens (a token repeated across frames is one emission); the
