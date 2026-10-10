@@ -297,8 +297,8 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
         np.ndarray: np array of frame indices that will be sampled.
     """
     warnings.warn(
-        "`get_uniform_frame_indices` is deprecated and will be removed in a future version. "
-        "Please use `default_sample_indices_fn` instead.",
+        "`get_uniform_frame_indices` is deprecated and will be removed in v5.26. "
+        "Use `default_sample_indices_fn` instead.",
         FutureWarning,
         stacklevel=2,
     )

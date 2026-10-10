@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-import warnings
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -33,7 +32,6 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
-    get_uniform_frame_indices,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -432,11 +430,3 @@ class LoadVideoTester(unittest.TestCase):
                 fps=1,
                 num_frames=10,
             )
-
-
-def test_get_uniform_frame_indices_deprecated():
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        get_uniform_frame_indices(17, 7)
-
-    assert any(issubclass(w.category, FutureWarning) and "default_sample_indices_fn" in str(w.message) for w in caught)
