@@ -21,7 +21,8 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..dac.modeling_dac import DacDecoderOutput
 from ..encodec.modeling_encodec import EncodecOutput
@@ -87,6 +88,10 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         Final dimensionality of the decoder's output before waveform generation.
     latent_dim (`int`, *optional*, defaults to 1024):
         Latent dimension used between pre-conv and transformer.
+    decoder_chunk_size (`int`, *optional*, defaults to 300):
+        Number of frames the decoder processes per chunk.
+    decoder_left_context_size (`int`, *optional*, defaults to 25):
+        Number of preceding frames prepended to each decoder chunk as context and dropped from its output.
     input_sampling_rate (`int`, *optional*, defaults to 24000):
         Sampling rate, in hertz (Hz), of the encoder's input audio waveform.
     output_sampling_rate (`int`, *optional*, defaults to 24000):
@@ -127,6 +132,8 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     head_dim: int = 64
     codebook_dim: int = 512
     latent_dim: int = 1024
+    decoder_chunk_size: int = 300
+    decoder_left_context_size: int = 25
 
     def __post_init__(self, **kwargs):
         encoder_valid_num_quantizers = kwargs.pop("encoder_valid_num_quantizers", None)
@@ -322,11 +329,24 @@ class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    def forward(self, quantized_representation, **kwargs):
+    def forward(self, quantized_representation, **kwargs: Unpack[TransformersKwargs]):
         r"""
         quantized_representation (`torch.FloatTensor` of shape `(batch_size, codebook_dim, sequence_length)`):
             Quantized continuous representation to decode into waveform values.
         """
+        chunk_size = self.config.decoder_chunk_size
+        left_context_size = self.config.decoder_left_context_size
+        wavs = []
+        start_index = 0
+        while start_index < quantized_representation.shape[-1]:
+            end_index = min(start_index + chunk_size, quantized_representation.shape[-1])
+            context_size = left_context_size if start_index - left_context_size > 0 else start_index
+            wav_chunk = self._decode_chunk(quantized_representation[..., start_index - context_size : end_index])
+            wavs.append(wav_chunk[..., context_size * self.total_upsample :])
+            start_index = end_index
+        return torch.cat(wavs, dim=-1)
+
+    def _decode_chunk(self, quantized_representation):
         hidden = self.pre_conv(quantized_representation).transpose(1, 2)
         hidden = self.input_proj(hidden)
         hidden = self.pre_transformer(inputs_embeds=hidden).last_hidden_state
@@ -339,18 +359,6 @@ class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
         for block in self.decoder:
             wav = block(wav)
         return wav.clamp(min=-1, max=1)
-
-    def chunked_decode(self, quantized_representation, chunk_size=300, left_context_size=25):
-        wavs = []
-        start_index = 0
-        while start_index < quantized_representation.shape[-1]:
-            end_index = min(start_index + chunk_size, quantized_representation.shape[-1])
-            context_size = left_context_size if start_index - left_context_size > 0 else start_index
-            hidden_states_chunk = quantized_representation[..., start_index - context_size : end_index]
-            wav_chunk = self(hidden_states_chunk)
-            wavs.append(wav_chunk[..., context_size * self.total_upsample :])
-            start_index = end_index
-        return torch.cat(wavs, dim=-1)
 
 @auto_docstring(
     custom_intro="""
@@ -430,7 +438,7 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
             Discrete code indices computed using `model.encode`.
         """
         quantized_representation = self.quantizer.decode(audio_codes.transpose(1, 2))
-        audio_values = self.decoder.chunked_decode(quantized_representation).squeeze(1)
+        audio_values = self.decoder(quantized_representation).squeeze(1)
 
         return Qwen3TTSTokenizerDecoderOutput(audio_values=audio_values)
 
