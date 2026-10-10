@@ -147,6 +147,39 @@ class DeepseekOcr2ModelTest(VLMModelTest, unittest.TestCase):
         config.vision_config.hidden_size = config.vision_config.encoder_config.hidden_size
         return config, inputs_dict
 
+    def test_set_attn_implementation_nested_subconfigs(self):
+        config = self.model_tester.get_config()
+        model = DeepseekOcr2Model(config)
+
+        # 1. Propagate string implementation to nested subconfigs
+        model.set_attn_implementation({"vision_config": "eager"})
+        self.assertEqual(model.language_model.config._attn_implementation, "sdpa")
+        self.assertEqual(model.vision_tower.config._attn_implementation, "eager")
+        self.assertEqual(model.vision_tower.sam_encoder.config._attn_implementation, "eager")
+        self.assertEqual(model.vision_tower.vision_encoder.config._attn_implementation, "eager")
+
+        # 2. Targeted nested subconfig via nested dict
+        model.set_attn_implementation("sdpa")
+        model.set_attn_implementation({"vision_config": {"sam_config": "eager"}})
+        self.assertEqual(model.vision_tower.config._attn_implementation, "sdpa")
+        self.assertEqual(model.vision_tower.sam_encoder.config._attn_implementation, "eager")
+        self.assertEqual(model.vision_tower.vision_encoder.config._attn_implementation, "sdpa")
+
+        # 3. Targeted nested subconfig via flat dict key
+        model.set_attn_implementation("sdpa")
+        model.set_attn_implementation({"sam_config": "eager"})
+        self.assertEqual(model.vision_tower.config._attn_implementation, "sdpa")
+        self.assertEqual(model.vision_tower.sam_encoder.config._attn_implementation, "eager")
+        self.assertEqual(model.vision_tower.vision_encoder.config._attn_implementation, "sdpa")
+
+        # 4. Consecutive calls work properly and do not leave _attn_was_changed behind
+        model.set_attn_implementation("eager")
+        self.assertEqual(model.vision_tower.sam_encoder.config._attn_implementation, "eager")
+        model.set_attn_implementation("sdpa")
+        self.assertEqual(model.vision_tower.sam_encoder.config._attn_implementation, "sdpa")
+        self.assertFalse(hasattr(model.vision_tower.sam_encoder.config, "_attn_was_changed"))
+        self.assertFalse(hasattr(model.vision_tower.config, "_attn_was_changed"))
+
 
 @require_torch
 class DeepseekOcr2IntegrationTest(unittest.TestCase):

@@ -1959,6 +1959,50 @@ class PreTrainedModel(
         cls._can_set_experts_implementation_cached_value = can_set
         return can_set
 
+    def _get_subconfig_target_implementations(self, attn_implementation: str | dict) -> dict[int, str]:
+        mapping = {}
+
+        def _resolve(cfg, spec, inherited_impl, is_root=False):
+            current_attn = getattr(cfg, "_attn_implementation", None)
+            if isinstance(spec, str):
+                target = spec
+                child_inherited = spec
+                child_dict = None
+            elif isinstance(spec, dict):
+                if is_root:
+                    target = spec.get("", current_attn)
+                else:
+                    target = inherited_impl if inherited_impl is not None else current_attn
+                child_inherited = inherited_impl
+                child_dict = spec
+            else:
+                target = inherited_impl if inherited_impl is not None else current_attn
+                child_inherited = inherited_impl
+                child_dict = None
+
+            mapping[id(cfg)] = target
+
+            for subconfig_key in getattr(cfg, "sub_configs", {}):
+                subconfig = getattr(cfg, subconfig_key, None)
+                if subconfig is not None:
+                    if child_dict is not None and subconfig_key in child_dict:
+                        sub_spec = child_dict[subconfig_key]
+                        _resolve(
+                            subconfig,
+                            sub_spec,
+                            sub_spec if isinstance(sub_spec, str) else child_inherited,
+                            is_root=False,
+                        )
+                    elif child_dict is not None:
+                        _resolve(subconfig, child_dict, child_inherited, is_root=False)
+                    elif isinstance(spec, str):
+                        _resolve(subconfig, spec, child_inherited, is_root=False)
+                    else:
+                        _resolve(subconfig, None, child_inherited, is_root=False)
+
+        _resolve(self.config, attn_implementation, None, is_root=True)
+        return mapping
+
     def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
         """
         Set the requested `attn_implementation` for this model.
@@ -1993,7 +2037,10 @@ class PreTrainedModel(
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
 
+        target_implementations = self._get_subconfig_target_implementations(attn_implementation)
+
         # Apply it to all submodels as well
+        changed_configs = []
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
             # e.g. ForCausalLM has a Model inside, but no need to check it again)
@@ -2013,15 +2060,7 @@ class PreTrainedModel(
                     )
                 # Set the attn on the submodule
                 else:
-                    sub_implementation = requested_implementation
-                    if isinstance(attn_implementation, dict):
-                        for subconfig_key in self.config.sub_configs:
-                            # We need to check for exact object match here, with `is`
-                            if getattr(self.config, subconfig_key) is submodule.config:
-                                sub_implementation = attn_implementation.get(
-                                    subconfig_key, submodule.config._attn_implementation
-                                )
-                                break
+                    sub_implementation = target_implementations.get(id(submodule.config), requested_implementation)
                     # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation_internal = sub_implementation
@@ -2029,37 +2068,48 @@ class PreTrainedModel(
                 # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
                 # We need to set it on the config itself, to differentiate 2 subconfigs of the same __class__ potentially
                 submodule.config._attn_was_changed = True
+                changed_configs.append(submodule.config)
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
-        for subconfig_key in self.config.sub_configs:
-            if (subconfig := getattr(self.config, subconfig_key)) is not None:
-                sub_implementation = (
-                    requested_implementation
-                    if not isinstance(attn_implementation, dict)
-                    else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-                )
-                # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
-                if (
-                    not hasattr(subconfig, "_attn_was_changed")
-                    # If it's already the same, then no need to enter here and raise warnings
-                    and sub_implementation != subconfig._attn_implementation
-                ):
-                    if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-                        raise ValueError(
-                            f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
-                            'The only possible arguments are "eager" (manual attention implementation)'
-                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+        def _apply_to_subconfigs(cfg):
+            for subconfig_key in getattr(cfg, "sub_configs", {}):
+                if (subconfig := getattr(cfg, subconfig_key)) is not None:
+                    sub_implementation = target_implementations.get(id(subconfig), requested_implementation)
+                    # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
+                    if (
+                        not hasattr(subconfig, "_attn_was_changed")
+                        # If it's already the same, then no need to enter here and raise warnings
+                        and sub_implementation != subconfig._attn_implementation
+                    ):
+                        if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                            raise ValueError(
+                                f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                                'The only possible arguments are "eager" (manual attention implementation)'
+                                f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                            )
+                        subconfig._attn_implementation_internal = sub_implementation
+                        logger.warning(
+                            f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
+                            "without finding the associated sub-model. For this reason we could not check if the model supports it. "
+                            "You may encounter undefined behavior."
                         )
-                    subconfig._attn_implementation_internal = sub_implementation
-                    logger.warning(
-                        f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
-                        "without finding the associated sub-model. For this reason we could not check if the model supports it. "
-                        "You may encounter undefined behavior."
-                    )
-                # Unset the attribute in this case, to avoid issues in the future
-                else:
+                    _apply_to_subconfigs(subconfig)
+
+        _apply_to_subconfigs(self.config)
+
+        # Unset the attribute in all cases, to avoid issues in future calls
+        for cfg in changed_configs:
+            if hasattr(cfg, "_attn_was_changed"):
+                del cfg._attn_was_changed
+
+        def _clean_attn_was_changed(cfg):
+            for subconfig_key in getattr(cfg, "sub_configs", {}):
+                if (subconfig := getattr(cfg, subconfig_key)) is not None:
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
+                    _clean_attn_was_changed(subconfig)
+
+        _clean_attn_was_changed(self.config)
 
     def get_experts_implementation(self) -> dict[str, str | None]:
         """
