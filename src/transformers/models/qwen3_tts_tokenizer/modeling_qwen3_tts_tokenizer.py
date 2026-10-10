@@ -45,11 +45,7 @@ from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_qwen3_tts_tokenizer import (
-    Qwen3TTSTokenizerCode2WavConfig,
-    Qwen3TTSTokenizerConfig,
-    Qwen3TTSTokenizerQuantizerConfig,
-)
+from .configuration_qwen3_tts_tokenizer import Qwen3TTSTokenizerConfig, Qwen3TTSTokenizerQuantizerConfig
 
 
 logger = logging.get_logger(__name__)
@@ -481,7 +477,7 @@ class Qwen3TTSTokenizerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Qwen3TTSTokenizerCode2WavPreTrainedModel(Qwen3TTSTokenizerPreTrainedModel):
-    config_class = Qwen3TTSTokenizerCode2WavConfig
+    config_class = Qwen3TTSTokenizerConfig
     _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
 
 
@@ -505,7 +501,7 @@ class Qwen3TTSTokenizerCode2WavDecoderResidualUnit(nn.Module):
 
 
 class Qwen3TTSTokenizerDecoderBlock(Qwen3TTSTokenizerPreTrainedModel):
-    def __init__(self, config: Qwen3TTSTokenizerCode2WavConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
         super().__init__(config)
         in_dim = config.decoder_dim // 2**layer_idx
         out_dim = config.decoder_dim // 2 ** (layer_idx + 1)
@@ -749,83 +745,6 @@ class Qwen3TTSTokenizerSplitResidualVectorQuantizer(nn.Module):
         return quantized_out
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Qwen3TTSTokenizerRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Qwen3TTSTokenizerRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class Qwen3TTSTokenizerRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen3TTSTokenizerConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: Qwen3TTSTokenizerConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -900,7 +819,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 class Qwen3TTSTokenizerCode2WavAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Qwen3TTSTokenizerCode2WavConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
@@ -1022,7 +941,7 @@ class Qwen3TTSTokenizerCode2WavLayerScale(nn.Module):
 
 
 class Qwen3TTSTokenizerCode2WavTransformerLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Qwen3TTSTokenizerCode2WavConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Qwen3TTSTokenizerCode2WavAttention(config, layer_idx)
@@ -1083,6 +1002,83 @@ class Qwen3TTSTokenizerCode2WavTransformerLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Qwen3TTSTokenizerRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Qwen3TTSTokenizerRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class Qwen3TTSTokenizerRotaryEmbedding(nn.Module):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: Qwen3TTSTokenizerConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(
+        config: Qwen3TTSTokenizerConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 @auto_docstring
 class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel):
     _can_record_outputs = {
@@ -1090,7 +1086,7 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel)
         "attentions": Qwen3TTSTokenizerCode2WavAttention,
     }
 
-    def __init__(self, config: Qwen3TTSTokenizerCode2WavConfig):
+    def __init__(self, config: Qwen3TTSTokenizerConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [
@@ -1176,7 +1172,7 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel)
 
 
 class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
-    config_class = Qwen3TTSTokenizerCode2WavConfig
+    config_class = Qwen3TTSTokenizerConfig
 
     def __init__(self, config: config_class):
         super().__init__(config)
@@ -2071,7 +2067,7 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
 
         self.encoder = Qwen3TTSTokenizerEncoderModel(self.config.encoder_config)
         self.quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(self.config.quantizer_config)
-        self.decoder = Qwen3TTSTokenizerDecoder(self.config.decoder_config)
+        self.decoder = Qwen3TTSTokenizerDecoder(config)
 
         self.post_init()
 
