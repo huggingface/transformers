@@ -19,7 +19,6 @@ import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn.utils.rnn import pad_sequence
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutput
@@ -28,7 +27,6 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..dac.modeling_dac import DacDecoderOutput
-from ..encodec.modeling_encodec import EncodecOutput
 from ..mimi.modeling_mimi import (
     MimiConv1d,
     MimiEncoder,
@@ -226,8 +224,21 @@ class Qwen3TTSTokenizerDecoderOutput(DacDecoderOutput):
     pass
 
 
-class Qwen3TTSTokenizerOutput(EncodecOutput):
-    pass
+@auto_docstring
+@dataclass
+class Qwen3TTSTokenizerOutput(ModelOutput):
+    r"""
+    audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        Decoded audio waveform, truncated to the input length.
+    audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
+        Discrete code indices computed using `model.encode`.
+    audio_codes_mask (`torch.Tensor` of shape `(batch_size, codes_length)`, *optional*):
+        Downsampled `padding_mask` indicating the valid frames in `audio_codes`.
+    """
+
+    audio_values: torch.FloatTensor | None = None
+    audio_codes: torch.LongTensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
 
@@ -478,14 +489,12 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         """
         length = input_values.shape[-1]
         encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)
-        audio_codes = pad_sequence(encoder_outputs.audio_codes, batch_first=True, padding_value=-1)
-
-        decoder_outputs = self.decode(audio_codes.clamp(min=0), return_dict=True)
-        audio_values = decoder_outputs.audio_values[..., :length]
+        audio_values = self.decode(encoder_outputs.audio_codes, return_dict=True).audio_values[..., :length]
 
         return Qwen3TTSTokenizerOutput(
             audio_values=audio_values,
-            audio_codes=audio_codes,
+            audio_codes=encoder_outputs.audio_codes,
+            audio_codes_mask=encoder_outputs.audio_codes_mask,
         )
 
 
