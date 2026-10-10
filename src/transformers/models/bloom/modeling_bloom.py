@@ -602,9 +602,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             if attention_mask is None:
                 input_tensor = input_ids if input_ids is not None else inputs_embeds
                 batch_size, seq_length = input_tensor.shape[:2]
-                attention_mask = torch.ones(
-                    batch_size, seq_length, device=input_tensor.device, dtype=torch.long
-                )
+                attention_mask = torch.ones(batch_size, seq_length, device=input_tensor.device, dtype=torch.long)
             else:
                 batch_size, seq_length = attention_mask.shape
             diff = target_length - seq_length
