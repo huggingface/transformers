@@ -604,7 +604,6 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Blip2QFormer
 class Blip2QFormerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -644,7 +643,6 @@ class Blip2QFormerAttention(nn.Module):
         return attention_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Blip2QFormer
 class Blip2QFormerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -660,7 +658,6 @@ class Blip2QFormerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Blip2QFormer
 class Blip2QFormerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
