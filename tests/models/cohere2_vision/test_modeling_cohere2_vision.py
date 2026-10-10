@@ -199,7 +199,7 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @require_torch_accelerator
     def test_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = self.get_model(dummy=False)
+        self.model = self.get_model(dummy=False)
         messages = [
             {
                 "role": "user",
@@ -220,7 +220,7 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ).to(torch_device, dtype=torch.float16)
         # Forward
         with torch.inference_mode():
-            output = model(**inputs)
+            output = self.model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
 
@@ -319,7 +319,7 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @require_torch_accelerator
     def test_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = self.get_model(dummy=False)
+        self.model = self.get_model(dummy=False)
         # Prepare inputs
         messages = [
             [
@@ -353,9 +353,9 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ]
         inputs = processor.apply_chat_template(
             messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ).to(model.device, dtype=torch.float16)
+        ).to(self.model.device, dtype=torch.float16)
 
-        output = model.generate(**inputs, do_sample=False, max_new_tokens=5)
+        output = self.model.generate(**inputs, do_sample=False, max_new_tokens=5)
 
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
