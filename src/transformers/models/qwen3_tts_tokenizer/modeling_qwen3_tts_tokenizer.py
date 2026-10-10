@@ -136,121 +136,18 @@ class Qwen3TTSTokenizerConvNeXtBlock(nn.Module):
         return hidden_states
 
 
-class Qwen3TTSTokenizerConv1dPaddingCache:
-    """
-    Padding cache for Qwen3TTSTokenizerConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
-
-    A padding cache is a list of cached partial hidden states for each convolution layer.
-    Hidden states are cached from the previous call to the Qwen3TTSTokenizerConv1d forward pass, given the padding size.
-    """
-
-    def __init__(
-        self,
-        num_layers: int,
-        per_layer_padding: list[int],
-        per_layer_padding_mode: list[str],
-        per_layer_in_channels: list[int],
-    ):
-        # ensure correct number of layers for each arg
-        from_args_num_layers = {len(per_layer_padding), len(per_layer_padding_mode), len(per_layer_in_channels)}
-
-        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
-            raise ValueError(
-                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
-            )
-
-        self.per_layer_padding = per_layer_padding
-        self.per_layer_padding_mode = per_layer_padding_mode
-        self.per_layer_in_channels = per_layer_in_channels
-
-        self.padding_cache = [None] * num_layers
-
-    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Initialize the cache for a specific layer.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to initialize the cache with.
-            layer_idx (`int`):
-                The index of the layer to initialize the cache for.
-        Returns:
-            `torch.Tensor`, the initialized cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, padding_mode, in_channels = (
-            self.per_layer_padding[layer_idx],
-            self.per_layer_padding_mode[layer_idx],
-            self.per_layer_in_channels[layer_idx],
-        )
-
-        if padding_mode == "constant":
-            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
-        elif padding_mode == "replicate":
-            current_cache = (
-                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
-            )
-        else:
-            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
-
-        return current_cache
-
-    def update(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to be partially cached.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
-
-        if self.padding_cache[layer_idx] is None:
-            current_cache = self._cache_init(hidden_states, layer_idx)
-        else:
-            current_cache = self.padding_cache[layer_idx]
-
-        # update the cache
-        if padding > 0:
-            shortfall = max(0, padding - hidden_states.shape[-1])
-            if shortfall > 0:
-                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
-            else:
-                padding_states = hidden_states[:, :, -padding:]
-        else:
-            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
-
-        self.padding_cache[layer_idx] = padding_states
-        return current_cache
-
-
 @auto_docstring
 @dataclass
 class Qwen3TTSTokenizerEncoderOutput(ModelOutput):
     r"""
-    audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-        Discrete code embeddings computed using `model.encode`.
-    encoder_past_key_values (`Cache`, *optional*):
-        Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
-        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-        The model will output the same cache format that is fed as input.
-
-        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-        have their past key value states given to this model).
-    padding_cache (`Qwen3TTSTokenizerConv1dPaddingCache`, *optional*):
-        Padding cache for Qwen3TTSTokenizerConv1d causal convolutions in order to support streaming via cache padding.
+    audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
+        Discrete code indices computed using `model.encode`.
+    audio_codes_mask (`torch.Tensor` of shape `(batch_size, codes_length)`, *optional*):
+        Downsampled `padding_mask` indicating the valid frames in `audio_codes`.
     """
 
     audio_codes: torch.LongTensor | None = None
-    encoder_past_key_values: Cache | None = None
-    padding_cache: Qwen3TTSTokenizerConv1dPaddingCache | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -1683,18 +1580,17 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Padding mask used to pad `input_values`.
         """
-
-        if padding_mask is None:
-            padding_mask = torch.ones_like(input_values).bool()
-
         embeddings = self.encoder(input_values.unsqueeze(1)).last_hidden_state
-        audio_codes = self.quantizer.encode(embeddings).transpose(0, 1)
-        audio_codes = [
-            code[..., : -(-mask.sum() // self.encoder.config.frame_size)].transpose(0, 1)
-            for code, mask in zip(audio_codes, padding_mask)
-        ]
+        audio_codes = self.quantizer.encode(embeddings).permute(1, 2, 0)
 
-        return Qwen3TTSTokenizerEncoderOutput(audio_codes=audio_codes)
+        audio_codes_mask = None
+        if padding_mask is not None:
+            frame_size = self.config.encoder_config.frame_size
+            codes_length = (padding_mask.sum(dim=-1, keepdim=True) + frame_size - 1) // frame_size
+            frame_index = torch.arange(audio_codes.shape[1], device=padding_mask.device).view(1, -1)
+            audio_codes_mask = (frame_index < codes_length).to(padding_mask.dtype)
+
+        return Qwen3TTSTokenizerEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
 
     @can_return_tuple
     @auto_docstring
