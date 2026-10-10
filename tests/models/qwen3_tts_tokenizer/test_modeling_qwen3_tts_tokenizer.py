@@ -350,7 +350,7 @@ class Qwen3TTSTokenizerIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             encoded = model.encode(input_values, padding_mask=padding_mask)
-            codes_list = encoded.audio_codes  # list of [time_i, num_quantizers]
+        codes_list = [codes[mask.bool()] for codes, mask in zip(encoded.audio_codes, encoded.audio_codes_mask)]
 
         for i, exp_codes in enumerate(expected["audio_codes"]):
             torch.testing.assert_close(
