@@ -560,6 +560,9 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
         super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section")
 
+    # Explicit decorator replaces Llama's inherited `@dynamic_rope_update`. HunYuan VL keeps
+    # `rope_type="dynamic"` for the NTK-alpha init path, but those frequencies are static.
+    @torch.no_grad()
     def forward(self, x, position_ids):
         # One row of positions per M-RoPE axis: (num_axes, bs, positions)
         position_ids = position_ids.expand(len(self.mrope_section), -1, -1)
