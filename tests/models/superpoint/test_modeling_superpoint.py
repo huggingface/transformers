@@ -15,8 +15,17 @@ import inspect
 import unittest
 from functools import cached_property
 
+import pytest
+
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -238,6 +247,27 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
                 with self.assertRaises(ValueError) as cm:
                     model(**model_inputs)
                 self.assertEqual(ValueError, cm.exception.__class__)
+
+    @slow
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    def test_compile_forward(self):
+        # Regression test: the list comprehensions in the forward pass used to shadow `last_hidden_state`,
+        # which raised an `UnboundLocalError` in the resume function generated after a dynamo graph break.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            torch._dynamo.reset()
+            compiled_model = torch.compile(model)
+
+            with torch.no_grad():
+                outputs = compiled_model(**self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertIsNotNone(outputs.keypoints)
+            self.assertIsNotNone(outputs.descriptors)
 
 
 def prepare_imgs():
