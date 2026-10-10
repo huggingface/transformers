@@ -191,6 +191,55 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+    def test_first_fusion_layer_has_no_unused_residual_parameters(self):
+        """The first fusion layer never receives a residual, so it should not expose checkpoint parameters for one."""
+        first_residual_prefix = "neck.fusion_stage.layers.0.residual_layer1."
+        second_residual_prefix = "neck.fusion_stage.layers.1.residual_layer1."
+
+        for model_class in (DPTForDepthEstimation, DPTForSemanticSegmentation):
+            with self.subTest(model_class=model_class.__name__):
+                model = model_class(self.model_tester.get_config())
+                state_dict_keys = model.state_dict().keys()
+
+                self.assertIsNone(model.neck.fusion_stage.layers[0].residual_layer1)
+                self.assertIsNotNone(model.neck.fusion_stage.layers[1].residual_layer1)
+                self.assertFalse(any(key.startswith(first_residual_prefix) for key in state_dict_keys))
+                self.assertTrue(any(key.startswith(second_residual_prefix) for key in state_dict_keys))
+
+    def test_load_legacy_first_fusion_residual_parameters(self):
+        first_residual_prefix = "neck.fusion_stage.layers.0.residual_layer1."
+        second_residual_prefix = "neck.fusion_stage.layers.1.residual_layer1."
+        unrelated_key = "unrelated.weight"
+
+        for model_class in (DPTForDepthEstimation, DPTForSemanticSegmentation):
+            for use_batch_norm in (False, True):
+                with self.subTest(model_class=model_class.__name__, use_batch_norm=use_batch_norm):
+                    config = self.model_tester.get_config()
+                    config.use_batch_norm_in_fusion_residual = use_batch_norm
+                    model = model_class(config)
+                    legacy_state_dict = model.state_dict()
+
+                    legacy_keys = []
+                    for key, value in list(legacy_state_dict.items()):
+                        if key.startswith(second_residual_prefix):
+                            legacy_key = key.replace(second_residual_prefix, first_residual_prefix, 1)
+                            legacy_state_dict[legacy_key] = value.clone()
+                            legacy_keys.append(legacy_key)
+                    legacy_state_dict[unrelated_key] = torch.zeros(1)
+
+                    _, loading_info = model_class.from_pretrained(
+                        None,
+                        config=config,
+                        state_dict=legacy_state_dict,
+                        output_loading_info=True,
+                        local_files_only=True,
+                    )
+
+                    self.assertGreater(len(legacy_keys), 0)
+                    self.assertEqual(loading_info["missing_keys"], set())
+                    self.assertEqual(loading_info["unexpected_keys"], {unrelated_key})
+                    self.assertEqual(loading_info["error_msgs"], [])
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
