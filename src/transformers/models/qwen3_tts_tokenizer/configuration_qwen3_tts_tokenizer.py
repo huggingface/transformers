@@ -113,21 +113,15 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     decoder_left_context_size: int = 25
 
     def __post_init__(self, **kwargs):
-        encoder_valid_num_quantizers = kwargs.pop("encoder_valid_num_quantizers", None)
+        # The original checkpoint carries `encoder_valid_num_quantizers`; the codebook count lives in `quantizer_config`.
+        kwargs.pop("encoder_valid_num_quantizers", None)
 
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "mimi")
-            self.encoder_config["num_quantizers"] = self.encoder_config.get("num_quantizers", 16)
             self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
         elif self.encoder_config is None:
             logger.info("encoder_config is None. Initializing V2 encoder with default values.")
-            self.encoder_config = CONFIG_MAPPING["mimi"](num_quantizers=16)
-
-        self.encoder_config.valid_num_quantizers = (
-            self.encoder_config.num_quantizers
-            if encoder_valid_num_quantizers is None
-            else encoder_valid_num_quantizers
-        )
+            self.encoder_config = CONFIG_MAPPING["mimi"]()
 
         # The original checkpoint nests the decoder settings, including the quantizer's, under `decoder_config`.
         decoder_config = kwargs.pop("decoder_config", None) or {}

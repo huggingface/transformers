@@ -28,12 +28,14 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 from ..dac.modeling_dac import DacDecoderOutput
 from ..encodec.modeling_encodec import EncodecOutput
 from ..mimi.modeling_mimi import (
+    MimiConv1d,
+    MimiEncoder,
     MimiEncoderOutput,
     MimiEuclideanCodebook,
-    MimiModel,
     MimiPreTrainedModel,
     MimiResidualVectorQuantizer,
     MimiSplitResidualVectorQuantizer,
+    MimiTransformerModel,
     MimiVectorQuantization,
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
@@ -137,21 +139,15 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     decoder_left_context_size: int = 25
 
     def __post_init__(self, **kwargs):
-        encoder_valid_num_quantizers = kwargs.pop("encoder_valid_num_quantizers", None)
+        # The original checkpoint carries `encoder_valid_num_quantizers`; the codebook count lives in `quantizer_config`.
+        kwargs.pop("encoder_valid_num_quantizers", None)
 
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "mimi")
-            self.encoder_config["num_quantizers"] = self.encoder_config.get("num_quantizers", 16)
             self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
         elif self.encoder_config is None:
             logger.info("encoder_config is None. Initializing V2 encoder with default values.")
-            self.encoder_config = CONFIG_MAPPING["mimi"](num_quantizers=16)
-
-        self.encoder_config.valid_num_quantizers = (
-            self.encoder_config.num_quantizers
-            if encoder_valid_num_quantizers is None
-            else encoder_valid_num_quantizers
-        )
+            self.encoder_config = CONFIG_MAPPING["mimi"]()
 
         # The original checkpoint nests the decoder settings, including the quantizer's, under `decoder_config`.
         decoder_config = kwargs.pop("decoder_config", None) or {}
@@ -243,21 +239,10 @@ class Qwen3TTSTokenizerSnakeBeta(Qwen2_5OmniSnakeBeta):
     pass
 
 class Qwen3TTSTokenizerEuclideanCodebook(MimiEuclideanCodebook):
-    def __init__(self, config: PreTrainedConfig, epsilon: float = 1e-5):
-        nn.Module.__init__(self)
-        embed = torch.zeros(config.codebook_size, config.codebook_dim)
-
-        self.codebook_size = config.codebook_size
-        # The top-level quantizer flag is absent from the original checkpoint and defaults to the correct loaded state.
-        # The Mimi encoder's flags remain persistent because they are serialized by the original checkpoint.
-        self.initialized = nn.Buffer(
-            torch.tensor([True], dtype=torch.float32),
-            persistent=not isinstance(config, Qwen3TTSTokenizerQuantizerConfig),
-        )
-        self.cluster_usage = nn.Buffer(torch.ones(config.codebook_size))
-        self.embed_sum = nn.Buffer(embed)
-        self._embed = None
-        self.epsilon = epsilon
+    def __init__(self, config, epsilon: float = 1e-5):
+        super().__init__(config, epsilon)
+        # Not stored in the original checkpoint; `_init_weights` sets it.
+        self.initialized = nn.Buffer(torch.tensor([True], dtype=torch.float32), persistent=False)
 
 
 class Qwen3TTSTokenizerVectorQuantization(MimiVectorQuantization):
@@ -361,23 +346,38 @@ class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
             wav = block(wav)
         return wav.clamp(min=-1, max=1)
 
+class Qwen3TTSTokenizerEncoder(MimiEncoder):
+    pass
+
+
+class Qwen3TTSTokenizerTransformerModel(MimiTransformerModel):
+    pass
+
+
+class Qwen3TTSTokenizerConv1d(MimiConv1d):
+    pass
+
+
 @auto_docstring(
     custom_intro="""
-    The Qwen3TTSTokenizer encoder model, based on MimiModel but only using the encoder path.
+    The Qwen3TTSTokenizer encoder: Mimi's convolutional encoder, encoder transformer, and downsampling layer.
     """
 )
-class Qwen3TTSTokenizerEncoderModel(MimiModel):
+class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        # Encoder-only model: waveform reconstruction is handled by the separate multi-codebook
-        # decoder, so Mimi's decode stack is dropped. `upsample` is cleared through `setattr`
-        # because Mimi assigns it twice — once as `None`, then conditionally as a module — and a
-        # plain `self.upsample = None` here is folded into the first of those by the modular
-        # converter, leaving the module to be rebuilt afterwards. It has no weights in the
-        # checkpoint, so keeping it would ship a randomly initialized parameter.
-        self.decoder = None
-        self.decoder_transformer = None
-        setattr(self, "upsample", None)
+        self.encoder = Qwen3TTSTokenizerEncoder(config)
+        self.encoder_transformer = Qwen3TTSTokenizerTransformerModel(config)
+        self.downsample = Qwen3TTSTokenizerConv1d(
+            config,
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
+            stride=2,
+            bias=False,
+            pad_mode="replicate",
+        )
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -399,6 +399,8 @@ class Qwen3TTSTokenizerEncoderModel(MimiModel):
 class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):
     config_class = Qwen3TTSTokenizerConfig
     main_input_name = "input_values"
+    # The original checkpoint also stores the encoder's own copy of the quantizer, identical to `quantizer`.
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.quantizer\."]
 
     def __init__(self, config: Qwen3TTSTokenizerConfig):
         super().__init__(config)
