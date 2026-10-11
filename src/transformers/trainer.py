@@ -4090,6 +4090,12 @@ class Trainer:
             # closing barrier. (PEFT models fall through to the adapter-only save below.)
             self._save(output_dir)
 
+        elif self.is_distributed_loading_by_transformers and self.args.should_save:
+            # PEFT gathers every `DTensor` in the state dict it saves, a collective, and builds that state dict from
+            # the whole sharded model by default. Hand it the adapter's own parameters, plain tensors.
+            state_dict = {name: param for name, param in self.model.named_parameters() if param.requires_grad}
+            self._save(output_dir, state_dict=state_dict)
+
         elif self.args.should_save:
             self._save(output_dir)
 
