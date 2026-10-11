@@ -2144,11 +2144,10 @@ class ModelUtilsTest(TestCasePlus):
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             device = torch.device(f"{device_type}:0")
 
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             t0 = time.time()
             model = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=torch.float16, device_map=device)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             dt = time.time() - t0
 
             # Assert loading is faster (it should be more than enough in both cases)
