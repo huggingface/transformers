@@ -589,7 +589,7 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if checkpoint != "shahvandit/qwen3-tts-base-hf":
             return
         sampling_rate = processor.audio_tokenizer.config.input_sampling_rate
-        input_values = torch.sin(torch.arange(sampling_rate) * (2 * torch.pi * 440 / sampling_rate))[None]
+        input_values = torch.sin(torch.arange(sampling_rate) * (2 * torch.pi * 440 / sampling_rate))[None, None]
         with torch.no_grad():
             codes = processor.audio_tokenizer.encode(input_values).audio_codes[0]
             audio = processor.decode(codes)

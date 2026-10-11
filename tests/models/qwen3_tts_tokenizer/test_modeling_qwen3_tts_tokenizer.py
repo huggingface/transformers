@@ -97,10 +97,8 @@ class Qwen3TTSTokenizerModelTester:
         )
 
     def prepare_config_and_inputs(self):
-        # top-level encode expects (batch, channels, seq) â€” channels=1
-        input_values = torch.randn([self.batch_size, self.audio_samples], device=torch_device)
+        input_values = torch.randn([self.batch_size, 1, self.audio_samples], device=torch_device)
         padding_mask = torch.ones([self.batch_size, self.audio_samples], dtype=torch.bool, device=torch_device)
-        # top-level decode expects (batch, seq_length, num_quantizers)
         config = self.get_config()
         return config, {"input_values": input_values, "padding_mask": padding_mask}
 
@@ -110,7 +108,7 @@ class Qwen3TTSTokenizerModelTester:
     def create_and_check_model_forward(self, config, inputs_dict):
         model = Qwen3TTSTokenizerModel(config=config).to(torch_device).eval()
         result = model(**inputs_dict)
-        self.parent.assertEqual(result.audio_values.shape, inputs_dict["input_values"].shape)
+        self.parent.assertEqual(result.audio_values.shape, inputs_dict["padding_mask"].shape)
 
 
 if is_torch_available():
@@ -157,7 +155,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(outputs.audio_codes, encoded.audio_codes)
         torch.testing.assert_close(outputs.audio_codes_mask, encoded.audio_codes_mask)
         self.assertLess(outputs.audio_codes_mask[0].sum(), outputs.audio_codes_mask[1].sum())
-        self.assertEqual(outputs.audio_values.shape, inputs_dict["input_values"].shape)
+        self.assertEqual(outputs.audio_values.shape, inputs_dict["padding_mask"].shape)
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -295,8 +293,8 @@ class Qwen3TTSTokenizerIntegrationTest(unittest.TestCase):
         ).eval()
 
         samples = self._load_datasamples(1)
-        input_values = torch.tensor(samples[0]).unsqueeze(0).to(model.device)
-        padding_mask = torch.ones_like(input_values).bool()
+        input_values = torch.tensor(samples[0])[None, None].to(model.device)
+        padding_mask = torch.ones(1, input_values.shape[-1], dtype=torch.bool, device=model.device)
 
         with torch.no_grad():
             encoded = model.encode(input_values, padding_mask=padding_mask)
@@ -338,7 +336,7 @@ class Qwen3TTSTokenizerIntegrationTest(unittest.TestCase):
         max_len = max(len(sample) for sample in samples)
         input_values = torch.stack(
             [torch.tensor(np.pad(sample, (0, max_len - len(sample)))) for sample in samples]
-        ).to(model.device)
+        ).unsqueeze(1).to(model.device)
         padding_mask = torch.stack(
             [
                 torch.tensor(np.concatenate([np.ones(len(sample)), np.zeros(max_len - len(sample))]).astype(bool))
