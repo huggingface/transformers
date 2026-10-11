@@ -3110,16 +3110,22 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
         test_case.fail(f"{results['error']}")
 
 
+# Devices locked to the process that opens them; a device spec adds its own with `SINGLE_PROCESS_DEVICE = True`
+SINGLE_PROCESS_DEVICES = {"tpu"}
+
+
 def run_test_using_subprocess(func):
     """
     To decorate a test to run in a subprocess using the `subprocess` module. This could avoid potential GPU memory
     issues (GPU OOM or a test that causes many subsequential failing with `CUDA error: device-side assert triggered`).
+
+    On devices in `SINGLE_PROCESS_DEVICES`, the test runs in the current process instead.
     """
     import pytest
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
+        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1" or torch_device in SINGLE_PROCESS_DEVICES:
             func(*args, **kwargs)
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
@@ -3537,6 +3543,9 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
+
+        if getattr(device_spec_module, "SINGLE_PROCESS_DEVICE", False):
+            SINGLE_PROCESS_DEVICES.add(torch_device)
 
 
 def compare_pipeline_output_to_hub_spec(output, hub_spec):
