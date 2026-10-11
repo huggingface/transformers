@@ -70,18 +70,17 @@ print("Input audio shape:", inputs["input_values"].shape)
 
 with torch.no_grad():
     # encode: one frame per 1920 input samples, 16 codes per frame
-    codes = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes[0]
-    print("Codes shape:", codes.shape)
-    # Codes shape: torch.Size([116, 16])
+    audio_codes = model.encode(**inputs).audio_codes
+    print("Audio codes shape:", audio_codes.shape)
+    # Audio codes shape: torch.Size([1, 116, 16])
 
-    # decode: `decode` is batched, so add back the batch dimension
-    audio_values = model.decode(codes.unsqueeze(0)).audio_values[0]
+    audio_values = model.decode(audio_codes).audio_values
     print("Reconstructed audio shape:", audio_values.shape)
-    # Reconstructed audio shape: torch.Size([222720])
+    # Reconstructed audio shape: torch.Size([1, 222720])
 
 # save audio
 output_fp = "qwen3_tts_tokenizer_reconstructed.wav"
-wavfile.write(output_fp, model.config.output_sampling_rate, audio_values.float().cpu().numpy())
+wavfile.write(output_fp, model.config.output_sampling_rate, audio_values[0].float().cpu().numpy())
 print(f"Reconstructed audio saved to: {output_fp}")
 ```
 
