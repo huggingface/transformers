@@ -902,7 +902,7 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
     for i, (sublist, *paired_sublists) in enumerate(zip(normalized_images, *normalized_paired)):
         for j, (image, *paired_values) in enumerate(zip(sublist, *paired_sublists)):
             key = (i, j) if is_nested else j
-            shape = image.shape[1:]
+            shape = image.shape
 
             # Add to grouped structures
             grouped_images[shape].append(image)

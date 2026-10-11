@@ -34,9 +34,11 @@ if is_vision_available():
         corners_to_center_format,
         flip_channel_order,
         get_resize_output_image_size,
+        group_images_by_shape,
         id_to_rgb,
         normalize,
         pad,
+        reorder_images,
         resize,
         rgb_to_id,
         to_channel_dimension_format,
@@ -645,3 +647,29 @@ class ImageTransformsTester(unittest.TestCase):
                 flip_channel_order(img_channels_first, input_data_format="channels_first"), flipped_img_channels_first
             )
         )
+
+    @require_torch
+    def test_group_images_by_shape_mixed_channels(self):
+        # Images sharing a spatial size but differing in channel count (e.g. grayscale
+        # vs RGB) must land in separate groups: the group key must be the full shape,
+        # so each group's tensors can be torch.stack-ed.
+        gray = torch.zeros(1, 700, 1000)
+        rgb1 = torch.zeros(3, 700, 1000)
+        rgb2 = torch.zeros(3, 700, 1000)
+        images = [gray, rgb1, rgb2]
+
+        grouped, grouped_index = group_images_by_shape(images, disable_grouping=False)
+
+        self.assertEqual(set(grouped), {(1, 700, 1000), (3, 700, 1000)})
+        for shape, stacked in grouped.items():
+            # every group must be stackable: uniform full shape
+            self.assertEqual(tuple(stacked.shape[1:]), tuple(shape))
+
+        # same-channel images of the same shape are still batched into one group
+        self.assertEqual(grouped[(3, 700, 1000)].shape[0], 2)
+        self.assertEqual(grouped[(1, 700, 1000)].shape[0], 1)
+
+        # reordering restores the original per-image order
+        reordered = reorder_images(grouped, grouped_index)
+        self.assertEqual(len(reordered), 3)
+        self.assertEqual([tuple(t.shape) for t in reordered], [tuple(t.shape) for t in images])
