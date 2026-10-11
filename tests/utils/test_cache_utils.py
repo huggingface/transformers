@@ -198,53 +198,38 @@ class CacheTest(unittest.TestCase):
         enc_dec = EncoderDecoderCache(DynamicCache(), DynamicCache())
         self.assertEqual(enc_dec.get_max_length(), -1)
 
-    def test_dynamic_cache_batch_size(self):
-        dc = DynamicCache()
-        self.assertEqual(dc.batch_size, -1)
-
-        dc.update(torch.randn(2, 4, 5, 8), torch.randn(2, 4, 5, 8), layer_idx=0)
-        self.assertEqual(dc.batch_size, 2)
-
-        # Beam reorder
-        dc.reorder_cache(torch.tensor([0, 0, 1, 1]))
-        self.assertEqual(dc.batch_size, 4)
-
-        # Reset
-        dc.reset()
-        self.assertEqual(dc.batch_size, -1)
-
     def test_encoder_decoder_cache_properties(self):
+        """`EncoderDecoderCache` has no `layers` of its own, so these must delegate to the underlying caches instead of
+        falling back to the `Cache` implementations, which raised `AttributeError`."""
         enc_dec = EncoderDecoderCache(DynamicCache(), DynamicCache())
         self.assertEqual(enc_dec.batch_size, -1)
         self.assertFalse(enc_dec.is_initialized)
         self.assertEqual(enc_dec.is_linear, [])
 
-        # Cross-attention updated first
-        enc_dec.cross_attention_cache.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=0)
-        self.assertEqual(enc_dec.batch_size, 3)
+        config = LlamaConfig(num_hidden_layers=1, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        enc_dec = EncoderDecoderCache(
+            StaticCache(config=config, max_cache_len=8), StaticCache(config=config, max_cache_len=8)
+        )
+        self.assertEqual(enc_dec.is_linear, [False])
 
-        # Self-attention updated with matching batch size
-        enc_dec.self_attention_cache.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=0)
+        # Only the cross-attention cache is initialized
+        enc_dec.cross_attention_cache.update(torch.randn(3, 2, 5, 8), torch.randn(3, 2, 5, 8), layer_idx=0)
         self.assertEqual(enc_dec.batch_size, 3)
+        self.assertFalse(enc_dec.is_initialized)
 
-        # Mismatch
-        mismatched = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        mismatched.self_attention_cache.update(torch.randn(2, 4, 5, 8), torch.randn(2, 4, 5, 8), layer_idx=0)
-        mismatched.cross_attention_cache.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=0)
+        # Both caches are initialized with the same batch size
+        enc_dec.self_attention_cache.update(torch.randn(3, 2, 5, 8), torch.randn(3, 2, 5, 8), layer_idx=0)
+        self.assertEqual(enc_dec.batch_size, 3)
+        self.assertTrue(enc_dec.is_initialized)
+
+        # Mismatched batch sizes
+        mismatched = EncoderDecoderCache(
+            StaticCache(config=config, max_cache_len=8), StaticCache(config=config, max_cache_len=8)
+        )
+        mismatched.self_attention_cache.update(torch.randn(2, 2, 5, 8), torch.randn(2, 2, 5, 8), layer_idx=0)
+        mismatched.cross_attention_cache.update(torch.randn(3, 2, 5, 8), torch.randn(3, 2, 5, 8), layer_idx=0)
         with self.assertRaises(ValueError):
             _ = mismatched.batch_size
-
-    def test_hybrid_cache_batch_size(self):
-        l1 = LinearAttentionLayer()
-        l2 = DynamicLayer()
-        c = Cache(layers=[l1, l2])
-        self.assertEqual(c.batch_size, -1)
-
-        c.update_conv_state(torch.randn(3, 16, 4), layer_idx=0)
-        self.assertEqual(c.batch_size, 3)
-
-        c.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=1)
-        self.assertEqual(c.batch_size, 3)
 
     @require_optimum_quanto
     def test_quantized_layer_beam_reorder(self):

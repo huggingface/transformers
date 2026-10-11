@@ -102,10 +102,6 @@ class CacheLayerMixin(ABC):
         if self.get_seq_length() > 0:
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
-        if hasattr(self, "_batch_size"):
-            self._batch_size = beam_idx.shape[0]
-        if hasattr(self, "batch_size") and not isinstance(type(self).batch_size, property):
-            self.batch_size = beam_idx.shape[0]
 
     def get_max_cache_shape(self) -> int:
         logger.warning(
@@ -125,7 +121,6 @@ class DynamicLayer(CacheLayerMixin):
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
-        self._batch_size = key_states.shape[0]
         self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
         self.values = torch.tensor([], dtype=self.dtype, device=self.device)
         self.is_initialized = True
@@ -163,15 +158,6 @@ class DynamicLayer(CacheLayerMixin):
             return 0
         return self.keys.shape[-2]
 
-    @property
-    def batch_size(self) -> int:
-        """Returns the batch size of the cached states, or -1 if not initialized."""
-        if not self.is_initialized:
-            return -1
-        if self.keys is not None and self.keys.numel() > 0:
-            return self.keys.shape[0]
-        return getattr(self, "_batch_size", -1)
-
     def get_max_length(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
@@ -182,7 +168,6 @@ class DynamicLayer(CacheLayerMixin):
         # the zeroing in `super`, which is still called to reset the `cumulative_length` of the inheriting layers.
         self.keys = self.values = None
         self.is_initialized = False
-        self._batch_size = -1
         super().reset()
 
     def crop(self, tokens_to_remove: int) -> None:
@@ -823,7 +808,6 @@ class QuantizedLayer(DynamicLayer):
         if self.keys.numel() > 0:
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
-        self._batch_size = beam_idx.shape[0]
 
     def _apply_pending_reorder(self, keys: torch.Tensor, values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Applies the reordering deferred by `reorder_cache` to freshly dequantized states."""
@@ -1027,16 +1011,6 @@ class LinearAttentionCacheLayerMixin(ABC):
             # recurrent_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
-
-    @property
-    def batch_size(self) -> int:
-        for state in self.conv_states.values():
-            if state is not None:
-                return state.shape[0]
-        for state in self.recurrent_states.values():
-            if state is not None:
-                return state.shape[0]
-        return -1
 
     @property
     def is_croppable(self) -> bool:
@@ -1727,7 +1701,7 @@ class Cache:
         (e.g. an all-linear-attention cache queried before the first forward)."""
         # ``LinearAttentionLayer`` sets ``batch_size`` lazily — skip layers that haven't been
         # initialized yet (``generate`` queries this on a fresh cache during cache-reuse checks).
-        values = [layer.batch_size for layer in self.layers if hasattr(layer, "batch_size") and layer.batch_size != -1]
+        values = [layer.batch_size for layer in self.layers if hasattr(layer, "batch_size")]
         if not values:
             return -1
         if len(set(values)) > 1:
@@ -2222,10 +2196,10 @@ class EncoderDecoderCache(Cache):
     def early_initialization(
         self,
         batch_size: int,
-        num_heads: int,
-        head_dim: int,
-        dtype: torch.dtype = torch.float32,
-        device: torch.device = torch.device("cpu"),
+        num_heads: int | list[int],
+        head_dim: int | list[int],
+        dtype: torch.dtype,
+        device: torch.device,
     ):
         self.self_attention_cache.early_initialization(batch_size, num_heads, head_dim, dtype=dtype, device=device)
         self.cross_attention_cache.early_initialization(batch_size, num_heads, head_dim, dtype=dtype, device=device)
