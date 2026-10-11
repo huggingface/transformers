@@ -147,3 +147,20 @@ class WatermarkDetectorTest(unittest.TestCase):
         self.assertEqual(result.num_tokens_scored[0], expected_count)
 
         return result
+
+    def test_mixed_bos_prefixes(self):
+        model_config = GPT2Config(vocab_size=128, bos_token_id=127, eos_token_id=127)
+        watermark_config = WatermarkingConfig(greenlist_ratio=0.25, seeding_scheme="lefthash", context_width=1)
+        detector = WatermarkDetector(
+            model_config=model_config,
+            device=torch_device,
+            watermarking_config=watermark_config,
+            ignore_repeated_ngrams=False,
+        )
+        input_ids = torch.tensor([[127, 10, 20, 30, 40, 50], [117, 15, 25, 35, 45, 55]], dtype=torch.long, device=torch_device)
+        with self.assertRaisesRegex(ValueError, "Mixed BOS"):
+            detector(input_ids)
+
+        reversed_input_ids = torch.tensor([[117, 15, 25, 35, 45, 55], [127, 10, 20, 30, 40, 50]], dtype=torch.long, device=torch_device)
+        with self.assertRaisesRegex(ValueError, "Mixed BOS"):
+            detector(reversed_input_ids)

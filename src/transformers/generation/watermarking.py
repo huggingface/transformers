@@ -211,6 +211,10 @@ class WatermarkDetector:
                     if `return_dict=True` otherwise a `np.ndarray`.
 
         """
+        has_bos = input_ids[:, 0] == self.bos_token_id
+
+        if torch.any(has_bos) != torch.all(has_bos):
+            raise ValueError("Mixed BOS prefixes in batch")
 
         # Let's assume that if one batch start with `bos`, all batched also do
         if input_ids[0, 0] == self.bos_token_id:
