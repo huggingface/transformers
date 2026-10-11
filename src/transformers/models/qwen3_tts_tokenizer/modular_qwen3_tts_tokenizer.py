@@ -27,6 +27,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..dac.modeling_dac import DacDecoderOutput
+from ..mimi.configuration_mimi import MimiConfig
 from ..mimi.modeling_mimi import (
     MimiConv1d,
     MimiEncoder,
@@ -72,6 +73,63 @@ class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
     num_semantic_quantizers: int = 1
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
+
+
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
+@strict
+class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
+    r"""
+    audio_channels (`int`, *optional*, defaults to 1):
+        Number of channels in the audio data. Either 1 for mono or 2 for stereo.
+    num_filters (`int`, *optional*, defaults to 64):
+        Number of convolution kernels of first `Qwen3TTSTokenizerConv1d` down sampling layer.
+    num_residual_layers (`int`,  *optional*, defaults to 1):
+        Number of residual layers.
+    upsampling_ratios (`Sequence[int]`, *optional*):
+        Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
+        will use the ratios in the reverse order to the ones specified here. If not specified, will defaults to
+        `[8, 6, 5, 4]`.
+    last_kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size for the last convolution layer.
+    residual_kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size for the residual layers.
+    dilation_growth_rate (`int`, *optional*, defaults to 2):
+        How much to increase the dilation with each layer.
+    use_causal_conv (`bool`, *optional*, defaults to `True`):
+        Whether to use fully causal convolution.
+    pad_mode (`str`, *optional*, defaults to `"constant"`):
+        Padding mode for the convolutions.
+    compress (`int`, *optional*, defaults to 2):
+        Reduced dimensionality in residual branches.
+    use_conv_shortcut (`bool`, *optional*, defaults to `False`):
+        Whether to use a convolutional layer as the 'skip' connection in the `Qwen3TTSTokenizerResnetBlock` block. If
+        False, an identity function will be used, giving a generic residual connection.
+    """
+
+    model_type = "qwen3_tts_tokenizer_encoder"
+    base_config_key = "encoder_config"
+
+    codebook_size = AttributeError()
+    codebook_dim = AttributeError()
+    num_quantizers = AttributeError()
+    num_semantic_quantizers = AttributeError()
+    vector_quantization_hidden_dimension = AttributeError()
+    trim_right_ratio = AttributeError()
+    upsample_groups = AttributeError()
+    use_cache = AttributeError()
+    use_streaming = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
+        self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
+        self._frame_rate = kwargs.pop("frame_rate", None)
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
+    def validate_architecture(self):
+        raise AttributeError("Not needed for Qwen3TTSTokenizer")
+
+    def num_codebooks(self):
+        raise AttributeError("Not needed for Qwen3TTSTokenizer")
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -142,11 +200,24 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         kwargs.pop("encoder_valid_num_quantizers", None)
 
         if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "mimi")
+            # The original checkpoint's encoder config also carries Mimi's quantizer and decoder settings, unused here.
+            for key in (
+                "codebook_size",
+                "codebook_dim",
+                "num_quantizers",
+                "num_semantic_quantizers",
+                "vector_quantization_hidden_dimension",
+                "trim_right_ratio",
+                "upsample_groups",
+                "use_cache",
+                "use_streaming",
+            ):
+                self.encoder_config.pop(key, None)
+            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "qwen3_tts_tokenizer_encoder")
             self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
         elif self.encoder_config is None:
             logger.info("encoder_config is None. Initializing V2 encoder with default values.")
-            self.encoder_config = CONFIG_MAPPING["mimi"]()
+            self.encoder_config = CONFIG_MAPPING["qwen3_tts_tokenizer_encoder"]()
 
         # The original checkpoint nests the decoder settings, including the quantizer's, under `decoder_config`.
         decoder_config = kwargs.pop("decoder_config", None) or {}
@@ -501,6 +572,7 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
 
 __all__ = [
     "Qwen3TTSTokenizerConfig",
+    "Qwen3TTSTokenizerEncoderConfig",
     "Qwen3TTSTokenizerModel",
     "Qwen3TTSTokenizerPreTrainedModel",
 ]
