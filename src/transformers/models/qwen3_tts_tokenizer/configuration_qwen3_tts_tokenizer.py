@@ -32,7 +32,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
 class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
     r"""
@@ -285,4 +285,4 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-__all__ = ["Qwen3TTSTokenizerConfig", "Qwen3TTSTokenizerEncoderConfig"]
+__all__ = ["Qwen3TTSTokenizerConfig", "Qwen3TTSTokenizerEncoderConfig", "Qwen3TTSTokenizerQuantizerConfig"]
