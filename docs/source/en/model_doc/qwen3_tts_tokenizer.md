@@ -177,6 +177,10 @@ print("Reconstructed audio shape:", audio_values.shape)
 
 [[autodoc]] Qwen3TTSTokenizerEncoderConfig
 
+## Qwen3TTSTokenizerQuantizerConfig
+
+[[autodoc]] Qwen3TTSTokenizerQuantizerConfig
+
 ## Qwen3TTSTokenizerModel
 
 [[autodoc]] Qwen3TTSTokenizerModel
