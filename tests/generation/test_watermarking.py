@@ -157,10 +157,14 @@ class WatermarkDetectorTest(unittest.TestCase):
             watermarking_config=watermark_config,
             ignore_repeated_ngrams=False,
         )
-        input_ids = torch.tensor([[127, 10, 20, 30, 40, 50], [117, 15, 25, 35, 45, 55]], dtype=torch.long, device=torch_device)
+        input_ids = torch.tensor(
+            [[127, 10, 20, 30, 40, 50], [117, 15, 25, 35, 45, 55]], dtype=torch.long, device=torch_device
+        )
         with self.assertRaisesRegex(ValueError, "Mixed BOS"):
             detector(input_ids)
 
-        reversed_input_ids = torch.tensor([[117, 15, 25, 35, 45, 55], [127, 10, 20, 30, 40, 50]], dtype=torch.long, device=torch_device)
+        reversed_input_ids = torch.tensor(
+            [[117, 15, 25, 35, 45, 55], [127, 10, 20, 30, 40, 50]], dtype=torch.long, device=torch_device
+        )
         with self.assertRaisesRegex(ValueError, "Mixed BOS"):
             detector(reversed_input_ids)
