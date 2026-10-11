@@ -50,6 +50,7 @@ if is_torch_available():
         AutoTokenizer,
         Cache,
         DynamicCache,
+        EncoderDecoderCache,
         Gemma2Config,
         Gemma4ForCausalLM,
         Gemma4TextConfig,
@@ -184,6 +185,66 @@ class CacheTest(unittest.TestCase):
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
+
+    def test_get_max_length_empty_cache(self):
+        dc = DynamicCache()
+        self.assertEqual(dc.get_max_length(), -1)
+        self.assertEqual(dc.get_max_length(0), -1)
+        self.assertEqual(dc.max_cache_len, -1)
+
+        empty_cache = Cache(layers=[])
+        self.assertEqual(empty_cache.get_max_length(), -1)
+
+        enc_dec = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        self.assertEqual(enc_dec.get_max_length(), -1)
+
+    def test_dynamic_cache_batch_size(self):
+        dc = DynamicCache()
+        self.assertEqual(dc.batch_size, -1)
+
+        dc.update(torch.randn(2, 4, 5, 8), torch.randn(2, 4, 5, 8), layer_idx=0)
+        self.assertEqual(dc.batch_size, 2)
+
+        # Beam reorder
+        dc.reorder_cache(torch.tensor([0, 0, 1, 1]))
+        self.assertEqual(dc.batch_size, 4)
+
+        # Reset
+        dc.reset()
+        self.assertEqual(dc.batch_size, -1)
+
+    def test_encoder_decoder_cache_properties(self):
+        enc_dec = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        self.assertEqual(enc_dec.batch_size, -1)
+        self.assertFalse(enc_dec.is_initialized)
+        self.assertEqual(enc_dec.is_linear, [])
+
+        # Cross-attention updated first
+        enc_dec.cross_attention_cache.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=0)
+        self.assertEqual(enc_dec.batch_size, 3)
+
+        # Self-attention updated with matching batch size
+        enc_dec.self_attention_cache.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=0)
+        self.assertEqual(enc_dec.batch_size, 3)
+
+        # Mismatch
+        mismatched = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        mismatched.self_attention_cache.update(torch.randn(2, 4, 5, 8), torch.randn(2, 4, 5, 8), layer_idx=0)
+        mismatched.cross_attention_cache.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=0)
+        with self.assertRaises(ValueError):
+            _ = mismatched.batch_size
+
+    def test_hybrid_cache_batch_size(self):
+        l1 = LinearAttentionLayer()
+        l2 = DynamicLayer()
+        c = Cache(layers=[l1, l2])
+        self.assertEqual(c.batch_size, -1)
+
+        c.update_conv_state(torch.randn(3, 16, 4), layer_idx=0)
+        self.assertEqual(c.batch_size, 3)
+
+        c.update(torch.randn(3, 4, 5, 8), torch.randn(3, 4, 5, 8), layer_idx=1)
+        self.assertEqual(c.batch_size, 3)
 
     @require_optimum_quanto
     def test_quantized_layer_beam_reorder(self):
