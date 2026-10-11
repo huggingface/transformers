@@ -78,14 +78,22 @@ with torch.no_grad():
     print("Reconstructed audio shape:", audio_values.shape)
     # Reconstructed audio shape: torch.Size([1, 222720])
 
+    # Equivalently, you can do encoding and decoding in one step
+    model_output = model(**inputs)
+    audio_codes = model_output.audio_codes
+    audio_values = model_output.audio_values
+    print("Forward audio shape:", audio_values.shape)
+    # Forward audio shape: torch.Size([1, 222480])
+
 # save audio
 output_fp = "qwen3_tts_tokenizer_reconstructed.wav"
 wavfile.write(output_fp, model.config.output_sampling_rate, audio_values[0].float().cpu().numpy())
 print(f"Reconstructed audio saved to: {output_fp}")
 ```
 
-The reconstruction is padded up to a whole number of frames, so it can be slightly longer than the input (here
-116 × 1920 = 222720 samples for 222480 input samples).
+The output of [`~Qwen3TTSTokenizerModel.decode`] is padded up to a whole number of frames, so it can be slightly longer
+than the input (here 116 × 1920 = 222720 samples for 222480 input samples). The forward pass truncates it back to the
+input length.
 
 ## Batched inputs
 
