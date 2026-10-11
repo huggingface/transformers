@@ -91,8 +91,9 @@ The reconstruction is padded up to a whole number of frames, so it can be slight
 ## Batched inputs
 
 The feature extractor pads waveforms of different lengths to a common length and builds the `padding_mask` marking the
-real samples, so trailing padding is not encoded. [`~Qwen3TTSTokenizerModel.encode`] then returns a *list*
-of code tensors, one per utterance, each already trimmed to its own length:
+real samples. [`~Qwen3TTSTokenizerModel.encode`] returns the codes as one padded tensor, together with an
+`audio_codes_mask` marking the valid frames of each utterance, and the padded codes can be passed directly to
+[`~Qwen3TTSTokenizerModel.decode`]:
 
 ```python
 import torch
@@ -120,15 +121,16 @@ print("Input audio shape:", inputs["input_values"].shape)
 # Input audio shape: torch.Size([2, 1, 665600])
 
 with torch.no_grad():
-    codes_list = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes
-    print("Codes shapes:", [tuple(codes.shape) for codes in codes_list])
-    # Codes shapes: [(116, 16), (347, 16)]
+    encoder_outputs = model.encode(**inputs)
+    audio_codes = encoder_outputs.audio_codes
+    print("Audio codes shape:", audio_codes.shape)
+    # Audio codes shape: torch.Size([2, 347, 16])
+    print("Valid frames:", encoder_outputs.audio_codes_mask.sum(dim=-1).tolist())
+    # Valid frames: [116, 347]
 
-    # `decode` reads each utterance's length back from the codes, where -1 marks padding
-    padded_codes = torch.nn.utils.rnn.pad_sequence(codes_list, batch_first=True, padding_value=-1)
-    audio_values = model.decode(padded_codes).audio_values
-    print("Reconstructed shapes:", [tuple(audio.shape) for audio in audio_values])
-    # Reconstructed shapes: [(222720,), (666240,)]
+    audio_values = model.decode(audio_codes).audio_values
+    print("Reconstructed audio shape:", audio_values.shape)
+    # Reconstructed audio shape: torch.Size([2, 666240])
 ```
 
 ### Speed-up with `torch.compile`
