@@ -39,7 +39,7 @@ This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
 ## Usage
 
-The [`Qwen3TTSTokenizerFeatureExtractor`] turns raw waveforms into the `(batch_size, num_samples)`
+The feature extractor, loaded with [`AutoFeatureExtractor`], turns raw waveforms into the `(batch_size, 1, num_samples)`
 float tensor and `padding_mask` expected by [`~Qwen3TTSTokenizerModel.encode`], whose codes are then
 reconstructed with [`~Qwen3TTSTokenizerModel.decode`]:
 
@@ -47,7 +47,7 @@ reconstructed with [`~Qwen3TTSTokenizerModel.decode`]:
 import torch
 from scipy.io import wavfile
 
-from transformers import AutoModel, Qwen3TTSTokenizerFeatureExtractor
+from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio_librosa
 
 
@@ -55,18 +55,18 @@ model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 
 # load model and feature extractor
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = Qwen3TTSTokenizerFeatureExtractor(
-    sampling_rate=model.config.input_sampling_rate
-)
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 # load audio at the sample rate the tokenizer expects
 audio = load_audio_librosa(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
     sampling_rate=model.config.input_sampling_rate,
 )
-inputs = feature_extractor(audio, sampling_rate=model.config.input_sampling_rate).to(model.device, model.dtype)
+inputs = feature_extractor(
+    audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+).to(model.device, model.dtype)
 print("Input audio shape:", inputs["input_values"].shape)
-# Input audio shape: torch.Size([1, 222480])
+# Input audio shape: torch.Size([1, 1, 222480])
 
 with torch.no_grad():
     # encode: one frame per 1920 input samples, 16 codes per frame
@@ -97,15 +97,13 @@ of code tensors, one per utterance, each already trimmed to its own length:
 ```python
 import torch
 
-from transformers import AutoModel, Qwen3TTSTokenizerFeatureExtractor
+from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = Qwen3TTSTokenizerFeatureExtractor(
-    sampling_rate=model.config.input_sampling_rate
-)
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 audios = [
     load_audio_librosa(url, sampling_rate=model.config.input_sampling_rate)
@@ -115,9 +113,11 @@ audios = [
     ]
 ]
 
-inputs = feature_extractor(audios, sampling_rate=model.config.input_sampling_rate).to(model.device, model.dtype)
+inputs = feature_extractor(
+    audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+).to(model.device, model.dtype)
 print("Input audio shape:", inputs["input_values"].shape)
-# Input audio shape: torch.Size([2, 665600])
+# Input audio shape: torch.Size([2, 1, 665600])
 
 with torch.no_grad():
     codes_list = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes
@@ -139,20 +139,20 @@ model exposes `encode` and `decode` rather than a single forward, compile each o
 
 ```python
 import torch
-from transformers import AutoModel, Qwen3TTSTokenizerFeatureExtractor
+from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio_librosa
 
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = Qwen3TTSTokenizerFeatureExtractor(
-    sampling_rate=model.config.input_sampling_rate
-)
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 audio = load_audio_librosa(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
     sampling_rate=model.config.input_sampling_rate,
 )
-inputs = feature_extractor(audio, sampling_rate=model.config.input_sampling_rate).to(model.device, model.dtype)
+inputs = feature_extractor(
+    audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+).to(model.device, model.dtype)
 
 model.encode = torch.compile(model.encode)
 model.decode = torch.compile(model.decode)
@@ -172,10 +172,6 @@ print("Reconstructed audio shape:", audio_values.shape)
 ## Qwen3TTSTokenizerConfig
 
 [[autodoc]] Qwen3TTSTokenizerConfig
-
-## Qwen3TTSTokenizerFeatureExtractor
-
-[[autodoc]] Qwen3TTSTokenizerFeatureExtractor
 
 ## Qwen3TTSTokenizerModel
 

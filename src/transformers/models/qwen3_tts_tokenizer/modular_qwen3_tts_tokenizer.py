@@ -442,12 +442,12 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         padding_mask: torch.Tensor | None = None,
     ):
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Padding mask used to pad `input_values`.
         """
-        embeddings = self.encoder(input_values.unsqueeze(1)).last_hidden_state
+        embeddings = self.encoder(input_values).last_hidden_state
         audio_codes = self.quantizer.encode(embeddings).permute(1, 2, 0)
 
         audio_codes_mask = None
@@ -483,9 +483,9 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         padding_mask: torch.Tensor | None = None,
     ):
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Padding mask used to pad `input_values`.
         """
         length = input_values.shape[-1]
