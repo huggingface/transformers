@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 import warnings
 from os.path import abspath, dirname, join
 from unittest import mock
@@ -303,11 +304,23 @@ def pytest_configure(config):
     register_network_debug_plugin(config)
 
 
+_collect_hook_total = 0.0
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_pycollect_makeitem(collector, name, obj):
+    global _collect_hook_total
     # Disable any kernels usage on integration tests
     if isinstance(obj, type) and "integration" in name.lower():
+        t0 = time.time()
         scoped_non_kernels_class(obj)
+        elapsed = time.time() - t0
+        _collect_hook_total += elapsed
+        warnings.warn(
+            f"[DEBUG] pytest_pycollect_makeitem: scoped_non_kernels_class({name}) took {elapsed:.3f}s "
+            f"(cumulative: {_collect_hook_total:.3f}s)",
+            stacklevel=1,
+        )
 
 
 def pytest_collection_modifyitems(items):

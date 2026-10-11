@@ -4905,10 +4905,11 @@ def force_serialization_as_bin_files():
 
 def scoped_non_kernels(test):
     """
-    Decorator that temporarily disables kernels usage. Important for e.g. integration tests that rely on exact previous numbers.
+    Decorator that temporarily disables kernels usage. Important for e.g. integration tests that
+    rely on exact previous numbers. Does NOT skip when kernels is unavailable — integration tests
+    should always run, just with kernels disabled via USE_HUB_KERNELS=NO.
     """
 
-    @require_kernels
     @functools.wraps(test)
     def wrapper(*args, **kwargs):
         with patch.dict("os.environ", {"USE_HUB_KERNELS": "NO"}):
