@@ -241,7 +241,7 @@ text = "VibeVoice is this novel framework designed for generating expressive, lo
 target_audio = load_audio(audio_url, sampling_rate=processor.audio_tokenizer.config.input_sampling_rate)
 reference_audio = load_audio(reference_url, sampling_rate=model.speaker_encoder_sample_rate)
 with torch.inference_mode():
-    audio_codes = processor.audio_tokenizer.encode(torch.from_numpy(target_audio).unsqueeze(0)).audio_codes
+    audio_codes = processor.audio_tokenizer.encode(torch.from_numpy(target_audio)[None, None]).audio_codes
     speaker_embedding = model.extract_speaker_embedding(
         reference_audio, model.speaker_encoder_sample_rate, processor.feature_extractor
     )
