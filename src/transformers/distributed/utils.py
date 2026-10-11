@@ -136,7 +136,7 @@ def _distributed_barrier():
         return
     device_type = torch._C._get_accelerator().type
     if device_type != "cpu":
-        torch.distributed.barrier(device_ids=[getattr(torch, device_type).current_device()])
+        torch.distributed.barrier(device_ids=[torch.accelerator.current_device_index()])
     else:
         torch.distributed.barrier()
 
