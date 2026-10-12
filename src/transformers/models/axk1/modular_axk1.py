@@ -27,6 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -64,6 +65,14 @@ class AXK1Config(DeepseekV3Config):
         Number of selected groups per token (each token's experts are drawn from these groups).
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
+    moe_layer_freq (`int`, *optional*, defaults to 1):
+        Frequency of MoE layers after the first `first_k_dense_replace` layers: layer `i` uses the MoE block
+        when `i >= first_k_dense_replace` and `i % moe_layer_freq == 0`.
+    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Function used to compute the router scores. Only `"sigmoid"` is supported.
+    topk_method (`str`, *optional*, defaults to `"none"`):
+        Top-k routing method. `"noaux_tc"` means the checkpoint ships an `e_score_correction_bias` for the
+        router and `"none"` means it does not (the bias then stays at zero).
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to use the interleaved rotary position embedding layout.
 
@@ -104,12 +113,22 @@ class AXK1Config(DeepseekV3Config):
     topk_group: int = 4
     num_experts_per_tok: int = 8
     first_k_dense_replace: int = 1
+    moe_layer_freq: int = 1
+    scoring_func: str = "sigmoid"
+    topk_method: str = "none"
     max_position_embeddings: int = 32768
     rms_norm_eps: float = 1e-6
     bos_token_id: int | None = 163691
     eos_token_id: int | list[int] | None = 163691
 
     num_mtp_layers = AttributeError()
+
+    def validate_architecture(self):
+        PreTrainedConfig.validate_architecture(self)
+        if self.scoring_func != "sigmoid":
+            raise ValueError(f"A.X-K1 only supports `scoring_func='sigmoid'`, got {self.scoring_func!r}.")
+        if self.topk_method not in ("none", "noaux_tc"):
+            raise ValueError(f"A.X-K1 only supports `topk_method` in ('none', 'noaux_tc'), got {self.topk_method!r}.")
 
 
 class AXK1RMSNorm(DeepseekV3RMSNorm):
@@ -221,7 +240,19 @@ class AXK1Attention(DeepseekV3Attention):
 
 
 class AXK1DecoderLayer(DeepseekV3DecoderLayer):
-    pass
+    def __init__(self, config: AXK1Config, layer_idx: int):
+        nn.Module.__init__(self)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
+
+        if layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0:
+            self.mlp = AXK1MoE(config)
+        else:
+            self.mlp = AXK1MLP(config)
+
+        self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):

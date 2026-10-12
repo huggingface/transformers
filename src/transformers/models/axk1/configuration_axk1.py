@@ -34,6 +34,14 @@ class AXK1Config(PreTrainedConfig):
         Number of selected groups per token (each token's experts are drawn from these groups).
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
+    moe_layer_freq (`int`, *optional*, defaults to 1):
+        Frequency of MoE layers after the first `first_k_dense_replace` layers: layer `i` uses the MoE block
+        when `i >= first_k_dense_replace` and `i % moe_layer_freq == 0`.
+    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Function used to compute the router scores. Only `"sigmoid"` is supported.
+    topk_method (`str`, *optional*, defaults to `"none"`):
+        Top-k routing method. `"noaux_tc"` means the checkpoint ships an `e_score_correction_bias` for the
+        router and `"none"` means it does not (the bias then stays at zero).
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to use the interleaved rotary position embedding layout.
 
@@ -112,6 +120,9 @@ class AXK1Config(PreTrainedConfig):
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
+    moe_layer_freq: int = 1
+    scoring_func: str = "sigmoid"
+    topk_method: str = "none"
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -120,6 +131,13 @@ class AXK1Config(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.scoring_func != "sigmoid":
+            raise ValueError(f"A.X-K1 only supports `scoring_func='sigmoid'`, got {self.scoring_func!r}.")
+        if self.topk_method not in ("none", "noaux_tc"):
+            raise ValueError(f"A.X-K1 only supports `topk_method` in ('none', 'noaux_tc'), got {self.topk_method!r}.")
 
 
 __all__ = ["AXK1Config"]

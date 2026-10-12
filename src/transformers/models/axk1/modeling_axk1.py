@@ -491,7 +491,7 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
 
-        if layer_idx >= config.first_k_dense_replace:
+        if layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0:
             self.mlp = AXK1MoE(config)
         else:
             self.mlp = AXK1MLP(config)

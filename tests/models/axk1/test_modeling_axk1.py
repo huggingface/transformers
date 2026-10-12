@@ -15,6 +15,8 @@
 
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -34,8 +36,10 @@ if is_torch_available():
     torch.set_float32_matmul_precision("highest")
 
     from transformers import (
+        AXK1Config,
         AXK1Model,
     )
+    from transformers.models.axk1.modeling_axk1 import AXK1MoE
 
 
 class AXK1ModelTester(CausalLMModelTester):
@@ -85,6 +89,27 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims (MLA qk/v dims differ)")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_moe_layer_freq(self):
+        config = self.model_tester.get_config()
+        config.num_hidden_layers = 5
+        config.first_k_dense_replace = 1
+        config.moe_layer_freq = 2
+        model = AXK1Model(config)
+        is_moe = [isinstance(layer.mlp, AXK1MoE) for layer in model.layers]
+        self.assertEqual(is_moe, [False, False, True, False, True])
+
+    def test_routing_config_fields(self):
+        # Configs that omit these fields (e.g. minimal test configs) must still expose them
+        config = AXK1Config()
+        self.assertEqual(config.moe_layer_freq, 1)
+        self.assertEqual(config.scoring_func, "sigmoid")
+        self.assertEqual(config.topk_method, "none")
+        AXK1Config(topk_method="noaux_tc")
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "scoring_func"):
+            AXK1Config(scoring_func="softmax")
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "topk_method"):
+            AXK1Config(topk_method="greedy")
 
 
 @slow
