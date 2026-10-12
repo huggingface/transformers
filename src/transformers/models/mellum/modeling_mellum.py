@@ -422,6 +422,7 @@ class MellumPreTrainedModel(PreTrainedModel):
         "hidden_states": MellumDecoderLayer,
         "attentions": MellumAttention,
     }
+    _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
 
     @torch.no_grad()
     def _init_weights(self, module):
