@@ -214,7 +214,10 @@ class WatermarkDetector:
         has_bos = input_ids[:, 0] == self.bos_token_id
 
         if torch.any(has_bos) != torch.all(has_bos):
-            raise ValueError("Mixed BOS prefixes in batch")
+            raise ValueError(
+                "Some batch contains inconsistent leading BOS token. Make sure "
+                "to prepare input with the same tokenization parameters."
+            )
 
         # Let's assume that if one batch start with `bos`, all batched also do
         if input_ids[0, 0] == self.bos_token_id:
