@@ -113,6 +113,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    get_current_accelerator,
     get_device_type,
     has_file,
     is_accelerate_available,
@@ -1735,10 +1736,7 @@ class PreTrainedModel(
                 ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
         if not is_torch_flex_attn_available():
-            raise ImportError(
-                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0 and"
-                " run on a device other than TPU."
-            )
+            raise ImportError("PyTorch Flex Attention is not supported on TPU.")
 
         # If no error raise by this point, we can return `True`
         return True
@@ -3169,9 +3167,9 @@ class PreTrainedModel(
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
-            # `current_accelerator()` is None when no accelerator is available, in which case the
+            # `get_current_accelerator()` is None when no accelerator is available, in which case the
             # activations already live on the host and there is nothing to copy off a device.
-            device_type = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
+            device_type = (get_current_accelerator() or torch.device("cpu")).type
 
             def checkpoint_func(function, *args, **kwargs):
                 with save_on_cpu(pin_memory=True, device_type=device_type):
@@ -5045,7 +5043,6 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model.tp_plan if _is_torch_distributed_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -5059,13 +5056,8 @@ def get_total_byte_count(
         else:
             dtype_size = param.element_size()
 
-        param_byte_count = param.numel() * dtype_size
-
-        if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
-            param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
-
-        total_byte_count[device] += param_byte_count
+        numel = param._local_tensor.numel() if is_dtensor(param) else param.numel()
+        total_byte_count[device] += numel * dtype_size
     return total_byte_count
 
 

@@ -93,8 +93,8 @@ def video_processor_class_from_name(class_name: str):
             if isinstance(cls, type) and cls.__name__ == class_name:
                 return cls
 
-    # 2. Built-in classes: compare classes which is how LazyMapping stores data
-    for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING.items():
+    # 2. Built-in classes: compare names without resolving unrelated classes
+    for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING_NAMES.items():
         if extractors_dict is None:
             continue
         if class_name in extractors_dict.values():
@@ -123,7 +123,7 @@ def _load_backend_class(video_processor_class_name: str, backend: str):
     mapping = {"torchvision": video_processor_class_name}
     for mapping_dict in (
         *VIDEO_PROCESSOR_MAPPING._extra_content.values(),
-        *VIDEO_PROCESSOR_MAPPING.values(),
+        *VIDEO_PROCESSOR_MAPPING_NAMES.values(),
     ):
         if any(
             video_processor_class_name == (v if not isinstance(v, type) else v.__name__) for v in mapping_dict.values()
