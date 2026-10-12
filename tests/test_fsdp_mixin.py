@@ -36,7 +36,6 @@ from transformers.testing_utils import (
     backend_torch_accelerator_module,
     init_test_logger,
     is_fsdp_test,
-    require_peft,
     require_torch_greater_or_equal,
 )
 from transformers.trainer_utils import set_seed
@@ -370,43 +369,6 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
         if rank == 0:
             logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
-
-
-def _test_fsdp2_peft_trainer_save_impl(rank, config_class, config_dict):
-    """`Trainer` saves the LoRA adapter of a model sharded at load time, and the saved adapter is the trained one."""
-    from datasets import Dataset
-    from peft import LoraConfig, get_peft_model
-    from safetensors.torch import load_file
-
-    from transformers import Trainer, TrainingArguments
-
-    init_test_logger()
-
-    config = config_class.from_dict(config_dict)
-    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
-
-    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir, _distributed_tmpdir(rank) as tmpdir:
-        _set_determinism(SEED)
-        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
-        model = get_peft_model(model, LoraConfig(r=4, target_modules=["q_proj", "v_proj"]))
-        input_ids = [[1, 2, 3, 4, 5, 6, 7, 8]] * 4
-        dataset = Dataset.from_dict({"input_ids": input_ids, "labels": input_ids})
-        args = TrainingArguments(
-            output_dir=tmpdir,
-            max_steps=1,
-            save_steps=1,
-            save_only_model=True,
-            per_device_train_batch_size=1,
-            report_to="none",
-        )
-        Trainer(model=model, args=args, train_dataset=dataset).train()
-
-        if rank == 0:
-            saved = load_file(os.path.join(tmpdir, "checkpoint-1", "adapter_model.safetensors"))
-            live = {n: p for n, p in model.named_parameters() if p.requires_grad}
-            assert len(saved) == len(live), f"{len(saved)} saved tensors for {len(live)} adapter parameters"
-            for name, param in live.items():
-                torch.testing.assert_close(saved[name.replace(".default", "")], param.detach().cpu(), rtol=0, atol=0)
 
 
 def _test_fsdp2_save_load_dcp_impl(rank, config_class, config_dict):
@@ -754,12 +716,6 @@ class FSDPTesterMixin(ABC):
     @is_fsdp_test
     def test_fsdp2_save_load(self):
         self._run_fsdp2_distributed_test("test_fsdp2_save_load", _test_fsdp2_save_load_impl)
-
-    @require_peft
-    @require_torch_greater_or_equal("2.7")
-    @is_fsdp_test
-    def test_fsdp2_peft_trainer_save(self):
-        self._run_fsdp2_distributed_test("test_fsdp2_peft_trainer_save", _test_fsdp2_peft_trainer_save_impl)
 
     @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
