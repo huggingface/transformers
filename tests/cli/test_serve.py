@@ -365,6 +365,24 @@ class TestGenerativeModelList(unittest.TestCase):
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
             self.assertNotIn("google-bert/bert-base-cased", model_ids)
 
+    def test_skips_null_architectures(self):
+        """A cached config with `"architectures": null` must not break the listing."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from huggingface_hub import hf_hub_download
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
+            config = Path(hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)).resolve()
+            config.write_text(json.dumps({**json.loads(config.read_text()), "architectures": None}))
+
+            model_ids = {r["id"] for r in ModelManager.get_gen_models(cache_dir)}
+
+            self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
+            self.assertNotIn("google-bert/bert-base-cased", model_ids)
+
 
 @require_serve
 class TestBuildGenerationConfig(unittest.TestCase):
