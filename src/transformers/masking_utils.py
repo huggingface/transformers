@@ -188,7 +188,7 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
 
 def non_negative_key_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
     """
-    A cache may give its mask offset as a tensor (`StaticRingLayer`), negative while its window is not
+    A cache may give its mask offset as a tensor (`StaticRingSlidingWindowLayer`), negative while its window is not
     full: its first keys are then empty slots, at negative positions, which this masks.
     """
     return kv_idx >= 0

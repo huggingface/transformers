@@ -232,7 +232,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - update
     - lazy_initialization
 
-[[autodoc]] StaticRingLayer
+[[autodoc]] StaticRingSlidingWindowLayer
     - update
 
 [[autodoc]] QuantoQuantizedLayer
