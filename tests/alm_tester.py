@@ -14,7 +14,6 @@
 
 import copy
 import random
-from inspect import signature
 from unittest.mock import patch
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
@@ -124,9 +123,6 @@ class ALMModelTester(MultiModalModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.audio_token_id}
 
-    def _build_modality_sub_configs(self):
-        return {self.audio_config_key: self.get_audio_config()}
-
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         audio_features = self.create_audio_features(batch_size=batch_size)
         audio_mask = self.create_audio_mask(batch_size=batch_size)
@@ -143,16 +139,6 @@ class ALMModelTester(MultiModalModelTester):
         )
         modality_inputs.update(additional_inputs)
         return input_ids, modality_inputs
-
-    # -- Audio sub-config construction -------------------------------------------------------
-
-    @property
-    def audio_config_args(self):
-        return list(signature(self.audio_config_class.__init__).parameters.keys())
-
-    def get_audio_config(self):
-        kwargs = self._collect_kwargs(self.audio_config_args, self.audio_config_class, prefix="audio")
-        return self.audio_config_class(**kwargs)
 
 
 class ALMModelTest(MultiModalModelTest):

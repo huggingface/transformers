@@ -106,13 +106,6 @@ class VLMModelTester(MultiModalModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.image_token_id}
 
-    def _build_modality_sub_configs(self):
-        sub_configs = {}
-        for key, specs in self.config_class.sub_configs_defaults.items():
-            subconfig_cls = self._resolve_config_cls(specs)
-            sub_configs[key] = self._build_sub_config(subconfig_cls, prefix=key[:-7])
-        return sub_configs
-
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         pixel_values = self.create_pixel_values(batch_size=batch_size)
         input_ids = self.place_image_tokens(input_ids, config)

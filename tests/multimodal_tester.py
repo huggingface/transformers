@@ -123,7 +123,11 @@ class MultiModalModelTester:
 
     def _build_modality_sub_configs(self):
         """Return the {sub-config-key: sub-config-instance} entries for the main config constructor."""
-        raise NotImplementedError
+        sub_configs = {}
+        for key, specs in self.config_class.sub_configs_defaults.items():
+            subconfig_cls = self._resolve_config_cls(specs)
+            sub_configs[key] = self._build_sub_config(subconfig_cls, prefix=key[:-7])
+        return sub_configs
 
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         """Create modality features, place modality placeholder tokens in ``input_ids``, and return:
