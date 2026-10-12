@@ -1,6 +1,6 @@
 name: Model integration contracts
 
-# Proof of concept (huggingface/model-integration-contracts, docs/transformers-ci-proof.md).
+# Proof of concept (huggingface/transformers-mic, docs/transformers-ci-proof.md).
 # Runs the model integration contracts the changed files can affect, on slim
 # fixtures pinned on the Hub, against the reviewed baselines in
 # tests/contracts/expectations/. Not a required check: a failure here is a
@@ -29,6 +29,7 @@ jobs:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb"
     env:
+      TMIC_SHA: 3e207ccfdaac950a333ba79602fe0d603495edb8
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
       # Not the shared /mnt/cache: PR jobs mount it read-only, and fixtures and contracts are downloaded.
       HF_HOME: /tmp/hf_home
@@ -49,6 +50,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           start=$SECONDS
           uv pip install -e .
+          uv pip install "transformers-mic @ git+https://github.com/huggingface/transformers-mic@$TMIC_SHA"
           uv pip install jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
           echo "Installed in $((SECONDS - start)) s on $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) cores"
 
@@ -76,7 +78,7 @@ jobs:
             echo "Changed files: all"
           fi
           start=$SECONDS
-          python utils/contracts/run.py --framework transformers --fixtures-only --lock "$LOCK" --require-all \
+          tmic check --fixtures-only --lock "$LOCK" --require-all \
             "${selection[@]}" --output /tmp/results.jsonl 2> /tmp/run.log | python -c '
           import json, sys
           for line in sys.stdin:
@@ -89,8 +91,8 @@ jobs:
         if: always()
         run: |
           touch /tmp/results.jsonl
-          python utils/contracts/report.py /tmp/results.jsonl --log /tmp/run.log \
-            --runner "python utils/contracts/run.py" --lock "$LOCK" >> "$GITHUB_STEP_SUMMARY"
+          tmic report /tmp/results.jsonl --log /tmp/run.log \
+            --lock "$LOCK" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()
