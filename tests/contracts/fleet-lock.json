@@ -134,6 +134,10 @@
         "training.gradients",
         "training.loss"
       ]
+    },
+    "Whisper/mic-whisper-tiny-slim": {
+      "issue": "https://github.com/huggingface/transformers/issues/49456",
+      "match": "You have modified the pretrained model configuration"
     }
   }
 }

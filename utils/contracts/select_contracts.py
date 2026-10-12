@@ -15,6 +15,7 @@ src/transformers/models/. A changed file then selects:
 import json
 from pathlib import Path
 
+
 SHARED = ("setup.py", "pyproject.toml")
 PROCESSOR_FILES = ("tokenizer_config.json", "preprocessor_config.json", "processor_config.json")
 CLASS_KEYS = ("tokenizer_class", "processor_class", "feature_extractor_type", "image_processor_type")
@@ -66,7 +67,7 @@ def select(changed_files, contract_dirs):
     selected = {}
     for path in changed_files:
         if path in SHARED:
-            return {name: f"dependencies ({path})" for name in contract_dirs}
+            return dict.fromkeys(contract_dirs, f"dependencies ({path})")
         if not path.startswith("src/transformers/"):
             continue
         parts = path.split("/")
@@ -75,5 +76,5 @@ def select(changed_files, contract_dirs):
                 if parts[3] in dirs:
                     selected.setdefault(name, f"models/{parts[3]} ({path})")
         else:
-            return {name: f"shared code ({path})" for name in contract_dirs}
+            return dict.fromkeys(contract_dirs, f"shared code ({path})")
     return selected
