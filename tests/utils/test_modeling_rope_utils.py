@@ -15,11 +15,12 @@
 
 import logging as stdlib_logging
 import math
+import tempfile
 import unittest
 
 from parameterized import parameterized
 
-from transformers import Gemma3TextConfig, LlamaConfig
+from transformers import DeepseekV4Config, Gemma3TextConfig, LlamaConfig, MLCDVisionConfig
 from transformers.testing_utils import CaptureLogger, is_torch_available, require_torch, torch_device
 from transformers.utils import logging as transformers_logging
 
@@ -38,6 +39,107 @@ if is_torch_available():
 
 @require_torch
 class RopeTest(unittest.TestCase):
+    @parameterized.expand([("type",), ("rope_type",)])
+    def test_rope_scaling_assignment_preserves_base_parameters(self, type_key):
+        config = LlamaConfig(rope_theta=500000.0, partial_rotary_factor=0.5)
+        value = {type_key: "yarn", "factor": 4.0, "original_max_position_embeddings": 4096}
+        config.rope_scaling = value
+
+        self.assertEqual(config.rope_parameters["rope_theta"], 500000.0)
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.5)
+        self.assertEqual(config.rope_parameters["rope_type"], "yarn")
+        self.assertNotIn("type", config.rope_parameters)
+        self.assertEqual(value, {type_key: "yarn", "factor": 4.0, "original_max_position_embeddings": 4096})
+
+        expected = LlamaConfig(rope_theta=500000.0, partial_rotary_factor=0.5, rope_scaling=value)
+        torch.testing.assert_close(
+            LlamaRotaryEmbedding(config).inv_freq,
+            LlamaRotaryEmbedding(expected).inv_freq,
+        )
+
+    def test_rope_scaling_assignment_can_override_base_parameters(self):
+        config = LlamaConfig(rope_theta=500000.0, partial_rotary_factor=0.5)
+        config.rope_scaling = {
+            "type": "linear",
+            "factor": 2.0,
+            "rope_theta": 250000.0,
+            "partial_rotary_factor": 0.25,
+        }
+        self.assertEqual(config.rope_parameters["rope_theta"], 250000.0)
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.25)
+        self.assertEqual(config.rope_parameters["rope_type"], "linear")
+        LlamaRotaryEmbedding(config)
+
+    @parameterized.expand([("flat",), ("nested",)])
+    def test_rope_scaling_assignment_preserves_per_layer_bases(self, layout):
+        config = self.get_config_with_rope_parameters(
+            rope_params={"rope_type": "default", "rope_theta": 750000.0, "partial_rotary_factor": 0.5},
+            is_nested=True,
+        )
+        config.rope_parameters["sliding_attention"]["rope_theta"] = 20000.0
+        if layout == "flat":
+            config.rope_scaling = {"type": "linear", "factor": 2.0}
+        else:
+            config.rope_scaling = {
+                "full_attention": {"type": "linear", "factor": 2.0},
+                "sliding_attention": {"type": "linear", "factor": 3.0},
+            }
+
+        self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], 750000.0)
+        self.assertEqual(config.rope_parameters["full_attention"]["partial_rotary_factor"], 0.5)
+        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 20000.0)
+        self.assertEqual(config.rope_parameters["full_attention"]["rope_type"], "linear")
+        self.assertEqual(
+            config.rope_parameters["sliding_attention"]["rope_type"], "default" if layout == "flat" else "linear"
+        )
+        self.assertNotIn("type", config.rope_parameters["full_attention"])
+        self.assertNotIn("type", config.rope_parameters["sliding_attention"])
+        Gemma3RotaryEmbedding(config)
+
+    @parameterized.expand([("flat",), ("nested",)])
+    def test_rope_scaling_none_resets_scaling_without_losing_the_base(self, layout):
+        config = self.get_config_with_rope_parameters(
+            rope_params={"rope_type": "linear", "factor": 2.0, "rope_theta": 750000.0},
+            is_nested=layout == "nested",
+        )
+        config.rope_scaling = None
+        if layout == "nested":
+            self.assertEqual(
+                config.rope_parameters["full_attention"], {"rope_type": "default", "rope_theta": 750000.0}
+            )
+            self.assertEqual(
+                config.rope_parameters["sliding_attention"], {"rope_type": "default", "rope_theta": 10000.0}
+            )
+            Gemma3RotaryEmbedding(config)
+        else:
+            self.assertEqual(config.rope_parameters, {"rope_type": "default", "rope_theta": 750000.0})
+            LlamaRotaryEmbedding(config)
+
+    def test_rope_scaling_assignment_survives_a_save_load_roundtrip(self):
+        config = LlamaConfig(rope_theta=500000.0)
+        config.rope_scaling = {"type": "yarn", "factor": 4.0, "original_max_position_embeddings": 4096}
+        with tempfile.TemporaryDirectory() as directory:
+            config.save_pretrained(directory)
+            restored = LlamaConfig.from_pretrained(directory)
+
+        self.assertEqual(restored.rope_parameters, config.rope_parameters)
+        torch.testing.assert_close(LlamaRotaryEmbedding(restored).inv_freq, LlamaRotaryEmbedding(config).inv_freq)
+
+    def test_rope_scaling_assignment_preserves_rope_type_keyed_bases_and_nope(self):
+        config = DeepseekV4Config()
+        original = dict(config.rope_parameters["main"])
+        config.rope_scaling = {"main": {"type": "linear", "factor": 2.0}, "compress": None}
+        self.assertEqual(config.rope_parameters["main"]["rope_theta"], original["rope_theta"])
+        self.assertEqual(config.rope_parameters["main"]["partial_rotary_factor"], original["partial_rotary_factor"])
+        self.assertEqual(config.rope_parameters["main"]["rope_type"], "linear")
+        self.assertIsNone(config.rope_parameters["compress"])
+
+    def test_rope_scaling_none_keeps_the_model_specific_default_type(self):
+        config = MLCDVisionConfig(rope_theta=500000.0)
+        config.rope_scaling = None
+        self.assertEqual(config.rope_parameters["rope_type"], "axial")
+        self.assertEqual(config.rope_parameters["rope_theta"], 500000.0)
+
     def get_config_with_rope_parameters(
         self, rope_params: dict, is_nested: bool = False, same_rope_per_layer: bool = False
     ):
