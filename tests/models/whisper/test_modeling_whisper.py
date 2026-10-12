@@ -284,6 +284,41 @@ class WhisperModelTester:
 
         self.parent.assertTrue(last_hidden_state.shape, (13, 7, 16))
 
+    def create_and_check_beam_search_transition_scores(self, config, inputs_dict):
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+        input_features = inputs_dict["input_features"]
+
+        ancestry = []
+        stack_split_outputs = model._stack_split_outputs
+
+        def capture_ancestry(seek_outputs, *args, **kwargs):
+            ancestry.extend(output["beam_indices"] for output in seek_outputs)
+            return stack_split_outputs(seek_outputs, *args, **kwargs)
+
+        with patch.object(model, "_stack_split_outputs", capture_ancestry):
+            output = model.generate(
+                input_features,
+                num_beams=3,
+                num_return_sequences=3,
+                return_dict_in_generate=True,
+                output_scores=True,
+                length_penalty=0.0,
+            )
+
+        # if no sequence leaves beam 0 the old code gathers in bounds too
+        self.parent.assertTrue(any((indices > 0).any() for indices in ancestry))
+
+        transition_scores = model.compute_transition_scores(output.sequences, output.scores, output.beam_indices)
+
+        cut_idx = output.sequences.shape[-1] - transition_scores.shape[-1]
+        for seq_idx in range(output.sequences.shape[0]):
+            for step, token_id in enumerate(output.sequences[seq_idx, cut_idx:]):
+                if output.beam_indices[seq_idx, step] < 0:
+                    continue
+                self.parent.assertEqual(transition_scores[seq_idx, step], output.scores[step][seq_idx, token_id])
+
+        torch.testing.assert_close(transition_scores.sum(dim=-1), output.sequences_scores, atol=1e-3, rtol=1e-3)
+
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = WhisperModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["decoder_input_ids"]
@@ -508,44 +543,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
     def test_beam_search_transition_scores(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs()
-        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
-
-        input_features = input_dict["input_features"]
-
-        ancestry = []
-        stack_split_outputs = model._stack_split_outputs
-
-        def capture_ancestry(seek_outputs, *args, **kwargs):
-            ancestry.extend(output["beam_indices"] for output in seek_outputs)
-            return stack_split_outputs(seek_outputs, *args, **kwargs)
-
-        with patch.object(model, "_stack_split_outputs", capture_ancestry):
-            output = model.generate(
-                input_features,
-                num_beams=3,
-                num_return_sequences=3,
-                return_dict_in_generate=True,
-                output_scores=True,
-                length_penalty=0.0,
-            )
-
-        # a run whose ancestry never leaves beam 0 gathers in bounds either way, so it would
-        # pass on unpatched code too
-        self.assertTrue(any((indices > 0).any() for indices in ancestry))
-
-        transition_scores = model.compute_transition_scores(output.sequences, output.scores, output.beam_indices)
-
-        # `scores` are gathered from the beam each step was generated on, so every transition score has to come
-        # from the row of the sequence it belongs to
-        cut_idx = output.sequences.shape[-1] - transition_scores.shape[-1]
-        for seq_idx in range(output.sequences.shape[0]):
-            for step, token_id in enumerate(output.sequences[seq_idx, cut_idx:]):
-                if output.beam_indices[seq_idx, step] < 0:
-                    continue
-                self.assertEqual(transition_scores[seq_idx, step], output.scores[step][seq_idx, token_id])
-
-        torch.testing.assert_close(transition_scores.sum(dim=-1), output.sequences_scores, atol=1e-3, rtol=1e-3)
+        """Regression test for #48621: `compute_transition_scores` must not select the beam twice."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_beam_search_transition_scores(*config_and_inputs)
 
     @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):

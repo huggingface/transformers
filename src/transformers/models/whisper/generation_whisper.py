@@ -1204,16 +1204,13 @@ class WhisperGenerationMixin(GenerationMixin):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0]:
-            if key in ["sequences", "beam_indices", "token_timestamps"]:
+            if key == "beam_indices" and "scores" in seek_outputs[0]:
+                # scores are already gathered per beam, so index their rows instead of the beams (#48621)
+                beam_indices = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+                rows = torch.arange(beam_indices.shape[0], device=device).unsqueeze(1).expand_as(beam_indices)
+                outputs[key] = torch.where(beam_indices == -1, beam_indices, rows)
+            elif key in ["sequences", "beam_indices", "token_timestamps"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
-                if key == "beam_indices" and "scores" in seek_outputs[0]:
-                    # `split_by_batch_index` already gathered `scores` from the beam each step was generated on,
-                    # so the stacked scores hold one row per returned sequence instead of one row per beam. Point
-                    # `beam_indices` at those rows, otherwise `compute_transition_scores` selects the beam a second
-                    # time and gathers out of bounds. `-1` marks steps past the end of a sequence and is kept.
-                    beam_indices = outputs[key]
-                    rows = torch.arange(beam_indices.shape[0], device=device).unsqueeze(1).expand_as(beam_indices)
-                    outputs[key] = torch.where(beam_indices == -1, beam_indices, rows)
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
                     torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key]))
