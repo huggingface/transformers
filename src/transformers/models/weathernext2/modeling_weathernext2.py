@@ -116,27 +116,40 @@ class WeatherNext2ConditionedMlp(nn.Module):
         return torch.cat(chunks, dim=1)
 
 
-class WeatherNext2EdgeUpdate(nn.Module):
-    """Computes a message on every grid<->mesh edge.
+class WeatherNext2GridToMeshEdgeUpdate(nn.Module):
+    """Updates edge features using the sending grid nodes."""
 
-    The first projection of the edge MLP is split across the edge features, the sender node and
-    (in the mesh-to-grid direction) the receiver node. Each part is applied to the *nodes* and only
-    then gathered onto the edges, which is much cheaper than gathering first: summing the parts is
-    exactly the concatenated first matmul. The senders arrive already projected, because the graph
-    network projects them once and then visits the edges in chunks.
-    """
-
-    def __init__(self, config: WeatherNext2Config, use_receiver_proj: bool):
+    def __init__(self, config: WeatherNext2Config):
         super().__init__()
         hidden_size = config.hidden_size
         # The bias of the concatenated first matmul rides on `edge_proj`, the one part that is
         # always present.
         self.edge_proj = nn.Linear(config.edge_hidden_size, hidden_size)
         self.sender_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.receiver_proj = nn.Linear(hidden_size, hidden_size, bias=False) if use_receiver_proj else None
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.act_fn = ACT2FN[config.mlp_act]
         self.norm = WeatherNext2ConditionedNorm(config, hidden_size)
+
+    def project_senders(self, sender_states: torch.Tensor) -> torch.Tensor:
+        return self.sender_proj(sender_states)
+
+    def forward(
+        self,
+        edge_states: torch.Tensor,
+        projected_senders: torch.Tensor,
+        senders: torch.Tensor,
+        conditioning: torch.Tensor,
+    ) -> torch.Tensor:
+        messages = self.edge_proj(edge_states) + projected_senders[:, senders]
+        return self.norm(self.out_proj(self.act_fn(messages)), conditioning)
+
+
+class WeatherNext2MeshToGridEdgeUpdate(WeatherNext2GridToMeshEdgeUpdate):
+    """Updates edge features using sending mesh nodes and receiving grid nodes."""
+
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__(config)
+        self.receiver_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(
         self,
@@ -148,49 +161,35 @@ class WeatherNext2EdgeUpdate(nn.Module):
         conditioning: torch.Tensor,
     ) -> torch.Tensor:
         messages = self.edge_proj(edge_states) + projected_senders[:, senders]
-        if self.receiver_proj is not None:
-            messages = messages + self.receiver_proj(receiver_states)[:, receivers]
+        messages = messages + self.receiver_proj(receiver_states)[:, receivers]
         return self.norm(self.out_proj(self.act_fn(messages)), conditioning)
 
 
-class WeatherNext2BipartiteGraphNetwork(nn.Module):
-    """One round of message passing between the lat/lon grid and the icosahedral mesh.
+class WeatherNext2GraphNetwork(nn.Module):
+    """Shared edge encoder and float32 message aggregation for the two graph directions."""
 
-    Edges run in a single direction. The node set on the receiving end is updated from its own
-    features concatenated with the summed incoming messages; the sending node set is updated from
-    its own features alone. Both updates are residual, so the two directions share this class and
-    differ only in which node set receives messages and whether the receiver contributes to them.
-
-    The edges are visited `config.chunk_size` at a time, in the way that suits each direction. A mesh
-    node receives dozens of edges from the grid, so the grid-to-mesh direction chunks the edges and
-    accumulates into the small mesh. A grid point receives exactly three edges from the mesh, so the
-    mesh-to-grid direction chunks the grid points and finishes each block as it goes.
-    """
-
-    def __init__(self, config: WeatherNext2Config, grid_to_mesh: bool):
+    def __init__(self, config: WeatherNext2Config):
         super().__init__()
-        self.grid_to_mesh = grid_to_mesh
         self.chunk_size = config.chunk_size
-        # Only the grid-to-mesh direction rescales its aggregate, and only for the checkpoints that
-        # set it: the number of grid points per mesh node varies with the grid resolution.
-        self.aggregate_normalization = config.aggregate_normalization if grid_to_mesh else None
-        hidden_size = config.hidden_size
-
-        # The edge encoder runs inside the edge loop, and the receiving side's update inside the
-        # block loop, so neither chunks again; only the grid-wide update on the sending side does.
         self.edge_encoder = WeatherNext2ConditionedMlp(
             config, config.num_edge_spatial_features, config.edge_hidden_size, config.edge_hidden_size, None
         )
-        self.edge_update = WeatherNext2EdgeUpdate(config, use_receiver_proj=not grid_to_mesh)
-        self.mesh_node_update = WeatherNext2ConditionedMlp(
-            config, 2 * hidden_size if grid_to_mesh else hidden_size, hidden_size, hidden_size, None
-        )
+
+    def with_aggregate(self, receiver_states: torch.Tensor, aggregated: torch.Tensor) -> torch.Tensor:
+        return torch.cat([receiver_states, aggregated.to(receiver_states.dtype)], dim=-1)
+
+
+class WeatherNext2GridToMesh(WeatherNext2GraphNetwork):
+    """Updates mesh nodes from incoming grid messages and applies a residual grid update."""
+
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__(config)
+        hidden_size = config.hidden_size
+        self.aggregate_normalization = config.aggregate_normalization
+        self.edge_update = WeatherNext2GridToMeshEdgeUpdate(config)
+        self.mesh_node_update = WeatherNext2ConditionedMlp(config, 2 * hidden_size, hidden_size, hidden_size, None)
         self.grid_node_update = WeatherNext2ConditionedMlp(
-            config,
-            hidden_size if grid_to_mesh else 2 * hidden_size,
-            hidden_size,
-            hidden_size,
-            config.chunk_size if grid_to_mesh else None,
+            config, hidden_size, hidden_size, hidden_size, config.chunk_size
         )
 
     def forward(
@@ -202,35 +201,52 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
         receivers: torch.Tensor,
         conditioning: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.grid_to_mesh:
-            projected_senders = self.edge_update.sender_proj(grid_states)
-            aggregated = torch.zeros(mesh_states.shape, dtype=torch.float32, device=mesh_states.device)
-            num_edges = senders.numel()
-            chunk_size = self.chunk_size or num_edges
-            for start in range(0, num_edges, chunk_size):
-                edges = slice(start, start + chunk_size)
-                messages = self.edge_update(
-                    self.edge_encoder(edge_features[:, edges], conditioning),
-                    projected_senders,
-                    mesh_states,
-                    senders[edges],
-                    receivers[edges],
-                    conditioning,
-                )
-                aggregated.index_add_(1, receivers[edges], messages.float())
-            mesh_states = mesh_states + self.mesh_node_update(
-                self.with_aggregate(mesh_states, aggregated), conditioning
+        projected_senders = self.edge_update.project_senders(grid_states)
+        aggregated = torch.zeros(mesh_states.shape, dtype=torch.float32, device=mesh_states.device)
+        num_edges = senders.numel()
+        chunk_size = self.chunk_size or num_edges
+        for start in range(0, num_edges, chunk_size):
+            edges = slice(start, start + chunk_size)
+            messages = self.edge_update(
+                self.edge_encoder(edge_features[:, edges], conditioning),
+                projected_senders,
+                senders[edges],
+                conditioning,
             )
-            grid_states = grid_states + self.grid_node_update(grid_states, conditioning)
-            return grid_states, mesh_states
+            aggregated.index_add_(1, receivers[edges], messages.float())
+        if self.aggregate_normalization is not None:
+            aggregated = aggregated / self.aggregate_normalization
+        mesh_states = mesh_states + self.mesh_node_update(self.with_aggregate(mesh_states, aggregated), conditioning)
+        grid_states = grid_states + self.grid_node_update(grid_states, conditioning)
+        return grid_states, mesh_states
 
+
+class WeatherNext2MeshToGrid(WeatherNext2GraphNetwork):
+    """Updates grid nodes from their three incoming mesh messages and applies a residual mesh update."""
+
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__(config)
+        hidden_size = config.hidden_size
+        self.edge_update = WeatherNext2MeshToGridEdgeUpdate(config)
+        self.mesh_node_update = WeatherNext2ConditionedMlp(config, hidden_size, hidden_size, hidden_size, None)
+        self.grid_node_update = WeatherNext2ConditionedMlp(config, 2 * hidden_size, hidden_size, hidden_size, None)
+
+    def forward(
+        self,
+        grid_states: torch.Tensor,
+        mesh_states: torch.Tensor,
+        edge_features: torch.Tensor,
+        senders: torch.Tensor,
+        receivers: torch.Tensor,
+        conditioning: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         num_points = grid_states.shape[1]
         if senders.numel() != 3 * num_points:
             raise ValueError(
                 f"The mesh-to-grid graph has {senders.numel()} edges, but every one of the {num_points} grid points "
                 "receives exactly three, one from each vertex of its mesh triangle."
             )
-        projected_senders = self.edge_update.sender_proj(mesh_states)
+        projected_senders = self.edge_update.project_senders(mesh_states)
         chunk_size = self.chunk_size or num_points
         # Each finished block is written into one output, so the grid is never held twice.
         updated = torch.empty_like(grid_states)
@@ -255,16 +271,6 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             )
         mesh_states = mesh_states + self.mesh_node_update(mesh_states, conditioning)
         return updated, mesh_states
-
-    def with_aggregate(self, receiver_states: torch.Tensor, aggregated: torch.Tensor) -> torch.Tensor:
-        """The receiving node's input: its own features next to its summed messages.
-
-        The messages are summed in float32 and only then cast back: a mesh node can receive hundreds
-        of them, and bf16 accumulation loses meaningful precision over that many terms.
-        """
-        if self.aggregate_normalization is not None:
-            aggregated = aggregated / self.aggregate_normalization
-        return torch.cat([receiver_states, aggregated.to(receiver_states.dtype)], dim=-1)
 
 
 def eager_attention_forward(
@@ -335,12 +341,6 @@ class WeatherNext2Attention(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        r"""
-        hidden_states (`torch.FloatTensor` of shape `(batch_size, num_blocks, block_size, hidden_size)`)
-        attention_mask (`torch.Tensor` or `BlockMask` of shape `(batch_size * num_blocks, 1, block_size, 3 * block_size)`):
-            Which of the three candidate blocks each query may attend to, node by node, as prepared by
-            [`WeatherNext2MeshTransformer.forward`].
-        """
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -583,9 +583,9 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         self.mesh_encoder = WeatherNext2ConditionedMlp(
             config, config.num_mesh_input_channels, hidden_size, hidden_size, None
         )
-        self.grid_to_mesh = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=True)
+        self.grid_to_mesh = WeatherNext2GridToMesh(config)
         self.mesh_transformer = WeatherNext2MeshTransformer(config)
-        self.mesh_to_grid = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=False)
+        self.mesh_to_grid = WeatherNext2MeshToGrid(config)
 
         self.allocate_geometry_buffers()
         self.post_init()

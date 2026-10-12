@@ -43,8 +43,9 @@ if is_torch_available():
     from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Model
     from transformers.models.weathernext2.modeling_weathernext2 import (
         WeatherNext2Attention,
-        WeatherNext2BipartiteGraphNetwork,
         WeatherNext2ConditionedMlp,
+        WeatherNext2GridToMesh,
+        WeatherNext2MeshToGrid,
     )
 
 
@@ -571,7 +572,8 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             for dtype in (torch.float32, torch.bfloat16):
                 with self.subTest(device=device, dtype=dtype):
                     torch.manual_seed(0)
-                    layer = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh).to(device=device, dtype=dtype)
+                    layer_class = WeatherNext2GridToMesh if grid_to_mesh else WeatherNext2MeshToGrid
+                    layer = layer_class(config).to(device=device, dtype=dtype)
                     reference = copy.deepcopy(layer)
                     reference.chunk_size = None
                     layer.chunk_size = chunk_size
@@ -596,7 +598,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         """Blocks of grid points are mapped to their edges by counting three per point, so another graph is
         rejected rather than aggregated into the wrong points."""
         config = self.model_tester.get_config()
-        layer = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=False)
+        layer = WeatherNext2MeshToGrid(config)
         args = self.graph_inputs(config, grid_to_mesh=False)
         with self.assertRaisesRegex(ValueError, "exactly three"):
             layer(args[0][:, :18], *args[1:])
