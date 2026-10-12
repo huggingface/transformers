@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import ctypes
+import ctypes.util
+import platform
+import sys
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -40,6 +44,61 @@ if logger.propagate:
     logger.propagate = False
 
 
+# `get_mempolicy` is not wrapped by glibc, so we call it through `syscall`. Its number is architecture-dependent and we
+# only query the policy on the architectures we know the number of, to avoid calling an unrelated syscall.
+_GET_MEMPOLICY_SYSCALL_NUMBER = {"x86_64": 239, "aarch64": 236, "riscv64": 236, "ppc64le": 260, "s390x": 269}
+_MPOL_BIND = 2
+_MAX_NUMA_NODES = 1024
+
+
+def get_numa_bound_nodes() -> list[int]:
+    """The NUMA nodes the process is restricted to by an `MPOL_BIND` memory policy, as set by `numactl --membind`.
+    Returns an empty list when there is no such policy, in which case allocations can fall back to any node."""
+    syscall_number = _GET_MEMPOLICY_SYSCALL_NUMBER.get(platform.machine())
+    if syscall_number is None:
+        return []
+    mode = ctypes.c_int()
+    nodemask = (ctypes.c_ulong * (_MAX_NUMA_NODES // 64))()
+    try:
+        libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+        libc.syscall.restype = ctypes.c_long
+        returncode = libc.syscall(
+            syscall_number, ctypes.byref(mode), nodemask, ctypes.c_ulong(_MAX_NUMA_NODES), None, ctypes.c_ulong(0)
+        )
+    except (OSError, AttributeError):
+        return []
+    if returncode != 0 or mode.value != _MPOL_BIND:
+        return []
+    return [node for node in range(_MAX_NUMA_NODES) if nodemask[node // 64] >> (node % 64) & 1]
+
+
+def get_cgroup_memory_limit() -> int:
+    """The memory limit of the process' cgroup (v2 first, then v1), or `sys.maxsize` if it is unlimited or unknown."""
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path, encoding="utf-8") as file:
+                limit = file.read().strip()
+        except OSError:
+            continue
+        return sys.maxsize if limit == "max" else int(limit)
+    return sys.maxsize
+
+
+def get_cpu_total_memory() -> int:
+    """The amount of memory the process can actually allocate on CPU. This is the machine's RAM, lowered by the cgroup
+    memory limit and by the capacity of the NUMA nodes the process is bound to, both of which `psutil` ignores."""
+    total_memory = min(psutil.virtual_memory().total, get_cgroup_memory_limit())
+    numa_nodes = get_numa_bound_nodes()
+    if numa_nodes:
+        # The first line of a node's meminfo is "Node <index> MemTotal: <size> kB"
+        numa_memory = 0
+        for node in numa_nodes:
+            with open(f"/sys/devices/system/node/node{node}/meminfo", encoding="utf-8") as file:
+                numa_memory += int(file.readline().split()[3]) * 1024
+        total_memory = min(total_memory, numa_memory)
+    return total_memory
+
+
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -65,7 +124,7 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     else:
         device = torch.device("cpu")
         if is_psutil_available():
-            total_memory = psutil.virtual_memory().total
+            total_memory = get_cpu_total_memory()
             allocated_memory = psutil.Process().memory_info().rss
             reserved_memory = allocated_memory
         else:
