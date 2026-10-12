@@ -328,12 +328,6 @@ class WeatherNext2Attention(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        r"""
-        hidden_states (`torch.FloatTensor` of shape `(batch_size, num_blocks, block_size, hidden_size)`)
-        attention_mask (`torch.Tensor` or `BlockMask` of shape `(batch_size * num_blocks, 1, block_size, 3 * block_size)`):
-            Which of the three candidate blocks each query may attend to, node by node, as prepared by
-            [`WeatherNext2MeshTransformer.forward`].
-        """
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
