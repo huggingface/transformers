@@ -1,0 +1,79 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-vit-integration",
+  "contract_name": "vit",
+  "contract_revision": "499b613e58aa698e4a572f6c1265aa55eb60a38e",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-vit-slim",
+  "kind": "fixture",
+  "revision": "2bf504ea8bd2e48d5e5870ea2880f8f79d52e11e",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 3.88,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "top5_labels": [
+   [
+    0,
+    1,
+    101,
+    230,
+    234
+   ],
+   [
+    1,
+    0,
+    51,
+    207,
+    230
+   ]
+  ],
+  "top5_probs": [
+   [
+    0.9963148236274719,
+    0.003572284709662199,
+    1.4807355341872608e-07,
+    1.4797826963786065e-07,
+    1.4519820012992568e-07
+   ],
+   [
+    0.995546817779541,
+    0.0003293995978310704,
+    4.8358469939557835e-06,
+    4.792945674125804e-06,
+    4.656020792026538e-06
+   ]
+  ],
+  "training": {
+   "loss": 0.004077558871358633,
+   "gradients": {
+    "vit.embeddings.cls_token": true,
+    "vit.embeddings.position_embeddings": true
+   },
+   "updated": true
+  }
+ }
+}

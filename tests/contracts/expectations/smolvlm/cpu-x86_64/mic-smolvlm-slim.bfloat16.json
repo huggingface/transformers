@@ -1,0 +1,109 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-smolvlm-integration",
+  "contract_name": "smolvlm",
+  "contract_revision": "4d272d2728f4d3d26c69f7858dfcb79cc1140d2b",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-smolvlm-slim",
+  "kind": "fixture",
+  "revision": "50f7c8105ba5aa229fe4be0545730fd100e2e3f7",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 23.61,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "selected_logits": [
+   [
+    0.357421875,
+    -0.083984375,
+    -0.3046875,
+    -0.1640625,
+    -0.291015625,
+    0.11083984375,
+    0.1767578125,
+    -0.1748046875,
+    -0.04833984375,
+    -0.06005859375
+   ],
+   [
+    0.2412109375,
+    0.033935546875,
+    -0.2060546875,
+    -0.10693359375,
+    0.11083984375,
+    -0.083984375,
+    -0.0272216796875,
+    -0.2158203125,
+    0.005828857421875,
+    0.0186767578125
+   ],
+   [
+    0.032470703125,
+    0.06787109375,
+    -0.1708984375,
+    0.0947265625,
+    0.228515625,
+    -0.09228515625,
+    -0.04931640625,
+    -0.056640625,
+    -0.040283203125,
+    -0.0050048828125
+   ],
+   [
+    -0.298828125,
+    0.1494140625,
+    0.201171875,
+    0.12890625,
+    -0.0615234375,
+    0.0869140625,
+    0.0830078125,
+    0.02978515625,
+    -0.1181640625,
+    0.0673828125
+   ],
+   [
+    0.005218505859375,
+    -0.0054931640625,
+    -0.1943359375,
+    -0.267578125,
+    -0.037841796875,
+    0.1953125,
+    0.123046875,
+    0.061279296875,
+    0.03759765625,
+    -0.08935546875
+   ]
+  ],
+  "training": {
+   "loss": 10.808806419372559,
+   "gradients": {
+    "model.vision_model.embeddings.patch_embedding.weight": true,
+    "model.vision_model.embeddings.position_embedding.weight": true
+   },
+   "updated": true
+  }
+ }
+}

@@ -1,0 +1,76 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-mistral3-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-mistral3-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 5.72,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "predicted_tokens": [
+   "",
+   ""
+  ],
+  "answer_logits": [
+   [
+    -0.04931640625,
+    0.0810546875,
+    0.1630859375,
+    -0.2265625,
+    1.109375,
+    0.19921875,
+    0.212890625,
+    -0.05126953125,
+    0.10009765625,
+    0.17578125
+   ],
+   [
+    -0.05126953125,
+    0.07666015625,
+    0.16015625,
+    -0.2333984375,
+    1.109375,
+    0.2021484375,
+    0.20703125,
+    -0.048583984375,
+    0.1005859375,
+    0.1748046875
+   ]
+  ],
+  "training": {
+   "loss": 11.76681137084961,
+   "gradients": {
+    "model.language_model.embed_tokens.weight": true,
+    "model.language_model.layers.0.self_attn.q_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

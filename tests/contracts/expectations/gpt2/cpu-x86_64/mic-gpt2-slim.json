@@ -1,0 +1,71 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-gpt2-integration",
+  "contract_name": "gpt2",
+  "contract_revision": "40ebf651d607b8b5b7c3c1e9855f4d7b55e74b2d",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-gpt2-slim",
+  "kind": "fixture",
+  "revision": "0b13f059bc38002cfde203fb3a1be4aaeef3ccc7",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 3.9,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "sdpa"
+  },
+  "predicted_tokens": [
+   21831,
+   640
+  ],
+  "predicted_text": [
+   "\u0120fox",
+   "\u0120time"
+  ],
+  "next_token_logits": [
+   [
+    0.7140664458274841,
+    0.6108794808387756,
+    0.596257209777832,
+    0.5959845781326294,
+    0.5851351618766785
+   ],
+   [
+    0.741654098033905,
+    0.6374403834342957,
+    0.6010291576385498,
+    0.6001221537590027,
+    0.5956145524978638
+   ]
+  ],
+  "training": {
+   "loss": 10.769245147705078,
+   "gradients": {
+    "transformer.h.0.attn.c_attn.weight": true,
+    "transformer.h.0.mlp.c_fc.weight": true
+   },
+   "updated": true
+  }
+ }
+}

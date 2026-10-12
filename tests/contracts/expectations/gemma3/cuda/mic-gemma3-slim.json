@@ -1,0 +1,64 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-gemma3-integration",
+  "contract_name": "gemma3",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-gemma3-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 6.29,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "predicted_tokens": [
+   "\u2581\u0987\u09a8\u09cd\u09a6\u09c1",
+   "\u0648\u0627\u062c"
+  ],
+  "predicted_text": " \u0987\u09a8\u09cd\u09a6\u09c1\u0648\u0627\u062c",
+  "answer_logits": [
+   [
+    0.6796875,
+    0.66796875,
+    0.6640625
+   ],
+   [
+    0.71875,
+    0.66015625,
+    0.65625
+   ]
+  ],
+  "training": {
+   "loss": 12.520472526550293,
+   "gradients": {
+    "model.language_model.embed_tokens.weight": true,
+    "model.language_model.layers.0.self_attn.q_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

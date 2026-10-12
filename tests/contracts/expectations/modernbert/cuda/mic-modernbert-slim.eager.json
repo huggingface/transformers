@@ -1,0 +1,64 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-modernbert-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-modernbert-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.21,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   220,
+   220
+  ],
+  "predicted_text": [
+   "\u012b",
+   "\u012b"
+  ],
+  "answer_logits": [
+   [
+    -0.07035188376903534,
+    -0.10849795490503311
+   ],
+   [
+    -0.07079791277647018,
+    -0.10871603339910507
+   ]
+  ],
+  "training": {
+   "loss": 10.926578521728516,
+   "gradients": {
+    "model.embeddings.tok_embeddings.weight": true,
+    "model.embeddings.norm.weight": true
+   },
+   "updated": true
+  }
+ }
+}

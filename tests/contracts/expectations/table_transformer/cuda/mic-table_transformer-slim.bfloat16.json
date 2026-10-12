@@ -1,0 +1,78 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-table_transformer-integration",
+  "contract_name": "table_transformer",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-table_transformer-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.99,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "inference_scores": [
+   [
+    -0.064453125,
+    0.06396484375,
+    -0.1435546875
+   ],
+   [
+    -0.064453125,
+    0.06396484375,
+    -0.1435546875
+   ],
+   [
+    -0.064453125,
+    0.06396484375,
+    -0.1435546875
+   ]
+  ],
+  "inference_boxes": [
+   [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ],
+   [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ]
+  ],
+  "training": {
+   "loss": 7.631974697113037,
+   "gradients": {
+    "model.backbone.conv_encoder.model.conv1.weight": true,
+    "model.backbone.conv_encoder.model.layer2.0.downsample.0.weight": true
+   },
+   "updated": true
+  }
+ }
+}

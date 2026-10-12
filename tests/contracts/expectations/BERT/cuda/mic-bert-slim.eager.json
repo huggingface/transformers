@@ -1,0 +1,89 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-bert-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-bert-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 1.04,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   5571,
+   5571,
+   5571,
+   11935
+  ],
+  "predicted_text": [
+   "charges",
+   "charges",
+   "charges",
+   "subtropical"
+  ],
+  "answer_logits": [
+   [
+    0.007818994112312794,
+    0.373182088136673,
+    0.08803114295005798,
+    0.026554442942142487
+   ],
+   [
+    0.008690929971635342,
+    0.37367114424705505,
+    0.08744853734970093,
+    0.02625495009124279
+   ],
+   [
+    0.008095373399555683,
+    0.3739737570285797,
+    0.08767388761043549,
+    0.027107642963528633
+   ],
+   [
+    0.1301427185535431,
+    0.2742496132850647,
+    -0.06490708887577057,
+    0.038007691502571106
+   ]
+  ],
+  "training": {
+   "loss": 10.193270683288574,
+   "gradients": {
+    "bert.encoder.layer.0.attention.self.query.weight": true,
+    "bert.encoder.layer.0.intermediate.dense.weight": true
+   },
+   "updated": true
+  }
+ }
+}

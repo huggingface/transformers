@@ -24,7 +24,7 @@ jobs:
   contracts:
     runs-on:
       group: aws-m8i-l-cache
-    timeout-minutes: 30
+    timeout-minutes: 90
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb"
@@ -37,6 +37,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       OMP_NUM_THREADS: "8"
       LOCK: tests/contracts/fleet-lock.json
+      PROTOTYPE_LOCK: tests/contracts/prototype-fleet.lock
     defaults:
       run:
         shell: bash
@@ -51,7 +52,7 @@ jobs:
           start=$SECONDS
           uv pip install -e .
           uv pip install "transformers-mic @ git+https://github.com/huggingface/transformers-mic@$TMIC_SHA"
-          uv pip install jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
+          uv pip install timm librosa soundfile scipy jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
           echo "Installed in $((SECONDS - start)) s on $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) cores"
 
       - uses: actions/cache@v4
@@ -85,6 +86,12 @@ jobs:
               r = json.loads(line)
               print(r["status"].ljust(6), r["target"], r.get("platform", ""), flush=True)' || status=$?
           echo "$(tail -1 /tmp/run.log); $((SECONDS - start)) s"
+          tmic check --fixtures-only --lock "$PROTOTYPE_LOCK" --all-variants \
+            "${selection[@]}" --output /tmp/results.jsonl 2>> /tmp/run.log | python -c '
+          import json, sys
+          for line in sys.stdin:
+              r = json.loads(line)
+              print(r["status"].ljust(6), r["target"], r.get("variant", ""), r.get("platform", ""), flush=True)' || status=$?
           exit "${status:-0}"
 
       - name: Summary

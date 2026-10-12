@@ -15,7 +15,12 @@ git diff --name-only origin/main...HEAD > /tmp/mic-changed-files.txt
 tmic check --fixtures-only --lock tests/contracts/fleet-lock.json --changed-files /tmp/mic-changed-files.txt
 ```
 
-New `mic-` artifacts from the declared prototype fleet enter this branch only
-after CPU baselines are recorded and reviewed. GPU-only validation does not
-establish a pass on the PR runner. The original frozen fleet remains the
-integration control during that migration.
+`tests/contracts/prototype-fleet.lock` adds 17 `tmic`-generated architecture
+contracts, checked against published Hub pins on CPU and GPU before export.
+These run in default, eager and bfloat16 variants. The original six-contract
+fleet remains the historical regression control. Both fleets use changed-file
+selection on PRs and run in full on pushes to `contracts-proof`.
+
+The prototype CPU expectations were measured on the GPU worker's x86 CPU under
+the pinned runtime. This branch also checks them on the dedicated CPU CI runner;
+passing the GPU-worker CPU check alone does not establish that result.

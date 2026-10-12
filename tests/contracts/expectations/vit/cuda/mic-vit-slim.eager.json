@@ -1,0 +1,78 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-vit-integration",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-vit-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.37,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "top5_labels": [
+   [
+    0,
+    1,
+    101,
+    230,
+    234
+   ],
+   [
+    1,
+    0,
+    51,
+    207,
+    230
+   ]
+  ],
+  "top5_probs": [
+   [
+    0.9963154196739197,
+    0.0035723361652344465,
+    1.480734823644525e-07,
+    1.479782127944418e-07,
+    1.4519815749736154e-07
+   ],
+   [
+    0.9955466985702515,
+    0.000329399888869375,
+    4.8358510866819415e-06,
+    4.792949766851962e-06,
+    4.656029432226205e-06
+   ]
+  ],
+  "training": {
+   "loss": 0.004077321384102106,
+   "gradients": {
+    "vit.embeddings.cls_token": true,
+    "vit.embeddings.position_embeddings": true
+   },
+   "updated": true
+  }
+ }
+}

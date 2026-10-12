@@ -1,0 +1,78 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-table_transformer-integration",
+  "contract_name": "table_transformer",
+  "contract_revision": "526a6608540f09cb9243420e83ac433d8b0a2ec3",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-table_transformer-slim",
+  "kind": "fixture",
+  "revision": "a0616d0368291a2730b5499af39909926ff9382e",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 5.22,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "inference_scores": [
+   [
+    -0.06341004371643066,
+    0.06314599514007568,
+    -0.14287631213665009
+   ],
+   [
+    -0.06340734660625458,
+    0.06314973533153534,
+    -0.1428736448287964
+   ],
+   [
+    -0.0634060651063919,
+    0.06314725428819656,
+    -0.142870232462883
+   ]
+  ],
+  "inference_boxes": [
+   [
+    0.49998366832733154,
+    0.49963489174842834,
+    0.5001215934753418,
+    0.5003186464309692
+   ],
+   [
+    0.49998360872268677,
+    0.49963489174842834,
+    0.5001215934753418,
+    0.5003186464309692
+   ]
+  ],
+  "training": {
+   "loss": 7.650144577026367,
+   "gradients": {
+    "model.backbone.conv_encoder.model.conv1.weight": true,
+    "model.backbone.conv_encoder.model.layer2.0.downsample.0.weight": true
+   },
+   "updated": true
+  }
+ }
+}

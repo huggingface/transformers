@@ -1,0 +1,59 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-llama-integration",
+  "contract_name": "llama",
+  "contract_revision": "cbd35a6c9e9be70f57591a4aecad6cd3c9cb11e6",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-llama-slim",
+  "kind": "fixture",
+  "revision": "ec23804b44cda418c562a57ddef6dfc000169e66",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 3.84,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "logit_probes": [
+   [
+    0.0264892578125,
+    -0.205078125,
+    0.365234375
+   ],
+   [
+    -0.1943359375,
+    0.271484375,
+    0.1376953125
+   ]
+  ],
+  "training": {
+   "loss": 10.860152244567871,
+   "gradients": {
+    "model.layers.0.self_attn.q_proj.weight": true,
+    "model.layers.0.mlp.gate_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

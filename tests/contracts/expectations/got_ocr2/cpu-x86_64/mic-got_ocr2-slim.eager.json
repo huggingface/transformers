@@ -1,0 +1,57 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-got_ocr2-integration",
+  "contract_name": "got_ocr2",
+  "contract_revision": "e5c722f255c8e4fe30ad6b80847aa9ae8e2d59ca",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-got_ocr2-slim",
+  "kind": "fixture",
+  "revision": "89a32bdbaf5e9b07b22400ef24e2c0e94a6cc050",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 51.78,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "eager"
+  },
+  "inference_logits": [
+   -6.8125,
+   -6.78125,
+   -7.0,
+   -6.9375,
+   -6.71875,
+   -6.6875,
+   -6.90625,
+   -6.84375
+  ],
+  "training": {
+   "loss": 0.0016535769682377577,
+   "gradients": {
+    "model.vision_tower.pos_embed": true,
+    "model.vision_tower.patch_embed.projection.weight": true
+   },
+   "updated": true
+  }
+ }
+}

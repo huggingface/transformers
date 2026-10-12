@@ -1,0 +1,143 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-clip-integration",
+  "contract_name": "clip",
+  "contract_revision": "6c631f841b6c8252be06661b92e4c7c73f898519",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-clip-slim",
+  "kind": "fixture",
+  "revision": "54a0d49d762a748b6a2dda0634d55628cacd7e2b",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3",
+   "local_patches": [
+    "config-field-generation-params",
+    "masked-spec-embed-init",
+    "whisper-decode-tensor-batch"
+   ]
+  },
+  "seconds": 0.82,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "image_to_text": [
+   1,
+   1,
+   1,
+   2
+  ],
+  "text_to_image": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "logits_per_image": [
+   [
+    -2.6372103691101074,
+    -2.2477340698242188,
+    -2.503988265991211,
+    -2.723219394683838
+   ],
+   [
+    4.143319129943848,
+    4.256854057312012,
+    4.226872444152832,
+    3.778782844543457
+   ],
+   [
+    1.5251153707504272,
+    1.6053025722503662,
+    1.227882981300354,
+    1.1937191486358643
+   ],
+   [
+    -0.43736717104911804,
+    -0.29582279920578003,
+    -0.10970821231603622,
+    -0.47324323654174805
+   ]
+  ],
+  "text_kwargs_input_ids": [
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    736,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1901,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    1746,
+    3999,
+    49407
+   ],
+   [
+    49406,
+    320,
+    1125,
+    539,
+    320,
+    4481,
+    3999,
+    49407
+   ]
+  ],
+  "image_processor_config_keys": [
+   "crop_size",
+   "do_center_crop",
+   "do_normalize",
+   "do_resize",
+   "feature_extractor_type",
+   "image_mean",
+   "image_std",
+   "resample",
+   "size"
+  ],
+  "training": {
+   "loss": 2.525594711303711,
+   "gradients": {
+    "visual_projection.weight": true,
+    "text_projection.weight": true
+   },
+   "updated": true
+  }
+ }
+}

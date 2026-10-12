@@ -1,0 +1,65 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-modernbert-integration",
+  "contract_name": "modernbert",
+  "contract_revision": "1c0a5edbc36aaf0a2190cf1a3b297058b242c386",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-modernbert-slim",
+  "kind": "fixture",
+  "revision": "4bd43e1d801756f8a231e6ec4bad85f5e46b9f63",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.18,
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "predicted_tokens": [
+   220,
+   220
+  ],
+  "predicted_text": [
+   "\u012b",
+   "\u012b"
+  ],
+  "answer_logits": [
+   [
+    -0.06982421875,
+    -0.1083984375
+   ],
+   [
+    -0.0693359375,
+    -0.10791015625
+   ]
+  ],
+  "training": {
+   "loss": 10.925919532775879,
+   "gradients": {
+    "model.embeddings.tok_embeddings.weight": true,
+    "model.embeddings.norm.weight": true
+   },
+   "updated": true
+  }
+ }
+}

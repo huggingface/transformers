@@ -1,0 +1,78 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-table_transformer-integration",
+  "contract_name": "table_transformer",
+  "contract_revision": "unpublished",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-table_transformer-slim",
+  "kind": "fixture",
+  "revision": "unpublished",
+  "environment": {
+   "python": "3.10.12",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cu128",
+   "torchvision": "0.26.0+cu128",
+   "torchaudio": "2.11.0+cu128",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 4.89,
+  "platform": "cuda"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cuda",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "inference_scores": [
+   [
+    -0.06344674527645111,
+    0.06313076615333557,
+    -0.14289110898971558
+   ],
+   [
+    -0.0634441077709198,
+    0.06313450634479523,
+    -0.14288856089115143
+   ],
+   [
+    -0.06344276666641235,
+    0.06313209980726242,
+    -0.14288513362407684
+   ]
+  ],
+  "inference_boxes": [
+   [
+    0.49998366832733154,
+    0.49963507056236267,
+    0.5001217126846313,
+    0.5003185868263245
+   ],
+   [
+    0.49998366832733154,
+    0.49963507056236267,
+    0.5001217722892761,
+    0.5003185868263245
+   ]
+  ],
+  "training": {
+   "loss": 7.660412788391113,
+   "gradients": {
+    "model.backbone.conv_encoder.model.conv1.weight": true,
+    "model.backbone.conv_encoder.model.layer2.0.downsample.0.weight": true
+   },
+   "updated": true
+  }
+ }
+}
