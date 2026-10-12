@@ -51,8 +51,7 @@ if is_torch_available():
 
 
 class Glm4vMoeVisionText2TextModelTester:
-    if is_torch_available():
-        causal_lm_class = Glm4vMoeForConditionalGeneration
+    causal_lm_class = Glm4vMoeForConditionalGeneration
 
     def __init__(
         self,
