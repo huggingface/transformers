@@ -153,14 +153,17 @@ This backend requires:
 
 - A Blackwell GPU (compute capability ≥ 10.0) with a CUDA toolkit (`nvcc`) 12.9 or later.
 - FP4-packed expert weights paired with UE8M0 weight scales (the pre-quantized checkpoint typically declares `expert_dtype="fp4"` and `scale_fmt="ue8m0"` in its config).
-- A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
+- A `torch.distributed` process group for the expert-parallel group, which the expert-parallel wrapping supplies automatically when `ep_size > 1`.
 
 ```py
 import os
 
 from transformers import AutoModelForCausalLM, DistributedConfig
 
-distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]))
+distributed_config = DistributedConfig(
+    tp_size=int(os.environ["WORLD_SIZE"]),
+    ep_size=int(os.environ["WORLD_SIZE"]),
+)
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V4",
     experts_implementation="deepgemm_megamoe",

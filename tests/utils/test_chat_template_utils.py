@@ -56,6 +56,36 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_bare_container_types(self):
+        def fn(x: list, y: tuple, z: dict):
+            """
+            Test function
+
+            Args:
+                x: The first input
+                y: The second input
+                z: The third input
+            """
+            return x
+
+        # Bare builtin containers have no typing origin, so they must be mapped explicitly;
+        # they should match their `typing.List` / `typing.Tuple` / `typing.Dict` equivalents.
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "description": "The first input"},
+                    "y": {"type": "array", "description": "The second input"},
+                    "z": {"type": "object", "description": "The third input"},
+                },
+                "required": ["x", "y", "z"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_union(self):
         def fn(x: int | float):
             """
@@ -73,6 +103,33 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "parameters": {
                 "type": "object",
                 "properties": {"x": {"type": ["integer", "number"], "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_union_with_duplicate_types(self):
+        def fn(x: list | tuple, y: list | tuple | dict | None = None):
+            """
+            Test function
+
+            Args:
+                x: The first input
+                y: The second input
+            """
+            return x
+
+        # `list` and `tuple` both map to "array", which should appear only once in the schema
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "description": "The first input"},
+                    "y": {"type": ["array", "object"], "nullable": True, "description": "The second input"},
+                },
                 "required": ["x"],
             },
         }

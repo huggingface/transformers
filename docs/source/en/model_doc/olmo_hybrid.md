@@ -82,6 +82,8 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 
 - The model uses a custom cache (`OlmoHybridDynamicCache`) that handles both KV cache for attention layers and recurrent state for linear attention layers.
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## OlmoHybridConfig
 
 [[autodoc]] OlmoHybridConfig

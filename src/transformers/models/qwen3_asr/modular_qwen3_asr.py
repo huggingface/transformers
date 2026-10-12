@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_layers import GenericForTokenClassification
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -28,7 +28,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import get_max_seqlen
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import AudioFlamingo3ForConditionalGeneration, AudioFlamingo3Model
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
@@ -94,7 +94,23 @@ class Qwen3ASRConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_asr"
-    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_asr_encoder"),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3",
+            init_kwargs={
+                "hidden_size": 2048,
+                "intermediate_size": 6144,
+                "num_hidden_layers": 28,
+                "num_attention_heads": 16,
+                "num_key_value_heads": 8,
+                "head_dim": 128,
+                "max_position_embeddings": 65536,
+                "tie_word_embeddings": True,
+            },
+        ),
+    }
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -105,30 +121,6 @@ class Qwen3ASRConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
     token_classification_bias: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen3_asr_encoder"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                hidden_size=2048,
-                intermediate_size=6144,
-                num_hidden_layers=28,
-                num_attention_heads=16,
-                num_key_value_heads=8,
-                head_dim=128,
-                max_position_embeddings=65536,
-                tie_word_embeddings=True,
-            )
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring

@@ -86,7 +86,7 @@ class VoxtralRealtimeModelTester(ALMModelTester):
         output_length = post_conv_len // downsample_factor
         return torch.ones([self.batch_size, output_length], dtype=torch.long).to(torch_device)
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         effective_feat = self.feat_seq_length + (self._max_new_tokens or 0) * 8
         return floats_tensor([self.batch_size, self.num_mel_bins, effective_feat])
 
