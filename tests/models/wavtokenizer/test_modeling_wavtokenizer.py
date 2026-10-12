@@ -227,7 +227,6 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 self.assertEqual(audio_values.shape, (batch_size, 1, num_codes * config.hop_length))
 
     def test_encode_batched_matches_single(self):
-        """Same-length samples encoded in a batch must produce the same codes as encoded individually."""
         torch.manual_seed(0)
         config = self.model_tester.get_config()
         model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()

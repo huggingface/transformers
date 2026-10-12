@@ -185,8 +185,6 @@ class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
         Dimension of the codebook vectors (the quantizer input after `quant_conv`).
     latent_channels (`int`, *optional*, defaults to 256):
         Number of channels output by the encoder (before `quant_conv`).
-    in_channels (`int`, *optional*, defaults to 3):
-        Number of input image channels.
     base_channels (`int`, *optional*, defaults to 256):
         Base channel count of the encoder; per-stage widths are `base_channels * channel_multiplier[stage]`.
     channel_multiplier (`list[int]`, *optional*, defaults to `(1, 1, 2, 2, 4)`):
@@ -298,16 +296,10 @@ class Apertus1p5Config(PreTrainedConfig):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
     audio_config (`Union[dict, WavTokenizerEncoderConfig]`, *optional*):
         Configuration of the WavTokenizer encoder that produces the audio codes.
-    image_token_id (`int`, *optional*, defaults to 131079):
-        Id of the `<|image|>` placeholder token that image code positions carry in `input_ids`.
-    audio_token_id (`int`, *optional*, defaults to 131085):
-        Id of the `<|audio|>` placeholder token that audio code positions carry in `input_ids`.
     image_token_offset (`int`, *optional*, defaults to 131272):
         Offset mapping a visual codebook index `i` to the vocabulary id of `<|visual token i|>`.
     audio_token_offset (`int`, *optional*, defaults to 262344):
         Offset mapping an audio codebook index `i` to the vocabulary id of `<|audio token i|>`.
-    tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-        Whether to tie the LM head weights to the input embeddings.
 
     Example:
 
@@ -560,19 +552,14 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
         self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, kernel_size=1)
         self.post_init()
 
+    @auto_docstring(custom_intro="Tokenizes images into a grid of discrete codebook indices.")
     def encode(self, pixel_values: torch.Tensor) -> Apertus1p5VisionTokenizerEncoderOutput:
-        """
-        Tokenizes images into a grid of discrete codebook indices.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-                RGB images normalized to `[-1, 1]`.
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
+            RGB images normalized to `[-1, 1]`.
 
         Returns:
-            `Apertus1p5VisionTokenizerEncoderOutput`: The `image_tokens` field contains discrete codebook
-            indices of shape `(batch_size, height // factor, width // factor)`, where `factor` is
-            `config.spatial_scale_factor`. Values are in `[0, config.codebook_size)`, before applying the
-            language-vocabulary offset.
+            `Apertus1p5VisionTokenizerEncoderOutput`: Discrete image-code grids in `image_tokens`.
         """
         # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
         # move the input to the encoder's device and dtype so callers can pass fp16/bf16 pixel values

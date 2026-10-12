@@ -52,8 +52,6 @@ from ..xcodec2.modeling_xcodec2 import Xcodec2ISTFTHead
 @strict
 class WavTokenizerConfig(PreTrainedConfig):
     r"""
-    sampling_rate (`int`, *optional*, defaults to 24000):
-        The sampling rate at which the audio waveform should be digitalized, expressed in hertz (Hz).
     audio_channels (`int`, *optional*, defaults to 1):
         Number of channels in the audio data. Only mono (1) is supported.
     num_filters (`int`, *optional*, defaults to 32):
@@ -182,48 +180,12 @@ class WavTokenizerConfig(PreTrainedConfig):
         return WavTokenizerEncoderConfig(**config_dict)
 
 
-@auto_docstring(
-    checkpoint="swiss-ai/wavtokenizer-large-unify-40token",
-    custom_intro="""
-    Configuration of [`WavTokenizerEncoderModel`]. It shares every field with [`WavTokenizerConfig`], so it can be
-    loaded from a full WavTokenizer checkpoint.
-    """,
-)
 @strict
-class WavTokenizerEncoderConfig(WavTokenizerConfig):
-    r"""
-    num_filters (`int`, *optional*, defaults to 32):
-        Number of convolution kernels of the first `WavTokenizerConv1d` down sampling layer.
-    upsampling_ratios (`list[int]`, *optional*, defaults to `[6, 5, 5, 4]`):
-        Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
-        will use the ratios in the reverse order to the ones specified here that must match the decoder order.
-        The product (600 by default) is the hop length: the number of audio samples represented by a single code.
-    num_residual_layers (`int`, *optional*, defaults to 1):
-        Number of residual layers in each encoder stage.
-    dilation_growth_rate (`int`, *optional*, defaults to 2):
-        How much to increase the dilation with each residual layer in the encoder.
-    compress (`int`, *optional*, defaults to 2):
-        Reduced dimensionality in residual branches.
-    use_conv_shortcut (`bool`, *optional*, defaults to `True`):
-        Whether to use a convolutional layer as the (skip) shortcut in the residual blocks. If False, an identity
-        function will be used, giving a generic residual connection.
-    use_causal_conv (`bool`, *optional*, defaults to `False`):
-        Whether to use fully causal convolution.
-    pad_mode (`str`, *optional*, defaults to `"reflect"`):
-        Padding mode for the convolutions.
-    norm_type (`str`, *optional*, defaults to `"weight_norm"`):
-        Normalization method for the encoder convolutions. Should be in `["weight_norm", "time_group_norm"]`.
-    last_kernel_size (`int`, *optional*, defaults to 7):
-        Kernel size for the last encoder convolution.
-    residual_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size for the residual layers of the encoder.
-    num_lstm_layers (`int`, *optional*, defaults to 2):
-        Number of LSTM layers at the end of the encoder.
-    adanorm_num_embeddings (`int`, *optional*, defaults to 4):
-        Number of condition embeddings of the decoder's adaptive layer norms. Conditioning is a training-time
-        feature (one embedding per bandwidth); inference always uses embedding 0.
-    decoder_attention_num_groups (`int`, *optional*, defaults to 32):
-        Number of groups of the decoder GroupNorm layers.
+class WavTokenizerEncoderConfig(WavTokenizerConfig):  # trf-ignore: TRF057 (see WavTokenizerConfig)
+    """
+    Configuration of [`WavTokenizerEncoderModel`], the encoder and quantizer of WavTokenizer. It shares every field
+    with [`WavTokenizerConfig`] (see its documentation for the arguments), so it can be loaded from a full
+    WavTokenizer checkpoint. Decoder-specific fields are unused by the encoder model.
     """
 
     model_type = "wavtokenizer_encoder"
@@ -583,7 +545,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
-            Padding mask used to pad `input_values`.
+            Mask indicating valid audio samples (1) versus padding (0), used to compute `audio_codes_mask`.
         """
         length = input_values.shape[-1]
         encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)

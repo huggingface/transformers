@@ -318,19 +318,14 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
         self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, kernel_size=1)
         self.post_init()
 
+    @auto_docstring(custom_intro="Tokenizes images into a grid of discrete codebook indices.")
     def encode(self, pixel_values: torch.Tensor) -> Apertus1p5VisionTokenizerEncoderOutput:
-        """
-        Tokenizes images into a grid of discrete codebook indices.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-                RGB images normalized to `[-1, 1]`.
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
+            RGB images normalized to `[-1, 1]`.
 
         Returns:
-            `Apertus1p5VisionTokenizerEncoderOutput`: The `image_tokens` field contains discrete codebook
-            indices of shape `(batch_size, height // factor, width // factor)`, where `factor` is
-            `config.spatial_scale_factor`. Values are in `[0, config.codebook_size)`, before applying the
-            language-vocabulary offset.
+            `Apertus1p5VisionTokenizerEncoderOutput`: Discrete image-code grids in `image_tokens`.
         """
         # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
         # move the input to the encoder's device and dtype so callers can pass fp16/bf16 pixel values
