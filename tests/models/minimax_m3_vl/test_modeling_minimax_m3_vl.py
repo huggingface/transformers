@@ -24,7 +24,6 @@ from transformers import (
     MiniMaxM3VLImageProcessorFast,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,
-    MiniMaxM3VLTextConfig,
     MiniMaxM3VLVideoProcessor,
     MiniMaxM3VLVisionConfig,
     is_torch_available,
@@ -63,8 +62,7 @@ if is_vision_available():
 class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniMaxM3VLModel
     config_class = MiniMaxM3VLConfig
-    text_config_class = MiniMaxM3VLTextConfig
-    vision_config_class = MiniMaxM3VLVisionConfig
+
     conditional_generation_class = MiniMaxM3SparseForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

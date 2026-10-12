@@ -21,13 +21,11 @@ from transformers import (
     AriaConfig,
     AriaForConditionalGeneration,
     AriaModel,
-    AriaTextConfig,
     AutoProcessor,
     AutoTokenizer,
     BitsAndBytesConfig,
     is_torch_available,
 )
-from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -54,8 +52,7 @@ IMAGE_OF_VIEW_URL = "https://huggingface.co/datasets/hf-internal-testing/transfo
 class AriaVisionText2TextModelTester(VLMModelTester):
     base_model_class = AriaModel
     config_class = AriaConfig
-    text_config_class = AriaTextConfig
-    vision_config_class = Idefics3VisionConfig
+
     conditional_generation_class = AriaForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

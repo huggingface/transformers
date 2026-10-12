@@ -34,10 +34,6 @@ if is_torch_available():
         DeepseekOcr2ForConditionalGeneration,
         DeepseekOcr2Model,
     )
-    from transformers.models.deepseek_ocr2.configuration_deepseek_ocr2 import (
-        DeepseekOcr2TextConfig,
-        DeepseekOcr2VisionConfig,
-    )
 
 if is_vision_available():
     from transformers.image_utils import load_image
@@ -47,8 +43,6 @@ class DeepseekOcr2VisionText2TextModelTester(VLMModelTester):
     base_model_class = DeepseekOcr2Model
     config_class = DeepseekOcr2Config
     conditional_generation_class = DeepseekOcr2ForConditionalGeneration
-    text_config_class = DeepseekOcr2TextConfig
-    vision_config_class = DeepseekOcr2VisionConfig
 
     def __init__(self, parent, **kwargs):
         # VisionModel always selects query_768_resolution (144 tokens) for small images + 1 separator

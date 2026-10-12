@@ -27,8 +27,6 @@ import pytest
 from transformers import (
     AutoProcessor,
     Cosmos3OmniConfig,
-    Qwen3VLTextConfig,
-    Qwen3VLVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -58,8 +56,7 @@ if is_torch_available():
 class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
     base_model_class = Cosmos3OmniModel
     config_class = Cosmos3OmniConfig
-    text_config_class = Qwen3VLTextConfig
-    vision_config_class = Qwen3VLVisionConfig
+
     conditional_generation_class = Cosmos3OmniForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

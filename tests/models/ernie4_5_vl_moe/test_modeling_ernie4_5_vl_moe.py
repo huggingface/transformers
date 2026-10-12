@@ -25,10 +25,6 @@ from transformers import (
     Ernie4_5_VLMoeModel,
     is_torch_available,
 )
-from transformers.models.ernie4_5_vl_moe.configuration_ernie4_5_vl_moe import (
-    Ernie4_5_VLMoeTextConfig,
-    Ernie4_5_VLMoeVisionConfig,
-)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -51,8 +47,7 @@ if is_torch_available():
 class Ernie4_5_VLMoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Ernie4_5_VLMoeModel
     config_class = Ernie4_5_VLMoeConfig
-    text_config_class = Ernie4_5_VLMoeTextConfig
-    vision_config_class = Ernie4_5_VLMoeVisionConfig
+
     conditional_generation_class = Ernie4_5_VLMoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

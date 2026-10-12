@@ -22,7 +22,6 @@ from transformers import (
     MuseGlimmerModel,
     is_torch_available,
 )
-from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -43,8 +42,7 @@ if is_torch_available():
 class MuseGlimmerVision2TextModelTester(VLMModelTester):
     base_model_class = MuseGlimmerModel
     config_class = MuseGlimmerConfig
-    text_config_class = MuseGlimmerTextConfig
-    vision_config_class = MuseGlimmerVisionConfig
+
     conditional_generation_class = MuseGlimmerForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

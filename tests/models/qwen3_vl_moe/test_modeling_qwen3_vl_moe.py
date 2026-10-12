@@ -24,7 +24,6 @@ from transformers import (
     Qwen3VLMoeModel,
     is_torch_available,
 )
-from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -47,8 +46,7 @@ if is_torch_available():
 class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen3VLMoeModel
     config_class = Qwen3VLMoeConfig
-    text_config_class = Qwen3VLMoeTextConfig
-    vision_config_class = Qwen3VLMoeVisionConfig
+
     conditional_generation_class = Qwen3VLMoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

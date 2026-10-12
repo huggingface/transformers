@@ -25,7 +25,6 @@ from transformers import (
     HunYuanVLForConditionalGeneration,
     HunYuanVLModel,
     HunYuanVLTextConfig,
-    HunYuanVLVisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -55,8 +54,7 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 
     base_model_class = HunYuanVLModel
     config_class = HunYuanVLConfig
-    text_config_class = HunYuanVLTextConfig
-    vision_config_class = HunYuanVLVisionConfig
+
     conditional_generation_class = HunYuanVLForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

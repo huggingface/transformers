@@ -30,13 +30,11 @@ if is_torch_available():
 
 
 class ALMModelTester(MultiModalModelTester):
-    audio_config_class = None
     audio_config_key = "audio_config"
     # Name under which the audio mask is passed to the model's forward (e.g. "feature_attention_mask"
     # for Qwen2Audio). Leave as `None` if the model does not consume a separate audio-level mask;
     # `_prepare_modality_inputs` then skips adding it to the inputs dict.
     audio_mask_key = None
-    _required_attributes = MultiModalModelTester._required_attributes + ("audio_config_class",)
 
     @property
     def pipeline_model_mapping(self):

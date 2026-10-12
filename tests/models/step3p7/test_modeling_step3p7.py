@@ -21,8 +21,6 @@ from transformers import is_torch_available
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.models.step3p7.configuration_step3p7 import (
     Step3p7Config,
-    Step3p7TextConfig,
-    Step3p7VisionConfig,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -52,8 +50,6 @@ class Step3p7VisionText2TextModelTester(VLMModelTester):
     base_model_class = Step3p7Model if is_torch_available() else None
     config_class = Step3p7Config
     conditional_generation_class = Step3p7ForConditionalGeneration if is_torch_available() else None
-    text_config_class = Step3p7TextConfig
-    vision_config_class = Step3p7VisionConfig
 
     def __init__(self, parent, **kwargs):
         # Vision downsampler reduces (image_size/patch_size)^2 → (image_size/patch_size/4)^2

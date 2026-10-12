@@ -27,7 +27,7 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
-from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig, Qwen3VLVisionConfig
+from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -52,8 +52,7 @@ if is_torch_available():
 class Qwen3VLVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen3VLModel
     config_class = Qwen3VLConfig
-    text_config_class = Qwen3VLTextConfig
-    vision_config_class = Qwen3VLVisionConfig
+
     conditional_generation_class = Qwen3VLForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

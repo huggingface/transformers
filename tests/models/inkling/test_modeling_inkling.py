@@ -23,10 +23,8 @@ from safetensors.torch import load_file
 
 from transformers import (
     AutoProcessor,
-    InklingAudioConfig,
     InklingConfig,
     InklingTextConfig,
-    InklingVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -95,8 +93,7 @@ class InklingAudio2TextModelTester(ALMModelTester):
     base_model_class = InklingModel
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
-    text_config_class = InklingTextConfig
-    audio_config_class = InklingAudioConfig
+
     audio_mask_key = "audio_input_ids_mask"
 
     def __init__(self, parent, **kwargs):
@@ -234,8 +231,6 @@ class InklingVision2TextModelTester(VLMModelTester):
     base_model_class = InklingModel
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
-    text_config_class = InklingTextConfig
-    vision_config_class = InklingVisionConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 4)
@@ -268,6 +263,16 @@ class InklingVision2TextModelTester(VLMModelTester):
         return floats_tensor(
             [batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
         )
+
+    def place_image_tokens(self, input_ids, config):
+        # override - model always generates encoded-images of one-token each
+        image_token_id = getattr(config, "image_token_id", self.image_token_id)
+        # Clear any accidental image tokens first
+        input_ids = input_ids.clone()
+        input_ids[input_ids == image_token_id] = self.bos_token_id
+        # Place image tokens at the start
+        input_ids[:, : self.num_image_tokens] = image_token_id
+        return input_ids
 
 
 @require_torch

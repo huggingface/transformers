@@ -45,7 +45,6 @@ if is_torch_available():
         Qwen3_5MoeModel,
         Qwen3_5MoeTextConfig,
         Qwen3_5MoeTextModel,
-        Qwen3_5MoeVisionConfig,
     )
 
 
@@ -195,8 +194,7 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
 class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen3_5MoeModel
     config_class = Qwen3_5MoeConfig
-    text_config_class = Qwen3_5MoeTextConfig
-    vision_config_class = Qwen3_5MoeVisionConfig
+
     conditional_generation_class = Qwen3_5MoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

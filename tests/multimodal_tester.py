@@ -37,7 +37,6 @@ class MultiModalModelTester:
     """Shared tester base for VLM (vision-language) and ALM (audio-language) models.
 
     Concrete subclasses (e.g. `VLMModelTester`, `ALMModelTester`) supply:
-      - the modality-specific sub-config class (`vision_config_class` for VLMs, `audio_config_class` for ALMs, ...),
       - the modality-specific defaults and helper methods,
       - the hooks `_build_modality_sub_configs` and `_prepare_modality_inputs`,
       - optionally an extended `_special_token_ids` and `pipeline_model_mapping`.
@@ -50,12 +49,12 @@ class MultiModalModelTester:
     # (the others are inferred from available public classes).
     base_model_class = None
     config_class = None
-    text_config_class = None
     conditional_generation_class = None
     sequence_classification_class = None
+    sub_configs_to_skip = []
 
     # Required attributes after the initialization phase of the tester. Subclasses extend.
-    _required_attributes = ("config_class", "text_config_class", "conditional_generation_class")
+    _required_attributes = ("config_class", "conditional_generation_class")
 
     # Arguments that should be passed to the config class even if not in its signature
     forced_config_args = ["pad_token_id"]
@@ -125,8 +124,9 @@ class MultiModalModelTester:
         """Return the {sub-config-key: sub-config-instance} entries for the main config constructor."""
         sub_configs = {}
         for key, specs in self.config_class.sub_configs_defaults.items():
-            subconfig_cls = self._resolve_config_cls(specs)
-            sub_configs[key] = self._build_sub_config(subconfig_cls, prefix=key[:-7])
+            if key not in self.sub_configs_to_skip:
+                subconfig_cls = self._resolve_config_cls(specs)
+                sub_configs[key] = self._build_sub_config(subconfig_cls, prefix=key[:-7])
         return sub_configs
 
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
@@ -171,14 +171,6 @@ class MultiModalModelTester:
     def config_args(self):
         return list(signature(self.config_class.__init__).parameters.keys())
 
-    @property
-    def text_config_args(self):
-        args = list(signature(self.text_config_class.__init__).parameters.keys())
-        for token_arg in ["pad_token_id", "bos_token_id", "eos_token_id"]:  # Not always explicitly in the sig
-            if token_arg not in args:
-                args.append(token_arg)
-        return args
-
     def _collect_kwargs(self, sig_keys, config_class, prefix=""):
         """Collect kwargs for ``config_class`` by matching ``sig_keys`` (and its ``attribute_map``) against ``self``."""
         attribute_map = getattr(config_class, "attribute_map", {})
@@ -199,13 +191,8 @@ class MultiModalModelTester:
 
     def get_config(self):
         kwargs = self._collect_kwargs(self.config_args + self.forced_config_args, self.config_class)
-        kwargs["text_config"] = self.get_text_config()
         kwargs.update(self._build_modality_sub_configs())
         return self.config_class(**kwargs)
-
-    def get_text_config(self):
-        kwargs = self._collect_kwargs(self.text_config_args, self.text_config_class)
-        return self.text_config_class(**kwargs)
 
     def _resolve_config_cls(self, specs):
         if issubclass(specs.config_class, PreTrainedConfig):

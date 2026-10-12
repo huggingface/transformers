@@ -22,11 +22,8 @@ from parameterized import parameterized
 
 from transformers import (
     NemotronH_Omni_Reasoning_V3_Config,
-    NemotronHConfig,
-    ParakeetEncoderConfig,
     ParakeetFeatureExtractor,
     PreTrainedTokenizerFast,
-    RadioConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -116,8 +113,7 @@ def set_omni_tester_defaults(kwargs):
 
 class NemotronHOmniVision2TextModelTester(VLMModelTester):
     config_class = NemotronH_Omni_Reasoning_V3_Config
-    text_config_class = NemotronHConfig
-    vision_config_class = RadioConfig
+
     # the model is a single generative class with no separate base model
     base_model_class = None
     conditional_generation_class = NemotronH_Omni_Reasoning_V3
@@ -151,8 +147,7 @@ class NemotronHOmniVision2TextModelTester(VLMModelTester):
 
 class NemotronHOmniAudio2TextModelTester(ALMModelTester):
     config_class = NemotronH_Omni_Reasoning_V3_Config
-    text_config_class = NemotronHConfig
-    audio_config_class = ParakeetEncoderConfig
+
     conditional_generation_class = NemotronH_Omni_Reasoning_V3
     audio_mask_key = "input_features_mask"
 

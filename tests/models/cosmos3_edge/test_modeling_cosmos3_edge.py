@@ -21,7 +21,6 @@ from transformers import (
     Cosmos3EdgeForConditionalGeneration,
     Cosmos3EdgeModel,
     Cosmos3EdgeTextConfig,
-    Cosmos3EdgeVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -110,8 +109,7 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
 
     base_model_class = Cosmos3EdgeModel
     config_class = Cosmos3EdgeConfig
-    text_config_class = Cosmos3EdgeTextConfig
-    vision_config_class = Cosmos3EdgeVisionConfig
+
     conditional_generation_class = Cosmos3EdgeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

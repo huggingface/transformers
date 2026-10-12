@@ -35,19 +35,16 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HyperCLOVAXConfig,
         HyperCLOVAXVisionV2Config,
         HyperCLOVAXVisionV2ForConditionalGeneration,
         HyperCLOVAXVisionV2Model,
-        Qwen2_5_VLVisionConfig,
     )
 
 
 class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
     base_model_class = HyperCLOVAXVisionV2Model
     config_class = HyperCLOVAXVisionV2Config
-    text_config_class = HyperCLOVAXConfig
-    vision_config_class = Qwen2_5_VLVisionConfig
+
     conditional_generation_class = HyperCLOVAXVisionV2ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

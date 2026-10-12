@@ -20,10 +20,8 @@ import pytest
 from transformers import (
     AutoProcessor,
     QianfanOCRConfig,
-    QianfanOCRVisionConfig,
     is_torch_available,
 )
-from transformers.models.qwen3 import Qwen3Config
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -46,8 +44,7 @@ if is_torch_available():
 class QianfanOCRVisionText2TextModelTester(VLMModelTester):
     base_model_class = QianfanOCRModel
     config_class = QianfanOCRConfig
-    text_config_class = Qwen3Config
-    vision_config_class = QianfanOCRVisionConfig
+
     conditional_generation_class = QianfanOCRForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

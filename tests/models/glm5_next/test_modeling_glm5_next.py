@@ -24,10 +24,8 @@ from transformers import (
     Glm5NextForConditionalGeneration,
     Glm5NextModel,
     Glm5NextTextModel,
-    Glm5NextVisionConfig,
     is_torch_available,
 )
-from transformers.models.glm5_next.configuration_glm5_next import Glm5NextTextConfig
 from transformers.models.glm5_next.modeling_glm5_next import Glm5NextTextLinearAttention
 from transformers.testing_utils import (
     require_torch,
@@ -48,8 +46,7 @@ if is_torch_available():
 class Glm5NextVisionText2TextModelTester(VLMModelTester):
     base_model_class = Glm5NextModel
     config_class = Glm5NextConfig
-    text_config_class = Glm5NextTextConfig
-    vision_config_class = Glm5NextVisionConfig
+
     conditional_generation_class = Glm5NextForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

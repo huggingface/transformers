@@ -18,7 +18,6 @@ import unittest
 from transformers import (
     CohereCompassConfig,
     CohereCompassTextConfig,
-    CohereCompassVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, torch_device
@@ -155,8 +154,7 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
 class CohereCompassModelTester(VLMModelTester):
     base_model_class = CohereCompassModel
     config_class = CohereCompassConfig
-    text_config_class = CohereCompassTextConfig
-    vision_config_class = CohereCompassVisionConfig
+
     conditional_generation_class = CohereCompassForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

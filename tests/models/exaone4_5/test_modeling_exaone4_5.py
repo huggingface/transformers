@@ -39,16 +39,13 @@ if is_torch_available():
         Exaone4_5_ForConditionalGeneration,
         Exaone4_5_Model,
         Exaone4_5_Processor,
-        Exaone4_5_VisionConfig,
-        Exaone4Config,
     )
 
 
 class Exaone4_5_ModelTester(VLMModelTester):
     base_model_class = Exaone4_5_Model
     config_class = Exaone4_5_Config
-    text_config_class = Exaone4Config
-    vision_config_class = Exaone4_5_VisionConfig
+
     conditional_generation_class = Exaone4_5_ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

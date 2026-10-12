@@ -19,9 +19,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
-    DeepseekV3Config,
     Kimi_K25Config,
-    Kimi_K25VisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -53,8 +51,7 @@ if is_vision_available():
 class Kimi_K25VisionText2TextModelTester(VLMModelTester):
     base_model_class = Kimi_K25Model
     config_class = Kimi_K25Config
-    text_config_class = DeepseekV3Config
-    vision_config_class = Kimi_K25VisionConfig
+
     conditional_generation_class = Kimi_K25ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

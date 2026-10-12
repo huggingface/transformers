@@ -59,8 +59,7 @@ if is_vision_available():
 class Molmo2VisionText2TextModelTester(VLMModelTester):
     base_model_class = Molmo2Model
     config_class = Molmo2Config
-    text_config_class = Molmo2TextConfig
-    vision_config_class = Molmo2VisionConfig
+
     conditional_generation_class = Molmo2ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

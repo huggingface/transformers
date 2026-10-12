@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
+from transformers import FunAsrNanoConfig
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...alm_tester import ALMModelTest, ALMModelTester
@@ -31,8 +31,7 @@ class FunAsrNanoModelTester(ALMModelTester):
     config_class = FunAsrNanoConfig
     base_model_class = FunAsrNanoModel
     conditional_generation_class = FunAsrNanoForConditionalGeneration
-    text_config_class = Qwen3Config
-    audio_config_class = FunAsrNanoEncoderConfig
+
     audio_config_key = "audio_config"
     audio_mask_key = "input_features_mask"
 

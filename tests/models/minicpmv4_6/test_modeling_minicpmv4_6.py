@@ -20,7 +20,6 @@ from transformers import (
     MiniCPMV4_6Config,
     is_torch_available,
 )
-from transformers.models.minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6VisionConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -39,14 +38,12 @@ if is_torch_available():
     import torch
 
     from transformers import MiniCPMV4_6ForConditionalGeneration, MiniCPMV4_6Model
-    from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
 
 
 class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniCPMV4_6Model
     config_class = MiniCPMV4_6Config
-    text_config_class = Qwen3_5TextConfig
-    vision_config_class = MiniCPMV4_6VisionConfig
+
     conditional_generation_class = MiniCPMV4_6ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

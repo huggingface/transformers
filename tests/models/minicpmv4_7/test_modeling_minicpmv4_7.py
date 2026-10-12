@@ -18,8 +18,6 @@ import unittest
 from transformers import (
     AutoProcessor,
     MiniCPMV4_7Config,
-    MiniCPMV4_7VisionConfig,
-    Qwen3_5TextConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -114,8 +112,7 @@ GOLDEN_CANVAS_LAYOUTS = {
 class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniCPMV4_7Model
     config_class = MiniCPMV4_7Config
-    text_config_class = Qwen3_5TextConfig
-    vision_config_class = MiniCPMV4_7VisionConfig
+
     conditional_generation_class = MiniCPMV4_7ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

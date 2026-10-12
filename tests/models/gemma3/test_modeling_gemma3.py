@@ -26,7 +26,6 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
-    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -173,8 +172,7 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
 class Gemma3Vision2TextModelTester(VLMModelTester):
     base_model_class = Gemma3Model
     config_class = Gemma3Config
-    text_config_class = Gemma3TextConfig
-    vision_config_class = SiglipVisionConfig
+
     conditional_generation_class = Gemma3ForConditionalGeneration
     sequence_classification_class = Gemma3ForSequenceClassification
 

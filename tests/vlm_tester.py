@@ -28,9 +28,6 @@ if is_torch_available():
 
 
 class VLMModelTester(MultiModalModelTester):
-    vision_config_class = None
-    _required_attributes = MultiModalModelTester._required_attributes + ("base_model_class", "vision_config_class")
-
     @property
     def pipeline_model_mapping(self):
         return {
@@ -93,9 +90,7 @@ class VLMModelTester(MultiModalModelTester):
 
         # Override if the image tokens shouldn't be placed at the start of the test sequence
         image_token_id = getattr(config, "image_token_id", self.image_token_id)
-        # Clear any accidental image tokens first
         input_ids = input_ids.clone()
-        input_ids[input_ids == image_token_id] = self.bos_token_id
         # Place image tokens at the start
         input_ids[:, : self.num_image_tokens] = image_token_id
         return input_ids

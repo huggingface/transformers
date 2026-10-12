@@ -17,9 +17,7 @@ import unittest
 
 from transformers import (
     AutoProcessor,
-    GraniteConfig,
     GraniteSpeechPlusConfig,
-    GraniteSpeechPlusEncoderConfig,
     GraniteSpeechPlusForConditionalGeneration,
     GraniteSpeechPlusModel,
 )
@@ -45,8 +43,7 @@ class GraniteSpeechPlusForConditionalGenerationModelTester(ALMModelTester):
     config_class = GraniteSpeechPlusConfig
     base_model_class = GraniteSpeechPlusModel
     conditional_generation_class = GraniteSpeechPlusForConditionalGeneration
-    audio_config_class = GraniteSpeechPlusEncoderConfig
-    text_config_class = GraniteConfig
+
     audio_config_key = "encoder_config"
 
     def __init__(self, parent, cat_hidden_layers=(0,), **kwargs):

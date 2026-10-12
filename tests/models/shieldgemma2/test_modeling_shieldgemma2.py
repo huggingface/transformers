@@ -18,9 +18,7 @@ import unittest
 
 from transformers import (
     BitsAndBytesConfig,
-    Gemma3TextConfig,
     ShieldGemma2Config,
-    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -49,8 +47,6 @@ if is_torch_available():
 
 class ShieldGemma2ModelTester(VLMModelTester):
     config_class = ShieldGemma2Config
-    text_config_class = Gemma3TextConfig
-    vision_config_class = SiglipVisionConfig
 
     if is_torch_available():
         base_model_class = Gemma3Model
