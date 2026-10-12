@@ -46,6 +46,19 @@ class Kolibri1ModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(StrictDataclassClassValidationError):
             Kolibri1Config(sliding_window=None)
 
+    def test_no_load_balancing_loss(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Kolibri1ForCausalLM(config).to(torch_device).eval()
+        input_ids = input_dict["input_ids"]
+
+        with torch.no_grad():
+            plain = model(input_ids, labels=input_ids)
+            with_router_logits = model(input_ids, labels=input_ids, output_router_logits=True)
+
+        self.assertIsNone(with_router_logits.aux_loss)
+        self.assertEqual(len(with_router_logits.router_logits), config.num_hidden_layers)
+        torch.testing.assert_close(with_router_logits.loss, plain.loss)
+
     @require_torch_gpu
     def test_router_with_activations_in_another_dtype(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

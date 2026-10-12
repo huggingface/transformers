@@ -92,7 +92,6 @@ class Kolibri1Config(PreTrainedConfig):
     num_experts: int = 384
     norm_topk_prob: bool = False
     output_router_logits: bool = False
-    router_aux_loss_coef: float = 0.001
     pad_token_id: int | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None

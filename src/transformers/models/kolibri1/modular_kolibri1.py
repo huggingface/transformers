@@ -20,14 +20,13 @@ from torch import nn
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_torch_greater_or_equal
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3MoE
 from ..exaone4.modeling_exaone4 import Exaone4Attention
 from ..glm4.modeling_glm4 import Glm4DecoderLayer
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeModel
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeExperts,
-    Qwen3MoeForCausalLM,
     Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
     Qwen3MoeTopKRouter,
@@ -81,6 +80,7 @@ class Kolibri1Config(Qwen3MoeConfig):
     decoder_sparse_step = AttributeError()
     mlp_only_layers = AttributeError()
     attention_bias = AttributeError()
+    router_aux_loss_coef = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -160,7 +160,7 @@ class Kolibri1Model(Qwen2MoeModel):
     pass
 
 
-class Kolibri1ForCausalLM(Qwen3MoeForCausalLM):
+class Kolibri1ForCausalLM(DeepseekV3ForCausalLM):
     pass
 
 
