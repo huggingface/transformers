@@ -58,11 +58,9 @@ from .distributed import DistributedConfig
 from .distributed.checkpoint import is_sharded_checkpoint
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
+from .distributed.tensor_parallel import verify_tp_plan
 from .distributed.utils import (
     _check_distributed_checkpointing_available,
-    _get_torch_distributed_world_size,
-    _is_torch_distributed_initialized,
     is_local_dist_rank_0,
 )
 from .dynamic_module_utils import custom_object_save
