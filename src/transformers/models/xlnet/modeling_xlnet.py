@@ -928,7 +928,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
     @staticmethod
     def positional_embedding(pos_seq, inv_freq, bsz=None):
-        sinusoid_inp = torch.einsum("i,d->id", pos_seq, inv_freq)
+        sinusoid_inp = pos_seq[:, None] * inv_freq
         pos_emb = torch.cat([torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)], dim=-1)
         pos_emb = pos_emb[:, None, :]
 

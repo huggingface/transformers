@@ -28,7 +28,7 @@ from safetensors import safe_open
 from ..utils import is_torch_available, is_torchao_available, logging
 
 
-MIN_TORCH_VERSION = "2.5.0"
+MIN_TORCH_VERSION = "2.6.0"
 
 
 if is_torch_available():

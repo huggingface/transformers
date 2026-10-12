@@ -226,6 +226,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "1e-3 tolerance but far from structural."
         ),
         "BitBackbone": "Same ORT accumulation as `BitModel` (~0.0048 across the feature maps).",
+        "BitForImageClassification": "Same ORT accumulation as `BitModel` (~0.0013 on the logits).",
         "ClapModel": "Same ORT accumulation as `BitModel` (~0.0033 on the contrastive logits).",
         "CLIPSegForImageSegmentation": "Same ORT accumulation as `BitModel` (~0.0059 on the decoder logits).",
         "FlavaForPreTraining": "Same ORT accumulation as `BitModel` (~0.0039 on the contrastive logits).",
@@ -269,6 +270,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
         "LwDetrModel": (
