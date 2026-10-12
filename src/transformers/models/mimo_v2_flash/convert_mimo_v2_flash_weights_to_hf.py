@@ -49,6 +49,9 @@ def convert_config(original_config: dict):
     }
     new_config_kwargs = {k: v for k, v in original_config.items() if k not in keys_to_drop}
 
+    if original_config.get("sliding_window_size") is not None:
+        new_config_kwargs["sliding_window"] = original_config["sliding_window_size"] + 1
+
     if "layernorm_epsilon" in new_config_kwargs:
         new_config_kwargs["rms_norm_eps"] = new_config_kwargs.pop("layernorm_epsilon")
 

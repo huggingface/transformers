@@ -425,6 +425,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "vipllava",
     "cohere_asr",
     "camembertv2-base",
+    "siglip2",
     "smolvlm",
 }
 
