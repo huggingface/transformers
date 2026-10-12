@@ -626,20 +626,8 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 def is_torch_tpu_available(check_device: bool = False) -> bool:
     import torch
 
-    if importlib.util.find_spec("torch_tpu") is None:
-        return False
-
-    if check_device:
-        try:
-            import torch_tpu  # noqa: F401
-
-            if hasattr(torch, "tpu") and torch.tpu.is_available():
-                return torch.tpu.device_count() >= 1
-            return False
-        except RuntimeError:
-            return False
-
-    return hasattr(torch, "tpu") and torch.tpu.is_available()
+    accelerator = get_current_accelerator()
+    return accelerator is not None and accelerator.type == "tpu" and torch.accelerator.is_available()
 
 
 @lru_cache

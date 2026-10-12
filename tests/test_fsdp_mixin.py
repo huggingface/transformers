@@ -104,9 +104,8 @@ def _get_rank_device(rank):
 
 
 def _set_rank_device(rank):
-    accelerator_module = backend_torch_accelerator_module(_get_distributed_device_type())
-    if accelerator_module is not None and hasattr(accelerator_module, "set_device"):
-        accelerator_module.set_device(rank)
+    if _get_distributed_device_type() != "cpu":
+        torch.accelerator.set_device_index(rank)
 
 
 def _get_available_fsdp_workers():

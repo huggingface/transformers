@@ -513,10 +513,10 @@ class ModelManager:
                     continue
 
                 config = json.loads(config_path.open().read())
-                if not (isinstance(config, dict) and "architectures" in config):
+                if not isinstance(config, dict):
                     continue
 
-                architectures = config["architectures"]
+                architectures = config.get("architectures") or []
                 llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
                 vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
                 multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
