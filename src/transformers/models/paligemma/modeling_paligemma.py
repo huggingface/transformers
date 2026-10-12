@@ -125,14 +125,11 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
-
-        self.text_config_dtype = self.config.get_text_config().dtype or self.dtype
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.text_config_dtype = self.config.text_config.dtype or self.dtype
         self.post_init()
 
     @can_return_tuple

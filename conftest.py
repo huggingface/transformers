@@ -383,6 +383,9 @@ if is_torch_available():
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     enable_tf32(False)
 
+    # some backends (e.g. TPU) ignore `fp32_precision` and default to reduced-precision matmuls
+    torch.set_float32_matmul_precision("highest")
+
     # This is necessary to make several `test_batching_equivalence` pass (within the tolerance `1e-5`)
     if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):
         torch.backends.cudnn.conv.fp32_precision = "ieee"

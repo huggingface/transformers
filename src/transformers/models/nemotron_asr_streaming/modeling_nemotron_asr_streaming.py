@@ -43,8 +43,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_nemotron_asr_streaming import NemotronAsrStreamingConfig, NemotronAsrStreamingEncoderConfig
@@ -343,22 +342,18 @@ class NemotronAsrStreamingEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: NemotronAsrStreamingEncoderConfig, device=None):
+    def __init__(self, config: NemotronAsrStreamingEncoderConfig):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device)
+        inv_freq = self.compute_default_relative_positional_parameters(config)
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_relative_positional_parameters(
-        config: NemotronAsrStreamingEncoderConfig, device=None
-    ) -> torch.Tensor:
+    def compute_default_relative_positional_parameters(config: NemotronAsrStreamingEncoderConfig) -> torch.Tensor:
         base = 10000.0
         inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
-        return inv_freq.to(device)
+        return inv_freq
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor, cached_frames: int | None = None):
@@ -372,19 +367,14 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
+        # The attention layers expect a batch dimension on the positional embeddings
+        freqs = freqs.expand(hidden_states.shape[0], -1, -1)
+        sin = freqs.sin()
+        cos = freqs.cos()
+        # interleave sin and cos
+        pos_embed = torch.stack([sin, cos], dim=-1)
+        pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
         return pos_embed.to(dtype=hidden_states.dtype)
 

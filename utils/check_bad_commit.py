@@ -25,6 +25,12 @@ import git
 from github_utils import get_github_json
 
 
+# Temporary workaround similar to https://github.com/huggingface/transformers-ci/pull/184 to avoid CPU OOM.
+if os.path.isdir("/mnt/efs_cache"):
+    os.environ["HF_HOME"] = "/mnt/efs_cache"
+    print("Using EFS cache: HF_HOME=/mnt/efs_cache")
+
+
 def create_script(target_test, flake_runs=4):
     """Create a python script to be run by `git bisect run` to determine if `target_test` passes or fails.
     If a test is not found in a commit, the script with exit code `0` (i.e. `Success`).
