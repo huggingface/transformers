@@ -17,7 +17,8 @@ tmic check --fixtures-only --lock tests/contracts/fleet-lock.json --changed-file
 
 `tests/contracts/prototype-fleet.lock` adds 17 `tmic`-generated architecture
 contracts, checked against published Hub pins on CPU and GPU before export.
-These run in default, eager and bfloat16 variants. The original six-contract
+The prototype lock uses `mic-*` contract keys to avoid case collisions with
+historical names such as `BERT`. These run in default, eager and bfloat16 variants. The original six-contract
 fleet remains the historical regression control. Both fleets use changed-file
 selection on PRs and run in full on pushes to `contracts-proof`.
 
