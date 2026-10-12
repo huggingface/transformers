@@ -143,8 +143,7 @@ with torch.no_grad():
 ### Speed-up with `torch.compile`
 
 You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html). The first
-few calls are slower due to compilation overhead, but subsequent calls with the same input shape are faster. Because the
-model exposes `encode` and `decode` rather than a single forward, compile each of them.
+few calls are slower due to compilation overhead, but subsequent calls with the same input shape are faster.
 
 ```python
 import torch
@@ -163,19 +162,17 @@ inputs = feature_extractor(
     audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
 ).to(model.device, model.dtype)
 
-model.encode = torch.compile(model.encode)
-model.decode = torch.compile(model.decode)
+compiled_model = torch.compile(model)
 
-# warmup (the first calls include compilation)
+# Warmup (includes compilation on first call)
 for _ in range(3):
     with torch.inference_mode():
-        codes = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes[0]
-        _ = model.decode(codes.unsqueeze(0)).audio_values[0]
+        _ = compiled_model(**inputs)
 
 with torch.inference_mode():
-    codes = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes[0]
-    audio_values = model.decode(codes.unsqueeze(0)).audio_values[0]
-print("Reconstructed audio shape:", audio_values.shape)
+    output = compiled_model(**inputs)
+print("Audio values shape:", output.audio_values.shape)
+# Audio values shape: torch.Size([1, 222480])
 ```
 
 ## Qwen3TTSTokenizerConfig
