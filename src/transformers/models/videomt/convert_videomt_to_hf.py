@@ -37,27 +37,31 @@ import subprocess
 import sys
 import tempfile
 import types
+from io import BytesIO
 from pathlib import Path
 
 import torch
 import torch.nn as nn
-from huggingface_hub import hf_hub_download
+from huggingface_hub import HfApi, hf_hub_download
 
-from transformers import VideomtConfig, VideomtForUniversalSegmentation
+from transformers import VideomtConfig, VideomtForUniversalSegmentation, VideomtVideoProcessor
 
 
 MODEL_REPO_ID = "tue-mps/VidEoMT"
+MODEL_ZOO_URL = "https://github.com/tue-mps/videomt/blob/master/model_zoo/dinov2.md"
+PAPER_URL = "https://huggingface.co/papers/2602.17807"
+DEFAULT_HUB_NAMESPACE = "tue-mps"
 
 # fmt: off
 CHECKPOINT_CONFIGS = {
-    "yt_2019_vit_small_52.8.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-small-ytvis2019", "dataset": "ytvis_2019"},
-    "yt_2019_vit_base_58.2.pth":    {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-base-ytvis2019",  "dataset": "ytvis_2019"},
-    "yt_2019_vit_large_68.6.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ytvis2019", "dataset": "ytvis_2019"},
-    "yt_2021_vit_large_63.1.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ytvis2021", "dataset": "ytvis_2021"},
-    "yt_2022_vit_large_42.6.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ytvis2022", "dataset": "ytvis_2021"},
-    "ovis_vit_large_52.5.pth":      {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ovis",      "dataset": "ovis"},
-    "vipseg_vit_large_55.2.pth":    {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-vipseg",    "dataset": "vipseg"},
-    "vspw_vit_large_95.0_64.9.pth": {"image_size": 1280, "num_frames": 2, "hub_name": "videomt-dinov2-large-vspw",      "dataset": "vipseg"},
+    "yt_2019_vit_small_52.8.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-small-ytvis2019", "dataset": "ytvis_2019", "dataset_name": "YouTube-VIS 2019", "task": "video instance segmentation", "task_tag": "video-instance-segmentation", "variant": "VidEoMT-S", "metrics": {"AP": "52.8", "AR@10": "62.2", "FPS": "294"}},
+    "yt_2019_vit_base_58.2.pth":    {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-base-ytvis2019",  "dataset": "ytvis_2019", "dataset_name": "YouTube-VIS 2019", "task": "video instance segmentation", "task_tag": "video-instance-segmentation", "variant": "VidEoMT-B", "metrics": {"AP": "58.2", "AR@10": "66.5", "FPS": "251"}},
+    "yt_2019_vit_large_68.6.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ytvis2019", "dataset": "ytvis_2019", "dataset_name": "YouTube-VIS 2019", "task": "video instance segmentation", "task_tag": "video-instance-segmentation", "variant": "VidEoMT-L", "metrics": {"AP": "68.6", "AR@10": "73.9", "FPS": "160"}},
+    "yt_2021_vit_large_63.1.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ytvis2021", "dataset": "ytvis_2021", "dataset_name": "YouTube-VIS 2021", "task": "video instance segmentation", "task_tag": "video-instance-segmentation", "variant": "VidEoMT-L", "metrics": {"AP": "63.1", "AR@10": "68.1", "FPS": "160"}},
+    "yt_2022_vit_large_42.6.pth":   {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ytvis2022", "dataset": "ytvis_2021", "dataset_name": "YouTube-VIS 2022", "task": "video instance segmentation", "task_tag": "video-instance-segmentation", "variant": "VidEoMT-L", "metrics": {"AP^L": "42.6", "AR^L@10": "48.1", "FPS": "161"}},
+    "ovis_vit_large_52.5.pth":      {"image_size": 640,  "num_frames": 2, "hub_name": "videomt-dinov2-large-ovis",      "dataset": "ovis",       "dataset_name": "OVIS",             "task": "video instance segmentation", "task_tag": "video-instance-segmentation", "variant": "VidEoMT-L", "metrics": {"AP": "52.5", "AR@10": "57.5", "FPS": "115"}},
+    "vipseg_vit_large_55.2.pth":    {"image_size": 1280, "num_frames": 2, "hub_name": "videomt-dinov2-large-vipseg",    "dataset": "vipseg",     "dataset_name": "VIPSeg",           "task": "video panoptic segmentation", "task_tag": "video-panoptic-segmentation", "variant": "VidEoMT-L", "metrics": {"VPQ": "55.2", "STQ": "48.9", "FPS": "75"}},
+    "vspw_vit_large_95.0_64.9.pth": {"image_size": 1280, "num_frames": 2, "hub_name": "videomt-dinov2-large-vspw",      "dataset": "vipseg",     "dataset_name": "VSPW",             "task": "video semantic segmentation", "task_tag": "video-semantic-segmentation", "variant": "VidEoMT-L", "metrics": {"mVC_16": "95.0", "mIoU": "64.9", "FPS": "73"}},
 }
 
 YTVIS_2019_ID2LABEL = {
@@ -177,6 +181,79 @@ def infer_backbone_model_name(checkpoint_filename: str) -> str:
     if "vit_large" in checkpoint_filename:
         return "vit_large_patch14_reg4_dinov2"
     raise ValueError(f"Could not infer timm backbone model from checkpoint name '{checkpoint_filename}'.")
+
+
+def infer_backbone_display_name(checkpoint_filename: str) -> str:
+    if "vit_small" in checkpoint_filename:
+        return "DINOv2 ViT-S/14 with 4 register tokens"
+    if "vit_base" in checkpoint_filename:
+        return "DINOv2 ViT-B/14 with 4 register tokens"
+    if "vit_large" in checkpoint_filename:
+        return "DINOv2 ViT-L/14 with 4 register tokens"
+    raise ValueError(f"Could not infer backbone display name from checkpoint name '{checkpoint_filename}'.")
+
+
+def resolve_hub_repo_id(checkpoint_filename: str, hub_namespace: str | None) -> str:
+    hub_name = CHECKPOINT_CONFIGS[checkpoint_filename]["hub_name"]
+    if "/" in hub_name or hub_namespace is None:
+        return hub_name
+    return f"{hub_namespace}/{hub_name}"
+
+
+def build_model_card(checkpoint_filename: str, hub_repo_id: str, image_size: int, num_frames: int) -> str:
+    checkpoint_config = CHECKPOINT_CONFIGS[checkpoint_filename]
+    metric_rows = "\n".join(
+        f"| {metric_name} | {metric_value} |" for metric_name, metric_value in checkpoint_config["metrics"].items()
+    )
+    backbone_model_name = infer_backbone_display_name(checkpoint_filename)
+
+    return f"""---
+library_name: transformers
+pipeline_tag: image-segmentation
+tags:
+- transformers
+- videomt
+- video-segmentation
+- {checkpoint_config["task_tag"]}
+- dinov2
+---
+
+# {checkpoint_config["variant"]} on {checkpoint_config["dataset_name"]}
+
+This repository contains the Hugging Face Transformers conversion of the official VidEoMT checkpoint
+`{checkpoint_filename}` from [tue-mps/VidEoMT]({MODEL_ZOO_URL}).
+
+## Model details
+
+- Architecture: VidEoMT with a {backbone_model_name} backbone
+- Task: {checkpoint_config["task"]}
+- Dataset: {checkpoint_config["dataset_name"]}
+- Input resolution: {image_size} x {image_size}
+- Number of frames: {num_frames}
+- Paper: [Your ViT is Secretly Also a Video Segmentation Model]({PAPER_URL})
+
+## Reported metrics
+
+| Metric | Value |
+| --- | --- |
+{metric_rows}
+
+The metrics above are the numbers reported by the authors in the [official model zoo]({MODEL_ZOO_URL}).
+
+## Usage
+
+```python
+from transformers import AutoModelForUniversalSegmentation, AutoVideoProcessor
+
+model_id = "{hub_repo_id}"
+processor = AutoVideoProcessor.from_pretrained(model_id)
+model = AutoModelForUniversalSegmentation.from_pretrained(model_id)
+```
+
+Use `processor.post_process_instance_segmentation`,
+`processor.post_process_panoptic_segmentation`, or
+`processor.post_process_semantic_segmentation` depending on the target task.
+"""
 
 
 def _build_reference_load_dict(
@@ -375,6 +452,7 @@ def convert_checkpoint(
     verify: bool = False,
     reference_repo_path: str | None = None,
     push_to_hub: bool = False,
+    hub_namespace: str | None = DEFAULT_HUB_NAMESPACE,
 ) -> None:
     checkpoint_path = hf_hub_download(repo_id=MODEL_REPO_ID, filename=checkpoint_filename)
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
@@ -396,6 +474,7 @@ def convert_checkpoint(
         config.label2id = {v: k for k, v in id2label.items()}
 
     model = VideomtForUniversalSegmentation(config)
+    processor = VideomtVideoProcessor(size={"height": image_size, "width": image_size})
     converted_state_dict, consumed_keys = convert_state_dict(original_state_dict)
 
     load_info = model.load_state_dict(converted_state_dict, strict=False)
@@ -437,9 +516,15 @@ def convert_checkpoint(
         if query_updater_keys:
             print("note=unconverted_query_updater_keys_detected; temporal-frame forward parity may differ")
 
+    hub_repo_id = resolve_hub_repo_id(checkpoint_filename, hub_namespace)
+    model_card = build_model_card(checkpoint_filename, hub_repo_id, image_size=image_size, num_frames=num_frames)
+
     if output_dir is not None:
+        output_dir_path = Path(output_dir)
+        output_dir_path.mkdir(parents=True, exist_ok=True)
         model.save_pretrained(output_dir)
-        config.save_pretrained(output_dir)
+        processor.save_pretrained(output_dir)
+        output_dir_path.joinpath("README.md").write_text(model_card)
         print(f"saved_to={output_dir}")
 
     if push_to_hub:
@@ -448,9 +533,17 @@ def convert_checkpoint(
             raise ValueError(
                 f"Cannot push to Hub: checkpoint '{checkpoint_filename}' has no entry in CHECKPOINT_CONFIGS."
             )
-        hub_name = ckpt_cfg["hub_name"]
-        model.push_to_hub(hub_name)
-        print(f"pushed_to_hub={hub_name}")
+        api = HfApi()
+        api.create_repo(repo_id=hub_repo_id, repo_type="model", exist_ok=True)
+        model.push_to_hub(hub_repo_id)
+        processor.push_to_hub(hub_repo_id)
+        api.upload_file(
+            repo_id=hub_repo_id,
+            repo_type="model",
+            path_or_fileobj=BytesIO(model_card.encode("utf-8")),
+            path_in_repo="README.md",
+        )
+        print(f"pushed_to_hub={hub_repo_id}")
 
     if verify:
         verify_ok = verify_conversion_against_github_reference(
@@ -594,6 +687,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-repo-path", type=str, default=None)
     parser.add_argument("--all", action="store_true", help="Convert all supported DINOv2 checkpoints")
     parser.add_argument("--push-to-hub", action="store_true", help="Push converted models to the Hugging Face Hub")
+    parser.add_argument(
+        "--hub-namespace",
+        type=str,
+        default=DEFAULT_HUB_NAMESPACE,
+        help="Namespace used when `hub_name` is not already fully qualified",
+    )
     args = parser.parse_args()
 
     if not args.all and args.checkpoint_filename is None:
@@ -623,6 +722,7 @@ def main() -> None:
             verify=args.verify,
             reference_repo_path=args.reference_repo_path,
             push_to_hub=args.push_to_hub,
+            hub_namespace=args.hub_namespace,
         )
 
 
