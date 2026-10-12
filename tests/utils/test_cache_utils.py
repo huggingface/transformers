@@ -49,6 +49,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
+        CompileConfig,
         DynamicCache,
         Gemma2Config,
         Gemma4ForCausalLM,
@@ -74,6 +75,7 @@ if is_torch_available():
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticLayer,
+        StaticRingSlidingWindowLayer,
         StaticSlidingWindowLayer,
     )
     from transformers.generation.utils import GenerationMixin
@@ -294,6 +296,72 @@ class CacheTest(unittest.TestCase):
         self.assertFalse(layers[2].is_sliding)
         self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
         self.assertEqual(layers[3].max_cache_len, 48)
+
+    def test_static_cache_with_ring_sliding_layers(self):
+        """
+        With ring sliding layers, generation past the window matches a dynamic cache, with or without padding.
+        """
+        config = Gemma2Config(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            sliding_window=4,
+            pad_token_id=0,
+        )
+        cache = StaticCache(config=config, max_cache_len=32, use_ring_sliding_layers=True)
+        self.assertEqual([type(layer) for layer in cache.layers], [StaticRingSlidingWindowLayer, StaticLayer])
+
+        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+        generation_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10, "do_sample": False}
+        ring_generation_config = GenerationConfig(
+            cache_implementation="static", cache_config={"use_ring_sliding_layers": True}, **generation_kwargs
+        )
+        padded_ids = torch.randint(1, 99, (2, 7), device=torch_device)
+        padded_ids[0, :3] = 0
+        inputs = [
+            {"input_ids": torch.randint(1, 99, (1, 3), device=torch_device)},
+            {"input_ids": torch.randint(1, 99, (1, 9), device=torch_device)},
+            {"input_ids": padded_ids, "attention_mask": (padded_ids != 0).long()},
+        ]
+        for attn_implementation in ("sdpa", "eager"):
+            model.set_attn_implementation(attn_implementation)
+            for prompt in inputs:
+                with self.subTest(attn_implementation=attn_implementation, shape=tuple(prompt["input_ids"].shape)):
+                    expected = model.generate(**prompt, **generation_kwargs)
+                    output = model.generate(**prompt, generation_config=ring_generation_config, disable_compile=True)
+                    self.assertTrue(torch.equal(output, expected))
+
+    @require_torch_accelerator
+    def test_static_cache_with_ring_sliding_layers_compiles_once(self):
+        """With ring sliding layers, decoding past the window compiles one graph with static shapes."""
+        config = Gemma2Config(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            sliding_window=4,
+        )
+        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+        input_ids = torch.randint(1, 99, (1, 3), device=torch_device)
+        generation_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10, "do_sample": False}
+        ring_generation_config = GenerationConfig(
+            cache_implementation="static", cache_config={"use_ring_sliding_layers": True}, **generation_kwargs
+        )
+        torch._dynamo.reset()
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            output = model.generate(
+                input_ids,
+                generation_config=ring_generation_config,
+                compile_config=CompileConfig(dynamic=False, fullgraph=True),
+            )
+        self.assertTrue(torch.equal(output, model.generate(input_ids, **generation_kwargs)))
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
@@ -1496,6 +1564,34 @@ class SyntheticCacheTest(unittest.TestCase):
             [3.0, 4.0, 5.0, 6.0],
             "Fully sliding StaticCache Scenario 3 failed",
         )
+
+    def test_ring_sliding_window_cache(self):
+        """Test a StaticCache of ring sliding layers on the states each update returns: a single token gets the window,
+        oldest first, starting with its empty slots (zeros) while not full; several tokens get the window as it was,
+        followed by the new ones.
+
+        prefill [1.0, 2.0]:                returned [0.0, 0.0, 0.0, 0.0, 1.0, 2.0]
+        update pos 2:                      returned [0.0, 1.0, 2.0, 3.0]
+        update pos 3, 4:                   returned [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+        update pos 5:                      returned [3.0, 4.0, 5.0, 6.0]
+        prefill [1.0, ..., 6.0], update:   returned [4.0, 5.0, 6.0, 7.0] (kept the last window_size tokens)
+        """
+        config = copy.deepcopy(self.config)
+        config.layer_types = ["sliding_attention"] * config.num_hidden_layers
+
+        def update(cache, values):
+            states = torch.tensor(values)[None, None, :, None]
+            return cache.update(key_states=states, value_states=states, layer_idx=0)[0][0, 0, :, 0].tolist()
+
+        cache = StaticCache(config=config, max_cache_len=self.max_cache_len, use_ring_sliding_layers=True)
+        self.assertEqual(update(cache, [1.0, 2.0]), [0.0, 0.0, 0.0, 0.0, 1.0, 2.0])
+        self.assertEqual(update(cache, [3.0]), [0.0, 1.0, 2.0, 3.0])
+        self.assertEqual(update(cache, [4.0, 5.0]), [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        self.assertEqual(update(cache, [6.0]), [3.0, 4.0, 5.0, 6.0])
+
+        cache = StaticCache(config=config, max_cache_len=self.max_cache_len, use_ring_sliding_layers=True)
+        update(cache, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        self.assertEqual(update(cache, [7.0]), [4.0, 5.0, 6.0, 7.0])
 
     def test_dynamic_cache(self):
         """Test DynamicCache with manually prefilled states and hardcoded assertions.

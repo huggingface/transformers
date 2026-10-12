@@ -186,6 +186,14 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
     return inner_mask
 
 
+def non_negative_key_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+    """
+    A cache may give its mask offset as a tensor (`StaticRingSlidingWindowLayer`), negative while its window is not
+    full: its first keys are then empty slots, at negative positions, which this masks.
+    """
+    return kv_idx >= 0
+
+
 def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offset: int) -> Callable:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
@@ -203,7 +211,8 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     From the 2D attention mask, prepare the correct padding mask to use by potentially padding it.
     """
     local_padding_mask = attention_mask
-    if attention_mask is not None:
+    # A tensor offset (see `non_negative_key_mask_function`) only gives positions the 2D mask already covers
+    if attention_mask is not None and not isinstance(kv_offset, torch.Tensor):
         # Pad it if necessary
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
@@ -218,6 +227,9 @@ def maybe_pad_block_sequence_ids(
     Usually that happens with `StaticCache` generation or generating without cache.
     Pads to the right with `-1`.
     """
+    # A tensor offset (see `non_negative_key_mask_function`) only gives positions the ids already cover
+    if isinstance(kv_offset, torch.Tensor):
+        return block_sequence_ids
     if (padding_length := kv_length + kv_offset - block_sequence_ids.shape[-1]) > 0:
         block_sequence_ids = F.pad(block_sequence_ids, pad=(0, padding_length), value=-1)
     return block_sequence_ids
@@ -244,6 +256,9 @@ def _ignore_causal_mask_sdpa(
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
     """
+    # The empty slots of a tensor offset need the mask (see `non_negative_key_mask_function`)
+    if isinstance(kv_offset, torch.Tensor):
+        return False
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
@@ -503,6 +518,8 @@ def sdpa_mask(
     # Potentially add the padding 2D mask
     if padding_mask is not None:
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+    if isinstance(kv_offset, torch.Tensor):
+        mask_function = and_masks(mask_function, non_negative_key_mask_function)
 
     batch_arange = torch.arange(batch_size, device=device)
     head_arange = torch.arange(1, device=device)
@@ -628,6 +645,16 @@ def flash_attention_mask(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
     """
+    # A tensor offset (see `non_negative_key_mask_function`) starts with empty slots while its window is not full
+    if isinstance(kv_offset, torch.Tensor):
+        positions = torch.arange(kv_length, device=kwargs.get("device", kv_offset.device)) + kv_offset
+        mask = (positions >= 0)[None, :].expand(batch_size, -1)
+        if attention_mask is not None:
+            mask = mask & attention_mask[:, positions.clamp(min=0)]
+        # Once the window is full and nothing is padded, flash can skip unpadding (its own check syncs anyway)
+        if not is_tracing(mask) and mask.all():
+            return None
+        return mask
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
@@ -677,6 +704,8 @@ def flex_attention_mask(
     if attention_mask is not None and not fast_all(attention_mask):
         padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+    if isinstance(kv_offset, torch.Tensor):
+        mask_function = and_masks(mask_function, non_negative_key_mask_function)
 
     # Add the offsets on top (because flex interface only allows length, not start and end indices)
     mask_function = add_offsets_to_mask_function(mask_function, q_offset, kv_offset)

@@ -640,6 +640,92 @@ class StaticSlidingWindowLayer(StaticLayer):
         self.cumulative_length_int = 0
 
 
+class StaticRingSlidingWindowLayer(StaticLayer):
+    """
+    A sliding window layer like [`StaticSlidingWindowLayer`], for static-shape compilation and export: an update is the
+    same tensor ops at every step, so no Python value decides how the cache is written, and one graph serves every
+    decoding step (`StaticSlidingWindowLayer` branches on a Python counter, which recompiles at each step under
+    `torch.compile(dynamic=False)` and freezes one branch in an exported graph).
+
+    It stores the key and value states as static tensors of shape
+    `[batch_size, num_heads, min(max_cache_len, sliding_window), head_dim]`, used as a ring buffer: the token at
+    position `p` lives in slot `p % sliding_window`.
+
+    The keys and values are returned oldest first, so they cover contiguous positions, of which the first ones are
+    negative while the window is not full yet (empty slots, that the mask never attends).
+
+    Args:
+        max_cache_len (`int`):
+            Maximum number of tokens that can be stored, used for tensor preallocation.
+        sliding_window (`int`):
+            The size of the sliding window.
+    """
+
+    is_sliding = True
+
+    def __init__(self, max_cache_len: int, sliding_window: int, **kwargs):
+        effective_max_cache_len = min(sliding_window, max_cache_len)
+        super().__init__(max_cache_len=effective_max_cache_len)
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Update the key and value caches in-place, and return the necessary keys and value states.
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
+        # Lazy initialization
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+
+        kv_length = key_states.shape[-2]
+        positions = torch.arange(kv_length, device=self.device) + self.cumulative_length
+
+        # With several new tokens, the first ones may need keys that the last ones overwrite: attend over the window
+        # as it was, followed by the new states
+        if kv_length > 1:
+            past_keys, past_values = self._oldest_first()
+            full_key_states = torch.cat((past_keys, key_states), dim=-2)
+            full_value_states = torch.cat((past_values, value_states), dim=-2)
+
+        # Only the last `max_cache_len` tokens are kept, each in the slot of its position
+        slots = positions[-self.max_cache_len :] % self.max_cache_len
+        stored_keys = key_states[:, :, -self.max_cache_len :]
+        stored_values = value_states[:, :, -self.max_cache_len :]
+        try:
+            self.keys.index_copy_(2, slots, stored_keys)
+            self.values.index_copy_(2, slots, stored_values)
+        except NotImplementedError:
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            self.keys[:, :, slots] = stored_keys
+            self.values[:, :, slots] = stored_values
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_length.add_(kv_length)
+
+        if kv_length > 1:
+            return full_key_states, full_value_states
+        return self._oldest_first()
+
+    def _oldest_first(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """The keys and values in position order: the oldest slot is the next one to be written."""
+        order = (torch.arange(self.max_cache_len, device=self.device) + self.cumulative_length) % self.max_cache_len
+        return self.keys.index_select(2, order), self.values.index_select(2, order)
+
+    def get_mask_sizes(self, query_length: int) -> tuple[int, torch.Tensor]:
+        """Return the length and offset of the keys the next update returns. The offset is a tensor, to avoid
+        recompiling at each step, and negative while the window is not full yet."""
+        # Mirrors `update`: a single token is attended with the window it completes, several after the window as it was
+        if query_length == 1:
+            return self.max_cache_len, self.cumulative_length + 1 - self.max_cache_len
+        return self.max_cache_len + query_length, self.cumulative_length - self.max_cache_len
+
+
 class StaticIndexedLayer(StaticLayer):
     """
     A `StaticLayer` with an additional statically-allocated indexer key cache for Dynamic Sparse
@@ -1918,6 +2004,10 @@ class StaticCache(Cache):
         offload_only_non_sliding (`bool`, *optional*, defaults to `True`):
             If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
             usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
+        use_ring_sliding_layers (`bool`, *optional*, defaults to `False`):
+            Whether sliding window and chunked attention layers are [`StaticRingSlidingWindowLayer`] instead of
+            [`StaticSlidingWindowLayer`]: one graph then serves every decoding step, for static-shape compilation
+            (`torch.compile(dynamic=False)`, Neuron, TPU) and export.
 
     Example:
 
@@ -1946,12 +2036,20 @@ class StaticCache(Cache):
         max_cache_len: int,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
+        use_ring_sliding_layers: bool = False,
         **kwargs,
     ):
         layer_types, per_layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
+        layer_type_mapping = STATIC_LAYER_TYPE_MAPPING
+        if use_ring_sliding_layers:
+            layer_type_mapping = {
+                **STATIC_LAYER_TYPE_MAPPING,
+                "sliding_attention": StaticRingSlidingWindowLayer,
+                "chunked_attention": StaticRingSlidingWindowLayer,
+            }
         # Dispatch the layer types
         layers = [
-            STATIC_LAYER_TYPE_MAPPING[layer_type](max_cache_len=max_cache_len, **layer_kwargs)
+            layer_type_mapping[layer_type](max_cache_len=max_cache_len, **layer_kwargs)
             for layer_type, layer_kwargs in zip(layer_types, per_layer_kwargs)
         ]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
