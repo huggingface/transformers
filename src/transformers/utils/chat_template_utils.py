@@ -609,30 +609,13 @@ _REASONING_FIELDS = ("reasoning_content", "thinking", "reasoning")
 
 
 def _alias_reasoning_fields(chat: ChatType) -> ChatType:
-    """
-    Copies a message's reasoning between `reasoning_content` and the other names it is passed under.
-
-    `reasoning_content` is the standard field that chat templates read reasoning from, but older parsed messages
-    use `thinking`, some APIs return `reasoning`, and gpt-oss templates read `thinking`. A message that only sets
-    `thinking` or `reasoning` gets a `reasoning_content` copy, and a message without `thinking` gets one from
-    `reasoning_content`, so the reasoning renders whichever field the template reads. Messages are copied, not
-    modified.
-    """
+    # Fill `reasoning_content` from older names for it, and fill `thinking` for gpt-oss templates, which read that
     aliased_chat = []
     for message in chat:
         if isinstance(message, dict):
-            if message.get("reasoning_content") is None:
-                source = next((key for key in _REASONING_FIELDS[1:] if message.get(key) is not None), None)
-                if source is not None:
-                    logger.warning_once(
-                        f"Copying the `{source}` message field to `reasoning_content`, the standard field for "
-                        "reasoning in chat templates. This copy is deprecated and will be removed in a future "
-                        "version, so please pass reasoning as `reasoning_content`. If the message came from "
-                        "`parse_response`, the model's response template should name this field `reasoning_content`."
-                    )
-                    message = {**message, "reasoning_content": message[source]}
-            if message.get("reasoning_content") is not None and "thinking" not in message:
-                message = {**message, "thinking": message["reasoning_content"]}
+            reasoning = next((message[key] for key in _REASONING_FIELDS if message.get(key) is not None), None)
+            if reasoning is not None:
+                message = {"thinking": reasoning, **message, "reasoning_content": reasoning}
         aliased_chat.append(message)
     return aliased_chat
 
