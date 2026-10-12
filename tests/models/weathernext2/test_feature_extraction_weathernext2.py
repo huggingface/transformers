@@ -130,6 +130,7 @@ class WeatherNext2FeatureExtractionTester:
         return start + np.arange(batch_size, dtype=np.int64) * 6 * 3600
 
 
+@require_torch
 class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
     feature_extraction_class = WeatherNext2FeatureExtractor
 
@@ -294,7 +295,6 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
             for key in ("grid_features", "global_features"):
                 np.testing.assert_allclose(single[key][0], batched[key][member], rtol=1e-6, atol=1e-6)
 
-    @require_torch
     def test_outputs_are_tensors_whatever_the_inputs(self):
         """Numpy and tensor states give the same result, always as tensors, so a rollout never leaves torch."""
         import torch
@@ -361,7 +361,6 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         with self.assertRaises(ValueError):
             extractor(tester.prepare_state())
 
-    @require_torch
     def test_call_returns_torch_tensors(self):
         import torch
 
