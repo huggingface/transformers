@@ -255,6 +255,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     def layer_types(self):
         return ["sliding_attention"] * self.num_hidden_layers
 
+
 class Qwen3TTSTokenizerCausalConvNet(Qwen3OmniMoeCausalConvNet):
     pass
 
@@ -312,7 +313,6 @@ class Qwen3TTSTokenizerOutput(ModelOutput):
     audio_codes_mask: torch.Tensor | None = None
 
 
-
 class Qwen3TTSTokenizerPreTrainedModel(MimiPreTrainedModel):
     base_model_prefix = "model"
     _can_compile_fullgraph = False
@@ -323,6 +323,7 @@ class Qwen3TTSTokenizerCode2WavPreTrainedModel(Qwen3TTSTokenizerPreTrainedModel)
     config_class = Qwen3TTSTokenizerConfig
     _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
 
+
 class Qwen3TTSTokenizerDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
     def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
         super().__init__(config, layer_idx)
@@ -330,6 +331,7 @@ class Qwen3TTSTokenizerDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
 
 class Qwen3TTSTokenizerSnakeBeta(Qwen2_5OmniSnakeBeta):
     pass
+
 
 class Qwen3TTSTokenizerEuclideanCodebook(MimiEuclideanCodebook):
     def __init__(self, config, epsilon: float = 1e-5):
@@ -368,6 +370,7 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerMo
     def __init__(self, config: Qwen3TTSTokenizerConfig):
         super().__init__(config)
 
+
 class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
     config_class = Qwen3TTSTokenizerConfig
 
@@ -378,18 +381,14 @@ class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
         self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
 
-        self.pre_conv = Qwen3TTSTokenizerCausalConvNet(
-            config.codebook_dim, config.latent_dim, kernel_size=3
-        )
+        self.pre_conv = Qwen3TTSTokenizerCausalConvNet(config.codebook_dim, config.latent_dim, kernel_size=3)
 
         upsample = []
         for factor in config.upsampling_ratios:
             upsample.append(
                 nn.ModuleList(
                     [
-                        Qwen3TTSTokenizerCausalTransConvNet(
-                            config.latent_dim, config.latent_dim, factor, factor
-                        ),
+                        Qwen3TTSTokenizerCausalTransConvNet(config.latent_dim, config.latent_dim, factor, factor),
                         Qwen3TTSTokenizerConvNeXtBlock(config.latent_dim),
                     ]
                 )
@@ -438,6 +437,7 @@ class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
         for block in self.decoder:
             wav = block(wav)
         return wav.clamp(min=-1, max=1)
+
 
 class Qwen3TTSTokenizerEncoder(MimiEncoder):
     pass
