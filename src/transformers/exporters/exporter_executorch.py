@@ -42,6 +42,7 @@ import math
 import operator
 import re
 from collections.abc import MutableMapping
+from functools import partial
 from typing import Any
 
 from ..utils import logging
@@ -105,6 +106,7 @@ if is_executorch_available():
 
 logger = logging.get_logger(__name__)
 
+
 class ExecutorchExporter(DynamoExporter):
     """Exporter that converts a [`PreTrainedModel`] to an ExecuTorch `ExecutorchProgramManager`.
 
@@ -144,17 +146,42 @@ class ExecutorchExporter(DynamoExporter):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            
+
             if config.backend == "qnn":
-                from executorch.backends.qualcomm.hf_transformers.api import lower_for_qnn
-                return lower_for_qnn(exported_program=exported_program, hf_config=config, sample_inputs=sample_inputs)
-            
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=partitioner,
-                compile_config=_get_edge_compile_config(config.backend),
-                transform_passes=_get_transform_passes(config.backend),
-            )
+                from executorch.backends.qualcomm.utils.utils import (
+                    generate_htp_compiler_spec,
+                    generate_qnn_executorch_compiler_spec,
+                    get_soc_to_chipset_map,
+                    to_edge_transform_and_lower_to_qnn,
+                )
+                from executorch.devtools.backend_debug import print_delegation_info
+                compiler_spec = generate_qnn_executorch_compiler_spec(
+                    soc_model=get_soc_to_chipset_map()[config.soc_model],
+                    backend_options=generate_htp_compiler_spec(use_fp16=config.pt2e_quantizer is None),
+                    use_mha2sha=hasattr(model, "generation_config"),
+                )
+                transform_passes = _get_transform_passes(config, sample_inputs)
+                kv_forward = "kv_forward"
+                constant_methods = {}
+                if "past_k" in sample_inputs:
+                    constant_methods["get_n_layers"] = len(sample_inputs["past_k"])
+                with torch.no_grad():
+                    edge_program_manager = to_edge_transform_and_lower_to_qnn(
+                        {kv_forward: exported_program.module()},
+                        {kv_forward: sample_inputs},
+                        compiler_spec,
+                        constant_methods=constant_methods,
+                        passes_job=transform_passes,
+                    )
+
+                print_delegation_info(edge_program_manager.exported_program(kv_forward).graph_module)
+            else:
+                edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                    exported_program,
+                    partitioner=partitioner,
+                    compile_config=_get_edge_compile_config(config.backend),
+                    transform_passes=_get_transform_passes(config),
+                )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
             )
@@ -168,19 +195,63 @@ class ExecutorchExporter(DynamoExporter):
         sample_inputs: Any,
         dynamic_shapes: Any,
     ) -> ExportedProgram:
-        if config.backend == "qnn":
+        # TODO: Improve the quantization flow and able to reuse the default quantize for llm models.
+        if config.backend == "qnn" and "past_k" in sample_inputs and "past_v" in sample_inputs:
             from executorch.backends.qualcomm.hf_transformers.api import quantize_for_qnn
+
             return quantize_for_qnn(exported_program, config, sample_inputs)
-        return super()._quantize(self, exported_program, config, sample_inputs, dynamic_shapes)
+        return super()._quantize(exported_program, config, sample_inputs, dynamic_shapes)
 
 
-def _get_transform_passes(backend: str):
+def _get_transform_passes(config, sample_inputs=None):
     """Return backend-specific graph transforms, or ``None`` for defaults."""
-    if backend == "mlx":
+    if config.backend == "mlx":
         from executorch.backends.mlx.passes import get_default_passes
 
         return get_default_passes()
-    return None
+    elif config.backend == "qnn":
+        from executorch.backends.qualcomm._passes import TagQuantIO
+        from executorch.backends.qualcomm._passes.qnn_pass_manager import get_qnn_pass_manager_cls
+        from executorch.backends.qualcomm.utils.constants import (
+            QCOM_PASS_ACTIVATE_KEY,
+            QCOM_PASS_ARGS_KWARGS_DEFAULTS_KEY,
+        )
+
+        def _tag_ios(node, sample_inputs):
+            from executorch.backends.qualcomm.builders.utils import is_graph_output
+
+            def get_dtype(node):
+                from executorch.backends.qualcomm.builders.utils import deduce_dtype
+                from executorch.backends.qualcomm.utils.constants import QCOM_QUANT_ATTRS
+
+                assert QCOM_QUANT_ATTRS in node.meta, f"{node.name} unable to find quant attributes to tag quant io."
+                return deduce_dtype(node.meta["val"], node.meta[QCOM_QUANT_ATTRS])
+
+            past_k_shape = sample_inputs["past_k"][0].shape
+            past_v_shape = sample_inputs["past_v"][0].shape
+            kv_cache_shape = {past_k_shape, past_v_shape}
+            atten_mask_shape = {sample_inputs["atten_mask"].shape}
+            quant_io_type = None
+
+            if node.op == "placeholder":
+                if node.meta["val"].shape in kv_cache_shape | atten_mask_shape:
+                    quant_io_type = get_dtype(node)
+            if is_graph_output(node):
+                quant_io_type = get_dtype(node)
+
+            return quant_io_type
+
+        assert sample_inputs is not None, "For QNN backend, please provide sample inputs"
+        passes_job = get_qnn_pass_manager_cls().get_capture_program_passes()
+        if config.pt2e_quantizer and "past_k" in sample_inputs and "past_v" in sample_inputs:
+            passes_job[TagQuantIO][QCOM_PASS_ACTIVATE_KEY] = True
+            passes_job[TagQuantIO][QCOM_PASS_ARGS_KWARGS_DEFAULTS_KEY]["get_quant_io_dtype_fn"] = partial(
+                _tag_ios,
+                sample_inputs=sample_inputs,
+            )
+        return passes_job
+    else:
+        return None
 
 
 def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
@@ -220,15 +291,28 @@ def _get_backend_config(config):
     ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
     (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
     """
-    if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
-        return None
-    return ExecutorchBackendConfig(
-        memory_planning_pass=MemoryPlanningPass(
-            alloc_graph_input=config.alloc_graph_input,
-            alloc_graph_output=config.alloc_graph_output,
-            alloc_mutable_buffers=config.alloc_mutable_buffers,
+    if config.backend == "qnn":
+        from executorch.backends.qualcomm._passes.build_quant_io import BuildQuantIo
+
+        return ExecutorchBackendConfig(
+            memory_planning_pass=MemoryPlanningPass(
+                alloc_graph_input=config.alloc_graph_input,
+                alloc_graph_output=config.alloc_graph_output,
+                alloc_mutable_buffers=config.alloc_mutable_buffers,
+            ),
+            passes=[BuildQuantIo()],
         )
-    )
+    elif config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
+        return None
+    else:
+        return ExecutorchBackendConfig(
+            memory_planning_pass=MemoryPlanningPass(
+                alloc_graph_input=config.alloc_graph_input,
+                alloc_graph_output=config.alloc_graph_output,
+                alloc_mutable_buffers=config.alloc_mutable_buffers,
+            )
+        )
+
 
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
 # Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
@@ -312,20 +396,26 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], confi
 
 
 def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchQnnConfig):
-    from executorch.backends.qualcomm.hf_transformers.api import prepare_for_qnn as _prepare_for_qnn
-
     model.requires_grad_(False)
     model = model.to(device="cpu")
     model = model.eval()
-    qnn_decoder_model = _prepare_for_qnn(model, config)
-    return qnn_decoder_model, _make_contiguous(qnn_decoder_model.get_example_inputs()), None
+    if hasattr(model, "generation_config"):
+        from executorch.backends.qualcomm.hf_transformers.causal_lm.decoder_model_wrapper import (
+            QnnCausalLMExportableModule,
+        )
+
+        assert hasattr(model.generation_config, "cache_config"), "Please provide cache_config in generation_config."
+        assert "max_cache_len" in model.generation_config.cache_config, "Please provide max_cache_len in cache_config"
+        model = QnnCausalLMExportableModule(model, model.generation_config.cache_config["max_cache_len"])
+        return model, _make_contiguous(model.get_example_inputs()), None
+    return model, _make_contiguous(sample_inputs), None
 
 
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
     "mlx": prepare_for_mlx,
-    "qnn": prepare_for_qnn
+    "qnn": prepare_for_qnn,
 }
 
 

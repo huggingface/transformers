@@ -262,5 +262,4 @@ class ExecutorchQnnConfig(ExecutorchConfig):
 
     backend: str = "qnn"
     backend_hardware: str = "htp"
-    model_id: str = "NousResearch/Llama-3.2-1B"
     soc_model: str = "SM8750"
