@@ -344,11 +344,13 @@ class SystemOneHandler(BaseHandler):
         modality = self.model_manager.get_model_modality(model, processor=processor)
         processor_inputs, questions = self.get_processor_inputs_from_request(request, modality)
 
-        chat_template_kwargs = {
-            **self.chat_template_kwargs,
-            **request.chat_template_kwargs,
-            "enable_thinking": False,
-        }
+        chat_template_kwargs = {**self.chat_template_kwargs, **request.chat_template_kwargs}
+        if chat_template_kwargs.get("enable_thinking"):
+            logger.warning_once(
+                "Decision models answer with their next token, so thinking can't be used with /v1/systemone. "
+                "Setting `enable_thinking=False`."
+            )
+        chat_template_kwargs["enable_thinking"] = False
         prompts = []
         for messages, question in zip(processor_inputs, questions):
             if self.decision_config.chat_template is not None:
