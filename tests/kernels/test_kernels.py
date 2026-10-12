@@ -290,12 +290,12 @@ class TestHubKernels(MemoryCleanupTestCase):
         del model
 
     def test_kernelize_without_compatible_build(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map=torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, use_kernels=False, device_map=torch_device)
         # This repo only has torch 2.4 builds, so no build variant is compatible with this system
         repo = LayerRepository(repo_id="kernels-test/only-torch-2.4", layer_name="Silu", revision="main")
         with use_kernel_mapping({"SiLU": {model.device.type: repo}}, inherit_mapping=False):
             # Would previously raise a `FileNotFoundError` instead of keeping the original layer
-            hub_kernels_pkg.kernelize(model)
+            hub_kernels_pkg.kernelize(model, mode=Mode.INFERENCE)
         first_act_fn = model.model.layers[0].mlp.act_fn
 
         self.assertTrue(model.use_kernels)
