@@ -51,9 +51,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm5NextTextConfig": ["head_dim"],
     # Kept as a config field, the ViT-style attention has no output dropout
     "RadioConfig": ["hidden_dropout_prob"],
-    # The modeling code hardcodes sigmoid scoring with a correction bias; these are validated in
-    # `validate_architecture` and declared so downstream libraries (e.g. vLLM) can always read them
-    "AXK1Config": ["scoring_func", "topk_method"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],

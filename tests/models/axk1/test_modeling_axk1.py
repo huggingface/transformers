@@ -15,8 +15,6 @@
 
 import unittest
 
-from huggingface_hub.errors import StrictDataclassClassValidationError
-
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -55,7 +53,6 @@ class AXK1ModelTester(CausalLMModelTester):
         n_group=2,
         topk_group=1,
         num_experts_per_tok=2,
-        first_k_dense_replace=1,
         moe_intermediate_size=16,
         kv_lora_rank=16,
         q_lora_rank=32,
@@ -70,7 +67,7 @@ class AXK1ModelTester(CausalLMModelTester):
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
+        self.mlp_layer_types = ["dense", "sparse"]
         self.moe_intermediate_size = moe_intermediate_size
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
@@ -90,26 +87,16 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    def test_moe_layer_freq(self):
+    def test_legacy_mlp_layer_types(self):
+        # Checkpoints describe the MLP layout with `first_k_dense_replace` / `moe_layer_freq`
+        config = AXK1Config(num_hidden_layers=5, first_k_dense_replace=1, moe_layer_freq=2)
+        self.assertEqual(config.mlp_layer_types, ["dense", "dense", "sparse", "dense", "sparse"])
         config = self.model_tester.get_config()
         config.num_hidden_layers = 5
-        config.first_k_dense_replace = 1
-        config.moe_layer_freq = 2
+        config.mlp_layer_types = ["dense", "dense", "sparse", "dense", "sparse"]
         model = AXK1Model(config)
         is_moe = [isinstance(layer.mlp, AXK1MoE) for layer in model.layers]
         self.assertEqual(is_moe, [False, False, True, False, True])
-
-    def test_routing_config_fields(self):
-        # Configs that omit these fields (e.g. minimal test configs) must still expose them
-        config = AXK1Config()
-        self.assertEqual(config.moe_layer_freq, 1)
-        self.assertEqual(config.scoring_func, "sigmoid")
-        self.assertEqual(config.topk_method, "none")
-        AXK1Config(topk_method="noaux_tc")
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "scoring_func"):
-            AXK1Config(scoring_func="softmax")
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "topk_method"):
-            AXK1Config(topk_method="greedy")
 
 
 @slow
