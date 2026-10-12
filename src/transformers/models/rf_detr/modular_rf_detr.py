@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import pathlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
@@ -43,15 +46,19 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
+from ...loss.loss_utils import dice_loss
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_scipy_available,
     logging,
+    requires_backends,
     torch_int,
 )
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
+from ...vision_utils import generalized_box_iou
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..detr.image_processing_detr import (
@@ -75,11 +82,16 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrConvNormLayer,
     LwDetrForObjectDetection,
     LwDetrLayerNorm,
+    LwDetrLoss,
     LwDetrModel,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
     refine_bboxes,
 )
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
 
 
 logger = logging.get_logger(__name__)
@@ -394,6 +406,354 @@ class RfDetrImageProcessor(DetrImageProcessor):
 
     def post_process_semantic_segmentation(self):
         raise NotImplementedError("Semantic segmentation is not supported for RF-DETR.")
+
+
+def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
+    return criterion(inputs, labels).mean(1).sum() / num_masks
+
+
+def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    height_and_width = inputs.shape[1]
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
+    loss_pos = torch.matmul(criterion(inputs, torch.ones_like(inputs)) / height_and_width, labels.T)
+    loss_neg = torch.matmul(criterion(inputs, torch.zeros_like(inputs)) / height_and_width, (1 - labels).T)
+    return loss_pos + loss_neg
+
+
+def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
+    inputs = inputs.sigmoid().flatten(1)
+    numerator = 2 * torch.matmul(inputs, labels.T)
+    denominator = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
+    return 1 - (numerator + 1) / (denominator + 1)
+
+
+def sample_point(
+    input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
+) -> torch.Tensor:
+    if point_coordinates.dim() == 3:
+        add_dim = True
+        point_coordinates = point_coordinates.unsqueeze(2)
+    point_features = F.grid_sample(input_features, 2.0 * point_coordinates - 1.0, **kwargs)
+    if add_dim:
+        point_features = point_features.squeeze(3)
+    return point_features
+
+
+def calculate_uncertainty(logits: torch.Tensor) -> torch.Tensor:
+    return -(torch.abs(logits))
+
+
+def sample_points_using_uncertainty(
+    logits: Tensor,
+    uncertainty_function: Callable[[Tensor], Tensor],
+    num_points: int,
+    oversample_ratio: int,
+    importance_sample_ratio: float,
+) -> Tensor:
+    num_boxes = logits.shape[0]
+    num_points_sampled = int(num_points * oversample_ratio)
+    point_coordinates = torch.rand(num_boxes, num_points_sampled, 2, device=logits.device)
+    point_logits = sample_point(logits, point_coordinates, align_corners=False)
+    point_uncertainties = uncertainty_function(point_logits)
+    num_uncertain_points = int(importance_sample_ratio * num_points)
+    num_random_points = num_points - num_uncertain_points
+    idx = torch.topk(point_uncertainties[:, 0, :], k=num_uncertain_points, dim=1)[1]
+    point_coordinates = torch.gather(point_coordinates, 1, idx.unsqueeze(-1).expand(-1, -1, 2))
+    if num_random_points > 0:
+        point_coordinates = torch.cat(
+            [point_coordinates, torch.rand(num_boxes, num_random_points, 2, device=logits.device)], dim=1
+        )
+    return point_coordinates
+
+
+class RfDetrHungarianMatcher(nn.Module):
+    def __init__(
+        self,
+        class_cost: float = 1,
+        bbox_cost: float = 1,
+        giou_cost: float = 1,
+        mask_point_sample_ratio: int = 16,
+        cost_mask_class_cost: float = 1,
+        cost_mask_dice_cost: float = 1,
+    ):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+        self.class_cost, self.bbox_cost, self.giou_cost = class_cost, bbox_cost, giou_cost
+        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
+        self.mask_point_sample_ratio = mask_point_sample_ratio
+        self.cost_mask_class, self.cost_mask_dice = cost_mask_class_cost, cost_mask_dice_cost
+
+    @torch.no_grad()
+    def forward(self, outputs, targets, group_detr):
+        if "pred_masks" not in outputs:
+            batch_size, num_queries = outputs["logits"].shape[:2]
+            out_prob = outputs["logits"].flatten(0, 1).sigmoid()
+            out_bbox = outputs["pred_boxes"].flatten(0, 1)
+            target_ids = torch.cat([value["class_labels"] for value in targets])
+            target_bbox = torch.cat([value["boxes"] for value in targets])
+            alpha, gamma = 0.25, 2.0
+            neg_cost_class = (1 - alpha) * out_prob**gamma * (-(1 - out_prob + 1e-8).log())
+            pos_cost_class = alpha * (1 - out_prob) ** gamma * (-(out_prob + 1e-8).log())
+            class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
+            dtype = out_bbox.dtype
+            out_bbox, target_bbox = out_bbox.float(), target_bbox.float()
+            bbox_cost = torch.cdist(out_bbox, target_bbox, p=1).to(dtype)
+            giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
+            cost_matrix = (
+                (self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost)
+                .view(batch_size, num_queries, -1)
+                .cpu()
+            )
+            sizes = [len(value["boxes"]) for value in targets]
+            indices = []
+            group_num_queries = num_queries // group_detr
+            for group_id, group_cost_matrix in enumerate(cost_matrix.split(group_num_queries, dim=1)):
+                group_indices = [
+                    linear_sum_assignment(cost[i]) for i, cost in enumerate(group_cost_matrix.split(sizes, -1))
+                ]
+                if group_id == 0:
+                    indices = group_indices
+                else:
+                    indices = [
+                        (
+                            np.concatenate([first[0], second[0] + group_num_queries * group_id]),
+                            np.concatenate([first[1], second[1]]),
+                        )
+                        for first, second in zip(indices, group_indices)
+                    ]
+            return [
+                (torch.as_tensor(source, dtype=torch.int64), torch.as_tensor(target, dtype=torch.int64))
+                for source, target in indices
+            ]
+        batch_size, num_queries = outputs["logits"].shape[:2]
+        out_prob = outputs["logits"].flatten(0, 1).sigmoid()
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)
+        out_masks = outputs["pred_masks"].flatten(0, 1)
+        target_ids = torch.cat([v["class_labels"] for v in targets])
+        target_bbox = torch.cat([v["boxes"] for v in targets])
+        target_masks = torch.cat([v["masks"] for v in targets])
+        alpha, gamma = 0.25, 2.0
+        neg = (1 - alpha) * out_prob**gamma * (-(1 - out_prob + 1e-8).log())
+        pos = alpha * (1 - out_prob) ** gamma * (-(out_prob + 1e-8).log())
+        class_cost = pos[:, target_ids] - neg[:, target_ids]
+        dtype = out_bbox.dtype
+        out_bbox, target_bbox = out_bbox.float(), target_bbox.float()
+        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1).to(dtype)
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
+        height, width = out_bbox.shape[:2]
+        num_points = height * width // self.mask_point_sample_ratio
+        target_masks = target_masks.to(out_masks.dtype)
+        point_coords = torch.rand(1, num_points, 2, device=out_masks.device)
+        pred_coords = point_coords.repeat(out_masks.shape[0], 1, 1)
+        pred_points = sample_point(out_masks.unsqueeze(1), pred_coords, align_corners=False).squeeze((-1, 1))
+        target_coords = point_coords.repeat(target_masks.shape[0], 1, 1)
+        target_points = sample_point(target_masks.unsqueeze(1), target_coords, align_corners=False, mode="nearest")
+        target_points = target_points.squeeze((-1, 1))
+        cost_matrix = (
+            (
+                self.bbox_cost * bbox_cost
+                + self.class_cost * class_cost
+                + self.giou_cost * giou_cost
+                + self.cost_mask_class * pair_wise_sigmoid_cross_entropy_loss(pred_points, target_points)
+                + self.cost_mask_dice * pair_wise_dice_loss(pred_points, target_points)
+            )
+            .view(batch_size, num_queries, -1)
+            .cpu()
+        )
+        max_cost = cost_matrix.max() if cost_matrix.numel() > 0 else 0
+        cost_matrix[cost_matrix.isinf() | cost_matrix.isnan()] = max_cost * 2
+        sizes = [len(v["masks"]) for v in targets]
+        indices = []
+        group_num_queries = num_queries // group_detr
+        for group_id, group_cost_matrix in enumerate(cost_matrix.split(group_num_queries, dim=1)):
+            group_indices = [linear_sum_assignment(c[i]) for i, c in enumerate(group_cost_matrix.split(sizes, -1))]
+            if group_id == 0:
+                indices = group_indices
+            else:
+                indices = [
+                    (
+                        np.concatenate([first[0], second[0] + group_num_queries * group_id]),
+                        np.concatenate([first[1], second[1]]),
+                    )
+                    for first, second in zip(indices, group_indices)
+                ]
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+
+
+class RfDetrSegmentationLoss(LwDetrLoss):
+    def __init__(self, config, losses, weight_dict):
+        nn.Module.__init__(self)
+        self.matcher = RfDetrHungarianMatcher(
+            class_cost=config.class_cost,
+            bbox_cost=config.bbox_cost,
+            giou_cost=config.giou_cost,
+            mask_point_sample_ratio=config.mask_point_sample_ratio,
+            cost_mask_class_cost=config.mask_class_loss_coefficient,
+            cost_mask_dice_cost=config.mask_dice_loss_coefficient,
+        )
+        self.num_classes, self.focal_alpha = config.num_labels, config.focal_alpha
+        self.losses, self.group_detr = losses, config.group_detr
+        self.mask_point_sample_ratio = config.mask_point_sample_ratio
+        self.auxiliary_loss = config.auxiliary_loss
+        self.weight_dict = weight_dict
+        if self.auxiliary_loss:
+            aux_weight_dict = {}
+            for i in range(config.decoder_layers - 1):
+                aux_weight_dict.update({k + f"_{i}": v for k, v in self.weight_dict.items()})
+            self.weight_dict.update(aux_weight_dict)
+        self.weight_dict.update({k + "_enc": v for k, v in self.weight_dict.items()})
+
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        if "pred_masks" not in outputs:
+            raise KeyError("No predicted masks found in outputs")
+        source_idx = self._get_source_permutation_idx(indices)
+        source_masks = outputs["pred_masks"][source_idx]
+        if source_masks.numel() == 0:
+            return {"loss_mask_ce": source_masks.sum(), "loss_mask_dice": source_masks.sum()}
+        target_masks = torch.cat([t["masks"][j] for t, (_, j) in zip(targets, indices)], dim=0)
+        source_masks, target_masks = source_masks.unsqueeze(1), target_masks.unsqueeze(1).float()
+        num_points = max(
+            source_masks.shape[-2], source_masks.shape[-2] * source_masks.shape[-1] // self.mask_point_sample_ratio
+        )
+        with torch.no_grad():
+            point_coords = sample_points_using_uncertainty(source_masks, calculate_uncertainty, num_points, 3, 0.75)
+            point_labels = sample_point(target_masks, point_coords, align_corners=False, mode="nearest").squeeze(1)
+        point_logits = sample_point(source_masks, point_coords, align_corners=False).squeeze(1)
+        return {
+            "loss_mask_ce": sigmoid_cross_entropy_loss(point_logits, point_labels, num_boxes),
+            "loss_mask_dice": dice_loss(point_logits, point_labels, num_boxes),
+        }
+
+    def forward(self, outputs, targets):
+        group_detr = self.group_detr if self.training else 1
+        outputs_main = {k: v for k, v in outputs.items() if k not in ("enc_outputs", "auxiliary_outputs")}
+        indices = self.matcher(outputs_main, targets, group_detr)
+        num_boxes = sum(len(t["class_labels"]) for t in targets) * group_detr
+        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
+        world_size = 1
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(num_boxes, op=dist.ReduceOp.SUM)
+            world_size = dist.get_world_size()
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
+        losses = {}
+        for loss in self.losses:
+            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+        if "auxiliary_outputs" in outputs:
+            for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
+                indices = self.matcher(auxiliary_outputs, targets, group_detr)
+                for loss in self.losses:
+                    loss_values = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
+                    losses.update({k + f"_{i}": v for k, v in loss_values.items()})
+        if "enc_outputs" in outputs:
+            enc_outputs = outputs["enc_outputs"]
+            indices = self.matcher(enc_outputs, targets, group_detr=group_detr)
+            for loss in self.losses:
+                loss_values = self.get_loss(loss, enc_outputs, targets, indices, num_boxes)
+                losses.update({k + "_enc": v for k, v in loss_values.items()})
+        return losses
+
+
+def _set_aux_loss(outputs_class, outputs_coord, outputs_masks):
+    return [
+        {"logits": a, "pred_boxes": b, "pred_masks": c}
+        for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1], outputs_masks[:-1])
+    ]
+
+
+class RfDetrLoss(LwDetrLoss):
+    def __init__(self, config, losses, weight_dict):
+        super().__init__(config, losses, weight_dict)
+        self.matcher = RfDetrHungarianMatcher(
+            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
+        )
+
+
+class RfDetrForObjectDetectionCriterion(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.auxiliary_loss = config.auxiliary_loss
+        self.loss_module = RfDetrLoss(
+            config,
+            ["labels", "boxes", "cardinality"],
+            {
+                "loss_ce": config.class_loss_coefficient,
+                "loss_bbox": config.bbox_loss_coefficient,
+                "loss_giou": config.giou_loss_coefficient,
+            },
+        )
+
+    def forward(
+        self,
+        logits,
+        labels,
+        pred_boxes,
+        outputs_class=None,
+        outputs_coord=None,
+        enc_outputs_class=None,
+        enc_outputs_coord=None,
+    ):
+        outputs_loss = {
+            "logits": logits,
+            "pred_boxes": pred_boxes,
+            "enc_outputs": {"logits": enc_outputs_class, "pred_boxes": enc_outputs_coord},
+        }
+        auxiliary_outputs = None
+        if self.auxiliary_loss:
+            auxiliary_outputs = [
+                {"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])
+            ]
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+        loss_dict = self.loss_module(outputs_loss, labels)
+        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
+
+
+class RfDetrForInstanceSegmentationCriterion(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.auxiliary_loss = config.auxiliary_loss
+        self.loss_module = RfDetrSegmentationLoss(
+            config,
+            ["labels", "boxes", "cardinality", "masks"],
+            {
+                "loss_ce": config.class_loss_coefficient,
+                "loss_bbox": config.bbox_loss_coefficient,
+                "loss_giou": config.giou_loss_coefficient,
+                "loss_mask_ce": config.mask_class_loss_coefficient,
+                "loss_mask_dice": config.mask_dice_loss_coefficient,
+            },
+        )
+
+    def forward(
+        self,
+        logits,
+        labels,
+        pred_boxes,
+        pred_masks,
+        outputs_class=None,
+        outputs_coord=None,
+        outputs_masks=None,
+        enc_outputs_class=None,
+        enc_outputs_coord=None,
+        enc_outputs_masks=None,
+    ):
+        outputs_loss = {
+            "logits": logits,
+            "pred_boxes": pred_boxes,
+            "pred_masks": pred_masks,
+            "enc_outputs": {
+                "logits": enc_outputs_class,
+                "pred_boxes": enc_outputs_coord,
+                "pred_masks": enc_outputs_masks,
+            },
+        }
+        auxiliary_outputs = None
+        if self.auxiliary_loss:
+            auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord, outputs_masks)
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+        loss_dict = self.loss_module(outputs_loss, labels)
+        return self.loss_module.get_weighted_loss(loss_dict), loss_dict, auxiliary_outputs
 
 
 @auto_docstring(checkpoint="Roboflow/rf-detr-base")
@@ -1169,6 +1529,10 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         boxes = refine_bboxes(reference_points, boxes_delta)
         return logits, boxes
 
+    def __init__(self, config: RfDetrConfig):
+        super().__init__(config)
+        self.criterion = RfDetrForObjectDetectionCriterion(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="""
@@ -1241,16 +1605,14 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
                     outputs.intermediate_hidden_states, intermediate_reference_points
                 )
 
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
+            loss, loss_dict, auxiliary_outputs = self.criterion(
                 logits,
                 labels,
-                self.device,
                 pred_boxes,
-                self.config,
                 outputs_class,
                 outputs_coord,
-                enc_outputs_class_logits,
-                outputs.enc_outputs_coord_logits,
+                enc_outputs_class=enc_outputs_class_logits,
+                enc_outputs_coord=outputs.enc_outputs_coord_logits,
             )
 
         return RfDetrObjectDetectionOutput(
@@ -1396,6 +1758,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         self.query_features_proj = nn.Linear(config.d_model, config.d_model)
 
         self.segmentation_bias = nn.Parameter(torch.zeros(1), requires_grad=True)
+        self.criterion = RfDetrForInstanceSegmentationCriterion(config)
 
         self.post_init()
 
@@ -1509,19 +1872,17 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
                 outputs_class, outputs_coord = self.model.predict_class_and_boxes(
                     outputs.intermediate_hidden_states, intermediate_reference_points
                 )
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
+            loss, loss_dict, auxiliary_outputs = self.criterion(
                 logits,
                 labels,
-                self.device,
                 pred_boxes,
                 pred_masks,
-                self.config,
                 outputs_class,
                 outputs_coord,
                 outputs_masks,
-                enc_outputs_class_logits,
-                outputs.enc_outputs_coord_logits,
-                enc_outputs_masks,
+                enc_outputs_class=enc_outputs_class_logits,
+                enc_outputs_coord=outputs.enc_outputs_coord_logits,
+                enc_outputs_masks=enc_outputs_masks,
             )
 
         return RfDetrInstanceSegmentationOutput(
@@ -1543,6 +1904,11 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
 
 
 __all__ = [
+    "RfDetrHungarianMatcher",
+    "RfDetrLoss",
+    "RfDetrSegmentationLoss",
+    "RfDetrForObjectDetectionCriterion",
+    "RfDetrForInstanceSegmentationCriterion",
     "RfDetrConfig",
     "RfDetrModel",
     "RfDetrForObjectDetection",
