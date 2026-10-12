@@ -444,7 +444,9 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
         if isinstance(module, WeatherNext2Model):
             module.init_geometry_buffers()
         elif isinstance(module, WeatherNext2ForecastHead):
-            module.init_output_activation_buffers()
+            gate, shifts = module.get_output_activation_buffers()
+            init.copy_(module.sigmoid_gate, gate)
+            init.copy_(module.sigmoid_shift, shifts)
 
 
 @auto_docstring(custom_intro="Latent representation of the atmosphere on the lat/lon grid.")
@@ -666,28 +668,17 @@ class WeatherNext2ForecastHead(nn.Module):
         self.sigmoid_shift = nn.Buffer(shifts, persistent=False)
 
     def get_output_activation_buffers(self) -> tuple[torch.Tensor, torch.Tensor]:
-        """Returns which output channels are squashed, and by how much.
-
-        A few targets are probabilities rather than physical quantities. The negative shift keeps
-        their prior mass near zero, since cyclones are rare.
-        """
+        """Builds the output-channel sigmoid gates and shifts from the config."""
         config = self.config
         shifts = torch.zeros(config.num_output_channels)
         gate = torch.zeros(config.num_output_channels, dtype=torch.bool)
         offset = 0
         for variable, _, levels in config.target_channel_layout:
-            # CODEPATH: only checkpoints predicting `cyclone_exists_gaussian_unit_mode` shift an
-            # output; for every other target the dict is empty and no channel is gated.
             if variable in (config.sigmoid_shifted_outputs or {}):
                 gate[offset : offset + levels] = True
                 shifts[offset : offset + levels] = config.sigmoid_shifted_outputs[variable]
             offset += levels
         return gate, shifts
-
-    def init_output_activation_buffers(self):
-        gate, shifts = self.get_output_activation_buffers()
-        init.copy_(self.sigmoid_gate, gate)
-        init.copy_(self.sigmoid_shift, shifts)
 
     def forward(self, grid_states: torch.Tensor) -> torch.Tensor:
         prediction = self.output_proj(self.act_fn(self.decoder_proj(grid_states)))
