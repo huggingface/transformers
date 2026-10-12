@@ -61,6 +61,12 @@ class Kolibri1Config(Qwen3MoeConfig):
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
+    # Token dispatch by default, so `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`)
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
 
     vocab_size: int = 128000
     hidden_size: int = 2560
