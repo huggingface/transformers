@@ -155,6 +155,18 @@ class TensorParallelLayer:
     def transform_output_post_forward(self, module, output, mesh):
         return output
 
+    @staticmethod
+    def _from_local_last_dim_shard(local, mesh, placement, size):
+        """Wrap this rank's slice of a tensor split along its last dimension, whose full width is `size`.
+
+        When `size` doesn't divide by the number of ranks, the last rank holds a shorter slice. `DTensor.from_local`
+        can't tell that from one rank's slice and would assume every rank holds the same width, so we pass the full
+        shape explicitly."""
+        shape = (*local.shape[:-1], size)
+        return DTensor.from_local(
+            local, mesh, [placement], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
+        )
+
     def install_forward(self, module, mesh):
         """Install pre / around / post transforms by replacing module.forward."""
         original_forward = module.forward
@@ -170,7 +182,9 @@ class TensorParallelLayer:
 
 
 class ColwiseParallel(TensorParallelLayer):
-    """Column-wise for linear layers: weight & bias → Shard(0); input replicated, output Shard(-1)."""
+    """Column-wise for linear layers: weight & bias → Shard(0); input replicated, output Shard(-1).
+
+    The output width (`out_features`) need not divide by the TP size: the last rank then holds a shorter slice."""
 
     def __init__(self, *, input_layouts=None, output_layouts=None, use_local_output: bool = True):
         self.input_layouts = input_layouts or Replicate()
@@ -181,22 +195,6 @@ class ColwiseParallel(TensorParallelLayer):
         use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
-
-    def validate_param(self, module, param, mesh, parameter_name=None):
-        meta = module._parameters.get(param)
-        gathers_output = isinstance(self.output_layouts, Replicate)
-        if meta is None or not gathers_output:
-            return
-
-        output_size = meta.shape[meta.ndim - 2]
-        tp_size = mesh.size()
-        if output_size % tp_size != 0:
-            parameter_name = parameter_name or param
-            layer_name = parameter_name.rsplit(".", 1)[0]
-            raise ValueError(
-                f"The output size of `{layer_name}` ({output_size}) must be divisible by the tensor parallel size "
-                f"({tp_size}) when gathering a colwise output."
-            )
 
     def install_forward(self, module, mesh):
         if not hasattr(module, "out_features"):
@@ -250,7 +248,8 @@ class ColwiseParallel(TensorParallelLayer):
         if self.should_use_local_tensors(module) and self.use_local_output and output_is_local_shard:
             return output
         if not isinstance(output, DTensor):
-            output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
+            # `out_features`, not the weight's shape: a packed or quantized weight doesn't show the full width
+            output = self._from_local_last_dim_shard(output, mesh, Shard(-1), module.out_features)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts])
         return output.to_local() if self.use_local_output else output
@@ -260,7 +259,8 @@ class RowwiseParallel(TensorParallelLayer):
     """Row-wise for linear layers: weight → Shard(1), bias → Replicate; input sharded on the last dim.
 
     The module forward produces a Partial output which the boundary redistribute reduces to
-    output_layouts (Replicate → allreduce, Shard(1) → reduce-scatter).
+    output_layouts (Replicate → allreduce, Shard(1) → reduce-scatter). The input width (`in_features`) need not
+    divide by the TP size.
     """
 
     def __init__(self, *, input_layouts=None, output_layouts=None, use_local_output: bool = True):
@@ -298,7 +298,11 @@ class RowwiseParallel(TensorParallelLayer):
         if self.should_use_local_tensors(module) and input_has_desired_layout and not isinstance(x, DTensor):
             return args, kwargs
         if not isinstance(x, DTensor):
-            x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+            if isinstance(self.input_layouts, Shard):
+                # the input is this rank's slice of the module's declared `in_features`
+                x = self._from_local_last_dim_shard(x, mesh, self.input_layouts, module.in_features)
+            else:
+                x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
             x = x.redistribute(placements=[desired])
         if self.should_use_local_tensors(module):
