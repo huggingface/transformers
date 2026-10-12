@@ -118,10 +118,13 @@ def blockwise_overlay(block_sequence_ids: torch.Tensor) -> Callable:
     Mostly used in MLLMs when non-text data attends bidirectionally to itself.
     """
 
+    # Positions past the given ids read the last one, `-1` once padded (see `maybe_pad_block_sequence_ids`)
+    last_position = block_sequence_ids.shape[-1] - 1
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = block_sequence_ids[batch_idx, q_idx]
-        kv_group = block_sequence_ids[batch_idx, kv_idx]
+        q_group = block_sequence_ids[batch_idx, q_idx.clamp(max=last_position)]
+        kv_group = block_sequence_ids[batch_idx, kv_idx.clamp(max=last_position)]
         return (q_group == kv_group) & (q_group >= 0)
 
     return inner_mask
@@ -186,12 +189,17 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
     return inner_mask
 
 
-def non_negative_key_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+def written_keys_only(mask_function: Callable) -> Callable:
     """
     A cache may give its mask offset as a tensor (`StaticRingSlidingWindowLayer`), negative while its window is not
-    full: its first keys are then empty slots, at negative positions, which this masks.
+    full: its first keys are then unwritten slots, at negative positions. This masks them, and shows `mask_function`
+    position 0 instead, so that it can index a padding mask or block ids there.
     """
-    return kv_idx >= 0
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return (kv_idx >= 0) & mask_function(batch_idx, head_idx, q_idx, kv_idx.clamp(min=0))
+
+    return inner_mask
 
 
 def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offset: int) -> Callable:
@@ -211,7 +219,7 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     From the 2D attention mask, prepare the correct padding mask to use by potentially padding it.
     """
     local_padding_mask = attention_mask
-    # A tensor offset (see `non_negative_key_mask_function`) only gives positions the 2D mask already covers
+    # A tensor offset (see `written_keys_only`) only gives positions the 2D mask already covers
     if attention_mask is not None and not isinstance(kv_offset, torch.Tensor):
         # Pad it if necessary
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
@@ -227,9 +235,10 @@ def maybe_pad_block_sequence_ids(
     Usually that happens with `StaticCache` generation or generating without cache.
     Pads to the right with `-1`.
     """
-    # A tensor offset (see `non_negative_key_mask_function`) only gives positions the ids already cover
+    # With a tensor offset (see `written_keys_only`) the length to pad to isn't known: one `-1` is enough, as
+    # `blockwise_overlay` reads positions past the ids at the last one
     if isinstance(kv_offset, torch.Tensor):
-        return block_sequence_ids
+        return F.pad(block_sequence_ids, pad=(0, 1), value=-1)
     if (padding_length := kv_length + kv_offset - block_sequence_ids.shape[-1]) > 0:
         block_sequence_ids = F.pad(block_sequence_ids, pad=(0, padding_length), value=-1)
     return block_sequence_ids
@@ -256,7 +265,7 @@ def _ignore_causal_mask_sdpa(
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
     """
-    # The empty slots of a tensor offset need the mask (see `non_negative_key_mask_function`)
+    # The unwritten slots of a tensor offset need the mask (see `written_keys_only`)
     if isinstance(kv_offset, torch.Tensor):
         return False
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:
@@ -523,6 +532,8 @@ def sdpa_mask(
     head_arange = torch.arange(1, device=device)
     q_arange = torch.arange(q_length, device=device) + q_offset
     kv_arange = torch.arange(kv_length, device=device) + kv_offset
+    if isinstance(kv_offset, torch.Tensor):
+        mask_function = written_keys_only(mask_function)
 
     # Actual mask creation
     # Option 1: Fast non-vmap mask creation (default)
@@ -540,9 +551,6 @@ def sdpa_mask(
         with TransformGetItemToIndex():
             attention_mask = _vmap_expansion_sdpa(mask_function)(batch_arange, head_arange, q_arange, kv_arange)
 
-    # Applied on the final mask rather than composed into `mask_function`, as it is built at every decoding step
-    if isinstance(kv_offset, torch.Tensor):
-        attention_mask = attention_mask & non_negative_key_mask_function(None, None, None, kv_arange)
     return attention_mask
 
 
@@ -646,7 +654,7 @@ def flash_attention_mask(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
     """
-    # A tensor offset (see `non_negative_key_mask_function`) starts with empty slots while its window is not full
+    # A tensor offset (see `written_keys_only`) starts with unwritten slots while its window is not full
     if isinstance(kv_offset, torch.Tensor):
         positions = torch.arange(kv_length, device=kwargs.get("device", kv_offset.device)) + kv_offset
         mask = (positions >= 0)[None, :].expand(batch_size, -1)
@@ -706,7 +714,7 @@ def flex_attention_mask(
         padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
     if isinstance(kv_offset, torch.Tensor):
-        mask_function = and_masks(mask_function, non_negative_key_mask_function)
+        mask_function = written_keys_only(mask_function)
 
     # Add the offsets on top (because flex interface only allows length, not start and end indices)
     mask_function = add_offsets_to_mask_function(mask_function, q_offset, kv_offset)

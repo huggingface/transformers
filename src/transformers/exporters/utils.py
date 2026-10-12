@@ -45,6 +45,7 @@ import sys
 from collections.abc import MutableMapping
 from typing import Any
 
+from ..generation.configuration_utils import STATIC_CACHE_IMPLEMENTATIONS
 from ..utils import logging
 from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import is_torch_available
@@ -680,7 +681,7 @@ def _capture_forward(module: torch.nn.Module):
         module.forward = original
 
 
-def _merge_decode_calls(decode_calls: list[dict]) -> dict:
+def _merge_decode_calls(decode_calls: list[dict], model: PreTrainedModel, attention_mask: Any) -> dict:
     """Merge consecutive single-token decode captures into one multi-token decode input.
 
     Each `model.generate` decode step feeds a single new token, so `torch.export` (with `Dim.AUTO`)
@@ -692,7 +693,8 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
 
     The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
     the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
-    handled below (its layout depends on the cache).
+    handled below (its layout depends on the cache): `model` and the generate inputs' 2D `attention_mask` build
+    the merged step's masks for a compileable cache.
     """
     first = decode_calls[0]
     merged = copy.copy(first)
@@ -721,37 +723,41 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     # last in both, so a negative dim concatenates it correctly either way.
     concat_along("position_ids", -1)
 
-    # `attention_mask` is either a 2D padding mask `[batch, kv]` (a growing `DynamicCache`: the model
-    # rebuilds the causal mask from `position_ids` / `cache_position` internally, so the last step's
-    # mask — spanning the most positions — is all it needs) or a 4D causal mask `[batch, heads, query,
-    # kv]` (a static cache passes the mask in explicitly). For the 4D case each single-token step is one
-    # causal query row against the fixed-size cache, so concatenating along the query axis rebuilds the
-    # correct `N`-token causal mask; taking just the last step would freeze the query axis at 1 and the
-    # exported decode could never run more than one token. Hybrid-attention models pass a dict
-    # `{attention_type: 4D mask}` instead of a single tensor — merge each entry the same way.
+    # `generate` passes a compileable cache 4D masks it builds for the step, built here for the merged step the same
+    # way. Otherwise it passes the 2D padding mask, and the last step's spans every position.
     masks = [call.get("attention_mask") for call in decode_calls]
     if all(mask is not None for mask in masks):
-        merged["attention_mask"] = _merge_step_masks(masks)
+        if getattr(merged.get("past_key_values"), "is_compileable", False):
+            merged["attention_mask"] = _build_step_masks(model, merged, attention_mask)
+        else:
+            merged["attention_mask"] = masks[-1]
 
     return merged
 
 
-def _merge_step_masks(masks: list[Any]) -> Any:
-    """Merge one attention mask per decode step into a single multi-token mask.
-
-    A 4D causal mask `[batch, heads, query, kv]` is concatenated along the query axis (each step is one
-    causal row against the fixed cache); a 2D padding mask keeps the last step (it already spans the most
-    positions). A dict `{attention_type: mask}` (hybrid-attention models) is merged entry by entry, and a
-    `None` mask (an attention type the model leaves unmasked) is preserved as `None`.
-    """
-    last_mask = masks[-1]
-    if last_mask is None:
-        return None
-    if isinstance(last_mask, dict):
-        return {key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask}
-    if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
-        return torch.cat(masks, dim=2)
-    return last_mask
+def _build_step_masks(model: PreTrainedModel, step_inputs: dict, attention_mask: Any) -> Any:
+    """The masks `generate` builds for a decode step with `step_inputs`, from the generate inputs' 2D
+    `attention_mask` (which `generate` drops when all ones, and otherwise extends by one per generated token)."""
+    tokens = step_inputs["input_ids"] if step_inputs.get("input_ids") is not None else step_inputs["inputs_embeds"]
+    batch_size, query_length = tokens.shape[:2]
+    cache = step_inputs["past_key_values"]
+    if attention_mask is not None and not attention_mask.all():
+        total_length = int(cache.get_seq_length()) + query_length
+        attention_mask = torch.nn.functional.pad(attention_mask, (0, total_length - attention_mask.shape[-1]), value=1)
+    else:
+        attention_mask = None
+    create_masks = getattr(model, "create_masks_for_generate", masking_utils.create_masks_for_generate)
+    return create_masks(
+        config=model.config,
+        inputs_embeds=torch.empty((batch_size, query_length, 0), dtype=model.dtype, device=tokens.device),
+        attention_mask=attention_mask,
+        past_key_values=cache,
+        position_ids=step_inputs.get("position_ids"),
+        block_sequence_ids=step_inputs.get("block_sequence_ids"),
+        token_type_ids=step_inputs.get("token_type_ids"),
+        mm_token_type_ids=step_inputs.get("mm_token_type_ids"),
+        is_first_iteration=False,
+    )
 
 
 def decompose_prefill_decode(
@@ -769,7 +775,9 @@ def decompose_prefill_decode(
     inputs use whatever cache `generate()` would build. Pass one with `cache_implementation="static"`
     and `max_cache_len=N` to capture a **statically sized** cache in the decode inputs — the basis for
     a static-cache export. `max_cache_len` sizes the cache independently of the capture, so the
-    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one.
+    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one. Its sliding window layers
+    are `StaticRingSlidingWindowLayer`s, so the exported decode serves any position (unless the config's
+    `cache_config` sets `use_ring_sliding_layers` itself).
 
     When `multi_token_decode`, the `decode` component is captured as a **multi-token** decode — two
     consecutive decode steps merged (see `_merge_decode_calls`) so its query-sequence axis stays
@@ -790,6 +798,10 @@ def decompose_prefill_decode(
     capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
+    # A static cache's sliding layers write the same way at every step only as ring buffers: otherwise the decode
+    # graph freezes the write it was captured with, and breaks once the window is full
+    if capture_config.cache_implementation in STATIC_CACHE_IMPLEMENTATIONS:
+        capture_config.cache_config = {"use_ring_sliding_layers": True, **(capture_config.cache_config or {})}
     try:
         with _capture_forward(model) as calls:
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
@@ -818,7 +830,10 @@ def decompose_prefill_decode(
     # `multi_token_decode`, merge the two decode steps into one multi-token decode so that axis stays
     # symbolic (continuation-from-past, or a plain prefill when the cache is empty, and it still covers seq == 1).
     prefill_inputs = calls[0]
-    decode_inputs = _merge_decode_calls(calls[1:num_new_tokens]) if multi_token_decode else calls[1]
+    if multi_token_decode:
+        decode_inputs = _merge_decode_calls(calls[1:num_new_tokens], model, inputs.get("attention_mask"))
+    else:
+        decode_inputs = calls[1]
     return {
         "prefill": (copy.copy(model), prefill_inputs),
         "decode": (copy.copy(model), decode_inputs),
