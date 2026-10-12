@@ -35,7 +35,7 @@ jobs:
       HF_HOME: /tmp/hf_home
       HF_HUB_DISABLE_PROGRESS_BARS: "1"
       PYTHONUNBUFFERED: "1"
-      OMP_NUM_THREADS: "8"
+      OMP_NUM_THREADS: "4"
       LOCK: tests/contracts/fleet-lock.json
       PROTOTYPE_LOCK: tests/contracts/prototype-fleet.lock
     defaults:
@@ -80,6 +80,9 @@ jobs:
           actual = Path(transformers.__file__).resolve()
           assert actual == expected.resolve(), (actual, expected)
           print("Framework under test:", actual)
+          import torch
+          assert torch.get_num_threads() == 4, torch.get_num_threads()
+          print("CPU threads:", torch.get_num_threads())
           PY_SOURCE
           if [[ "${{ github.ref_name }}" == contracts-proof || "${{ github.head_ref }}" == contracts-proof ]]; then
             selection=(--run-all)

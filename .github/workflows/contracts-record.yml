@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       model_select:
-        description: "Space-separated prototypes (empty records all)"
+        description: "Space-separated prototypes (empty defaults to Whisper)"
         type: string
         default: "whisper"
 
