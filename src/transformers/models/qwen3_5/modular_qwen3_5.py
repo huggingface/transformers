@@ -183,7 +183,7 @@ class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
 
 
 class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
-    def __init__(self, config: Qwen3_5TextConfig, device=None):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 

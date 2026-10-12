@@ -315,6 +315,7 @@ if TYPE_CHECKING:
     from .modernbert import *
     from .modernbert_decoder import *
     from .modernvbert import *
+    from .molmo2 import *
     from .moonshine import *
     from .moonshine_streaming import *
     from .moshi import *
@@ -384,6 +385,7 @@ if TYPE_CHECKING:
     from .pp_chart2table import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
+    from .pp_doclayout_v4 import *
     from .pp_formulanet import *
     from .pp_lcnet import *
     from .pp_lcnet_v3 import *

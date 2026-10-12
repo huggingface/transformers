@@ -255,7 +255,7 @@ A checkpoint resolves to a generic `TokenizersBackend` for one of three reasons.
 
 The affected model types and checkpoints grow as configs are corrected on the Hub. For the current set, see the `MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS` and `MODEL_IDS_TO_TOKENIZERS_BACKEND` definitions in [tokenization_auto.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/auto/tokenization_auto.py).
 
-The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies. To override the choice, pass `backend="tokenizers"` or `backend="sentencepiece"`.
+The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies.
 
 Check which backend a tokenizer is using with the `backend` property.
 
