@@ -35,8 +35,6 @@ class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
         Dimension of the codebook vectors (the quantizer input after `quant_conv`).
     latent_channels (`int`, *optional*, defaults to 256):
         Number of channels output by the encoder (before `quant_conv`).
-    in_channels (`int`, *optional*, defaults to 3):
-        Number of input image channels.
     base_channels (`int`, *optional*, defaults to 256):
         Base channel count of the encoder; per-stage widths are `base_channels * channel_multiplier[stage]`.
     channel_multiplier (`list[int]`, *optional*, defaults to `(1, 1, 2, 2, 4)`):
@@ -194,16 +192,10 @@ class Apertus1p5Config(PreTrainedConfig):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
     audio_config (`Union[dict, WavTokenizerEncoderConfig]`, *optional*):
         Configuration of the WavTokenizer encoder that produces the audio codes.
-    image_token_id (`int`, *optional*, defaults to 131079):
-        Id of the `<|image|>` placeholder token that image code positions carry in `input_ids`.
-    audio_token_id (`int`, *optional*, defaults to 131085):
-        Id of the `<|audio|>` placeholder token that audio code positions carry in `input_ids`.
     image_token_offset (`int`, *optional*, defaults to 131272):
         Offset mapping a visual codebook index `i` to the vocabulary id of `<|visual token i|>`.
     audio_token_offset (`int`, *optional*, defaults to 262344):
         Offset mapping an audio codebook index `i` to the vocabulary id of `<|audio token i|>`.
-    tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-        Whether to tie the LM head weights to the input embeddings.
 
     Example:
 
