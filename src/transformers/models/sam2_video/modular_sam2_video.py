@@ -941,8 +941,8 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
 
 
 class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
-    def __init__(self, config: Sam2VideoConfig, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__(config)
 
     def compute_axial_rope_parameters(config: Sam2VideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """

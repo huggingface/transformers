@@ -1061,8 +1061,8 @@ class Qwen3OmniMoeVisionPatchMerger(nn.Module):
 
 
 class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
-    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig):
+        super().__init__(config)
 
     def compute_axial_rope_parameters(
         config: Qwen3OmniMoeVisionEncoderConfig, device=None, **kwargs

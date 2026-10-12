@@ -749,7 +749,7 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Sam2VideoConfig, device=None):
+    def __init__(self, config: Sam2VideoConfig):
         super().__init__()
         self.config = config
 

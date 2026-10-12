@@ -717,7 +717,7 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Gemma4VisionConfig, device=None):
+    def __init__(self, config: Gemma4VisionConfig):
         super().__init__()
         self.config = config
 

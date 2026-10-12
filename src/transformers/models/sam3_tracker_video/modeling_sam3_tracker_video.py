@@ -749,7 +749,7 @@ class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Sam3TrackerVideoConfig, device=None):
+    def __init__(self, config: Sam3TrackerVideoConfig):
         super().__init__()
         self.config = config
 

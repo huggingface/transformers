@@ -793,8 +793,8 @@ def apply_multidimensional_rope(
 
 # override -- Gemma4 doesn't pack inputs for attention and thus needs a proper batch dim
 class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
-    def __init__(self, config: Gemma4VisionConfig, device=None):
-        super().__init__(config, device)
+    def __init__(self, config: Gemma4VisionConfig):
+        super().__init__(config)
 
     def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         return super().compute_axial_rope_parameters(config, device, **kwargs)

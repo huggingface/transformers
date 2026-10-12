@@ -1357,8 +1357,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
 
 
 class Qwen2_5OmniVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig):
+        super().__init__(config)
 
     def compute_axial_rope_parameters(
         config: Qwen2_5OmniVisionEncoderConfig, device=None, **kwargs

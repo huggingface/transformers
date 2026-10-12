@@ -985,7 +985,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, device=None):
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig):
         super().__init__()
         self.config = config
 
