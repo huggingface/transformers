@@ -92,12 +92,6 @@ class PvtV2SelfAttention(nn.Module):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
 
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})"
-            )
-
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 

@@ -215,12 +215,6 @@ class VJEPA2RopeAttention(nn.Module):
         self.config = config
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
-                f"heads {num_attention_heads}."
-            )
-
         self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
