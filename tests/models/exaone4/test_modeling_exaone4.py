@@ -139,6 +139,13 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = " This is a nice place. I really enjoy the scenery, and the atmosphere is so relaxing. I'm grateful for the opportunity to experience this place. It"
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         prompt = "This is a nice place. " * 700 + "I really enjoy the scenery,"
+        # Drop prior test's device model; 32B weights plus ~18.7k-token prompt do not
+        # fit, and model/tokenizer are locals the mixin cannot free.
+        for name in ("model", "tokenizer"):
+            if hasattr(self, name):
+                delattr(self, name)
+        torch.cuda.empty_cache()
+        gc.collect()
         model = Exaone4ForCausalLM.from_pretrained(
             self.TEST_MODEL_ID, device_map="auto", dtype=torch.bfloat16, attn_implementation="sdpa"
         )
