@@ -47,6 +47,13 @@ python run_clm.py \
 This takes about half an hour to train on a single K80 GPU and about one minute for the evaluation to run. It reaches
 a score of ~20 perplexity once fine-tuned on the dataset.
 
+> **Memory requirements:** training with the settings above needs significantly more GPU memory than the
+> ~0.5 GB checkpoint itself. In addition to the model weights, full-parameter AdamW training also stores
+> gradients and two optimizer states (about 16 bytes per parameter in fp32) plus activations, so even a
+> 24 GB GPU can run out of memory at larger batch sizes. If you hit `CUDA out of memory`, lower
+> `--per_device_train_batch_size` (and use `--gradient_accumulation_steps` to keep the effective batch
+> size) or enable mixed precision with `--fp16` (or `--bf16` on newer GPUs).
+
 To run on your own training and validation files, use the following command:
 
 ```bash
