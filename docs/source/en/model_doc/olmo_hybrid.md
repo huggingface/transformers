@@ -8,7 +8,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-02-26.*
 
@@ -81,6 +81,8 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 ```
 
 - The model uses a custom cache (`OlmoHybridDynamicCache`) that handles both KV cache for attention layers and recurrent state for linear attention layers.
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## OlmoHybridConfig
 

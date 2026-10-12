@@ -36,7 +36,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
             num_frames = num_frames if num_frames is not None else self.num_frames
             assert num_frames is not None, "`num_frames` must be specified if `fixed_len_video == True`"
             frame_idxs = [int(i * (total_frames - 1) / (num_frames - 1)) for i in range(num_frames)]
-            return torch.tensor(frame_idxs)
+            return frame_idxs
         else:
             return super().sample_frames(metadata, num_frames, fps, **kwargs)
 
@@ -46,7 +46,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
         # Always set `return_tensors` to `None` since it won't pad variable length videos
-        # We'll handle this after we call the parent' method
+        # We'll handle this after we call the parent's method
         return_tensors = kwargs.pop("return_tensors", None)
         result = super()._preprocess(videos, **kwargs)
         pixels = result.pixel_values_videos

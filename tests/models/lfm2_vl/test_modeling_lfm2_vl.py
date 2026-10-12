@@ -15,10 +15,8 @@
 
 import math
 import unittest
-from io import BytesIO
 
 import pytest
-import requests
 
 from transformers import AutoProcessor, is_torch_available
 from transformers.models.lfm2_vl.modeling_lfm2_vl import Lfm2VlForConditionalGeneration
@@ -31,16 +29,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_vision_available
 
 from ...causal_lm_tester import CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
-
-if is_vision_available():
-    from PIL import Image
 
 if is_torch_available():
     import torch
@@ -60,7 +55,6 @@ class Lfm2VlModelTester(CausalLMModelTester):
         is_training=True,
         batch_size=2,
         scale_factor=2,
-        num_images=2,
         vision_config={
             "hidden_size": 32,
             "intermediate_size": 37,
@@ -102,7 +96,6 @@ class Lfm2VlModelTester(CausalLMModelTester):
         self.is_training = is_training
         self.batch_size = batch_size
         self.scale_factor = scale_factor
-        self.num_images = num_images
         self.downsample_factor = downsample_factor
         self.projector_hidden_size = projector_hidden_size
         self.image_seq_length = 4
@@ -117,16 +110,16 @@ class Lfm2VlModelTester(CausalLMModelTester):
         )
 
     def prepare_config_and_inputs(self):
-        # Create dummy pixel values: [num_images, num_patches, channels * patch_size^2]
+        # Create dummy pixel values: [batch_size, num_patches, channels * patch_size^2]
         patch_size = self.vision_config["patch_size"]
-        pixel_values = floats_tensor([self.num_images, 64, 3 * patch_size * patch_size])
+        pixel_values = floats_tensor([self.batch_size, 64, 3 * patch_size * patch_size])
 
         # Spatial shapes: one (height_patches, width_patches) per image
         patches = int(math.sqrt(64))
-        spatial_shapes = torch.tensor([[patches, patches]] * self.num_images, dtype=torch.long, device=torch_device)
+        spatial_shapes = torch.tensor([[patches, patches]] * self.batch_size, dtype=torch.long, device=torch_device)
 
         # Pixel attention mask: mark all patches as valid (no padding)
-        pixel_attention_mask = torch.ones((self.num_images, 64), dtype=torch.long, device=torch_device)
+        pixel_attention_mask = torch.ones((self.batch_size, 64), dtype=torch.long, device=torch_device)
         config = self.get_config()
         return config, pixel_values, spatial_shapes, pixel_attention_mask
 
@@ -210,15 +203,9 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("LiquidAI/LFM2-VL-1.6B")
         self.processor.tokenizer.padding_side = "left"
-        self.image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
-        self.image2 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
-            )
+        self.image = load_coco_image("000000039769.jpg")
+        self.image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -241,8 +228,18 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                ("cuda", (8, 0)): [
+                    "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
+                ],
+                ("cuda", (8, 6)): [
+                    "In this image, we see two cats sleeping on a pink blanket. They are both very relaxed and comfortable. They are both grey"
+                ],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()[0]
+        self.assertEqual(generated_texts[0], EXPECTED_TEXT_COMPLETION)
 
     @require_deterministic_for_xpu
     def test_integration_test_high_resolution(self):
@@ -261,9 +258,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = (
-            "In this image, we see the Statue of Liberty, standing tall on its pedestal. The statue is made of metal,"
-        )
+        expected_generated_text = "In this image, we see the Statue of Liberty, which is a well-known landmark. However, upon closer inspection, it"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @require_deterministic_for_xpu
@@ -283,11 +278,16 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = [
-            "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
-            "In this image, we see a cat that is lying on its side on a cat bed.",
-        ]
-        self.assertListEqual(generated_texts, expected_generated_text)
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
+                ],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()
+        self.assertListEqual(generated_texts, EXPECTED_TEXT_COMPLETION)
 
 
 @require_torch_accelerator
@@ -296,15 +296,9 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("LiquidAI/LFM2.5-VL-1.6B")
         self.processor.tokenizer.padding_side = "left"
-        self.image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
-        self.image2 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
-            )
+        self.image = load_coco_image("000000039769.jpg")
+        self.image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -349,7 +343,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in"
+        expected_generated_text = "In this image, we see a statue of a woman holding a torch. This statue is located on a small island surrounded by water"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @require_deterministic_for_xpu
@@ -369,16 +363,12 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = Expectations(
+        EXPECTED_TEXT_COMPLETION = Expectations(
             {
                 (None, None): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in",
-                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
-                ],
-                ("xpu", 5): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
+                    "In this image, we see a statue of a woman holding a torch. This statue is located on a small island surrounded by water",
                     "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
                 ],
             }
         ).get_expectation()
-        self.assertListEqual(generated_texts, expected_generated_text)
+        self.assertListEqual(generated_texts, EXPECTED_TEXT_COMPLETION)

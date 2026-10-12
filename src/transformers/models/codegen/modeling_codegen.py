@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    sinusoid_inp = torch.arange(num_pos, dtype=torch.int64).float()[:, None] * inv_freq
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -87,8 +87,8 @@ class CodeGenAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
         self.pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.register_buffer(
-            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        self.embed_positions = nn.Buffer(
+            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
         )
 
     def _split_heads(self, x, n_head, dim_head, mp_num):

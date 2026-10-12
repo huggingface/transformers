@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...backbone_utils import filter_output_hidden_states
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_bidirectional_mask
@@ -273,24 +273,14 @@ class Tipsv2Config(PreTrainedConfig):
     ```"""
 
     model_type = "tipsv2"
-    sub_configs = {"text_config": Tipsv2TextConfig, "vision_config": Tipsv2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Tipsv2TextConfig),
+        "vision_config": SubConfigSpec(config_class=Tipsv2VisionConfig),
+    }
 
     text_config: dict | Tipsv2TextConfig | None = None
     vision_config: dict | Tipsv2VisionConfig | None = None
     temperature_init_value: float = 0.005065968260169029
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
@@ -370,6 +360,7 @@ class Tipsv2VisionEmbeddings(Dinov2WithRegistersEmbeddings):
 class Tipsv2VisionPreTrainedModel(Dinov2WithRegistersPreTrainedModel):
     config: Tipsv2VisionConfig
     base_model_prefix = "vision_model"
+    _no_split_modules = ["Tipsv2VisionEmbeddings", "Tipsv2VisionLayer"]
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
 
@@ -675,6 +666,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
         if pooling_mask is not None:
+            pooling_mask = pooling_mask.to(last_hidden_state.device)
             masked_hidden_state = last_hidden_state * pooling_mask[..., None]
             pooled_output = masked_hidden_state.sum(dim=1) / (
                 pooling_mask.sum(dim=1, keepdim=True) + self.config.pooling_epsilon
@@ -845,7 +837,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         loss = None
         if image_embeds is not None and text_embeds is not None:
             logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
-            logits_per_text = logits_per_text / self.temperature
+            logits_per_text = logits_per_text / self.temperature.to(logits_per_text.device)
             logits_per_image = logits_per_text.t()
             if return_loss:
                 loss = image_text_contrastive_loss(logits_per_text)

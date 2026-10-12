@@ -258,6 +258,27 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 GenerationConfig(assistant_ensemble_weight=invalid).validate()
 
+    def test_validate_suppress_forced_token_overlap(self):
+        """
+        A token that is both forced (`forced_bos_token_id`/`forced_eos_token_id`) and suppressed (`suppress_tokens`)
+        makes all logits `-inf` at the forcing step, yielding `nan` probabilities and a generation crash (see #24099).
+        `validate` must reject this combination with a clear error.
+        """
+        # Every forced token is also suppressed -> guaranteed crash -> must raise
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_eos_token_id=2, suppress_tokens=[2])
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_bos_token_id=3, suppress_tokens=[3, 4])
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_eos_token_id=[2, 5], suppress_tokens=[2, 5, 9])
+
+        # Partial overlap: at least one forced token survives, so no crash is possible -> must NOT raise
+        GenerationConfig(forced_eos_token_id=[2, 5], suppress_tokens=[2]).validate()
+        # No overlap, or only one of the two set -> must NOT raise
+        GenerationConfig(forced_eos_token_id=2, suppress_tokens=[5, 6]).validate()
+        GenerationConfig(suppress_tokens=[2]).validate()
+        GenerationConfig(forced_eos_token_id=2).validate()
+
     def test_assistant_ensemble_weight_default_and_round_trip(self):
         """Default is `None`; values round-trip through `to_dict`/`from_dict`."""
         self.assertIsNone(GenerationConfig().assistant_ensemble_weight)

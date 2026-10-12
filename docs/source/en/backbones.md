@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -72,7 +72,7 @@ The example below loads a [ResNet](./model_doc/resnet) backbone and neck for use
 Note that initializing from config will create the model with random weights. If you want to load a pretrained model, use `from_pretrained` API.
 
 ```py
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
+from transformers import AutoConfig, MaskFormerConfig, MaskFormerForInstanceSegmentation
 
 backbone_config = AutoConfig.from_pretrained("microsoft/resnet-50")
 config = MaskFormerConfig(backbone_config=backbone_config)
@@ -100,7 +100,7 @@ model = MaskFormerForInstanceSegmentation(config)
 [timm](https://hf.co/docs/timm/index) is a collection of vision models for training and inference. Transformers supports timm models as backbones with the [`TimmBackbone`] and [`TimmBackboneConfig`] classes. Set the necessary backbone checkpoint in `backbone` to create a model with Timm backbone with randomly initialized weights.
 
 ```py
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, TimmBackboneConfig
 
 backbone_config = TimmBackboneConfig(backbone="resnet50", out_indices=[-1])
 config = MaskFormerConfig(backbone_config=backbone_config)

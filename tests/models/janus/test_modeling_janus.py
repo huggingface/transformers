@@ -18,7 +18,6 @@ import tempfile
 import unittest
 from functools import reduce
 
-import pytest
 import requests
 
 from transformers import (
@@ -310,11 +309,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                         else:
                             pass
 
-    @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
 
 class JanusVQModelTester:
     def __init__(
@@ -430,7 +424,10 @@ class JanusIntegrationTest(unittest.TestCase):
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
         inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
@@ -450,10 +447,16 @@ class JanusIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompts = [
             "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?",
@@ -466,13 +469,9 @@ class JanusIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("xpu", None): [
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",  # fmt: skip
-                ],
                 (None, None): [
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and is one",  # fmt: skip
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation of a winged figure. This constellation is the **Luna**, also",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars, and it appears to depict a constellation. The",
                 ],
             }
         )
@@ -488,10 +487,16 @@ class JanusIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "What do these two images <image_placeholder> and <image_placeholder> have in common?"
 
@@ -544,10 +549,11 @@ class JanusIntegrationTest(unittest.TestCase):
                     897, 4044, 1762, 4676
                 ],
                 ("cuda", None): [
-                    2567, 6155, 6155, 250, 15131, 15797, 15453, 12190, 3351, 10803, 10673, 3096, 14485, 5335, 6677,
-                    13743, 9574, 8228, 3679, 11495, 11495, 15342, 11209, 1389, 15628, 6841, 15490, 10301, 12841, 3930,
-                    3396, 10037, 7779, 4517, 3824, 3673, 14408, 4791, 14109, 4929, 2342, 4817, 15531, 4320, 1923, 9530,
-                    13086, 5212, 14575, 4212
+                    2567,  6155,  6155,   250,   250, 15797,  8221, 12190,   900, 12131,
+                    13146,  4475,  6910,  2250, 13615,  1665,  8932,  7101,  1151, 13915,
+                    250,  7311,  4015,  2016, 15628,  4462, 14906, 10046, 10046, 10395,
+                    9145,  8760, 14030,  1284,  2039,  7372,  3298, 12529,   138, 12590,
+                    1037,  4580,  7523, 12611,  8631,  6099, 13139,  8548,  4930,  8310
                 ],
                 ("xpu", None): [
                     4484, 4015, 15750, 376, 2300, 13791, 3609, 2509, 2418, 6347, 7372, 1006, 14519, 6126, 11908, 14968,

@@ -167,7 +167,6 @@ class Gemma4AudioFeatureExtractor(SequenceFeatureExtractor):
             self.per_bin_stddev = None
 
     def _extract_spectrogram(self, waveform: np.ndarray, attention_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """"""
         if waveform.ndim == 1:  # If single waveform, add batch dimension
             waveform = np.expand_dims(waveform, axis=0)
 

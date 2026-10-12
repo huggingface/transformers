@@ -56,7 +56,7 @@ def rot_matmul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 def rot_vec_mul(r: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     """
-    Applies a rotation to a vector. Written out by hand to avoid transfer to avoid AMP downcasting.
+    Applies a rotation to a vector. Written out by hand to avoid AMP downcasting.
 
     Args:
         r: [*, 3, 3] rotation matrices

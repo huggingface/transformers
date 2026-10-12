@@ -82,7 +82,8 @@ class CLIPSegDecoderOutput(ModelOutput):
         Classification scores for each pixel.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*,):
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        Rreturned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
+
+        Returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
     attentions (`tuple(torch.FloatTensor)`, *optional*):
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads. Returned when `output_attentions=True` is passed or when `config.output_attentions=True`
@@ -143,7 +144,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -214,9 +215,7 @@ class CLIPSegTextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -721,7 +720,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, CLIPSegVisionModel
@@ -1009,7 +1008,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         conditional_embeddings: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        labels: torch.LongTensor | None = None,
+        labels: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CLIPSegOutput:
@@ -1019,10 +1018,9 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
             The conditional embeddings for the query images. If provided, the model will use this instead of computing
             the embeddings from the conditional_pixel_values.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth segmentation masks, with values in `[0, 1]` and the same spatial size as `logits`. A binary
+            cross-entropy loss is computed between the predicted logits and these masks.
 
         Examples:
 

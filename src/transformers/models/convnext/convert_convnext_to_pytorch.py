@@ -20,9 +20,9 @@ import json
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
@@ -63,7 +63,7 @@ def get_convnext_config(checkpoint_url):
 
     repo_id = "huggingface/label-files"
     config.num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     if "1k" not in checkpoint_url:
         # this dataset contains 21843 labels but the model only has 21841

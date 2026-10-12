@@ -19,14 +19,14 @@ from ...image_processing_utils import BatchFeature
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput
 
 
@@ -151,10 +151,7 @@ def pad_to_max_patches(
     return video, positions
 
 
-@add_start_docstrings(
-    "Constructs a Gemma4 video processor that samples frames from videos for use with the Gemma4 model.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-)
+@auto_docstring
 class Gemma4VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = [0.0, 0.0, 0.0]
@@ -171,7 +168,7 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
     max_soft_tokens = 70
     pooling_kernel_size = 3
     valid_kwargs = Gemma4VideoProcessorKwargs
-    model_input_names = ["pixel_values_videos", "video_position_ids"]
+    model_input_names = ["pixel_values_videos", "video_position_ids", "num_frames_per_video"]
 
     def __init__(self, **kwargs: Unpack[Gemma4VideoProcessorKwargs]):
         super().__init__(**kwargs)
@@ -224,7 +221,6 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         resample: "tvF.InterpolationMode | int | None",
         do_rescale: bool,
@@ -246,11 +242,9 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
         pixel_values = []
         position_ids = []
         num_soft_tokens_per_video = []
-        num_frames = 1
+        num_frames_per_video = []
 
         for video in videos:
-            if do_convert_rgb:
-                video = self.convert_to_rgb(video)
             if do_resize:
                 video = self.aspect_ratio_preserving_resize(
                     video=video,
@@ -267,6 +261,7 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
             patch_width = video.shape[-1] // patch_size
             patches = convert_video_to_patches(video, patch_size)
             num_soft_tokens_per_video.append(patches.shape[1] // pooling_kernel_size**2)
+            num_frames_per_video.append(num_frames)
 
             device = video.device
             patch_grid = torch.meshgrid(
@@ -282,13 +277,15 @@ class Gemma4VideoProcessor(BaseVideoProcessor):
             pixel_values.append(patches)
             position_ids.append(positions)
 
-        # Stack into batch tensors
-        pixel_values = torch.stack(pixel_values, dim=0)  # (num_videos, num_frames, max_patches, patch_pixels)
-        position_ids = torch.stack(position_ids, dim=0)  # (num_videos, num_frames, max_patches, 2)
+        # Concatenate along the frame axis rather than stacking on a new video axis, so that videos with
+        # different frame counts can be batched together. `num_frames_per_video` splits it back per video.
+        pixel_values = torch.cat(pixel_values, dim=0)  # (total_num_frames, max_patches, patch_pixels)
+        position_ids = torch.cat(position_ids, dim=0)  # (total_num_frames, max_patches, 2)
 
         data = {
             "pixel_values_videos": pixel_values,
             "video_position_ids": position_ids,
+            "num_frames_per_video": num_frames_per_video,
             "num_soft_tokens_per_video": num_soft_tokens_per_video,
         }
         return BatchFeature(data=data, tensor_type=return_tensors)

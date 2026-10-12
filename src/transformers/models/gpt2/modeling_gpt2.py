@@ -444,11 +444,10 @@ class GPT2PreTrainedModel(PreTrainedModel):
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        if isinstance(module, PreTrainedModel):
-            for name, p in module.named_parameters():
-                if name == "c_proj.weight":
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
+        if isinstance(module, (GPT2Attention, GPT2MLP)):
+            # Special Scaled Initialization --> 2 residual paths (attention and MLP) per Transformer Block
+            std = self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
+            init.normal_(module.c_proj.weight, mean=0.0, std=std)
 
 
 @auto_docstring(
@@ -589,7 +588,6 @@ class GPT2Model(GPT2PreTrainedModel):
             position_ids=position_ids,
         )
 
-        encoder_attention_mask = None
         if encoder_hidden_states is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
@@ -894,10 +892,6 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,

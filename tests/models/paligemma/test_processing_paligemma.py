@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import PaliGemmaProcessor
+from transformers import PaliGemmaProcessor, SiglipImageProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -29,8 +29,9 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        image_processor = image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
+        # Use 64×64 instead of the default 224×224 to avoid large tensors.
+        # image_seq_length=0 matches the processor attribute so token-count tests pass.
+        image_processor = SiglipImageProcessor(size={"height": 64, "width": 64})
         image_processor.image_seq_length = 0
         return image_processor
 
@@ -38,6 +39,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         tokenizer = tokenizer_class.from_pretrained(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         return tokenizer
 
@@ -61,7 +63,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_image_seq_length(self):
         input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=112, padding="max_length")
         image_processor.image_seq_length = 14
@@ -75,7 +77,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_call_with_suffix(self):
         input_str = "lower newer"
         suffix = "upper older longer string"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         processor = self.get_processor()
         inputs = processor(text=input_str, images=image_input, suffix=suffix)
         self.assertTrue("labels" in inputs)
@@ -94,7 +96,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_single_image = "<image>Dummy text!"
         text_no_image = "Dummy text!"
 
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
 
         out_noimage = processor(text=text_no_image, images=image, return_tensors="pt")
         out_singlimage = processor(text=text_single_image, images=image, return_tensors="pt")

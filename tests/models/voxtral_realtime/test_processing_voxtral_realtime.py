@@ -18,6 +18,7 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import VoxtralRealtimeProcessor
 from transformers.testing_utils import require_mistral_common, require_soundfile, require_torch
@@ -65,11 +66,26 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_save_load_pretrained_additional_features(self):
         pass
 
-    @unittest.skip(
-        "VoxtralRealtimeProcessor encodes audio via a mistral-common transcription request (with padding), "
-        "so its features differ from those of the bare feature extractor"
+    @parameterized.expand(["images", "videos", "audio"])
+    @unittest.skip("MistralTokenizer doesn't support `max_length` arg when loading a tokenizer")
+    def test_subprocessor_defaults_preserved_by_kwargs(self, modality):
+        pass
+
+    @parameterized.expand(["images", "videos", "audio"])
+    @unittest.skip("MistralTokenizer doesn't support `max_length` arg when loading a tokenizer")
+    def test_kwargs_overrides_default_subprocessor_kwargs(self, modality):
+        pass
+
+    @parameterized.expand(
+        [
+            ("text",),
+            ("images",),
+            ("videos",),
+            ("audio",),
+        ]
     )
-    def test_feature_extractor_defaults(self):
+    @unittest.skip("Processor has custom code on top of a feature extractor")
+    def test_subprocessor_defaults(self, modality):
         pass
 
     def _dummy_audio(self, processor, seed: int = 0, duration_s: float = 1.0):

@@ -19,9 +19,9 @@ URL: https://github.com/hustvl/ViTMatte
 import argparse
 from io import BytesIO
 
-import httpx
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import VitDetConfig, VitMatteConfig, VitMatteForImageMatting, VitMatteImageProcessor

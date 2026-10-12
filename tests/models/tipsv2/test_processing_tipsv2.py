@@ -26,6 +26,6 @@ from ...test_processing_common import ProcessorTesterMixin
 class Tipsv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Tipsv2Processor
     model_id = "google/tipsv2-b14"
-    image_text_kwargs_max_length = 64
-    image_text_kwargs_override_max_length = 32
-    image_unstructured_max_length = 48
+    images_text_kwargs_max_length = 64
+    images_text_kwargs_override_max_length = 32
+    images_unstructured_max_length = 48

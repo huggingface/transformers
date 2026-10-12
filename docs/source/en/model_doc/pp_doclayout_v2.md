@@ -46,7 +46,7 @@ from PIL import Image
 from transformers import pipeline
 
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
 layout_detector = pipeline("object-detection", model="PaddlePaddle/PP-DocLayoutV2_safetensors")
 result = layout_detector(image)
 print(result)
@@ -66,7 +66,7 @@ from transformers import AutoImageProcessor, AutoModelForObjectDetection
 model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 outputs = model(**inputs)
@@ -98,7 +98,7 @@ from PIL import Image
 from transformers import pipeline
 
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
 layout_detector = pipeline("object-detection", model="PaddlePaddle/PP-DocLayoutV2_safetensors")
 result = layout_detector([image, image])
 print(result[0])
@@ -120,7 +120,7 @@ model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 target_sizes = [image.size[::-1], image.size[::-1]]
 

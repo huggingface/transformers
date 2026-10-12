@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -28,7 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.generic import no_inherit_decorator
 from ...utils.import_utils import requires
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
@@ -72,7 +72,9 @@ class LightGlueConfig(PreTrainedConfig):
     """
 
     model_type = "lightglue"
-    sub_configs = {"keypoint_detector_config": AutoConfig}
+    sub_configs_defaults = {
+        "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
+    }
 
     keypoint_detector_config: dict | SuperPointConfig | None = None
     descriptor_dim: int = 256
@@ -88,22 +90,16 @@ class LightGlueConfig(PreTrainedConfig):
     attention_bias: bool = True
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
-        if isinstance(self.keypoint_detector_config, dict):
-            self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
-            self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
-                **self.keypoint_detector_config, attn_implementation="eager"
-            )
-        elif self.keypoint_detector_config is None:
-            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
+        self.keypoint_detector_config.attn_implementation = "eager"
 
         self.intermediate_size = self.descriptor_dim * 2
         self.hidden_size = self.descriptor_dim
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -374,7 +370,7 @@ class LightGlueMatchAssignmentLayer(nn.Module):
         batch_size, num_keypoints, descriptor_dim = descriptors.shape
         # Final projection and similarity computation
         m_descriptors = self.final_projection(descriptors)
-        m_descriptors = m_descriptors / torch.tensor(self.descriptor_dim, device=m_descriptors.device) ** 0.25
+        m_descriptors = m_descriptors / torch.full((), self.descriptor_dim, device=m_descriptors.device) ** 0.25
         m_descriptors = m_descriptors.reshape(batch_size // 2, 2, num_keypoints, descriptor_dim)
         m_descriptors0 = m_descriptors[:, 0]
         m_descriptors1 = m_descriptors[:, 1]
@@ -465,7 +461,7 @@ def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[tor
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
     """
-    Normalize keypoints locations based on image image_shape
+    Normalize keypoints locations based on image_shape
 
     Args:
         keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
@@ -750,8 +746,8 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     config=self.config,
                     inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
                     attention_mask=mask,
-                    # Model is too sensitive to the FA backend --> force mask to avoid the backend
-                    and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+                    # Model is too sensitive to the FA backend, so always materialize the mask to avoid it.
+                    allow_is_bidirectional_skip=False,
                 )
             else:
                 extended_attention_mask = torch.ones((batch_size, descriptors.size()[-2]), device=keypoints.device)

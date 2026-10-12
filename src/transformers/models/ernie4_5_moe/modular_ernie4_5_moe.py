@@ -54,8 +54,7 @@ class Ernie4_5_MoeMLP(Qwen3MoeMLP):
 
 
 class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
-    def __init__(self, config: Ernie4_5_MoeConfig, device=None):
-        super().__init__(config, device)
+    pass
 
 
 @no_inherit_decorator
@@ -115,11 +114,7 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             router_logits = F.linear(hidden_states.float(), self.weight.float())

@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import (
     auto_docstring,
     logging,
@@ -91,11 +91,6 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
         Controls bidirectional attention behavior. When set to `"vision"`, vision tokens
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
     attention_k_eq_v (`bool`, defaults to `False`):
         Whether keys and values share the same projection weights. When `True`, the key
         projection output is reused as the value projection.
@@ -150,8 +145,6 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping: float | None = None
     use_bidirectional_attention: Literal["all", "vision"] | None = "vision"
-    num_global_key_value_heads: int | None = None
-    global_head_dim: int = 512
     attention_k_eq_v: bool = False
     num_kv_shared_layers: int = 0
     use_double_wide_mlp: bool = False
@@ -181,7 +174,31 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
+        global_head_dim = kwargs.pop("global_head_dim", 512)
+        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
+        if "per_layer_config" not in kwargs:
+            layer_overrides: dict[str, Any] = {"head_dim": global_head_dim}
+            # `attention_k_eq_v` gates the kv-head override for the models that declare it;
+            # models that drop the attribute entirely are ungated, hence the `True` fallback.
+            num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
+            if num_key_value_heads is not None:
+                layer_overrides["num_key_value_heads"] = num_key_value_heads
+            kwargs["per_layer_config"] = {
+                layer_idx: layer_overrides
+                for layer_idx, layer_type in enumerate(self.layer_types)
+                if layer_type == "full_attention"
+            }
+
         super().__post_init__(**kwargs)
+
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `None` fallback.
+        if getattr(self, "use_bidirectional_attention", None) == "all":
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
@@ -277,10 +294,10 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma4_unified"
-    sub_configs = {
-        "text_config": Gemma4UnifiedTextConfig,
-        "vision_config": Gemma4UnifiedVisionConfig,
-        "audio_config": Gemma4UnifiedAudioConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Gemma4UnifiedTextConfig),
+        "vision_config": SubConfigSpec(config_class=Gemma4UnifiedVisionConfig, optional=True),
+        "audio_config": SubConfigSpec(config_class=Gemma4UnifiedAudioConfig, optional=True),
     }
 
     text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
@@ -295,25 +312,6 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
     audio_token_id: int | None = 258_881
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma4UnifiedTextConfig()
-            logger.info("text_config is None. Using default Gemma4UnifiedTextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma4UnifiedTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. Gemma4UnifiedModel.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma4UnifiedVisionConfig(**self.vision_config)
-
-        if self.audio_config is None:
-            logger.info("audio_config is None. Gemma4UnifiedModel.audio_tower will not be initialized.")
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma4UnifiedAudioConfig(**self.audio_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma4UnifiedAudioConfig", "Gemma4UnifiedConfig", "Gemma4UnifiedTextConfig", "Gemma4UnifiedVisionConfig"]

@@ -23,13 +23,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# GitHub REST calls go through the shared helper (rate-limit handling, no anonymous fallback, fail
+# hard on a rejected token); the local `request_json` below is kept only for the Grafana proxy.
+from github_utils import github_request
+
 
 GITHUB_API_URL = "https://api.github.com"
-GRAFANA_QUERY_URL = "https://transformers-ci.lor-e.huggingface.cool/api/datasources/proxy/uid/prometheus/api/v1/query"
-DASHBOARD_URL = (
-    "https://transformers-ci.lor-e.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch"
-)
-BADGE_URL = "https://transformers-ci.lor-e.huggingface.cool/badge/pr"
+GRAFANA_QUERY_URL = "https://transformers-ci.huggingface.cool/api/datasources/proxy/uid/prometheus/api/v1/query"
+DASHBOARD_URL = "https://transformers-ci.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch"
+BADGE_URL = "https://img.shields.io/badge/%F0%9F%A4%97%20Transformers%20CI-333333?style=flat"
 BADGE_START = "<!-- ci-dashboard-badge:start -->"
 BADGE_END = "<!-- ci-dashboard-badge:end -->"
 RECAP_START = "<!-- ci-dashboard-recap:start -->"
@@ -58,28 +60,19 @@ def log_workflow_run(workflow_run):
     print("==========================================")
 
 
-def request_json(url, token=None, method="GET", payload=None):
-    """Send an HTTP request and parse the response body as JSON."""
-    headers = {
-        "Accept": "application/vnd.github+json" if "api.github.com" in url else "application/json",
-        "User-Agent": "transformers-ci-dashboard-recap",
-    }
-    if token is not None and "api.github.com" in url:
-        headers["Authorization"] = f"Bearer {token}"
-        headers["X-GitHub-Api-Version"] = "2022-11-28"
+def request_json(url):
+    """GET a URL and parse the response body as JSON (used for the Grafana datasource proxy).
 
-    data = None
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    GitHub API access does *not* go through here -- see :func:`github_utils.github_request`.
+    """
+    headers = {"Accept": "application/json", "User-Agent": "transformers-ci-dashboard-recap"}
+    request = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read().decode("utf-8")
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{method} {url} failed with {error.code}: {body}") from error
+        raise RuntimeError(f"GET {url} failed with {error.code}: {body}") from error
 
     if not raw:
         return None
@@ -93,7 +86,7 @@ def github_paginate(path, token, key=None):
     separator = "&" if "?" in path else "?"
     while True:
         url = f"{GITHUB_API_URL}{path}{separator}per_page=100&page={page}"
-        payload = request_json(url, token=token)
+        payload = github_request(url, token=token)
         page_items = payload[key] if key is not None else payload
         if not page_items:
             break
@@ -198,16 +191,9 @@ def format_duration(seconds):
     return f"{remaining_seconds}s"
 
 
-def render_ci_badge(pr_number, dashboard_url):
-    """Render the CI dashboard badge block inserted at the top of the PR body."""
-    badge_url = f"{BADGE_URL}?pr={pr_number}"
-    return "\n".join(
-        [
-            BADGE_START,
-            f"[![CI]({badge_url})]({dashboard_url})",
-            BADGE_END,
-        ]
-    )
+def render_ci_badge(dashboard_url):
+    """Render a static dashboard link, independent of CI status and metrics."""
+    return f"{BADGE_START}\n[![🤗 Transformers CI]({BADGE_URL})]({dashboard_url})\n{BADGE_END}"
 
 
 def render_ci_recap(dashboard_url, recap, workflow_run, quality_failed):
@@ -294,7 +280,7 @@ def delete_old_dashboard_comments(repo, token, pr_number):
     for comment in comments:
         body = comment.get("body") or ""
         if any(marker in body for marker in OLD_DASHBOARD_COMMENT_MARKERS):
-            request_json(
+            github_request(
                 f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}", token=token, method="DELETE"
             )
 
@@ -305,13 +291,13 @@ def recreate_ci_recap_comment(repo, token, pr_number, recap):
     for comment in comments:
         if RECAP_START not in (comment.get("body") or ""):
             continue
-        request_json(
+        github_request(
             f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
             token=token,
             method="DELETE",
         )
 
-    request_json(
+    github_request(
         f"{GITHUB_API_URL}/repos/{repo}/issues/{pr_number}/comments",
         token=token,
         method="POST",
@@ -351,23 +337,24 @@ def main():
     delete_old_dashboard_comments(repo, token, pr["number"])
 
     dashboard_url = f"{DASHBOARD_URL}?var-pr={pr['number']}"
+    updated_body = inject_ci_badge(pr.get("body"), render_ci_badge(dashboard_url))
+    updated_body = remove_marked_block(updated_body, RECAP_START, RECAP_END)
+    if updated_body != (pr.get("body") or ""):
+        github_request(
+            f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
+            token=token,
+            method="PATCH",
+            payload={"body": updated_body},
+        )
+
     try:
         recap = get_ci_recap(pr["number"], workflow_run["html_url"], workflow_run.get("conclusion"))
     except Exception as error:
         print(f"Could not collect Grafana recap metrics: {error}")
         recap = {"metrics_available": False}
 
-    badge_body = render_ci_badge(pr["number"], dashboard_url)
     recap_body = render_ci_recap(
         dashboard_url, recap, workflow_run, quality_job_failed(repo, token, workflow_run["id"])
-    )
-    updated_body = inject_ci_badge(pr.get("body"), badge_body)
-    updated_body = remove_marked_block(updated_body, RECAP_START, RECAP_END)
-    request_json(
-        f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
-        token=token,
-        method="PATCH",
-        payload={"body": updated_body},
     )
     recreate_ci_recap_comment(repo, token, pr["number"], recap_body)
 

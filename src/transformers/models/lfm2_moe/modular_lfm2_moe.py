@@ -23,7 +23,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.import_utils import is_causal_conv1d_available
+from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
@@ -31,21 +32,11 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2RotaryEmbedding,
     Lfm2ShortConv,
 )
-from ..llama.modeling_llama import LlamaForCausalLM, LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_lfm2_moe import Lfm2MoeConfig
-
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_fn, causal_conv1d_update = None, None
-
-
-kernel_modules = (causal_conv1d_fn, causal_conv1d_update)
-is_fast_path_available = all(kernel_modules)
 
 
 logger = logging.get_logger(__name__)
@@ -102,7 +93,7 @@ class Lfm2MoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         super().__init__(config)
         self.use_expert_bias = config.use_expert_bias
         if self.use_expert_bias:
-            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
+            self.expert_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -132,7 +123,11 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 
 
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
-    _is_stateful = True
+    _can_record_outputs = {
+        "hidden_states": Lfm2MoeDecoderLayer,
+        "attentions": Lfm2MoeAttention,
+        "router_logits": OutputRecorder(Lfm2MoeTopKRouter, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -214,7 +209,7 @@ class Lfm2MoeModel(MixtralModel):
         )
 
 
-class Lfm2MoeForCausalLM(LlamaForCausalLM):
+class Lfm2MoeForCausalLM(DeepseekV2ForCausalLM):
     pass
 
 

@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch HunYuanVL model."""
 
-import copy
 import unittest
 
 import requests
@@ -113,9 +112,11 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids, device=torch_device)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
-            [self.batch_size * self.num_image_patches, self.num_channels * self.patch_size * self.patch_size]
+            [batch_size * self.num_image_patches, self.num_channels * self.patch_size * self.patch_size]
         ).to(torch_device)
 
     def place_image_tokens(self, input_ids, config):
@@ -124,11 +125,12 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
         input_ids[:, : self.num_image_placeholder_tokens] = self.image_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids, device=torch_device)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -146,36 +148,8 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = HunYuanVLVisionText2TextModelTester
     test_all_params_have_gradient = False
-    test_torch_exportable = False
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        filtered_inputs_dict = {}
-        for key, value in inputs_dict.items():
-            if key == "pixel_values":
-                filtered_inputs_dict[key] = value[: batch_size * self.model_tester.num_image_patches]
-            elif key == "image_grid_thw":
-                filtered_inputs_dict[key] = value[:batch_size]
-            elif key == "position_ids":
-                continue
-            elif isinstance(value, torch.Tensor):
-                filtered_inputs_dict[key] = value[:batch_size, ...]
-            else:
-                filtered_inputs_dict[key] = value
-
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
 
     def test_auto_model_uses_base_model(self):
         config = self.model_tester.get_config()
@@ -246,41 +220,25 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(text_config.rope_parameters["mrope_section"], [2, 2, 2, 2])
         self.assertNotIn("xdrope_section", text_config.rope_parameters)
 
-    def test_mismatching_num_image_tokens(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            _ = model(**input_dict)
+    def test_legacy_field_aliases_normalize_onto_canonical_fields(self):
+        # `attention_head_dim` / `org_vocab_size` / `pad_id` are the names the Tencent codebase uses for `head_dim` /
+        # `vocab_size` / `pad_token_id`; every public checkpoint stores both spellings with the same value. They must
+        # fold onto the canonical field rather than linger as duplicate attributes.
+        aliases = {"attention_head_dim": "head_dim", "org_vocab_size": "vocab_size", "pad_id": "pad_token_id"}
+        legacy_kwargs = {"attention_head_dim": 16, "org_vocab_size": 99, "pad_id": 7}
 
-            curr_input_dict = copy.deepcopy(input_dict)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][: -self.model_tester.num_image_patches]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][:-1]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
+        for config in (HunYuanVLTextConfig(**legacy_kwargs), HunYuanVLConfig(**legacy_kwargs).text_config):
+            for alias, canonical in aliases.items():
+                self.assertEqual(getattr(config, canonical), legacy_kwargs[alias])
+                # reading the alias keeps working, but it is not stored (and so not serialized) separately
+                self.assertEqual(getattr(config, alias), legacy_kwargs[alias])
+                self.assertNotIn(alias, config.__dict__)
+                self.assertNotIn(alias, config.to_dict())
 
-            input_ids = input_dict["input_ids"][:1]
-            attention_mask = input_dict["attention_mask"][:1]
-            pixel_values = input_dict["pixel_values"][: self.model_tester.num_image_patches]
-            image_grid_thw = input_dict["image_grid_thw"][:1]
-            mm_token_type_ids = input_dict["mm_token_type_ids"][:1]
-
-            with self.assertRaises(ValueError):
-                _ = model(
-                    input_ids=torch.cat([input_ids, input_ids], dim=0),
-                    attention_mask=torch.cat([attention_mask, attention_mask], dim=0),
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-                )
-
-            _ = model(
-                input_ids=torch.cat([input_ids, input_ids], dim=0),
-                attention_mask=torch.cat([attention_mask, attention_mask], dim=0),
-                pixel_values=torch.cat([pixel_values, pixel_values], dim=0),
-                image_grid_thw=torch.cat([image_grid_thw, image_grid_thw], dim=0),
-                mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-            )
+        # the top-level config folds them into `text_config` instead of keeping them at the root
+        config = HunYuanVLConfig(**legacy_kwargs)
+        for alias in aliases:
+            self.assertNotIn(alias, config.to_dict())
 
     def test_prepare_inputs_for_generation_drops_pixel_values_after_prefill(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -317,10 +275,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     def test_batching_equivalence(self, atol=2e-5, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    # FIXME raushan, no idea why yet
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("HunYuanVL currently validates the vision path with eager attention.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
@@ -339,7 +293,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
 class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
     model_id = "tencent/HunyuanOCR"
     candy_image_url = url_to_local_path(
-        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/p-blog/candy.JPG"
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/candy.JPG"
     )
     lowres_image_url = url_to_local_path(
         "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
@@ -425,7 +379,8 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
+                ("cuda", None): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple quantitative metrics across different categories.  \n2. **Axes & Categories**: The chart has 12 axes, each representing a different",
+                ("xpu", 5): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
             }
         )  # fmt: skip
         decoded_text = self._generate_trimmed_text(model, inputs, max_new_tokens=self.max_new_tokens)[0]
@@ -443,8 +398,12 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): [
-                    "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
-                    "To determine the animal on the candy, observe the image: there are two candies—one teal and one orange. The teal candy has a black silhouette of a bird (a type of bird in the family **passerina**). The orange candy also has a black silhouette of a bird, but",
+                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *V",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                ],
+                ("xpu", 5): [
+                    "To determine what is shown in the image, we analyze the context of the radar chart. A radar chart is a graphical representation of multivariate data, where each axis represents a different variable (here, different models or tasks).  \n\nIn the image, the axes are labeled with model names (e.g., VQAv",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
                 ]
             }
         )  # fmt: skip
@@ -458,7 +417,8 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "To determine the answer, we analyze the radar chart:  \n\n1. **First image**: The first image shows a hand with multiple colored candy beads. The top - most bead is teal, and the second bead from the top is green. The third bead from the top is orange. The fourth bead from the",
+                ("cuda", None): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
+                ("xpu", 5): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
             }
         )  # fmt: skip
         decoded_text = self._generate_trimmed_text(model, inputs, max_new_tokens=self.max_new_tokens)[0]
@@ -477,9 +437,14 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): [
-                    "OCR (Optical Character Recognition) is a computer technology that uses **Optical Character Recognition (OCR)** to extract text from images or documents. It is a powerful tool for automating tasks like text extraction, image analysis, and document processing.\n\n### Brief Explanation:\n1. **Purpose**: OCR is used to recognize and extract",
-                    "To determine the answer, we analyze the radar chart:  \n\n1. **First image**: The first image shows a hand with multiple colored candy beads. The top - most bead is teal, and the second bead from the top is green. The third bead from the top is orange. The fourth bead from the",
-                    "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
+                    "It is a software tool that allows you to extract text from a document.",
+                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a blue line (BLIP-2) and a green line (InstructBLIP). The second image shows the",
+                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple quantitative metrics across different categories.  \n2. **Axes & Categories**: The chart has 12 axes, each representing a category",
+                ],
+                ("xpu", 5): [
+                    "It is a software tool that allows you to extract text from a document.",
+                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a green - colored region. The animal on this green region is a turtle.  \n2. **Second Image**:",
+                    "To determine what is shown in the image, we analyze the context of the radar chart. A radar chart is a graphical representation of multivariate data, where each axis represents a different variable (here, different models or tasks).  \n\nIn the image, the axes are labeled with model names (e.g., VQAv",
                 ]
             }
         )  # fmt: skip
@@ -499,8 +464,12 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): [
-                    "STEALTH CAM 07:59 AM 09/01/15 69 F FRONT CBN",
-                    "To determine the animal on the candy, observe the image: there are two candies—one teal and one orange. The teal candy has a black silhouette of a bird (a type of bird in the family **passerina**). The orange candy also has a black silhouette of a bird, but",
+                    "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                ],
+                ("xpu", 5): [
+                    "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
                 ]
             }
         )  # fmt: skip
@@ -519,14 +488,19 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_texts_batch = Expectations(
             {
                 ("cuda", None): [
-                    "STEALTH CAM 07:59 AM 09/01/15 69 F FRONT CBN",
-                    "To determine the animal on the candy, observe the image: there are two candies—one teal and one orange. The teal candy has a black silhouette of a bird (a type of bird in the family **passerina**). The orange candy also has a black silhouette of a bird, but",
+                    "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                ],
+                ("xpu", 5): [
+                    "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
                 ]
             }
         )  # fmt: skip
         expected_texts_single = Expectations(
             {
-                ("cuda", None): "STEALTH CAM 07:59 AM 09/01/15 69 F FRONT CBN",
+                ("cuda", None): "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
+                ("xpu", 5): "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
             }
         )  # fmt: skip
 

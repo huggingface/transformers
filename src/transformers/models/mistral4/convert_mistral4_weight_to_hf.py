@@ -360,7 +360,7 @@ def convert_state_dict(
 
 
 def _read_json(path: Path) -> dict:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 

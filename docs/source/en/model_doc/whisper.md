@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -30,6 +30,8 @@ You can find all the original Whisper checkpoints under the [Whisper](https://hu
 
 > [!TIP]
 > Click on the Whisper models in the right sidebar for more examples of how to apply Whisper to different audio tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to automatically transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -97,17 +99,6 @@ transcription[0]
 ## WhisperTokenizer
 
 [[autodoc]] WhisperTokenizer
-    - set_prefix_tokens
-    - get_special_tokens_mask
-    - save_vocabulary
-    - batch_decode
-    - decode
-    - basic_normalize
-    - normalize
-
-## WhisperTokenizerFast
-
-[[autodoc]] WhisperTokenizerFast
     - set_prefix_tokens
     - get_special_tokens_mask
     - save_vocabulary

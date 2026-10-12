@@ -55,6 +55,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
+    from transformers import GenerationConfig
     from transformers.exporters.utils import (
         cast_leaf_tensors,
         decompose_prefill_decode,
@@ -273,6 +274,9 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(1, 1)
+                # `decompose_prefill_decode` bases its capture config on the model's own (mimics a
+                # real `PreTrainedModel`); the guard under test fires afterwards on the capture count.
+                self.generation_config = GenerationConfig()
 
             def forward(self, input_ids=None, **kwargs):
                 return input_ids

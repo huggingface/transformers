@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -37,6 +37,8 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
 
     model_type = "ernie4_5_vl_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
 
@@ -47,6 +49,7 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     spatial_merge_size: int = 2
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
     base_model_tp_plan = {
         "blocks.*.attn.qkv": "colwise",
@@ -100,10 +103,9 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 103424
@@ -178,8 +180,11 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    sub_configs = {"vision_config": Ernie4_5_VLMoeVisionConfig, "text_config": Ernie4_5_VLMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Ernie4_5_VLMoeVisionConfig),
+        "text_config": SubConfigSpec(config_class=Ernie4_5_VLMoeTextConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -190,19 +195,6 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     video_end_token_id: int = 101307
     video_token_id: int = 103367
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        super().__post_init__(**kwargs)
 
 
 class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):

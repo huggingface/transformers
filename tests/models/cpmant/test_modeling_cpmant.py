@@ -124,7 +124,7 @@ class CpmAntModelTester:
         model_output = model(**input_ids)
         self.parent.assertEqual(
             model_output.logits.shape,
-            (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length),
+            (self.batch_size, self.seq_length, config.vocab_size),
         )
 
     def prepare_config_and_inputs_for_common(self):

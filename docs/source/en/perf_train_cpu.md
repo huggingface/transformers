@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -33,7 +33,7 @@ All distributed examples use [Intel MPI](https://www.intel.com/content/www/us/en
 ```bash
 python run_qa.py \
  --model_name_or_path google-bert/bert-base-uncased \
- --dataset_name squad \
+ --dataset_name rajpurkar/squad \
  --do_train \
  --do_eval \
  --per_device_train_batch_size 12 \
@@ -71,7 +71,7 @@ export MASTER_ADDR=127.0.0.1
 mpirun -n 2 -genv OMP_NUM_THREADS=23 \
 python3 run_qa.py \
  --model_name_or_path google-bert/bert-large-uncased \
- --dataset_name squad \
+ --dataset_name rajpurkar/squad \
  --do_train \
  --do_eval \
  --per_device_train_batch_size 12 \
@@ -108,7 +108,7 @@ mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
 python3 run_qa.py \
  --model_name_or_path google-bert/bert-large-uncased \
- --dataset_name squad \
+ --dataset_name rajpurkar/squad \
  --do_train \
  --do_eval \
  --per_device_train_batch_size 12 \
@@ -198,7 +198,7 @@ spec:
                   pip install -r /workspace/transformers/examples/pytorch/question-answering/requirements.txt;
                   torchrun /workspace/transformers/examples/pytorch/question-answering/run_qa.py \
                     --model_name_or_path distilbert/distilbert-base-uncased \
-                    --dataset_name squad \
+                    --dataset_name rajpurkar/squad \
                     --do_train \
                     --do_eval \
                     --per_device_train_batch_size 12 \

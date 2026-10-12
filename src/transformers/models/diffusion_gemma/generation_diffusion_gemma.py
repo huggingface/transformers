@@ -925,9 +925,7 @@ class DiffusionGemmaGenerationMixin:
 
         # Dynamic Caches
         else:
-            dynamic_cache_kwargs = {}
-            if generation_config.cache_implementation != "dynamic_full":
-                dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+            dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
             if generation_config.cache_implementation == "offloaded":
                 dynamic_cache_kwargs["offloading"] = True
             past_key_values = DynamicCache(**dynamic_cache_kwargs)

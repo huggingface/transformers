@@ -156,7 +156,6 @@ class NemotronHModelTester:
             max_position_embeddings=self.max_position_embeddings,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             ssm_state_size=self.ssm_state_size,
             mamba_num_heads=self.mamba_num_heads,
             mamba_n_groups=self.mamba_n_groups,
@@ -320,6 +319,34 @@ class NemotronHModelTester:
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
 
+    def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
+        """
+        Kernel kwargs given to the model must reach the Mamba2 mixer, which splats them into
+        the fused conv1d+scan, the conv and the chunk scan. This is how `seq_idx` reaches the
+        kernels for packed / variable-length batches.
+        """
+        model = NemotronHModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        mixer = next(block.mixer for block in model.layers if block.block_type == "linear_attention")
+        original_forward = mixer.forward
+        seen = []
+
+        def recording_forward(*fwd_args, **fwd_kwargs):
+            seen.append(set(fwd_kwargs))
+            return original_forward(*fwd_args, **fwd_kwargs)
+
+        mixer.forward = recording_forward
+
+        input_ids = input_ids.to(torch_device)
+        seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
+        with torch.no_grad():
+            model(input_ids, seq_idx=seq_idx)
+
+        self.parent.assertTrue(seen, "the linear-attention mixer was never called")
+        self.parent.assertIn("seq_idx", seen[0])
+
     def create_and_check_nemotron_h_chunked_prefill(self, config, input_ids, *args, device="cpu"):
         """
         Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
@@ -426,16 +453,16 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         for layer, layer_type in zip(past_key_values.layers, config.layer_types):
             # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
             if layer_type == "moe":
-                self.assertEqual(layer.conv_states, None)
-                self.assertEqual(layer.recurrent_states, None)
+                self.assertEqual(layer.conv_states[0], None)
+                self.assertEqual(layer.recurrent_states[0], None)
             # Attention layer cache
             elif layer_type == "full_attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
                 self.assertEqual(layer.values.shape, attention_shape)
             # Mamba layer cache
             elif layer_type == "linear_attention":
-                self.assertEqual(layer.conv_states.shape, conv_shape)
-                self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+                self.assertEqual(layer.conv_states[0].shape, conv_shape)
+                self.assertEqual(layer.recurrent_states[0].shape, recurrent_shape)
             else:
                 raise ValueError("Unknown layer type.")
 
@@ -482,14 +509,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("NemotronH hybrid cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
-        pass
-
-    @unittest.skip(reason="A large nemotron3 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
@@ -519,6 +538,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
+    def test_kwargs_reach_mamba2_mixer(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
 
     def test_attention_outputs(self):
         r"""
@@ -807,7 +830,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = f"{tmpdir}/config.json"
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(legacy_config, f)
 
             # Load the config

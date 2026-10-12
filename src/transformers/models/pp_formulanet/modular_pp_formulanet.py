@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
@@ -61,7 +61,7 @@ from ..slanext.modeling_slanext import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
     r"""
@@ -83,15 +83,17 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
         The hidden size of the decoder that the encoder features are projected to.
     """
 
+    model_type = "pp_formulanet_vision"
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
     decoder_hidden_size: int = 512
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetTextConfig(MBartConfig):
+    model_type = "pp_formulanet_text"
     base_config_key = "text_config"
     vocab_size: int = 50000
     max_position_embeddings: int = 2560
@@ -108,30 +110,18 @@ class PPFormulaNetTextConfig(MBartConfig):
     is_decoder = AttributeError()
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
-    sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=PPFormulaNetTextConfig),
+        "vision_config": SubConfigSpec(config_class=PPFormulaNetVisionConfig),
+    }
 
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = PPFormulaNetTextConfig(**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None. Initializing the PPFormulaNetTextConfig with default values.")
-            self.text_config = PPFormulaNetTextConfig()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = PPFormulaNetVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the PPFormulaNetVisionConfig with default values.")
-            self.vision_config = PPFormulaNetVisionConfig()
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -142,7 +132,11 @@ class PPFormulaNetImageProcessor(NougatImageProcessor):
     size = {"height": 768, "width": 768}
 
 
-@auto_docstring
+# Don't copy default values from Nougat!
+class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
+
+
 class PPFormulaNetProcessor(NougatProcessor):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
@@ -169,7 +163,7 @@ class PPFormulaNetProcessor(NougatProcessor):
     def __call__(
         self,
         images: ImageInput,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[PPFormulaNetProcessorKwargs],
     ) -> BatchFeature:
         r"""
         images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -182,7 +176,7 @@ class PPFormulaNetProcessor(NougatProcessor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ProcessingKwargs,
+            PPFormulaNetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -451,7 +445,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         ```python
         >>> from io import BytesIO
 
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
@@ -459,7 +453,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_path)
 
-        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
         >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
         >>> outputs = model(**inputs)
@@ -467,6 +461,10 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         >>> print(result)
         ['\\zeta_{0}(\\nu)=-\\frac{\\nu\\varrho^{-2\\nu}}{\\pi}\\int_{\\mu}^{\\infty}d\\omega\\int_{C_{+}}d z\\frac{2z^{2}}{(z^{2}+\\omega^{2})^{\\nu+1}}\\breve{\\Psi}(\\omega;z)e^{i\\epsilon z}\\quad,']
         ```"""
+        # `shift_labels` is consumed by the loss below (the decoder inputs are already right-shifted), so pop it
+        # before the inner model call rather than letting it flow down through `**kwargs`.
+        shift_labels = kwargs.pop("shift_labels", None)
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -488,8 +486,14 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
 
         loss = None
         if labels is not None:
+            # Encoder-decoder logits are position-aligned with the targets, so pass them as `shift_labels`
+            # (with `labels=None`) to stop `ForCausalLMLoss` shifting them a second time.
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=None,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=shift_labels if shift_labels is not None else labels,
+                **kwargs,
             )
 
         return Seq2SeqLMOutput(
@@ -504,7 +508,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):
         return self.model.get_encoder(modality=modality)
 
@@ -514,7 +518,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def get_image_features(self):
         raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self):
+    def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 
 

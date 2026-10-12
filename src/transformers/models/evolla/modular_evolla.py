@@ -103,20 +103,15 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
     def __init__(self, config):
         super().__init__(config)
         # remove the position_ids in EsmEmbeddings
-        self.position_ids = None
+        del self.position_ids
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
     def __init__(self, config: SaProtConfig, device=None):
-        super().__init__(config, device)
+        super().__init__(config)
 
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: SaProtConfig | None = None,
-        device: "torch.device | None" = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len)
+    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config)
 
 
 class EvollaSaProtSelfAttention(EsmSelfAttention):
@@ -772,9 +767,9 @@ class EvollaModel(EvollaPreTrainedModel):
         msa_feats (torch.FloatTensor):
             The input IDs for purely MSA-based features. Should be of shape `(batch_size, msa_seq_length, msa_feat_dim)` and type `torch.FloatTensor`. Dummy input for now.
         structure_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummy input for now.
         msa_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummy input for now.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

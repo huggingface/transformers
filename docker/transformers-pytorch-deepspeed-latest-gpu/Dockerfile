@@ -1,22 +1,46 @@
-# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-08.html
-FROM nvcr.io/nvidia/pytorch:24.08-py3
+# Plain CUDA base, like `transformers-all-latest-gpu`, but deliberately held on CUDA 12.x rather
+# than following that image to 13.0.
+#
+# DeepSpeed pre-compiles its CUDA ops here, and `op_builder/builder.py` picks the architectures to
+# cross-compile for in `get_default_compute_capabilities()`, which only has branches for CUDA 11 and
+# CUDA 12. On CUDA 13 neither matches, so the list stays at the `DEFAULT_COMPUTE_CAPABILITIES` of
+# `6.0;6.1;7.0` -- every one of which CUDA 13 dropped -- and the build dies on
+# `nvcc fatal: Unsupported gpu architecture 'compute_60'`. This is still the case on DeepSpeed
+# master and in the latest release (0.19.6).
+#
+# So: bump this to a CUDA 13 base and `cu130` torch once DeepSpeed knows about CUDA 13, and keep the
+# toolkit here matching `$CUDA` in the meantime -- `assert_no_cuda_mismatch()` compares them exactly
+# and refuses to compile when they differ.
+FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='2.8.0'
+# Torch version is kept in sync with `transformers-all-latest-gpu`; `CUDA` is not, see above.
+ARG PYTORCH='2.13.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
-RUN apt -y update
-RUN apt install -y libaio-dev
+RUN apt update
+# On top of what the general test image installs: `libaio-dev` for DeepSpeed's async I/O, and
+# `python-is-python3` because DeepSpeed's `zero_to_fp32.py` is executed directly and its shebang is
+# `#!/usr/bin/env python`, which Ubuntu does not provide (the previous `nvcr.io` base image did).
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs libaio-dev python-is-python3
+RUN git lfs install
 RUN python3 -m pip install --no-cache-dir --upgrade pip
+
+# The DeepSpeed CI job passes `working-directory-prefix: /workspace` and so expects the clone at
+# `/workspace/transformers`. The previous `nvcr.io` base image set this as its `WORKDIR`, the plain
+# CUDA one does not.
+WORKDIR /workspace
 
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-# `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
-RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'pandas<2' 'numpy<2'
+# `sklearn` on top of `deepspeed-testing`: the model zoo tests drive the example scripts, which
+# compute metrics with scikit-learn (and scipy, which it pulls in). `transformers-all-latest-gpu`
+# gets these through `[dev]`, and the previous `nvcr.io` base image happened to preinstall them.
+RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing,sklearn]'
 
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
@@ -25,23 +49,10 @@ RUN python3 -m pip uninstall -y torch torchvision torchaudio torchcodec && pytho
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
-# Uninstall `transformer-engine` shipped with the base image
-RUN python3 -m pip uninstall -y transformer-engine
-
-# Uninstall `torch-tensorrt` shipped with the base image
-RUN python3 -m pip uninstall -y torch-tensorrt
-
-# Uninstall outdated `nvtx` (0.2.5 from /rapids/) shipped with the base image:
-# DeepSpeed calls `nvtx.get_domain` (added in 0.2.12) and will crash otherwise.
-# DeepSpeed falls back to `torch.cuda.nvtx` when the standalone package is absent.
-RUN python3 -m pip uninstall -y nvtx
-
-# recompile apex
-RUN python3 -m pip uninstall -y apex
-# RUN git clone https://github.com/NVIDIA/apex
-#  `MAX_JOBS=1` disables parallel building to avoid cpu memory OOM when building image on GitHub Action (standard) runners
-# TODO: check if there is alternative way to install latest apex
-# RUN cd apex && MAX_JOBS=1 python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
+# Narrow DeepSpeed's cross-compile list to the architectures the CI runners actually use, instead of
+# the `6.0;6.1;7.0;8.0;8.6;9.0` default -- the old entries are dead weight in the op build, which is
+# repeated inside every GPU VM. `TORCH_CUDA_ARCH_LIST` takes priority over the default list.
+ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0"
 
 # Pre-build **latest** DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
@@ -57,6 +68,4 @@ RUN python3 -m pip uninstall -y kernels
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
 
-# The base image ships with `pydantic==1.8.2` which is not working - i.e. the next command fails
-RUN python3 -m pip install -U --no-cache-dir "pydantic>=2.0.0"
 RUN python3 -c "from deepspeed.launcher.runner import main"

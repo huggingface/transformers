@@ -20,12 +20,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
@@ -129,10 +126,10 @@ class JanusConfig(PreTrainedConfig):
     ```"""
 
     model_type = "janus"
-    sub_configs = {
-        "text_config": AutoConfig,
-        "vision_config": JanusVisionConfig,
-        "vq_config": JanusVQVAEConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+        "vision_config": SubConfigSpec(config_class=JanusVisionConfig),
+        "vq_config": SubConfigSpec(config_class=JanusVQVAEConfig),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -142,28 +139,9 @@ class JanusConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        if self.vision_config is None:
-            logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
-            self.vision_config = JanusVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = JanusVisionConfig(**self.vision_config)
-
-        if self.vq_config is None:
-            logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
-            self.vq_config = JanusVQVAEConfig()
-        elif isinstance(self.vq_config, dict):
-            self.vq_config = JanusVQVAEConfig(**self.vq_config)
-
+        super().__post_init__(**kwargs)
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]

@@ -17,6 +17,7 @@ Generic utilities
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import json
 import os
@@ -35,12 +36,14 @@ from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, resolve_internal_import
 
 
 if TYPE_CHECKING:
     import torch
     from torch import nn
+
+    from ..configuration_utils import PreTrainedConfig
 
 
 # Generic class or function
@@ -302,12 +305,41 @@ def is_flash_attention_requested(
     return "flash" in checked_attention_implementation
 
 
+def get_max_seqlen(
+    cu_seqlens: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+    kwarg_name: str = "max_seqlen",
+) -> int | None:
+    """Get the maximum packed sequence length, or pop it from `kwargs` if precomputed.
+
+    Args:
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        config: model configuration used to determine the attention implementation.
+        kwargs: optional caller kwargs containing a precomputed maximum sequence length.
+        kwarg_name: key used to pop the precomputed value from `kwargs`.
+
+    Returns:
+        Maximum packed sequence length as a Python integer, or `None` when Flash Attention is not requested
+        and no precomputed value is provided.
+    """
+    if kwargs is not None and (max_seqlen := kwargs.pop(kwarg_name, None)) is not None:
+        return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
+    return (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+
+
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
     """
-    Split the optional `paged|` prefix from an attention implementation string.
-
-    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    Deprecated because the "paged|" prefix is no longer needed for flash or SDPA. This used to split the optional
+    `paged|` prefix from an attention implementation string.
     """
+    warnings.warn(
+        "split_attention_implementation is deprecated as the 'paged|' prefix is no longer needed for flash or SDPA.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if implementation is None:
         return False, None
 
@@ -859,13 +891,13 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
 
     # pretrained_model_path is a file
     if is_file and pretrained_model_path.endswith(".json"):
-        with open(pretrained_model_path) as f:
+        with open(pretrained_model_path, encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
     # pretrained_model_path is a directory with a config.json
     if is_dir and os.path.exists(os.path.join(pretrained_model_path, "config.json")):
-        with open(os.path.join(pretrained_model_path, "config.json")) as f:
+        with open(os.path.join(pretrained_model_path, "config.json"), encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
@@ -918,6 +950,11 @@ def can_return_tuple(func):
 
 _KNOWN_MODALITIES = ("image", "video", "audio")
 
+# Flash-attention varlen kwargs the outer (text) forward broadcasts to every submodule. They belong to the
+# language model, not a modality encoder, and their names collide with the vision/audio encoders' own
+# `cu_seqlens`/`max_seqlen`, so `accepts_precomputed_kwargs` drops them when they arrive unprefixed.
+_FLASH_VARLEN_KWARGS = ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k")
+
 
 def accepts_precomputed_kwargs(modality: str):
     """
@@ -960,6 +997,10 @@ def accepts_precomputed_kwargs(modality: str):
                     continue
                 if k.startswith(prefix) and k not in existing_params:
                     translated[k.removeprefix(prefix)] = v
+                elif k in _FLASH_VARLEN_KWARGS and k not in existing_params:
+                    # Unprefixed text flash-attention varlen kwargs — don't let them leak into this
+                    # modality encoder, where they'd duplicate/clash with its own `cu_seqlens`.
+                    continue
                 else:
                     translated[k] = v
             return func(*args, **translated)
@@ -1154,5 +1195,29 @@ def retry(
                     delay = min(delay * 2, max_delay)
 
         return wrapper
+
+    return decorator
+
+
+def maybe_replace_from_package(source_package: str, func_name: str):
+    """
+    This decorator will try to replace the decorated function with `func_name` imported from `package`, if it's available. If not,
+    simply use the decorated function.
+    Useful to define explicit torch fallback functions, while still using an optimized implementations from auxiliary package (e.g.
+    `causal_conv1d`) if available.
+    """
+
+    def decorator(torch_func: Callable) -> Callable:
+        try:
+            module = importlib.import_module(source_package)
+            function = resolve_internal_import(module, func_name)
+        except Exception:
+            function = torch_func
+        # `resolve_internal_import` may succeed, but return None
+        finally:
+            if function is None:
+                function = torch_func
+
+        return function
 
     return decorator

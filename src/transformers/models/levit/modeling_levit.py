@@ -176,9 +176,7 @@ class LevitAttention(nn.Module):
 
         self.attention_bias_cache = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
-        self.register_buffer(
-            "attention_bias_idxs", torch.LongTensor(indices).view(len_points, len_points), persistent=False
-        )
+        self.attention_bias_idxs = nn.Buffer(torch.LongTensor(indices).view(len_points, len_points), persistent=False)
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -257,9 +255,7 @@ class LevitAttentionSubsample(nn.Module):
         self.indices = indices
 
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
-        self.register_buffer(
-            "attention_bias_idxs", torch.LongTensor(indices).view(len_points_, len_points), persistent=False
-        )
+        self.attention_bias_idxs = nn.Buffer(torch.LongTensor(indices).view(len_points_, len_points), persistent=False)
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -569,12 +565,6 @@ class LevitForImageClassification(LevitPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)

@@ -149,9 +149,8 @@ class TimesFmPositionalEmbedding(nn.Module):
 
         num_timescales = self.embedding_dims // 2
         log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
-        self.register_buffer(
-            "inv_timescales",
-            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+        self.inv_timescales = nn.Buffer(
+            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment)
         )
 
     def forward(self, seq_length=None, position=None):
@@ -361,7 +360,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
         outputs = torch.where(
             torch.abs(inputs - self.config.pad_val) < self.config.tolerance,
-            torch.tensor(self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
+            torch.full((), self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
             outputs,
         )
         return outputs, (mu, sigma)
@@ -391,12 +390,12 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         patched_inputs = torch.where(
             torch.abs(patched_pads - 1.0) < self.config.tolerance,
-            torch.tensor(0.0, dtype=patched_inputs.dtype, device=patched_inputs.device),
+            torch.full((), 0.0, dtype=patched_inputs.dtype, device=patched_inputs.device),
             patched_inputs,
         )
         patched_pads = torch.where(
             torch.abs(patched_inputs - self.config.pad_val) < self.config.tolerance,
-            torch.tensor(1.0, dtype=patched_pads.dtype, device=patched_pads.device),
+            torch.full((), 1.0, dtype=patched_pads.dtype, device=patched_pads.device),
             patched_pads,
         )
         patched_inputs, stats = self._forward_transform(patched_inputs, patched_pads)
@@ -797,13 +796,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
+        """Calculates the moving average over a sliding window."""
         # Pad with zeros to handle initial window positions
         arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-        # Create a convolution kernel
-        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        smoothed_arr = arr_padded.unfold(-1, window_size, 1).mean(dim=-1)
         return [smoothed_arr, arr - smoothed_arr]
 
 

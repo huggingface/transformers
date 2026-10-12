@@ -75,7 +75,7 @@ class BrosPositionalEmbedding1D(nn.Module):
         inv_freq = 1 / (
             10000 ** (torch.arange(0.0, self.dim_bbox_sinusoid_emb_1d, 2.0) / self.dim_bbox_sinusoid_emb_1d)
         )
-        self.register_buffer("inv_freq", inv_freq)
+        self.inv_freq = nn.Buffer(inv_freq)
 
     def forward(self, pos_seq: torch.Tensor) -> torch.Tensor:
         seq_size = pos_seq.size()
@@ -132,9 +132,8 @@ class BrosTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.register_buffer(
-            "token_type_ids",
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.token_type_ids = nn.Buffer(
             torch.zeros(
                 self.position_ids.size(),
                 dtype=torch.long,
@@ -817,7 +816,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
         )
-        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
+        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1, device=device, dtype=torch.bool)
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             self_token_mask[None, :, :], torch.finfo(subsequent_token_logits.dtype).min
         )
@@ -941,7 +940,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             batch_size, max_seq_length = attention_mask.shape
             device = attention_mask.device
 
-            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
+            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1, device=device, dtype=torch.bool)
 
             mask = bbox_first_token_mask.view(-1)
             bbox_first_token_mask = torch.cat(

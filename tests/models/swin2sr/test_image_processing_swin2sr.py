@@ -20,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -32,38 +32,12 @@ if is_vision_available():
     from transformers.image_transforms import get_image_size
 
 
-class Swin2SRImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_pad=True,
-        size_divisor=8,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_pad = do_pad
-        self.size_divisor = size_divisor
+class Swin2SRImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size_divisor", 8)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_pad": self.do_pad,
-            "size_divisor": self.size_divisor,
-        }
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         img = images[0]
@@ -80,36 +54,11 @@ class Swin2SRImageProcessingTester:
 
         return self.num_channels, input_height + pad_height, input_width + pad_width
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Swin2SRImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "size_divisor"))
+    image_processor_tester_class = Swin2SRImageProcessingTester
 
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)

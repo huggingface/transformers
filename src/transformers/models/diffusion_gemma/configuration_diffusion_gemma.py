@@ -22,9 +22,9 @@ from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -38,11 +38,6 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         Controls bidirectional attention behavior. When set to `"vision"`, vision tokens
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
     top_k_experts (`int`, *optional*):
         Number of experts activated per token in MoE layers.
     moe_intermediate_size (`int`, *optional*):
@@ -103,8 +98,6 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping = 30.0
     use_bidirectional_attention: Literal["all", "vision"] | None = None
-    num_global_key_value_heads: int | None = None
-    global_head_dim: int = 512
     num_experts: int | None = None
     top_k_experts: int | None = None
     moe_intermediate_size: int | None = None
@@ -134,7 +127,31 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
+        global_head_dim = kwargs.pop("global_head_dim", 512)
+        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
+        if "per_layer_config" not in kwargs:
+            layer_overrides: dict[str, Any] = {"head_dim": global_head_dim}
+            # `attention_k_eq_v` gates the kv-head override for the models that declare it;
+            # models that drop the attribute entirely are ungated, hence the `True` fallback.
+            num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
+            if num_key_value_heads is not None:
+                layer_overrides["num_key_value_heads"] = num_key_value_heads
+            kwargs["per_layer_config"] = {
+                layer_idx: layer_overrides
+                for layer_idx, layer_type in enumerate(self.layer_types)
+                if layer_type == "full_attention"
+            }
+
         super().__post_init__(**kwargs)
+
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `None` fallback.
+        if getattr(self, "use_bidirectional_attention", None) == "all":
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
@@ -180,9 +197,9 @@ class DiffusionGemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "diffusion_gemma"
-    sub_configs = {
-        "text_config": DiffusionGemmaTextConfig,
-        "vision_config": AutoConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=DiffusionGemmaTextConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision"),
     }
 
     text_config: DiffusionGemmaTextConfig | dict[str, Any] | None = None
@@ -194,21 +211,6 @@ class DiffusionGemmaConfig(PreTrainedConfig):
     # Important: this model also ties the text encoder with the decoder. Setting this to `False` undoes all ties.
     tie_word_embeddings: bool = True
     canvas_length: int | None = 256
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = DiffusionGemmaTextConfig()
-            logger.info("text_config is None. Using default DiffusionGemmaTextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = DiffusionGemmaTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. DiffusionGemmaEncoderModel.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "gemma4_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["DiffusionGemmaTextConfig", "DiffusionGemmaConfig"]

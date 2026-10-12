@@ -2,11 +2,13 @@ import hashlib
 import itertools
 import json
 import logging
+import os
 from functools import lru_cache
 from typing import Any
 
 import torch
 
+from transformers.distributed import DistributedConfig
 from transformers.generation.configuration_utils import CompileConfig
 from transformers.utils import is_torch_accelerator_available
 from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
@@ -139,6 +141,21 @@ class BenchmarkConfig:
     @property
     def hash(self) -> str:
         return hashlib.sha256(json.dumps(self.to_dict()).encode()).hexdigest()
+
+    @property
+    def distributed_config(self) -> DistributedConfig | None:
+        """Translate `tp_plan` into the `DistributedConfig` that `from_pretrained` expects, or `None` if no TP."""
+        if self.tp_plan is None:
+            return None
+        # `torchrun` sets WORLD_SIZE; without it there is no process group to shard over.
+        tp_size = int(os.environ.get("WORLD_SIZE", 1))
+        if tp_size <= 1:
+            raise ValueError(
+                "Tensor parallelism was requested, but WORLD_SIZE is not set to more than 1. Launch the benchmark "
+                "with `torchrun --nproc_per_node=<num_gpus> ...` to run with tensor parallelism."
+            )
+        # `DistributedConfig.tp_plan` only takes an explicit plan; leaving it as None makes it use the model's own.
+        return DistributedConfig(tp_size=tp_size, tp_plan=self.tp_plan if isinstance(self.tp_plan, dict) else None)
 
     def infer_name(self, compact: bool = True) -> str:
         """Infer a human-readable name for the benchmark config, either compact or verbose."""

@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
 from ...image_utils import (
@@ -242,8 +242,8 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         if crop_to_patches:
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
 
-            for shape, stacked_images in grouped_images.items():
-                h, w = shape[-2:]
+            for key, stacked_images in grouped_images.items():
+                h, w = stacked_images.shape[-2:]
                 if max(h, w) > tile_size:
                     stacked_patches, n_patches = self.crop_image_to_patches(
                         stacked_images,
@@ -256,11 +256,11 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
                     flat_patches = self.rescale_and_normalize(
                         flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                     )
-                    local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
-                    num_local_patches[shape] = [n_patches] * stacked_images.shape[0]
+                    local_patches_grouped[key] = flat_patches.reshape(stacked_patches.shape)
+                    num_local_patches[key] = [n_patches] * stacked_images.shape[0]
                 else:
-                    local_patches_grouped[shape] = [None] * stacked_images.shape[0]
-                    num_local_patches[shape] = [0] * stacked_images.shape[0]
+                    local_patches_grouped[key] = [None] * stacked_images.shape[0]
+                    num_local_patches[key] = [0] * stacked_images.shape[0]
 
             num_local_patches = reorder_images(num_local_patches, grouped_images_index)
             ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
@@ -275,8 +275,8 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_global_grouped = {}
-        for shape, stacked in grouped_images.items():
-            h, w = shape[-2:]
+        for key, stacked in grouped_images.items():
+            h, w = stacked.shape[-2:]
             scale = global_target_size / max(h, w)
             new_h = round(h * scale)
             new_w = round(w * scale)
@@ -285,7 +285,7 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
             stacked = self.rescale_and_normalize(
                 stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_global_grouped[shape] = stacked
+            processed_global_grouped[key] = stacked
         all_pixel_values_global = reorder_images(processed_global_grouped, grouped_images_index)
 
         data = {
@@ -297,12 +297,11 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         Returns the number of image patches for a given image size (1 global + local patches).
         """
-        if images_kwargs is None:
-            images_kwargs = {}
+        images_kwargs = images_kwargs or {}
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
         tile_size = images_kwargs.get("tile_size", self.tile_size)
@@ -547,26 +546,12 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
-    sub_configs = {
-        "sam_config": DeepseekOcr2SamVisionConfig,
-        "encoder_config": DeepseekOcr2VisionEncoderConfig,
+    sub_configs_defaults = {
+        "sam_config": SubConfigSpec(config_class=DeepseekOcr2SamVisionConfig),
+        "encoder_config": SubConfigSpec(config_class=DeepseekOcr2VisionEncoderConfig),
     }
-
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.sam_config is None:
-            self.sam_config = DeepseekOcr2SamVisionConfig()
-        elif isinstance(self.sam_config, dict):
-            self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
-
-        if self.encoder_config is None:
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig()
-        elif isinstance(self.encoder_config, dict):
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig(**self.encoder_config)
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
@@ -626,28 +611,15 @@ class DeepseekOcr2Config(PreTrainedConfig):
     """
 
     model_type = "deepseek_ocr2"
-    sub_configs = {
-        "vision_config": DeepseekOcr2VisionConfig,
-        "text_config": DeepseekOcr2TextConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=DeepseekOcr2VisionConfig),
+        "text_config": SubConfigSpec(config_class=DeepseekOcr2TextConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 128815
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = DeepseekOcr2VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = DeepseekOcr2VisionConfig(**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = DeepseekOcr2TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = DeepseekOcr2TextConfig(**self.text_config)
-
-        super().__post_init__(**kwargs)
 
 
 @dataclass
@@ -667,11 +639,11 @@ class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
 
 
 class DeepseekOcr2ModelOutputWithPast(LlavaNextModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
@@ -1007,10 +979,9 @@ class DeepseekOcr2Model(LlavaNextModel):
             else:
                 all_features.append(torch.cat([global_flat, view_sep], dim=0))
 
-        image_features = torch.cat(all_features, dim=0)
         return DeepseekOcr2ModelOutputWithPooling(
             last_hidden_state=global_vision_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=all_features,
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
             **local_outputs,
@@ -1029,6 +1000,7 @@ class DeepseekOcr2Model(LlavaNextModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | DeepseekOcr2ModelOutputWithPast:
         r"""
@@ -1037,16 +1009,21 @@ class DeepseekOcr2Model(LlavaNextModel):
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
         """
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
-            ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -1065,7 +1042,8 @@ class DeepseekOcr2Model(LlavaNextModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features,
+            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -1098,36 +1076,6 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
             **kwargs,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_local=None,
-        num_local_patches=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_local"] = pixel_values_local
-            model_inputs["num_local_patches"] = num_local_patches
-
-        return model_inputs
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1143,6 +1091,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | DeepseekOcr2CausalLMOutputWithPast:
         r"""
@@ -1161,6 +1110,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1185,6 +1135,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
 

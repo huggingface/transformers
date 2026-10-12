@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -24,12 +24,14 @@ rendered properly in your Markdown viewer.
 
 # CLIP
 
-[CLIP](https://huggingface.co/papers/2103.00020) is a is a multimodal vision and language model motivated by overcoming the fixed number of object categories when training a computer vision model. CLIP learns about images directly from raw text by jointly training on 400M (image, text) pairs. Pretraining on this scale enables zero-shot transfer to downstream tasks. CLIP uses an image encoder and text encoder to get visual features and text features. Both features are projected to a latent space with the same number of dimensions and their dot product gives a similarity score.
+[CLIP](https://huggingface.co/papers/2103.00020) is a multimodal vision and language model motivated by overcoming the fixed number of object categories when training a computer vision model. CLIP learns about images directly from raw text by jointly training on 400M (image, text) pairs. Pretraining on this scale enables zero-shot transfer to downstream tasks. CLIP uses an image encoder and text encoder to get visual features and text features. Both features are projected to a latent space with the same number of dimensions and their dot product gives a similarity score.
 
 You can find all the original CLIP checkpoints under the [OpenAI](https://huggingface.co/openai?search_models=clip) organization.
 
 > [!TIP]
 > Click on the CLIP models in the right sidebar for more examples of how to apply CLIP to different image and language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to calculate similarity scores between multiple text descriptions and an image with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -81,7 +83,7 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 ## Notes
 
-- Use [`CLIPImageProcessor`] to resize (or rescale) and normalizes images for the model.
+- Use [`CLIPImageProcessor`] to resize (or rescale) and normalize images for the model.
 
 ## CLIPConfig
 
@@ -100,10 +102,6 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 [[autodoc]] CLIPTokenizer
     - get_special_tokens_mask
     - save_vocabulary
-
-## CLIPTokenizerFast
-
-[[autodoc]] CLIPTokenizerFast
 
 ## CLIPImageProcessor
 

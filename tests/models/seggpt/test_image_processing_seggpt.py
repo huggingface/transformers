@@ -21,9 +21,9 @@ from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -36,47 +36,15 @@ if is_vision_available():
     from PIL import Image
 
 
-class SegGptImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        num_labels=5,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.num_labels = num_labels
+class SegGptImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_segmentation_labels", 5)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
+        super().__init__(**kwargs)
 
     def expected_post_processed_shape(self):
         return self.size["height"] // 2, self.size["width"]
@@ -87,27 +55,16 @@ class SegGptImageProcessingTester:
             pred_masks=torch.rand(self.batch_size, self.num_channels, self.size["height"], self.size["width"])
         )
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
             "outputs": SegGptImageSegmentationOutput(
                 pred_masks=torch.randn(self.batch_size, self.num_channels, self.size["height"], self.size["width"])
             ),
-            "num_labels": self.num_labels,
+            "num_labels": self.num_segmentation_labels,
         }
         expected_shape = {
             # extra background class
-            "num_labels": self.num_labels + 1,
+            "num_labels": self.num_segmentation_labels + 1,
             "height": self.size["height"] // 2,
             "width": self.size["width"],
         }
@@ -129,30 +86,7 @@ def prepare_img():
 @require_torch
 @require_vision
 class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = SegGptImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    image_processor_tester_class = SegGptImageProcessingTester
 
     def test_image_processor_palette(self):
         num_labels = 3
@@ -263,14 +197,17 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
     def test_prompt_mask_equivalence(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            image_size = self.image_processor_tester.image_size
+            image_height, image_width = (
+                self.image_processor_tester.size["height"],
+                self.image_processor_tester.size["width"],
+            )
 
             # Single Mask Examples
-            expected_single_shape = [1, 3, image_size, image_size]
+            expected_single_shape = [1, 3, image_height, image_width]
 
             # Single Semantic Map (2D)
-            image_np_2d = np.ones((image_size, image_size))
-            image_pt_2d = torch.ones((image_size, image_size))
+            image_np_2d = np.ones((image_height, image_width), dtype=np.uint8)
+            image_pt_2d = torch.ones((image_height, image_width), dtype=torch.uint8)
             image_pil_2d = Image.fromarray(image_np_2d)
 
             inputs_np_2d = image_processor(images=None, prompt_masks=image_np_2d, return_tensors="pt")
@@ -282,8 +219,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             self.assertEqual(list(inputs_np_2d["prompt_masks"].shape), expected_single_shape)
 
             # Single RGB Images (3D)
-            image_np_3d = np.ones((3, image_size, image_size))
-            image_pt_3d = torch.ones((3, image_size, image_size))
+            image_np_3d = np.ones((3, image_height, image_width))
+            image_pt_3d = torch.ones((3, image_height, image_width))
             image_pil_3d = Image.fromarray(image_np_3d.transpose(1, 2, 0).astype(np.uint8))
 
             inputs_np_3d = image_processor(
@@ -301,11 +238,11 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             self.assertEqual(list(inputs_np_3d["prompt_masks"].shape), expected_single_shape)
 
             # Batched Examples
-            expected_batched_shape = [2, 3, image_size, image_size]
+            expected_batched_shape = [2, 3, image_height, image_width]
 
             # Batched Semantic Maps (3D)
-            image_np_2d_batched = np.ones((2, image_size, image_size))
-            image_pt_2d_batched = torch.ones((2, image_size, image_size))
+            image_np_2d_batched = np.ones((2, image_height, image_width), dtype=np.uint8)
+            image_pt_2d_batched = torch.ones((2, image_height, image_width), dtype=torch.uint8)
 
             inputs_np_2d_batched = image_processor(images=None, prompt_masks=image_np_2d_batched, return_tensors="pt")
             inputs_pt_2d_batched = image_processor(images=None, prompt_masks=image_pt_2d_batched, return_tensors="pt")
@@ -316,8 +253,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             self.assertEqual(list(inputs_np_2d_batched["prompt_masks"].shape), expected_batched_shape)
 
             # Batched RGB images
-            image_np_4d = np.ones((2, 3, image_size, image_size))
-            image_pt_4d = torch.ones((2, 3, image_size, image_size))
+            image_np_4d = np.ones((2, 3, image_height, image_width))
+            image_pt_4d = torch.ones((2, 3, image_height, image_width))
 
             inputs_np_4d = image_processor(
                 images=None, prompt_masks=image_np_4d, return_tensors="pt", do_convert_rgb=False
@@ -341,9 +278,12 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        image_size = self.image_processor_tester.image_size
-        image_np = np.random.randint(0, 256, (3, image_size, image_size), dtype=np.uint8)
-        mask_np = np.zeros((image_size, image_size), dtype=np.uint8)
+        image_height, image_width = (
+            self.image_processor_tester.size["height"],
+            self.image_processor_tester.size["width"],
+        )
+        image_np = np.random.randint(0, 256, (3, image_height, image_width), dtype=np.uint8)
+        mask_np = np.zeros((image_height, image_width), dtype=np.uint8)
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -45,7 +45,7 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 - Wav2Vec2Phoneme is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - Wav2Vec2Phoneme model was trained using connectionist temporal classification (CTC) so the model output has to be
   decoded using [`Wav2Vec2PhonemeCTCTokenizer`].
-- Wav2Vec2Phoneme can be fine-tuned on multiple language at once and decode unseen languages in a single forward pass
+- Wav2Vec2Phoneme can be fine-tuned on multiple languages at once and decode unseen languages in a single forward pass
   to a sequence of phonemes
 - By default, the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
   should make use of a dictionary and language model.

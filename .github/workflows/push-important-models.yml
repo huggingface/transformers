@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   get_modified_models:
+    permissions:
+      contents: read
     name: "Get all modified files"
     runs-on: ubuntu-latest
     outputs:
@@ -148,7 +150,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: ./.github/workflows/self-scheduled.yml
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     needs: get_modified_models
     if: needs.get_modified_models.outputs.matrix != '' && needs.get_modified_models.outputs.matrix != '[]'
     with:

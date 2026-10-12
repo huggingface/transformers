@@ -19,9 +19,9 @@ import re
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -228,7 +228,7 @@ def get_mobilenet_v2_config(model_name):
         filename = "imagenet-1k-id2label.json"
 
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
 
     if config.num_labels == 1001:
         id2label = {int(k) + 1: v for k, v in id2label.items()}

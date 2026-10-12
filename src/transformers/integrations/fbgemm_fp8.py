@@ -109,7 +109,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
 
         self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=dtype))
         self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
-        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
         if bias:
             self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=torch.float32))
@@ -170,7 +170,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32)
         )
         # Register input scale upper bound
-        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
     def forward(self, hidden_states):
         """
@@ -267,7 +267,7 @@ def get_quantize_fp8_per_row():
 
 
 def replace_with_fbgemm_fp8_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False, tp_plan=None
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
@@ -280,7 +280,7 @@ def replace_with_fbgemm_fp8_linear(
             Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
         quantization_config (`FbgemmFp8Config`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
     global quantize_fp8_per_row
@@ -297,9 +297,6 @@ def replace_with_fbgemm_fp8_linear(
         with init_empty_weights(include_buffers=True):
             if module.__class__.__name__ == "Llama4TextExperts":
                 # TODO: make sure tp works later
-                # if tp_plan is not None:
-                #     tp_key = re.sub(r"\d+", "*", f"{module_name}.down_proj_scale")
-                #     tp_plan[tp_key] = None
                 text_config = getattr(model.config, "text_config", model.config)
                 new_module = FbgemmFp8Llama4TextExperts(text_config or model.config)
             elif isinstance(module, nn.Linear):

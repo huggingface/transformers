@@ -21,12 +21,14 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import Mxfp4Config
 
 from ..utils import (
+    get_current_accelerator,
     is_accelerate_available,
     is_kernels_available,
     is_torch_available,
     is_triton_available,
     logging,
 )
+from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 from .quantizers_utils import get_module_from_name
 
 
@@ -75,7 +77,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
 
-        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        device = get_current_accelerator() or torch.device("cpu")
         if device.type not in ["cuda", "xpu", "cpu"]:
             if self.pre_quantized:
                 logger.warning_once(
@@ -128,7 +130,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             if not kernels_installed:
                 logger.warning_once(
                     "MXFP4 quantization requires the `kernels` package: "
-                    "`pip install kernels>=0.12.0`. "
+                    f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                    f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
                     "We will default to dequantizing the model to bf16."
                 )
                 self.quantization_config.dequantize = True
@@ -184,9 +187,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..integrations import replace_with_mxfp4_linear
 
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
-        # only CPU kernels can work with pre-quantized models
-        device = torch.accelerator.current_accelerator() or torch.device("cpu")
-        if use_kernels and device.type not in ["cpu"]:
+        # only CPU and XPU kernels can work with pre-quantized models
+        device = get_current_accelerator() or torch.device("cpu")
+        if use_kernels and device.type not in ["cpu", "xpu"]:
             logger.warning_once(
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"

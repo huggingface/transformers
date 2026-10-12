@@ -53,7 +53,7 @@ members/contributors who may be interested in your PR.
 Models:
 
 - text models: @ArthurZucker @Cyrilvallez @vasqu
-- vision models: @yonigozlan @molbap
+- vision models: @molbap @guarin
 - audio models: @eustlb @ebezzam @vasqu
 - multimodal models: @zucchini-nlp
 - graph models: @clefourrier
@@ -80,9 +80,10 @@ Integrations:
 
 Devices/Backends:
 
-- AMD ROCm: @ivarflakstad
+- AMD ROCm: @Abdennacer-Badaoui
+- MPS: @isalia20
 - Intel XPU: @IlyasMoutawwakil
-- Ascend NPU: @ivarflakstad 
+- Ascend NPU: @IlyasMoutawwakil 
 
 Documentation: @stevhliu
 

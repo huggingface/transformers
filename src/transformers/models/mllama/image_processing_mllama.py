@@ -260,7 +260,7 @@ def pad_batches_and_tiles(
             a batch sample containing multiple images, where each image is pre-split into tiles.
             The shape of each tile array is (num_tiles, channels, tile_height, tile_width).
         max_image_tiles (int):
-            The maximum number of tiles any image was potantially split.
+            The maximum number of tiles any image was potentially split.
 
     Returns:
         `Tuple[torch.Tensor, List[List[int]]]`: A tuple containing:
@@ -342,7 +342,8 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     if not is_vision_available() or not isinstance(image, Image.Image):
         return image
 
-    if image.mode == "RGB":
+    # PNG tRNS keeps mode "RGB"/"L"/"P" while storing transparency in image.info.
+    if image.mode == "RGB" and image.info.get("transparency") is None:
         return image
 
     image_rgba = image.convert("RGBA")

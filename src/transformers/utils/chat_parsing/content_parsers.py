@@ -159,12 +159,13 @@ def parse_content(text: str, name: str, args: dict) -> Any:
     return CONTENT_PARSERS[name](text, args)
 
 
-_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+_PLACEHOLDER = re.compile(r"\{(\w+(?:\.\w+)*)\}")
 
 
 def _apply_transform(transform: Any, scope: dict) -> Any:
     """Recursively walk a transform template, which is used to restructure
-    parsed output into the actual shape we want."""
+    parsed output into the actual shape we want. A dotted placeholder like
+    `{content.args}` descends into keys of the looked-up value."""
     if isinstance(transform, dict):
         return {k: _apply_transform(v, scope) for k, v in transform.items()}
     if isinstance(transform, list):
@@ -174,10 +175,18 @@ def _apply_transform(transform: Any, scope: dict) -> Any:
     whole = _PLACEHOLDER.fullmatch(transform)
     if not whole:
         return transform
-    key = whole.group(1)
-    if key not in scope:
-        raise KeyError(f"transform placeholder '{{{key}}}' is not defined. Available: {sorted(scope)}")
-    return scope[key]
+    path = whole.group(1)
+    root, *keys = path.split(".")
+    if root not in scope:
+        raise KeyError(f"transform placeholder '{{{path}}}' is not defined. Available: {sorted(scope)}")
+    value = scope[root]
+    for key in keys:
+        if not isinstance(value, dict):
+            raise ValueError(f"transform placeholder '{{{path}}}' cannot index into {type(value).__name__} at '{key}'")
+        if key not in value:
+            raise ValueError(f"transform placeholder '{{{path}}}' is missing key '{key}'. Available: {sorted(value)}")
+        value = value[key]
+    return value
 
 
 def validate_transform_strings(scope: str, transform: Any) -> None:

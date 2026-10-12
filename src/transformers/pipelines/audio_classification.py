@@ -14,8 +14,8 @@
 import subprocess
 from typing import Any
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .base import Pipeline, build_pipeline_init_args

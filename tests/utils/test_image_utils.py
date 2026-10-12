@@ -14,10 +14,10 @@
 import codecs
 import unittest
 
-import httpx
 import numpy as np
 import pytest
 from huggingface_hub.file_download import hf_hub_download
+from huggingface_hub.utils import httpx
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
@@ -717,7 +717,7 @@ class LoadImageTester(unittest.TestCase):
         img = load_image(INVOICE_URL)
         img_arr = np.array(img)
 
-        self.assertEqual(img_arr.shape, (1061, 750, 3))
+        self.assertEqual(img_arr.shape, (1200, 900, 3))
 
     @is_flaky()
     def test_load_img_url_timeout(self):

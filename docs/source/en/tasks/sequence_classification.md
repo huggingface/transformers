@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -138,7 +138,7 @@ Before you start training your model, create a map of the expected ids to their 
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 
@@ -238,6 +238,7 @@ Tokenize the text and return PyTorch tensors:
 Pass your inputs to the model and return the `logits`:
 
 ```py
+>>> import torch
 >>> from transformers import AutoModelForSequenceClassification
 
 >>> model = AutoModelForSequenceClassification.from_pretrained("stevhliu/my_awesome_model")
