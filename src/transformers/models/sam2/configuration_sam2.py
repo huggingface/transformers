@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
@@ -122,8 +122,8 @@ class Sam2VisionConfig(PreTrainedConfig):
 
     base_config_key = "vision_config"
     model_type = "sam2_vision_model"
-    sub_configs = {
-        "backbone_config": AutoConfig,
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_hiera_det_model"),
     }
 
     backbone_config: dict | PreTrainedConfig | None = None
@@ -148,12 +148,6 @@ class Sam2VisionConfig(PreTrainedConfig):
         )
         self.fpn_top_down_levels = [2, 3] if self.fpn_top_down_levels is None else self.fpn_top_down_levels
 
-        if isinstance(self.backbone_config, dict):
-            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "sam2_hiera_det_model")
-            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
-        elif self.backbone_config is None:
-            self.backbone_config = Sam2HieraDetConfig()
-
         super().__post_init__(**kwargs)
 
 
@@ -170,6 +164,7 @@ class Sam2PromptEncoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "prompt_encoder_config"
+    model_type = "sam2_prompt_encoder"
 
     hidden_size: int = 256
     image_size: int | list[int] | tuple[int, int] = 1024
@@ -204,6 +199,7 @@ class Sam2MaskDecoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "mask_decoder_config"
+    model_type = "sam2_mask_decoder"
 
     hidden_size: int = 256
     hidden_act: str = "gelu"
@@ -258,35 +254,19 @@ class Sam2Config(PreTrainedConfig):
     ```"""
 
     model_type = "sam2"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "prompt_encoder_config": Sam2PromptEncoderConfig,
-        "mask_decoder_config": Sam2MaskDecoderConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="sam2_vision_model",
+        ),
+        "prompt_encoder_config": SubConfigSpec(config_class=Sam2PromptEncoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=Sam2MaskDecoderConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
     prompt_encoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam2_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam2_vision_model"]()
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = Sam2PromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = Sam2PromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = Sam2MaskDecoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = Sam2MaskDecoderConfig()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = [

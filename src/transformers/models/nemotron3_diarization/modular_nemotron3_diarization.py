@@ -21,7 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -175,10 +175,10 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron3_diarization"
-    sub_configs = {
-        "audio_config": Nemotron3DiarizationAudioConfig,
-        "head_config": Nemotron3DiarizationHeadConfig,
-        "streaming_config": Nemotron3DiarizationStreamingConfig,
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=Nemotron3DiarizationAudioConfig),
+        "head_config": SubConfigSpec(config_class=Nemotron3DiarizationHeadConfig),
+        "streaming_config": SubConfigSpec(config_class=Nemotron3DiarizationStreamingConfig),
     }
 
     audio_config: Nemotron3DiarizationAudioConfig | dict | None = None
@@ -189,21 +189,6 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
     fifo_length: int = 40
     speaker_cache_update_period: int = 300
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.audio_config is None:
-            self.audio_config = Nemotron3DiarizationAudioConfig()
-        elif isinstance(self.audio_config, dict):
-            self.audio_config = Nemotron3DiarizationAudioConfig(**self.audio_config)
-        if self.head_config is None:
-            self.head_config = Nemotron3DiarizationHeadConfig()
-        elif isinstance(self.head_config, dict):
-            self.head_config = Nemotron3DiarizationHeadConfig(**self.head_config)
-        if self.streaming_config is None:
-            self.streaming_config = Nemotron3DiarizationStreamingConfig()
-        elif isinstance(self.streaming_config, dict):
-            self.streaming_config = Nemotron3DiarizationStreamingConfig(**self.streaming_config)
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         if self.chunk_right_context >= self.chunk_length:

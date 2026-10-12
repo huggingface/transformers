@@ -51,12 +51,6 @@ Examples of use can be found in the [example notebooks](https://github.com/huggi
     - numpy_mask_tokens
     - torch_mask_tokens
 
-## DataCollatorForWholeWordMask
-
-[[autodoc]] data.data_collator.DataCollatorForWholeWordMask
-    - numpy_mask_tokens
-    - torch_mask_tokens
-
 ## DataCollatorForPermutationLanguageModeling
 
 [[autodoc]] data.data_collator.DataCollatorForPermutationLanguageModeling
