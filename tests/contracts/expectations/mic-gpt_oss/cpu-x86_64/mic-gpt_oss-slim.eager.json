@@ -1,0 +1,76 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-gpt_oss-integration",
+  "contract_name": "gpt_oss",
+  "contract_revision": "b1d63fd734710c163e46edf24c313ec537d7b881",
+  "framework": "transformers",
+  "variant": "eager",
+  "target": "mic-gpt_oss-slim",
+  "kind": "fixture",
+  "revision": "31a4cd7021a54fcbfddb884a6b6937eb364b203c",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 8.64,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   199297,
+   50459
+  ],
+  "answer_logits": [
+   [
+    -0.15196476876735687,
+    -0.07642129808664322,
+    -0.03964700922369957,
+    0.06336655467748642,
+    -0.1396329700946808,
+    0.16412395238876343,
+    -0.06315228343009949,
+    0.09537868946790695
+   ],
+   [
+    -0.049026042222976685,
+    0.13571614027023315,
+    -0.1129116415977478,
+    -0.05200163647532463,
+    0.1435624063014984,
+    0.14955376088619232,
+    -0.1536538004875183,
+    -0.11213580518960953
+   ]
+  ],
+  "training": {
+   "loss": 12.24637222290039,
+   "gradients": {
+    "model.embed_tokens.weight": true,
+    "model.layers.0.self_attn.q_proj.weight": true
+   },
+   "updated": true
+  }
+ }
+}

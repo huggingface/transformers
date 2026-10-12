@@ -1,0 +1,144 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-speech_t5-integration",
+  "contract_name": "speech_t5",
+  "contract_revision": "d95f24b7fdc730cbfd5689c09788a22be8868434",
+  "framework": "transformers",
+  "variant": "default",
+  "target": "mic-speech_t5-slim",
+  "kind": "fixture",
+  "revision": "c79f63c5decffb9fe2e288a251d337096964142a",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 8.05,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "float32",
+   "attn_implementation": "eager"
+  },
+  "predicted_tokens": [
+   [
+    2,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71
+   ],
+   [
+    2,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71,
+    71
+   ]
+  ],
+  "predicted_text": [
+   "//////////",
+   "//////////"
+  ],
+  "selected_logits": [
+   [
+    [
+     0.02512858621776104,
+     0.0,
+     -0.42389482259750366,
+     0.19021053612232208,
+     0.060033150017261505
+    ],
+    [
+     -0.015703704208135605,
+     0.0,
+     -0.4729844927787781,
+     0.08474739640951157,
+     0.038702256977558136
+    ],
+    [
+     -0.08956193923950195,
+     0.0,
+     -0.4465203285217285,
+     0.014073532074689865,
+     0.055781345814466476
+    ],
+    [
+     -0.12191959470510483,
+     0.0,
+     -0.37187325954437256,
+     0.01807418465614319,
+     0.06433584541082382
+    ]
+   ],
+   [
+    [
+     0.026626931503415108,
+     0.0,
+     -0.4217956066131592,
+     0.1914471983909607,
+     0.0598323754966259
+    ],
+    [
+     -0.014203053899109364,
+     0.0,
+     -0.47109195590019226,
+     0.08603648841381073,
+     0.03851447254419327
+    ],
+    [
+     -0.08809540420770645,
+     0.0,
+     -0.44469165802001953,
+     0.01533506065607071,
+     0.05560164898633957
+    ],
+    [
+     -0.12044881284236908,
+     0.0,
+     -0.3699616491794586,
+     0.019329851493239403,
+     0.06415252387523651
+    ]
+   ]
+  ],
+  "training": {
+   "loss": 4.449295520782471,
+   "gradients": {
+    "speecht5.encoder.prenet.feature_encoder.conv_layers.0.conv.weight": true,
+    "speecht5.encoder.prenet.feature_encoder.conv_layers.1.conv.weight": true
+   },
+   "updated": true
+  }
+ }
+}

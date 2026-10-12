@@ -29,7 +29,7 @@ jobs:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb"
     env:
-      TMIC_SHA: 6f50a6e0dc1d1b965d2edb00c038235133562ca2
+      TMIC_SHA: 648524e
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
       # Not the shared /mnt/cache: PR jobs mount it read-only, and fixtures and contracts are downloaded.
       HF_HOME: /tmp/hf_home
@@ -50,9 +50,16 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           start=$SECONDS
+          uv pip install torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cpu
           uv pip install -e .
           uv pip install "transformers-mic @ git+https://github.com/huggingface/transformers-mic@$TMIC_SHA"
-          uv pip install timm librosa soundfile scipy jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
+          uv pip install timm jsonschema "git+https://github.com/huggingface/doc-builder@$DOC_BUILDER_SHA"
+          python - <<'PY_PINS'
+          import json, subprocess
+          pins = json.load(open("tests/contracts/prototype-fleet.lock"))["environment"]
+          packages = [f"{name}=={version}" for name, version in pins.items() if name not in {"python", "torch", "torchvision", "torchaudio"}]
+          subprocess.run(["uv", "pip", "install", *packages], check=True)
+          PY_PINS
           echo "Installed in $((SECONDS - start)) s on $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) cores"
 
       - uses: actions/cache@v4
@@ -94,6 +101,19 @@ jobs:
           for line in sys.stdin:
               r = json.loads(line)
               print(r["status"].ljust(6), r["target"], r.get("variant", ""), r.get("platform", ""), flush=True)' || status=$?
+          if [[ "${{ github.ref_name }}" == contracts-proof || "${{ github.head_ref }}" == contracts-proof ]]; then
+            python - <<'PY_COVERAGE'
+          import json
+          from pathlib import Path
+          lock = json.loads(Path("tests/contracts/prototype-fleet.lock").read_text())
+          rows = [json.loads(line) for line in Path("/tmp/results.jsonl").read_text().splitlines()]
+          seen = {(row.get("contract_name"), row.get("variant")) for row in rows}
+          required = {(name, variant) for name in lock["contracts"] for variant in ("default", "eager", "bfloat16")}
+          missing = required - seen
+          assert not missing, f"Prototype cases did not execute: {sorted(missing)}"
+          print(f"Verified execution of {len(required)} prototype cases")
+          PY_COVERAGE
+          fi
           exit "${status:-0}"
 
       - name: Summary

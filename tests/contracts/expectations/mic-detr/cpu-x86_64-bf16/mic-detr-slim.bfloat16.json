@@ -1,0 +1,93 @@
+{
+ "recorded_with": {
+  "contract": "hf-internal-testing/mic-detr-integration",
+  "contract_name": "detr",
+  "contract_revision": "f3a79837574f4bc72ca3201bb01b85696fe37a0c",
+  "framework": "transformers",
+  "variant": "bfloat16",
+  "target": "mic-detr-slim",
+  "kind": "fixture",
+  "revision": "3a3a1420126e33823f073575fdb3bbac07037b52",
+  "environment": {
+   "python": "3.11.17",
+   "transformers": "5.19.0.dev0",
+   "torch": "2.11.0+cpu",
+   "torchvision": "0.26.0+cpu",
+   "torchaudio": "2.11.0+cpu",
+   "tokenizers": "0.23.1",
+   "numpy": "1.26.4",
+   "pillow": "12.2.0",
+   "accelerate": "1.13.0",
+   "safetensors": "0.8.0",
+   "huggingface-hub": "1.32.0",
+   "sentencepiece": "0.2.1",
+   "protobuf": "6.33.6",
+   "librosa": "0.11.0",
+   "soundfile": "0.13.1",
+   "scipy": "1.15.3"
+  },
+  "seconds": 7.29,
+  "environment_differs": {
+   "python": "3.11.17 (pinned 3.10)"
+  },
+  "platform": "cpu-x86_64-bf16"
+ },
+ "outputs": {
+  "runtime": {
+   "device": "cpu",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa"
+  },
+  "top_class_logits": [
+   [
+    -0.1376953125,
+    0.033935546875,
+    -0.25390625,
+    0.154296875,
+    0.042724609375
+   ],
+   [
+    -0.1376953125,
+    0.033935546875,
+    -0.25390625,
+    0.154296875,
+    0.042724609375
+   ],
+   [
+    -0.1376953125,
+    0.03369140625,
+    -0.25390625,
+    0.154296875,
+    0.043212890625
+   ]
+  ],
+  "pred_boxes": [
+   [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ],
+   [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ],
+   [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ]
+  ],
+  "training": {
+   "loss": 9.059709548950195,
+   "gradients": {
+    "model.backbone.model.conv1.weight": true,
+    "model.backbone.model.layer1.0.downsample.0.weight": true
+   },
+   "updated": true
+  }
+ }
+}

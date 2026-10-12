@@ -128,10 +128,6 @@
     "scipy": "1.15.3"
   },
   "known_failures": {
-    "Whisper/mic-whisper-tiny-slim": {
-      "issue": "https://github.com/huggingface/transformers/issues/49456: generate() raises on suppress_tokens from config.json since #48282",
-      "match": "You have modified the pretrained model configuration"
-    },
     "Wav2Vec2/mic-wav2vec2-base-960h-slim": {
       "issue": "https://github.com/huggingface/transformers/issues/49385: masked_spec_embed uninitialized, so the SpecAugment loss and gradients are undefined (fix #49386)",
       "skip_outputs": [
