@@ -38,7 +38,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -369,22 +369,22 @@ class WeatherNext2AttentionMask(nn.Module):
 
     def forward(self, attention_mask, batch_size, dtype):
         num_blocks, _, block_size, kv_length = attention_mask.shape
-        queries = attention_mask.new_empty((batch_size * num_blocks, block_size, 0), dtype=dtype)
-        if self.config._attn_implementation == "flex_attention":
-            keys = queries.new_empty((batch_size * num_blocks, kv_length, 0))
-            return create_bidirectional_mask(
-                self.config,
-                queries,
-                None,
-                encoder_hidden_states=keys,
-                and_mask_function=banded_mask_function(attention_mask),
+        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS.get(self.config._attn_implementation)
+        return (
+            mask_interface(
+                batch_size=batch_size * num_blocks,
+                q_length=block_size,
+                kv_length=kv_length,
+                mask_function=banded_mask_function(attention_mask),
+                allow_is_causal_skip=False,
+                allow_is_bidirectional_skip=False,
+                dtype=dtype,
+                device=attention_mask.device,
+                use_vmap=False,
             )
-
-        # A prepared 4D mask avoids expanding geometry indices over every query/key pair.
-        mask = attention_mask if batch_size == 1 else attention_mask.repeat(batch_size, 1, 1, 1)
-        if self.config._attn_implementation == "eager":
-            mask = torch.where(mask, torch.zeros((), dtype=dtype, device=mask.device), torch.finfo(dtype).min)
-        return create_bidirectional_mask(self.config, queries, mask)
+            if mask_interface is not None
+            else None
+        )
 
 
 class WeatherNext2MeshTransformer(nn.Module):
