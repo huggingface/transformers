@@ -812,6 +812,45 @@ class PipelineUtilsTest(unittest.TestCase):
                     self.assertEqual(k1, k2)
                     self.assertEqual(v1.dtype, v2.dtype)
 
+    @require_torch
+    def test_pipeline_code_revision(self):
+        from transformers import BertConfig, BertModel
+        from transformers.pipelines import AutoConfig, load_model
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = BertConfig(
+                vocab_size=100, hidden_size=32, num_hidden_layers=1, num_attention_heads=1, intermediate_size=32
+            )
+            config.save_pretrained(tmp_dir)
+            model = BertModel(config)
+            model.save_pretrained(tmp_dir)
+
+            # 1. Via model_kwargs
+            _ = pipeline("feature-extraction", model=tmp_dir, model_kwargs={"code_revision": "test-rev"})
+
+            # 2. Top-level kwarg
+            _ = pipeline("feature-extraction", model=tmp_dir, code_revision="test-rev")
+
+            # 3. Conflicting top-level and model_kwargs raises ValueError
+            with self.assertRaises(ValueError):
+                _ = pipeline(
+                    "feature-extraction",
+                    model=tmp_dir,
+                    code_revision="test-rev-1",
+                    model_kwargs={"code_revision": "test-rev-2"},
+                )
+
+            # 4. Verified propagation to AutoConfig and load_model
+            with (
+                mock.patch(
+                    "transformers.pipelines.AutoConfig.from_pretrained", wraps=AutoConfig.from_pretrained
+                ) as mock_config,
+                mock.patch("transformers.pipelines.load_model", wraps=load_model) as mock_load,
+            ):
+                _ = pipeline("feature-extraction", model=tmp_dir, model_kwargs={"code_revision": "test-pin"})
+                self.assertEqual(mock_config.call_args[1].get("code_revision"), "test-pin")
+                self.assertEqual(mock_load.call_args[1].get("code_revision"), "test-pin")
+
     def check_default_pipeline(self, task, set_seed_fn, check_models_equal_fn):
         from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
