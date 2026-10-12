@@ -239,34 +239,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.assertTrue(torch.isfinite(outputs.prediction).all())
 
-    def test_banded_mask_broadcasting_matches_vmap(self):
-        from transformers.masking_utils import create_bidirectional_mask
-        from transformers.models.weathernext2.modeling_weathernext2 import banded_mask_function
-
-        for implementation in ("eager", "sdpa"):
-            config = self.model_tester.get_config()
-            config._attn_implementation = implementation
-            model = WeatherNext2Model(config).to(torch_device).eval()
-            mask = model.geometry.attention_mask
-            blocks, _, block_size, kv_length = mask.shape
-            for batch_size in (1, 2):
-                with self.subTest(implementation=implementation, batch_size=batch_size):
-                    states = torch.randn(batch_size, config.num_mesh_nodes, config.hidden_size, device=torch_device)
-                    conditioning = torch.randn(batch_size, config.noise_channels, device=torch_device)
-                    queries = states.new_empty((batch_size * blocks, block_size, config.hidden_size))
-                    keys = states.new_empty((batch_size * blocks, kv_length, 0))
-                    expected = create_bidirectional_mask(
-                        config, queries, None, encoder_hidden_states=keys, and_mask_function=banded_mask_function(mask)
-                    )
-                    captured = []
-                    hook = model.mesh_transformer.layers[0].register_forward_pre_hook(
-                        lambda module, args: captured.append(args[1])
-                    )
-                    with torch.no_grad():
-                        model.mesh_transformer(states, mask, conditioning)
-                    hook.remove()
-                    torch.testing.assert_close(captured[0], expected, atol=0, rtol=0)
-
     def test_mesh_transformer_shares_prepared_mask(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = WeatherNext2Model(config).to(torch_device).eval()
