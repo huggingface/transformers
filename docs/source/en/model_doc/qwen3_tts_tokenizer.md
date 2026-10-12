@@ -45,10 +45,10 @@ reconstructed with [`~Qwen3TTSTokenizerModel.decode`]:
 
 ```python
 import torch
+from datasets import Audio, load_dataset
 from scipy.io import wavfile
 
 from transformers import AutoFeatureExtractor, AutoModel
-from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -58,32 +58,31 @@ model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 # load audio at the sample rate the tokenizer expects
-audio = load_audio_librosa(
-    "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-    sampling_rate=model.config.input_sampling_rate,
-)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio = dataset[0]["audio"]["array"]
 inputs = feature_extractor(
     audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
 ).to(model.device, model.dtype)
 print("Input audio shape:", inputs["input_values"].shape)
-# Input audio shape: torch.Size([1, 1, 222480])
+# Input audio shape: torch.Size([1, 1, 140520])
 
 with torch.no_grad():
     # encode: one frame per 1920 input samples, 16 codes per frame
     audio_codes = model.encode(**inputs).audio_codes
     print("Audio codes shape:", audio_codes.shape)
-    # Audio codes shape: torch.Size([1, 116, 16])
+    # Audio codes shape: torch.Size([1, 74, 16])
 
     audio_values = model.decode(audio_codes).audio_values
     print("Reconstructed audio shape:", audio_values.shape)
-    # Reconstructed audio shape: torch.Size([1, 222720])
+    # Reconstructed audio shape: torch.Size([1, 142080])
 
     # Equivalently, you can do encoding and decoding in one step
     model_output = model(**inputs)
     audio_codes = model_output.audio_codes
     audio_values = model_output.audio_values
     print("Forward audio shape:", audio_values.shape)
-    # Forward audio shape: torch.Size([1, 222480])
+    # Forward audio shape: torch.Size([1, 140520])
 
 # save audio
 output_fp = "qwen3_tts_tokenizer_reconstructed.wav"
@@ -92,7 +91,7 @@ print(f"Reconstructed audio saved to: {output_fp}")
 ```
 
 The output of [`~Qwen3TTSTokenizerModel.decode`] is padded up to a whole number of frames, so it can be slightly longer
-than the input (here 116 × 1920 = 222720 samples for 222480 input samples). The forward pass truncates it back to the
+than the input (here 74 × 1920 = 142080 samples for 140520 input samples). The forward pass truncates it back to the
 input length.
 
 ## Batched inputs
