@@ -71,7 +71,7 @@ jobs:
             git diff --name-only origin/contracts-proof...HEAD > /tmp/changed-files.txt
             selection=(--changed-files /tmp/changed-files.txt)
           else
-            selection=()  # pushes to the proof branch run every contract
+            selection=(--run-all)  # pushes to the proof branch run every contract
           fi
           if [[ -f /tmp/changed-files.txt ]]; then
             echo "Changed files: $(wc -l < /tmp/changed-files.txt)"; head -20 /tmp/changed-files.txt
