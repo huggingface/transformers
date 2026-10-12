@@ -17,10 +17,18 @@ import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
+from transformers import AutoTokenizer, is_torch_available
+from transformers.testing_utils import (
+    Expectations,
+    require_torch,
+    require_torch_accelerator_memory,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -69,3 +77,76 @@ class Kolibri1ModelTest(CausalLMModelTest, unittest.TestCase):
             logits = model(inputs_embeds=inputs_embeds).logits
 
         self.assertFalse(logits.isnan().any())
+
+
+@slow
+@require_torch_accelerator_memory(memory=180)
+class Kolibri1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    TEST_MODEL_ID = "Aleph-Alpha/Kolibri-1-BF16"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Dropped again by the mixin's `tearDownClass`.
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = Kolibri1ForCausalLM.from_pretrained(
+                cls.TEST_MODEL_ID, device_map="auto", experts_implementation="eager"
+            )
+        return cls.model
+
+    def generate_reply(self, content, max_new_tokens):
+        tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
+        model = self.get_model()
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": content}],
+            add_generation_prompt=True,
+            enable_thinking=False,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(model.device)
+        with torch.no_grad():
+            generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+        return tokenizer.decode(generated_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+    def test_model_logits(self):
+        input_ids = [452, 22090, 493, 1678, 2459]
+        model = self.get_model()
+        input_ids = torch.tensor([input_ids]).to(model.device)
+        with torch.no_grad():
+            out = model(input_ids).logits.float().cpu()
+
+        # fmt: off
+        EXPECTED_MEAN = Expectations(
+            {
+                ("cuda", None): torch.tensor([[-3.6648, -4.0749, -3.8838, -4.3631, -3.9150]]),
+            }
+        ).get_expectation()
+        EXPECTED_SLICE = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [-2.0000, -7.0938, -8.3750, -9.5000, -8.6875, -8.6875, -8.9375, -7.9062, -4.7188, 1.8594]
+                ),
+            }
+        ).get_expectation()
+        # fmt: on
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
+
+    def test_model_generation(self):
+        EXPECTED_TEXT = (
+            "Ein Mixture-of-Experts-Modell ist ein neuronales Netz, das aus mehreren spezialisierten Experten "
+            "besteht, von denen bei jeder Vorhersage nur ein kleiner Teil aktiviert wird, um Effizienz und "
+            "Skalierbarkeit zu erhöhen."
+        )
+        text = self.generate_reply("Erkläre in einem Satz, was ein Mixture-of-Experts-Modell ist.", 40)
+        self.assertEqual(EXPECTED_TEXT, text)
+
+    def test_model_recall_beyond_sliding_window(self):
+        filler = "Der Himmel ist blau. Das Gras ist grün. Die Sonne scheint. " * 150
+        prompt = f"Merke dir: Der Geheimcode lautet 4721.\n\n{filler}\nWie lautet der Geheimcode? Antworte nur mit der Zahl."
+        text = self.generate_reply(prompt, 10)
+        self.assertEqual("4721", text)
