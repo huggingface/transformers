@@ -141,7 +141,7 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         "hyper_connection_mixer.input_mix_weight_down": "rowwise_split_input",
         # It's extremely important to shard this embedding as its size is ~45B == 90 GiB - we shard on dim 1, as the checkpoints
         # for it are sharded on dim0 (this way Concatenate and tp do not work on the same dim and everything is easy)
-        "layers.*.ple.ple_embedding.ngram_embedding": "colwise_gather_output",
+        "layers.*.ple.ple_embedding.ngram_embedding": "embedding_colwise",
     }
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",

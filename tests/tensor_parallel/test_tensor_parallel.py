@@ -251,20 +251,21 @@ class TestTensorParallelLayer(TestCasePlus):
             self.assertEqual(weight_shape, (32, expected_size))
             self.assertEqual(bias_shape, (10,))
 
-    def test_embedding_uneven_local_shapes(self):
-        rowwise_embedding = torch.nn.Embedding(10, 10)
-        rowwise_placement = self._get_parameter_placements(rowwise_embedding, RowwiseParallel())["weight"]
+    def test_linear_styles_reject_embedding(self):
+        for style in ("colwise", "rowwise"):
+            with self.subTest(style=style):
+                with self.assertRaises(ValueError) as context:
+                    ALL_PARALLEL_STYLES[style].install_forward(torch.nn.Embedding(8, 16), mesh=None)
+                self.assertIn("linear layers", str(context.exception))
 
-        colwise_embedding = torch.nn.Embedding(10, 10)
-        colwise_placement = self._get_parameter_placements(colwise_embedding, ColwiseParallel())["weight"]
+    def test_embedding_uneven_local_shapes(self):
+        embedding = torch.nn.Embedding(10, 10)
+        placement = self._get_parameter_placements(embedding, ALL_PARALLEL_STYLES["embedding_rowwise"])["weight"]
 
         expected_local_sizes = (4, 4, 2)
         for rank, expected_size in enumerate(expected_local_sizes):
-            rowwise_shape = self._get_local_shape((10, 10), rowwise_placement, world_size=3, rank=rank)
-            colwise_shape = self._get_local_shape((10, 10), colwise_placement, world_size=3, rank=rank)
-
-            self.assertEqual(rowwise_shape, (expected_size, 10))
-            self.assertEqual(colwise_shape, (10, expected_size))
+            local_shape = self._get_local_shape((10, 10), placement, world_size=3, rank=rank)
+            self.assertEqual(local_shape, (expected_size, 10))
 
     def test_shard_tensor_shape_consistency(self):
         world_size = 4
@@ -291,7 +292,7 @@ class TestTensorParallelLayer(TestCasePlus):
             },
             "embedding_colwise": {
                 "module": torch.nn.Embedding(32, 16),
-                "style": ColwiseParallel(),
+                "style": ALL_PARALLEL_STYLES["embedding_colwise"],
                 "expected_shapes": {"weight": (32, 4)},
             },
         }
