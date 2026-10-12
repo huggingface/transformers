@@ -319,6 +319,14 @@ class DistributedMixin:
             _distributed_barrier()
 
     def _load_and_finalize_distributed_pretrained_model(self, distributed_checkpoint_dir, device_map, device_mesh):
+        """
+        Loads a distributed checkpoint into an uninitialized model:
+
+            1. DCP expects the parameters to be materialized before loading, so we move them to device.
+            2. Restore parameter sharing broken by materialization by tying the weights again.
+            3. Load the distributed checkpoint into the model.
+            4. Initialize any non-persistent buffers that DCP cannot provide.
+        """
         # First, materialize the parameters.
         self._move_missing_keys_from_meta_to_device(set(self.state_dict()), device_map, device_mesh, None)
         self.tie_weights(recompute_mapping=False)
