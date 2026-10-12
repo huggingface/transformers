@@ -65,6 +65,8 @@ def gpt_oss() -> HeterogeneousModelingSpec:
                 ),
             },
         },
+        attention_mask_consumers=["self_attn"],
+        cache_writers={"self_attn": ["key_value"]},
     )
 
 
@@ -98,6 +100,8 @@ def llama() -> HeterogeneousModelingSpec:
                 "mlp": get_skip_replacement_factory(LlamaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)),
             },
         },
+        attention_mask_consumers=["self_attn"],
+        cache_writers={"self_attn": ["key_value"]},
     )
 
 
@@ -137,6 +141,8 @@ def llama4() -> HeterogeneousModelingSpec:
                 ),
             },
         },
+        attention_mask_consumers=["self_attn"],
+        cache_writers={"self_attn": ["key_value"]},
     )
 
 
@@ -174,5 +180,10 @@ def nemotron_h() -> HeterogeneousModelingSpec:
                     NemotronHMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
                 ),
             },
+        },
+        attention_mask_consumers=[("mixer", NemotronHAttention)],
+        cache_writers={
+            ("mixer", NemotronHAttention): ["key_value"],
+            ("mixer", NemotronHMamba2Mixer): ["linear_attention"],
         },
     )

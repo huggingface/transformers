@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from transformers.utils import logging
@@ -51,9 +51,10 @@ class _HeterogeneitySpec:
     per_layer_attributes: set[str]
     explicit_per_layer_attributes: set[str]
 
+    # Set by generic heterogeneous modeling when it builds the model
     model_layer_configs: dict[int, PreTrainedConfig] | None = None
-    cache_receivers_skipped_layers: frozenset[int] = frozenset()
-    attention_mask_receivers_skipped_layers: frozenset[int] = frozenset()
+    unconsumed_attention_mask_layers: set[int] = field(default_factory=set)
+    per_layer_unwritten_caches: dict[int, set[str]] = field(default_factory=dict)
 
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:
@@ -360,14 +361,6 @@ class HeterogeneousConfigMixin:
     def generic_heterogeneous_modeling_applied(self) -> bool:
         """Whether generic heterogeneous modeling has been applied successfully during model initialization."""
         return self.is_heterogeneous and self._heterogeneity_spec.model_layer_configs is not None
-
-    @property
-    def cache_receivers_skipped_layers(self) -> frozenset[int] | None:
-        """Generic heterogeneous modeling fills this in when building the model, with the indices of the layers in
-        which skips replaced every module that receives the cache."""
-        if not self.generic_heterogeneous_modeling_applied:
-            return None
-        return self._heterogeneity_spec.cache_receivers_skipped_layers
 
     @property
     def per_layer_config(self) -> Sequence[PreTrainedConfig]:

@@ -4,6 +4,7 @@ from collections.abc import Iterable
 import torch
 
 from .configuration_utils import PreTrainedConfig
+from .integrations.heterogeneity.cache_utils import get_generic_heterogeneous_modeling_cache_layer_types
 from .utils import (
     is_hqq_available,
     is_optimum_quanto_available,
@@ -1798,13 +1799,9 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
         layer_types = layer_types[:-num_kv_shared_layers]
 
-    # Support generic heterogeneous modeling: when skips remove every module of a layer that receives the cache,
-    # the layer gets a `NoCacheLayer`
+    # Support generic heterogeneous modeling, in which skips can leave some of a layer's caches without writers
     if config.generic_heterogeneous_modeling_applied:
-        layer_types = [
-            "no_cache" if layer_idx in config.cache_receivers_skipped_layers else layer_type
-            for layer_idx, layer_type in enumerate(layer_types)
-        ]
+        layer_types = get_generic_heterogeneous_modeling_cache_layer_types(config, layer_types)
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []

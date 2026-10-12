@@ -198,7 +198,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         self.assertIsNone(mask[0])
 
     def test_encoder_layer_with_skipped_attention_gets_no_mask(self):
-        # ModernBERT's attention receives the attention mask but no cache
+        # ModernBERT's attention consumes the attention mask, and nothing writes to a cache
         spec = HeterogeneousModelingSpec(
             layer_cls=ModernBertEncoderLayer,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
@@ -209,6 +209,8 @@ class TestHeterogeneousMasking(unittest.TestCase):
                     )
                 }
             },
+            attention_mask_consumers=["attn"],
+            cache_writers={},
         )
         config = ModernBertConfig(
             hidden_size=64,

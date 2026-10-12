@@ -18,7 +18,7 @@ from .heterogeneous_modeling_spec import (
     HeterogeneousModelingSpec,
     SkipDescriptor,
     get_heterogeneous_modeling_spec,
-    nest_skip_descriptor_paths,
+    nest_spec_member_paths,
 )
 from .layer_idx_resolvers import LayerIdxFromArgument, LayerIdxFromModelInitStack, LayerIdxResolver
 from .modeling_utils import (
@@ -40,6 +40,6 @@ __all__ = [
     "apply_generic_heterogeneous_modeling_if_applicable",
     "get_heterogeneous_modeling_spec",
     "get_skip_replacement_factory",
-    "nest_skip_descriptor_paths",
+    "nest_spec_member_paths",
     "support_generic_heterogeneous_modeling",
 ]

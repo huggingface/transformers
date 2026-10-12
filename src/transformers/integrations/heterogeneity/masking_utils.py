@@ -20,6 +20,7 @@ from functools import partial, wraps
 from inspect import signature, unwrap
 from typing import TYPE_CHECKING, Any
 
+from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import KEY_VALUE_CACHE
 from transformers.utils import is_torch_available, is_torch_tensor
 
 
@@ -126,19 +127,21 @@ def _create_attention_masks_by_layer_idx(
     layer_configs = config._heterogeneity_spec.model_layer_configs
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
-        if layer_idx in config._heterogeneity_spec.attention_mask_receivers_skipped_layers:
-            # The skips replaced every module in this layer detected as receiving the attention mask, so nothing left
-            # in the layer needs it
+        if layer_idx in config._heterogeneity_spec.unconsumed_attention_mask_layers:
+            # The skips replaced every attention mask consumer of this layer, so nothing left in the layer needs it
             attention_masks[layer_idx] = None
             continue
 
-        if past_key_values is not None and layer_idx in config.cache_receivers_skipped_layers:
-            # A module left in this layer receives the attention mask, but with a cache, the mask factories size each
-            # layer's mask from its cache entry, and this layer's entry is a `NoCacheLayer`, which holds nothing
+        if past_key_values is not None and KEY_VALUE_CACHE in (
+            config._heterogeneity_spec.per_layer_unwritten_caches.get(layer_idx, ())
+        ):
+            # An attention mask consumer is left in this layer, but with a cache, the mask factories size each layer's
+            # mask from its key/value cache, and this layer has none
             raise ValueError(
-                f"Layer {layer_idx} still has modules that receive the attention mask, but its skips replaced every "
-                "module that receives the cache, so there is no cache entry to build its attention mask from. Skip "
-                "the modules that receive the attention mask too, or run without a cache."
+                f"Layer {layer_idx} still has an attention mask consumer, but its skips replaced every writer of its "
+                "key/value cache, so there is no cache entry to build its attention mask from. If the heterogeneous "
+                "modeling spec lists the wrong members in `attention_mask_consumers` or `cache_writers`, fix it. "
+                "Otherwise, also skip the attention mask consumers, or run without a cache."
             )
 
         layer_config = layer_configs[layer_idx]

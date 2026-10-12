@@ -41,6 +41,8 @@ if is_torch_available():
     )
     from transformers import (
         DynamicCache,
+        FalconH1Config,
+        FalconH1ForCausalLM,
         GptOssForCausalLM,
         Llama4ForCausalLM,
         LlamaConfig,
@@ -56,9 +58,16 @@ if is_torch_available():
     from transformers.integrations.heterogeneity import (
         HeterogeneousModelingSpec,
         LayerIdxFromArgument,
+        ReturnEntry,
+        get_skip_replacement_factory,
     )
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.modeling_layers import MtpModel
+    from transformers.models.falcon_h1.modeling_falcon_h1 import (
+        FalconH1Attention,
+        FalconH1DecoderLayer,
+        FalconH1PreTrainedModel,
+    )
     from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 
@@ -72,7 +81,7 @@ if is_torch_available():
         def forward(self, hidden_states):
             return hidden_states
 
-    class _ClassSpecificNoOpAttention(_ToyNoOpAttention):
+    class _SelectedNoOpAttention(_ToyNoOpAttention):
         pass
 
     class _ToyDecoderLayer(torch.nn.Module):
@@ -87,6 +96,8 @@ if is_torch_available():
             layer_cls=layer_cls,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
             skip_descriptors={"attention": {"self_attn": attention_replacement_cls}},
+            attention_mask_consumers=[],
+            cache_writers={},
         )
 
     def _toy_config(intermediate_size, skip_attention=False):
@@ -260,19 +271,31 @@ class TestHeterogeneousModeling(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "no `_MaskSelectingToyLayer` layer was constructed"):
                 _SingleLayerToyModel(config)
 
-    @parameterized.expand([("class_specific_match", True), ("generic_match", False)])
-    def test_skip_replacement_selection(self, _, class_matches):
+    @parameterized.expand(
+        [
+            ("class_key_over_plain_key", ["plain", "member_class"], "member_class"),
+            ("plain_key_when_class_key_does_not_match", ["plain", "unrelated_class"], "plain"),
+            ("subclass_key_first", ["member_class", "base_class"], "member_class"),
+            ("base_class_key_first", ["base_class", "member_class"], "member_class"),
+        ]
+    )
+    def test_skip_replacement_selection(self, _, key_names, expected_key_name):
+        # The cases name the keys because the toy classes exist only when torch is available
+        member_keys = {
+            "plain": "self_attn",
+            "member_class": ("self_attn", _ToyAttention),
+            "base_class": ("self_attn", torch.nn.Module),
+            "unrelated_class": ("self_attn", torch.nn.Linear),
+        }
         spec = _toy_modeling_spec(_ToyDecoderLayer, _ToyNoOpAttention)
-        member_class = _ToyAttention if class_matches else torch.nn.Linear
         spec.skip_descriptors["attention"] = {
-            "self_attn": _ToyNoOpAttention,
-            ("self_attn", member_class): _ClassSpecificNoOpAttention,
+            member_keys[name]: _SelectedNoOpAttention if name == expected_key_name else _ToyNoOpAttention
+            for name in key_names
         }
         with patch.object(_SingleLayerToyModel, "_heterogeneous_modeling_spec", spec):
             model = _SingleLayerToyModel(_toy_config(intermediate_size=32, skip_attention=True))
 
-        expected_class = _ClassSpecificNoOpAttention if class_matches else _ToyNoOpAttention
-        self.assertIs(type(model.layer.self_attn), expected_class)
+        self.assertIs(type(model.layer.self_attn), _SelectedNoOpAttention)
 
     def test_unmatched_skip_member_raises_before_replacing_any_members(self):
         config = tiny_llama_config(per_layer_config={3: {"skip": ["attention"]}})
@@ -501,6 +524,47 @@ class TestHeterogeneousCache(unittest.TestCase):
                         input_ids[:, -2:], attention_mask=attention_mask, past_key_values=cache, use_cache=True
                     ).logits
                     torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
+
+    def test_cached_decoding_with_attention_skipped_in_a_hybrid_layer(self):
+        # Falcon-H1 runs attention and Mamba in parallel in every layer, and each layer's cache entry holds the
+        # key/value cache of the attention and the linear-attention cache of the Mamba
+        spec = HeterogeneousModelingSpec(
+            layer_cls=FalconH1DecoderLayer,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+            skip_descriptors={
+                "attention": {
+                    "self_attn": get_skip_replacement_factory(
+                        FalconH1Attention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                    )
+                }
+            },
+            attention_mask_consumers=["self_attn"],
+            cache_writers={"self_attn": ["key_value"], "mamba": ["linear_attention"]},
+        )
+        config = FalconH1Config(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            mamba_n_heads=16,
+            mamba_d_state=16,
+            mamba_chunk_size=16,
+            # Caches read positions from layer 0 by default, and here only the Mamba writes to its cache entry
+            per_layer_config={0: {"skip": ["attention"]}},
+        )
+        with patch.object(FalconH1PreTrainedModel, "_heterogeneous_modeling_spec", spec, create=True):
+            model = build_model(config, FalconH1ForCausalLM)
+        input_ids = torch.tensor([[5, 6, 7, 8, 9, 10]])
+        cache = DynamicCache(config=config)
+
+        with torch.no_grad():
+            expected_logits = model(input_ids, use_cache=False).logits[:, -2:]
+            model(input_ids[:, :-2], past_key_values=cache, use_cache=True)
+            actual_logits = model(input_ids[:, -2:], past_key_values=cache, use_cache=True).logits
+
+        torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
     def test_static_cache_generation_with_skipped_attention(self):
         config = tiny_gpt_oss_config(

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import os
 import re
 import sys
@@ -31,7 +32,7 @@ from .integrations.heterogeneity import (
     HeterogeneousModelingSpec,
     LayerIdxFromArgument,
     get_heterogeneous_modeling_spec,
-    nest_skip_descriptor_paths,
+    nest_spec_member_paths,
 )
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
@@ -368,12 +369,11 @@ def _get_mtp_heterogeneous_modeling_spec(main_model: PreTrainedModel) -> Heterog
     if main_heterogeneous_modeling_spec is None:
         return None
 
-    return HeterogeneousModelingSpec(
+    # The MTP block is a layer of the main architecture, so the main spec applies to it, under its path
+    return dataclasses.replace(
+        nest_spec_member_paths(main_heterogeneous_modeling_spec, parent_path="mtp_block"),
         layer_cls=MtpLayer,
         layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-        skip_descriptors=nest_skip_descriptor_paths(
-            main_heterogeneous_modeling_spec.skip_descriptors, parent_path="mtp_block"
-        ),
     )
 
 

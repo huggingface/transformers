@@ -75,7 +75,8 @@ spec = HeterogeneousModelingSpec(
   when it is passed to `layer_cls.__init__`, as it is in most models.
 
 A spec without skip descriptors is enough as long as no layer has a skip. Supporting `skip` additionally
-requires a skip descriptor for each skip type, defining its effect on the layer.
+requires a skip descriptor for each skip type, defining its effect on the layer, and declarations of the layer members
+that consume the attention mask or write to the cache (see [Attention masks and caches](#attention-masks-and-caches)).
 
 ## Skip descriptors
 
@@ -119,6 +120,8 @@ spec = HeterogeneousModelingSpec(
             ),
         },
     },
+    attention_mask_consumers=["self_attn"],
+    cache_writers={"self_attn": ["key_value"]},
 )
 ```
 
@@ -142,7 +145,8 @@ The `arg_name` must be an argument of the original class's `forward`.
 
 A replacement key is either a member name, or a `(member_name, member_class)`
 tuple, which applies only when the member is an instance of that class and takes precedence over a plain member-name
-key. This supports layers whose member class varies, like NemotronH's `mixer` — its built-in spec declares the skip
+key. When several classes match, the most specific one takes precedence. This supports layers whose member class
+varies, like NemotronH's `mixer` — its built-in spec declares the skip
 like this (excerpt):
 
 ```py
@@ -166,6 +170,22 @@ skip_descriptors = {
     },
 }
 ```
+
+### Attention masks and caches
+
+When a spec has skip descriptors, it must also declare:
+
+- `attention_mask_consumers`: every layer member that applies the attention mask, including members that no skip
+  descriptor replaces. For example, `["self_attn"]`, or `[]` if there are none.
+- `cache_writers`: every layer member that writes to the cache, including members that no skip descriptor replaces,
+  mapped to the caches it writes: `"key_value"` if it calls `Cache.update`, and `"linear_attention"` if it calls
+  `update_conv_state` or `update_recurrent_state`. For example,
+  `{"self_attn": ["key_value"], "mamba": ["linear_attention"]}`, or `{}` if there are none.
+
+Write members like [replacement keys](#replacements), with dotted paths for nested members, such as `"block.attn"`.
+
+Skipping all of a layer's attention mask consumers removes its attention mask, and skipping all writers of a cache
+removes that cache from the layer.
 
 ## The resulting model
 
