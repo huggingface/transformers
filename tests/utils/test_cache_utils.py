@@ -75,7 +75,7 @@ if is_torch_available():
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticLayer,
-        StaticRingSlidingWindowLayer,
+        StaticRingLayer,
         StaticSlidingWindowLayer,
     )
     from transformers.generation.utils import GenerationMixin
@@ -313,7 +313,7 @@ class CacheTest(unittest.TestCase):
             pad_token_id=0,
         )
         cache = StaticCache(config=config, max_cache_len=32, use_ring_sliding_layers=True)
-        self.assertEqual([type(layer) for layer in cache.layers], [StaticRingSlidingWindowLayer, StaticLayer])
+        self.assertEqual([type(layer) for layer in cache.layers], [StaticRingLayer, StaticLayer])
 
         model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
         generation_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10, "do_sample": False}

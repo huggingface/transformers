@@ -640,7 +640,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         self.cumulative_length_int = 0
 
 
-class StaticRingSlidingWindowLayer(StaticLayer):
+class StaticRingLayer(StaticLayer):
     """
     A sliding window layer like [`StaticSlidingWindowLayer`], for static-shape compilation and export: an update is the
     same tensor ops at every step, so no Python value decides how the cache is written, and one graph serves every
@@ -722,7 +722,7 @@ class StaticRingSlidingWindowLayer(StaticLayer):
         recompiling at each step, and negative while the window is not full yet."""
         # Mirrors `update`: a single token is attended with the window it completes, several after the window as it was
         if query_length == 1:
-            return self.max_cache_len, self.cumulative_length + 1 - self.max_cache_len
+            return self.max_cache_len, self.cumulative_length - (self.max_cache_len - 1)
         return self.max_cache_len + query_length, self.cumulative_length - self.max_cache_len
 
 
@@ -2005,7 +2005,7 @@ class StaticCache(Cache):
             If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
             usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
         use_ring_sliding_layers (`bool`, *optional*, defaults to `False`):
-            Whether sliding window and chunked attention layers are [`StaticRingSlidingWindowLayer`] instead of
+            Whether sliding window and chunked attention layers are [`StaticRingLayer`] instead of
             [`StaticSlidingWindowLayer`]: one graph then serves every decoding step, for static-shape compilation
             (`torch.compile(dynamic=False)`, Neuron, TPU) and export.
 
@@ -2044,8 +2044,8 @@ class StaticCache(Cache):
         if use_ring_sliding_layers:
             layer_type_mapping = {
                 **STATIC_LAYER_TYPE_MAPPING,
-                "sliding_attention": StaticRingSlidingWindowLayer,
-                "chunked_attention": StaticRingSlidingWindowLayer,
+                "sliding_attention": StaticRingLayer,
+                "chunked_attention": StaticRingLayer,
             }
         # Dispatch the layer types
         layers = [

@@ -188,7 +188,7 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
 
 def non_negative_key_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
     """
-    A cache may give its mask offset as a tensor (`StaticRingSlidingWindowLayer`), negative while its window is not
+    A cache may give its mask offset as a tensor (`StaticRingLayer`), negative while its window is not
     full: its first keys are then empty slots, at negative positions, which this masks.
     """
     return kv_idx >= 0
@@ -518,8 +518,6 @@ def sdpa_mask(
     # Potentially add the padding 2D mask
     if padding_mask is not None:
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
-    if isinstance(kv_offset, torch.Tensor):
-        mask_function = and_masks(mask_function, non_negative_key_mask_function)
 
     batch_arange = torch.arange(batch_size, device=device)
     head_arange = torch.arange(1, device=device)
@@ -542,6 +540,9 @@ def sdpa_mask(
         with TransformGetItemToIndex():
             attention_mask = _vmap_expansion_sdpa(mask_function)(batch_arange, head_arange, q_arange, kv_arange)
 
+    # Applied on the final mask rather than composed into `mask_function`, as it is built at every decoding step
+    if isinstance(kv_offset, torch.Tensor):
+        attention_mask = attention_mask & non_negative_key_mask_function(None, None, None, kv_arange)
     return attention_mask
 
 
