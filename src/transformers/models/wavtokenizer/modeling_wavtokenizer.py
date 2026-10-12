@@ -670,7 +670,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
-            Padding mask used to pad `input_values`.
+            Mask indicating valid audio samples (1) versus padding (0), used to compute `audio_codes_mask`.
         """
         length = input_values.shape[-1]
         encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)
