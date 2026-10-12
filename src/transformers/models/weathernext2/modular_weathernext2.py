@@ -38,7 +38,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -361,12 +361,7 @@ class WeatherNext2Layer(GradientCheckpointingLayer):
 
 @use_kernel_forward_from_hub("WeatherNext2AttentionMask")
 class WeatherNext2AttentionMask(nn.Module):
-    """Prepares the shared mesh mask for the selected attention backend, once per forward.
-
-    It calls the mask interface directly rather than `create_bidirectional_mask`, which switches to vmap
-    whenever a custom mask function is passed; the banded one is index-based, and at 0.25 degrees vmap
-    would build index tensors over all 1.3 billion entries of the mask.
-    """
+    """Prepares the shared mesh mask for the selected attention backend, once per forward."""
 
     def __init__(self, config):
         super().__init__()
@@ -374,22 +369,22 @@ class WeatherNext2AttentionMask(nn.Module):
 
     def forward(self, attention_mask, batch_size, dtype):
         num_blocks, _, block_size, kv_length = attention_mask.shape
-        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS.get(self.config._attn_implementation)
-        return (
-            mask_interface(
-                batch_size=batch_size * num_blocks,
-                q_length=block_size,
-                kv_length=kv_length,
-                mask_function=banded_mask_function(attention_mask),
-                allow_is_causal_skip=False,
-                allow_is_bidirectional_skip=False,
-                dtype=dtype,
-                device=attention_mask.device,
-                use_vmap=False,
+        queries = attention_mask.new_empty((batch_size * num_blocks, block_size, 0), dtype=dtype)
+        if self.config._attn_implementation == "flex_attention":
+            keys = queries.new_empty((batch_size * num_blocks, kv_length, 0))
+            return create_bidirectional_mask(
+                self.config,
+                queries,
+                None,
+                encoder_hidden_states=keys,
+                and_mask_function=banded_mask_function(attention_mask),
             )
-            if mask_interface is not None
-            else None
-        )
+
+        # A prepared 4D mask avoids expanding geometry indices over every query/key pair.
+        mask = attention_mask if batch_size == 1 else attention_mask.repeat(batch_size, 1, 1, 1)
+        if self.config._attn_implementation == "eager":
+            mask = torch.where(mask, torch.zeros((), dtype=dtype, device=mask.device), torch.finfo(dtype).min)
+        return create_bidirectional_mask(self.config, queries, mask)
 
 
 class WeatherNext2MeshTransformer(nn.Module):
@@ -590,6 +585,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         grid_features: torch.Tensor,
         global_features: torch.Tensor,
         noise: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> WeatherNext2ModelOutput:
         r"""
@@ -602,6 +598,8 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             mesh learns anything about the state of the calendar.
         noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
             One standard normal draw per ensemble member.
+        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
+            Exact banded mesh geometry, shared by all ensemble members. Defaults to the checkpoint's mask.
         """
         batch_size = grid_features.shape[0]
         dtype = self.grid_encoder.fc1.weight.dtype
@@ -639,7 +637,8 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             self.grid_to_mesh_receivers,
             conditioning,
         )
-        mesh_states = self.mesh_transformer(mesh_states, self.attention_mask, conditioning, **kwargs)
+        attention_mask = self.attention_mask if attention_mask is None else attention_mask
+        mesh_states = self.mesh_transformer(mesh_states, attention_mask, conditioning, **kwargs)
         grid_states, mesh_states = self.mesh_to_grid(
             grid_states,
             mesh_states,
@@ -716,6 +715,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
         global_features: torch.Tensor,
         noise: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> WeatherNext2ForecastOutput:
         r"""
@@ -728,6 +728,8 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
             ensemble, repeat the inputs `n` times along the batch axis and pass `n` different draws.
         generator (`torch.Generator`, *optional*):
             Generator used to sample `noise`, for reproducible ensembles.
+        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`, *optional*):
+            Exact banded mesh geometry, shared by all ensemble members. Defaults to the checkpoint's mask.
 
         Example:
 
@@ -762,7 +764,11 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
             ).to(grid_features.device)
 
         outputs: WeatherNext2ModelOutput = self.model(
-            grid_features=grid_features, global_features=global_features, noise=noise, **kwargs
+            grid_features=grid_features,
+            global_features=global_features,
+            noise=noise,
+            attention_mask=attention_mask,
+            **kwargs,
         )
 
         return WeatherNext2ForecastOutput(

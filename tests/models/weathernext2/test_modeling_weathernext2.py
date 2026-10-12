@@ -236,6 +236,8 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
         with torch.no_grad():
             outputs = model(**inputs)
+            masked_outputs = model(**inputs, attention_mask=model.model.attention_mask)
+        torch.testing.assert_close(outputs.prediction, masked_outputs.prediction)
         self.assertEqual(
             outputs.prediction.shape,
             (self.model_tester.batch_size, config.num_output_channels, config.grid_latitudes, config.grid_longitudes),
@@ -314,10 +316,14 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = WeatherNext2Model(config).to(torch_device).eval()
         processor = model.mesh_transformer
+        inputs["attention_mask"] = model.attention_mask.clone()
         prepared_masks = []
         layer_masks = []
         hooks = [
-            processor.mask_preparer.register_forward_hook(lambda module, args, output: prepared_masks.append(output))
+            processor.mask_preparer.register_forward_hook(lambda module, args, output: prepared_masks.append(output)),
+            processor.mask_preparer.register_forward_pre_hook(
+                lambda module, args: self.assertIs(args[0], inputs["attention_mask"])
+            ),
         ]
         for layer in processor.layers:
             hooks.append(layer.register_forward_pre_hook(lambda module, args: layer_masks.append(args[1])))
@@ -413,6 +419,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             seconds_since_epoch=valid_time,
             num_steps=2,
             noise=noise,
+            attention_mask=model.model.attention_mask,
         )
 
         manual_state = state
