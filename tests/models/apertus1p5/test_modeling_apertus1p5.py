@@ -591,14 +591,11 @@ class Apertus1p5ModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
-    """Mirrors the Apertus test setup; the only 1.5-specific behavior is the optionally pruned output layer."""
-
     model_tester_class = Apertus1p5TextModelTester
     model_split_percents = [0.5, 0.7, 0.8]
     _torch_compile_train_cls = Apertus1p5TextForCausalLM if is_torch_available() else None
 
     def test_pruned_head_logits_and_generation(self):
-        """A compact physical head returns only output-token scores for loss and generation."""
         config = self.model_tester.get_config()
         config.output_vocab_size = 40
         model = Apertus1p5TextForCausalLM(config).to(torch_device).eval()
