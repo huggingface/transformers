@@ -15,6 +15,8 @@
 
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
 
@@ -24,7 +26,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import Kolibri1ForCausalLM, Kolibri1Model
+    from transformers import Kolibri1Config, Kolibri1ForCausalLM, Kolibri1Model
 
 
 class Kolibri1ModelTester(CausalLMModelTester):
@@ -39,6 +41,10 @@ class Kolibri1ModelTester(CausalLMModelTester):
 @require_torch
 class Kolibri1ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Kolibri1ModelTester
+
+    def test_sliding_window_required(self):
+        with self.assertRaises(StrictDataclassClassValidationError):
+            Kolibri1Config(sliding_window=None)
 
     @require_torch_gpu
     def test_router_with_activations_in_another_dtype(self):

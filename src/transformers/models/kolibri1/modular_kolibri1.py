@@ -89,6 +89,11 @@ class Kolibri1Config(Qwen3MoeConfig):
             ]
         PreTrainedConfig.__post_init__(self, **kwargs)
 
+    def validate_architecture(self):
+        PreTrainedConfig.validate_architecture(self)
+        if "sliding_attention" in self.layer_types and (self.sliding_window is None or self.sliding_window <= 0):
+            raise ValueError(f"Sliding-attention layers need a positive `sliding_window`, got {self.sliding_window}.")
+
 
 class Kolibri1Attention(Exaone4Attention):
     def __init__(self, config: Kolibri1Config, layer_idx: int):

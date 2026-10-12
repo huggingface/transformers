@@ -107,5 +107,10 @@ class Kolibri1Config(PreTrainedConfig):
             ]
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        super().validate_architecture()
+        if "sliding_attention" in self.layer_types and (self.sliding_window is None or self.sliding_window <= 0):
+            raise ValueError(f"Sliding-attention layers need a positive `sliding_window`, got {self.sliding_window}.")
+
 
 __all__ = ["Kolibri1Config"]
