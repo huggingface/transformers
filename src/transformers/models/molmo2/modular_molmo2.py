@@ -902,18 +902,14 @@ class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
 
     images_kwargs: Molmo2ImagesKwargs
     videos_kwargs: Molmo2VideosKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
 
 
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
     valid_processor_kwargs = Molmo2ProcessorKwargs
+
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
 
     @property
     def model_input_names(self):
@@ -1054,8 +1050,7 @@ class Molmo2Processor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Molmo2ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:
