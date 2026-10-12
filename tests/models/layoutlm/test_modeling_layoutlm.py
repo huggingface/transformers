@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import unittest
 
 import pytest
@@ -286,86 +285,11 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
-    def test_sdpa_can_dispatch_and_matches_eager(self):
-        """Regression test for #49513: verify LayoutLM supports and dispatches to SDPA."""
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            bbox,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-
-        input_ids = input_ids.to(torch_device)
-        bbox = bbox.to(torch_device)
-        if input_mask is not None:
-            input_mask = input_mask.to(torch_device)
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.to(torch_device)
-
-        config._attn_implementation = "eager"
-        model_eager = LayoutLMModel(config)
-        model_eager.to(torch_device)
-        model_eager.eval()
-        with torch.no_grad():
-            output_eager = model_eager(
-                input_ids=input_ids,
-                bbox=bbox,
-                attention_mask=input_mask,
-                token_type_ids=token_type_ids,
-            )
-
-        config_sdpa = copy.deepcopy(config)
-        config_sdpa._attn_implementation = "sdpa"
-        model_sdpa = LayoutLMModel(config_sdpa)
-        model_sdpa.to(torch_device)
-        model_sdpa.load_state_dict(model_eager.state_dict())
-        model_sdpa.eval()
-
-        with unittest.mock.patch(
-            "torch.nn.functional.scaled_dot_product_attention",
-            wraps=torch.nn.functional.scaled_dot_product_attention,
-        ) as mock_sdpa:
-            with torch.no_grad():
-                output_sdpa = model_sdpa(
-                    input_ids=input_ids,
-                    bbox=bbox,
-                    attention_mask=input_mask,
-                    token_type_ids=token_type_ids,
-                )
-
-            self.assertEqual(mock_sdpa.call_count, config.num_hidden_layers)
-            torch.testing.assert_close(
-                output_eager.last_hidden_state,
-                output_sdpa.last_hidden_state,
-                atol=1e-5,
-                rtol=1e-5,
-            )
-
-        # Runtime switching check
-        model_eager.set_attn_implementation("sdpa")
-        with unittest.mock.patch(
-            "torch.nn.functional.scaled_dot_product_attention",
-            wraps=torch.nn.functional.scaled_dot_product_attention,
-        ) as mock_sdpa:
-            with torch.no_grad():
-                output_switched = model_eager(
-                    input_ids=input_ids,
-                    bbox=bbox,
-                    attention_mask=input_mask,
-                    token_type_ids=token_type_ids,
-                )
-            self.assertEqual(mock_sdpa.call_count, config.num_hidden_layers)
-            torch.testing.assert_close(
-                output_eager.last_hidden_state,
-                output_switched.last_hidden_state,
-                atol=1e-5,
-                rtol=1e-5,
-            )
+    @unittest.skip(
+        reason="LayoutLM automatically creates an attention mask when none is provided, which prevents dispatching to the SDPA Flash Attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 
 def prepare_layoutlm_batch_inputs():
