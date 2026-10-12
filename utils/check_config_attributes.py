@@ -245,6 +245,12 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_diffusion_samples",
         "max_atomic_number",
     ],
+    "Qwen3TTSTalkerConfig": [
+        # Read in generation_qwen3_tts.py (speaker dialect and think-token prefill), which this check does not scan --
+        # it only looks at files named modeling_*.
+        "codec_think_id",
+        "spk_is_dialect",
+    ],
     "AXK2Config": ["layer_types"],  # needed for correct cache
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
