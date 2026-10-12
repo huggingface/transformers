@@ -137,6 +137,31 @@ def get_cgroup_memory_limit_bytes() -> int | None:
     return None
 
 
+def get_numa_bound_memory() -> int | None:
+    """
+    Capacity of the NUMA nodes the process is bound to, as set by `numactl --membind`, or `None` when it is not bound.
+
+    This is another limit `psutil.virtual_memory().total` does not see: it reports the whole machine, while a bound
+    process is OOM-killed once it has filled the nodes it may allocate from. Only a bind policy is a hard limit, the
+    interleave and preferred policies can spill over to any node.
+    """
+    try:
+        with open("/proc/self/numa_maps", encoding="utf-8") as f:
+            policy = f.readline().split()[1]  # e.g. "default", "bind:0", "bind:0-1,3", "interleave:0-5"
+        if not policy.startswith("bind:"):
+            return None
+        total_memory = 0
+        for node_range in policy.removeprefix("bind:").split(","):
+            first, _, last = node_range.partition("-")
+            for node in range(int(first), int(last or first) + 1):
+                # The first line of a node's meminfo is "Node <index> MemTotal: <size> kB"
+                with open(f"/sys/devices/system/node/node{node}/meminfo", encoding="utf-8") as f:
+                    total_memory += int(f.readline().split()[3]) * 1024
+        return total_memory
+    except (OSError, IndexError, ValueError):
+        return None
+
+
 def infer_framework_from_repr(x) -> str | None:
     """
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the

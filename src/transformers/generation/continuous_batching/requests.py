@@ -18,7 +18,12 @@ from enum import IntEnum
 
 import torch
 
-from ...utils import get_cgroup_memory_limit_bytes, is_psutil_available, is_torch_xpu_available
+from ...utils import (
+    get_cgroup_memory_limit_bytes,
+    get_numa_bound_memory,
+    is_psutil_available,
+    is_torch_xpu_available,
+)
 from ...utils.logging import logging
 
 
@@ -38,26 +43,6 @@ if logger.propagate:
     handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
     logger.propagate = False
-
-
-def get_numa_bound_memory() -> int | None:
-    """The capacity of the NUMA nodes the process is bound to, as set by `numactl --membind`, or `None` when it is not
-    bound. Only a bind policy is a hard limit: the interleave and preferred policies can spill over to any node."""
-    try:
-        with open("/proc/self/numa_maps", encoding="utf-8") as file:
-            policy = file.readline().split()[1]  # e.g. "default", "bind:0", "bind:0-1,3", "interleave:0-5"
-        if not policy.startswith("bind:"):
-            return None
-        total_memory = 0
-        for node_range in policy.removeprefix("bind:").split(","):
-            first, _, last = node_range.partition("-")
-            for node in range(int(first), int(last or first) + 1):
-                # The first line of a node's meminfo is "Node <index> MemTotal: <size> kB"
-                with open(f"/sys/devices/system/node/node{node}/meminfo", encoding="utf-8") as file:
-                    total_memory += int(file.readline().split()[3]) * 1024
-        return total_memory
-    except (OSError, IndexError, ValueError):
-        return None
 
 
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
