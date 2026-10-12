@@ -16,6 +16,7 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import IntEnum
+from pathlib import Path
 
 import torch
 
@@ -42,15 +43,24 @@ if logger.propagate:
 
 
 def get_cgroup_memory_limit() -> int:
-    """The memory limit of the process' cgroup (v2 first, then v1), or `sys.maxsize` if there is none."""
-    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
-        try:
-            with open(path, encoding="utf-8") as file:
-                limit = file.read().strip()
-        except OSError:
-            continue
-        return sys.maxsize if limit == "max" else int(limit)
-    return sys.maxsize
+    """The memory limit enforced on the process' cgroup, or `sys.maxsize` if there is none. A cgroup inherits the
+    limits of its parents, so the effective limit is the smallest one up to the root of the hierarchy."""
+    limit = sys.maxsize
+    try:
+        # A line of /proc/self/cgroup is "<id>:<controllers>:<path>", where <path> is relative to the mount point
+        relative_path = Path("/proc/self/cgroup").read_text(encoding="utf-8").splitlines()[0].rsplit(":", 1)[1]
+        # v2 mounts every controller at the root of the hierarchy, v1 gives the memory controller its own directory
+        for mount, name in (("/sys/fs/cgroup", "memory.max"), ("/sys/fs/cgroup/memory", "memory.limit_in_bytes")):
+            cgroup = Path(mount, relative_path.lstrip("/"))
+            for file in (parent / name for parent in (cgroup, *cgroup.parents)):
+                if file.is_file():
+                    # When there is no limit, v2 writes "max" and v1 writes a huge sentinel value
+                    raw = file.read_text(encoding="utf-8").strip()
+                    if raw != "max" and int(raw) < 2**62:
+                        limit = min(limit, int(raw))
+    except (OSError, IndexError, ValueError):
+        pass
+    return limit
 
 
 def get_numa_bound_memory() -> int:
