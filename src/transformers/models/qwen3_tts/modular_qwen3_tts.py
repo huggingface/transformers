@@ -53,7 +53,7 @@ from .generation_qwen3_tts import Qwen3TTSGenerationMixin
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-12Hz-0.6B-Base")
 @strict
 class Qwen3TTSSpeakerEncoderConfig(Qwen2_5OmniDiTConfig):
     r"""

@@ -27,7 +27,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-12Hz-0.6B-Base")
 @strict
 class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
     r"""
