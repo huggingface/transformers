@@ -166,7 +166,7 @@ if is_kernels_available():
                 ): LayerRepository(
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
-                    revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
+                    revision="531ae679ab5c13a3bf49607e1b6e6459300772e9",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -177,7 +177,7 @@ if is_kernels_available():
                 ): LayerRepository(
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
-                    revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
+                    revision="13462bf5e936315f341204ae06bf09068392d227",
                     # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
@@ -705,9 +705,12 @@ if is_kernels_available():
                         repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
-                "cuda": LayerRepository(
-                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
-                ),
+                # Inference only, like xpu and rocm: the kernel's backward does not match the rotary embedding's
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
+                    )
+                },
                 "rocm": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=2
@@ -951,7 +954,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
-    mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+    mode = (Mode.INFERENCE if not model.training else Mode.TRAINING) if mode is None else mode
     device = Device(type=get_device_type(model.device))
 
     if model.kernel_config is not None:

@@ -1289,6 +1289,9 @@ class ProcessorTesterMixin:
         # calculate expected video token count based on video_grid_thw
         if (grid_thw := out_dict.get(f"{modality}_grid_thw")) is not None:
             mm_len = sum(thw[0] * thw[1] * thw[2] for thw in grid_thw)
+        elif (num_frames_per_video := out_dict.get("num_frames_per_video")) is not None:
+            # Models that concatenate the frames of every video along a single axis
+            mm_len = sum(num_frames_per_video)
         else:
             mm_len = batch_size
 

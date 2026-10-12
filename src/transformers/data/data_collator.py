@@ -767,7 +767,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def torch_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed and self.generator is None:
+        if self.seed is not None and self.generator is None:
             # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
             # If no seed supplied, we will use the global RNG
             self.create_rng()
@@ -861,7 +861,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed and self.generator is None:
+        if self.seed is not None and self.generator is None:
             # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
             # If no seed supplied, we will use the global RNG
             self.create_rng()

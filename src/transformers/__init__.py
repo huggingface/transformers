@@ -353,7 +353,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure.setdefault("image_processing_backends", [])
     _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
-    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
+    _import_structure["video_processing_utils"] = ["BaseVideoProcessor", "VideoProcessorMixin"]
 
 # PyTorch-backed objects
 try:
@@ -807,6 +807,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
+    from .video_processing_utils import VideoProcessorMixin as VideoProcessorMixin
 else:
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
 
