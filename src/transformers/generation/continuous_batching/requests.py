@@ -11,16 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sys
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import IntEnum
-from pathlib import Path
 
 import torch
 
-from ...utils import is_psutil_available, is_torch_xpu_available
+from ...utils import get_cgroup_memory_limit_bytes, is_psutil_available, is_torch_xpu_available
 from ...utils.logging import logging
 
 
@@ -42,35 +40,14 @@ if logger.propagate:
     logger.propagate = False
 
 
-def get_cgroup_memory_limit() -> int:
-    """The memory limit enforced on the process' cgroup, or `sys.maxsize` if there is none. A cgroup inherits the
-    limits of its parents, so the effective limit is the smallest one up to the root of the hierarchy."""
-    limit = sys.maxsize
-    try:
-        # A line of /proc/self/cgroup is "<id>:<controllers>:<path>", where <path> is relative to the mount point
-        relative_path = Path("/proc/self/cgroup").read_text(encoding="utf-8").splitlines()[0].rsplit(":", 1)[1]
-        # v2 mounts every controller at the root of the hierarchy, v1 gives the memory controller its own directory
-        for mount, name in (("/sys/fs/cgroup", "memory.max"), ("/sys/fs/cgroup/memory", "memory.limit_in_bytes")):
-            cgroup = Path(mount, relative_path.lstrip("/"))
-            for file in (parent / name for parent in (cgroup, *cgroup.parents)):
-                if file.is_file():
-                    # When there is no limit, v2 writes "max" and v1 writes a huge sentinel value
-                    raw = file.read_text(encoding="utf-8").strip()
-                    if raw != "max" and int(raw) < 2**62:
-                        limit = min(limit, int(raw))
-    except (OSError, IndexError, ValueError):
-        pass
-    return limit
-
-
-def get_numa_bound_memory() -> int:
-    """The capacity of the NUMA nodes the process is bound to, as set by `numactl --membind`, or `sys.maxsize` if it is
-    not bound. Only a bind policy is a hard limit: the interleave and preferred policies can spill over to any node."""
+def get_numa_bound_memory() -> int | None:
+    """The capacity of the NUMA nodes the process is bound to, as set by `numactl --membind`, or `None` when it is not
+    bound. Only a bind policy is a hard limit: the interleave and preferred policies can spill over to any node."""
     try:
         with open("/proc/self/numa_maps", encoding="utf-8") as file:
             policy = file.readline().split()[1]  # e.g. "default", "bind:0", "bind:0-1,3", "interleave:0-5"
         if not policy.startswith("bind:"):
-            return sys.maxsize
+            return None
         total_memory = 0
         for node_range in policy.removeprefix("bind:").split(","):
             first, _, last = node_range.partition("-")
@@ -80,7 +57,7 @@ def get_numa_bound_memory() -> int:
                     total_memory += int(file.readline().split()[3]) * 1024
         return total_memory
     except (OSError, IndexError, ValueError):
-        return sys.maxsize
+        return None
 
 
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
@@ -109,7 +86,8 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         device = torch.device("cpu")
         if is_psutil_available():
             # The machine's RAM is not necessarily all usable: psutil sees neither the cgroup nor the NUMA limit
-            total_memory = min(psutil.virtual_memory().total, get_cgroup_memory_limit(), get_numa_bound_memory())
+            limits = (psutil.virtual_memory().total, get_cgroup_memory_limit_bytes(), get_numa_bound_memory())
+            total_memory = min(limit for limit in limits if limit is not None)
             allocated_memory = psutil.Process().memory_info().rss
             reserved_memory = allocated_memory
         else:
