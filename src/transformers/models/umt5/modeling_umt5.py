@@ -285,7 +285,7 @@ class UMT5Attention(nn.Module):
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(relative_position)
         values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        values = values.permute([2, 0, 1]).unsqueeze(0).contiguous()  # shape (1, num_heads, query_length, key_length)
         return values
 
     def forward(

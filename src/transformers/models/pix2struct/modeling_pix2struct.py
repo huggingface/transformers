@@ -675,7 +675,7 @@ class Pix2StructTextAttention(nn.Module):
             max_distance=self.relative_attention_max_distance,
         )
         values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        values = values.permute([2, 0, 1]).unsqueeze(0).contiguous()  # shape (1, num_heads, query_length, key_length)
         return values
 
     # Adapted from transformers.models.t5.modeling_t5.T5Attention.forward
