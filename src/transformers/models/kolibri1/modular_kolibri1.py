@@ -174,8 +174,8 @@ class Kolibri1ForCausalLM(DeepseekV3ForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, Kolibri1ForCausalLM
 
-        >>> model = Kolibri1ForCausalLM.from_pretrained("Aleph-Alpha/Kolibri-1-BF16")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Aleph-Alpha/Kolibri-1-BF16")
+        >>> model = Kolibri1ForCausalLM.from_pretrained("Aleph-Alpha/Kolibri-1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Aleph-Alpha/Kolibri-1")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
