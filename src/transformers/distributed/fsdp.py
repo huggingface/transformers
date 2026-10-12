@@ -19,8 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
-from .utils import _is_torch_distributed_initialized
+from .utils import _get_parameter_plan, _is_torch_distributed_initialized, replace_layer_number_by_wildcard
 
 
 if TYPE_CHECKING:

@@ -24,19 +24,19 @@ from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
-    _validate_parallel_plan_styles,
     apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
-    resolve_parallel_plans,
 )
 from .utils import (
     TransformersDeviceMesh,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
+    _validate_parallel_plan_styles,
     gather_full_state_dict,
     initialize_distributed_mesh,
+    resolve_parallel_plans,
     save_model_checkpoint_distributed,
 )
 
@@ -200,28 +200,28 @@ class DistributedMixin:
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
 
-        # Resolve both plans before sharding anything: overrides are merged into `model.tp_plan` / `model.ep_plan`,
-        # and the experts named by the EP plan are removed from the TP plan so they are sharded once.
-        tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
-        distributed_config._validate_resolved_ep_plan(ep_plan)
+        (tp_params, tp_modules), (ep_params, ep_modules) = resolve_parallel_plans(model, distributed_config)
 
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        if tp_plan:
-            model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
+        if tp_params or tp_modules:
+            model = apply_tensor_parallelism(
+                model, mesh_manager.get_mesh("tp"), tp_params, tp_modules
+            )
 
-        if ep_plan:
+        if ep_params or ep_modules:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
+            ep_styles = set(ep_params.values()) | set(ep_modules.values())
 
-            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
+            if {"ep_router", "moe_tp_experts"}.issubset(ep_styles):
                 # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
-                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
-            elif "ep_dispatch_experts" in ep_plan.values():
+                model = apply_tensor_parallelism(model, tp_mesh, ep_params, ep_modules)
+            elif "ep_dispatch_experts" in ep_styles:
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
-                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
+                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_params, ep_modules)
 
         if distributed_config.fsdp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)

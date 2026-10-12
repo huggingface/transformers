@@ -14,8 +14,10 @@
 from __future__ import annotations
 
 import os
+import re
 import warnings
 from datetime import timedelta
+from itertools import chain
 from typing import TYPE_CHECKING, TypeGuard
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
@@ -25,6 +27,7 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
+    from torch import nn
     from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor
 
@@ -389,3 +392,103 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
+
+
+def replace_layer_number_by_wildcard(name: str) -> str:
+    """
+    Replace layer indices in a module/param FQN with ``.*`` (e.g. ``layers.3.mlp`` → ``layers.*.mlp``).
+    """
+    return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
+
+
+def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=True) -> str | None:
+    """
+    Get the parallel style for a parameter or module from a TP or EP plan.
+
+    The plan is a dictionary that maps parameter or module names to parallel styles.
+    The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
+
+    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
+    not parent classes for `post_init` calls
+    """
+    generic_param_name = replace_layer_number_by_wildcard(parameter_name)
+    if generic_param_name in plan:
+        return plan[generic_param_name]
+    elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in plan:
+        return plan[module_name]
+    return None
+
+
+def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
+    from .tensor_parallel import ALL_PARALLEL_STYLES
+
+    unsupported_styles = {style for style in (plan or {}).values() if style not in ALL_PARALLEL_STYLES}
+    if unsupported_styles:
+        raise ValueError(
+            f"Unsupported parallel styles: {unsupported_styles}. Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+        )
+
+
+def expand_parallel_plan(model: nn.Module, plan: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Map declarative plan patterns to concrete parameter FQNs and module hook targets."""
+    from .tensor_parallel import ALL_PARALLEL_STYLES
+
+    params: dict[str, str] = {}
+    modules: dict[str, str] = {}
+
+    for name, module in model.named_modules():
+        for p_name, _ in list(module.named_parameters(recurse=False)):
+            full = f"{name}.{p_name}" if name else p_name
+            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+                params[full] = style_name
+
+        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            modules[name] = style_name
+
+    return params, modules
+
+
+def resolve_parallel_plans(
+    model: nn.Module, distributed_config: DistributedConfig
+) -> tuple[tuple[dict[str, str], dict[str, str]], tuple[dict[str, str], dict[str, str]]]:
+    """Merge config overrides, split TP/EP declarative plans, and expand them to concrete FQNs.
+
+    Returns ``((tp_parameters, tp_modules), (ep_parameters, ep_modules))``. Each dict is empty when the
+    corresponding parallel size is 1.
+
+    EP owns every module it names, so matching TP rules are dropped before expansion.
+    """
+    names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
+    for plan_name in ("tp_plan", "ep_plan"):
+        override = getattr(distributed_config, plan_name)
+        if isinstance(override, dict):
+            plan = getattr(model, plan_name)
+            if unknown := override.keys() - names - plan.keys():
+                raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
+            setattr(model, f"_{plan_name}", plan | override)
+
+    tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
+    ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
+    if distributed_config.ep_size > 1 and not ep_plan:
+        raise ValueError(
+            f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(model).__name__}` "
+            "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
+            "`base_model_ep_plan` to the model's config, or disable expert parallelism."
+        )
+
+    if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
+        raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
+
+    is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
+    tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
+
+    _validate_parallel_plan_styles(tp_plan)
+    _validate_parallel_plan_styles(ep_plan)
+    distributed_config._validate_resolved_ep_plan(ep_plan)
+
+    tp_params, tp_modules = expand_parallel_plan(model, tp_plan) if tp_plan else ({}, {})
+    ep_params, ep_modules = expand_parallel_plan(model, ep_plan) if ep_plan else ({}, {})
+
+    return (tp_params, tp_modules), (ep_params, ep_modules)

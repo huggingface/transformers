@@ -26,6 +26,7 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
 )
+from transformers.distributed.utils import _validate_parallel_plan_styles, expand_parallel_plan
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 
@@ -83,7 +84,7 @@ class TestTensorParallelProperties(TestCasePlus):
         }
 
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, tp_mesh=None)
+            _validate_parallel_plan_styles(model.tp_plan)
 
         error_message = str(context.exception)
         self.assertIn("'invalid_style'", error_message)
@@ -217,8 +218,9 @@ class TestTensorParallelLayer(TestCasePlus):
         model.tp_plan = {"lm_head": "colwise_gather_output"}
         device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
 
+        tp_params, tp_modules = expand_parallel_plan(model, model.tp_plan)
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, device_mesh)
+            tensor_parallel.apply_tensor_parallelism(model, device_mesh, tp_params, tp_modules)
 
         self.assertIn("lm_head", str(context.exception))
         self.assertIn("divisible", str(context.exception))

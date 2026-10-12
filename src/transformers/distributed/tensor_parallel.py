@@ -16,19 +16,17 @@ from __future__ import annotations
 import contextlib
 import re
 from collections.abc import Callable
-from itertools import chain
 from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
+from .utils import replace_layer_number_by_wildcard
 
 
 if TYPE_CHECKING:
     from torch import nn
     from torch.distributed.device_mesh import DeviceMesh
-
-    from .configuration_utils import DistributedConfig
 
 
 logger = logging.get_logger(__name__)
@@ -41,16 +39,6 @@ if is_torch_distributed_available():
     from torch.distributed._functional_collectives import all_to_all_single
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
-
-
-def replace_layer_number_by_wildcard(name: str) -> str:
-    """
-    Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
-    a dot (`.`) and the end of the string.
-    This matches how modules are named/numbered when using a nn.ModuleList or nn.Sequential, but will NOT match
-    numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
-    """
-    return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
@@ -80,24 +68,6 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
-
-
-def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=True) -> str | None:
-    """
-    Get the parallel style for a parameter or module from a TP or EP plan.
-
-    The plan is a dictionary that maps parameter or module names to parallel styles.
-    The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
-
-    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
-    not parent classes for `post_init` calls
-    """
-    generic_param_name = replace_layer_number_by_wildcard(parameter_name)
-    if generic_param_name in plan:
-        return plan[generic_param_name]
-    elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in plan:
-        return plan[module_name]
-    return None
 
 
 @contextlib.contextmanager
@@ -956,101 +926,55 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
-    unsupported_styles = {style for style in (plan or {}).values() if style not in ALL_PARALLEL_STYLES}
-    if unsupported_styles:
-        raise ValueError(
-            f"Unsupported parallel styles: {unsupported_styles}. Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-        )
-
-
-def resolve_parallel_plans(
-    model: nn.Module, distributed_config: DistributedConfig
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
-
-    Returns the TP plan to apply to the dense modules and the EP plan to apply to the experts. Each plan is empty
-    when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
-    are dropped: expert weights are sharded once, by the EP plan.
-    """
-    # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
-    names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
-    for plan_name in ("tp_plan", "ep_plan"):
-        override = getattr(distributed_config, plan_name)
-        if isinstance(override, dict):
-            plan = getattr(model, plan_name)
-            if unknown := override.keys() - names - plan.keys():
-                raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
-            setattr(model, f"_{plan_name}", plan | override)
-
-    tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
-    ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
-    if distributed_config.ep_size > 1 and not ep_plan:
-        raise ValueError(
-            f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(model).__name__}` "
-            "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
-            "`base_model_ep_plan` to the model's config, or disable expert parallelism."
-        )
-
-    if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
-        raise ValueError("`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`.")
-
-    # EP rules take precedence: drop TP rules on EP modules and their children.
-    is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
-    tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
-
-    _validate_parallel_plan_styles(tp_plan)
-    _validate_parallel_plan_styles(ep_plan)
-    return tp_plan, ep_plan
-
-
-def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
+def apply_tensor_parallelism(
+    model, tp_mesh, param_plan: dict[str, str], module_plan: dict[str, str]
+):
     """Apply parameter sharding and forward hooks on the TP mesh."""
-    tp_plan = model.tp_plan if tp_plan is None else tp_plan
-    _validate_parallel_plan_styles(tp_plan)
+    for full_param_name, style_name in param_plan.items():
+        module_name, param_name = full_param_name.rsplit(".", 1) if "." in full_param_name else ("", full_param_name)
+        module = model.get_submodule(module_name) if module_name else model
+        style = ALL_PARALLEL_STYLES[style_name]
+        style.validate_param(module, param_name, tp_mesh, parameter_name=full_param_name)
+        style.shard_param(module, param_name, tp_mesh)
+        module._is_hooked = True
 
-    for name, module in model.named_modules():
-        # Create DTensor placeholders so the loader knows which shard belongs to this rank.
-        for p_name, _ in list(module.named_parameters(recurse=False)):
-            full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_plan(parameter_name=full, plan=tp_plan, is_weight=True)
-            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
-                style.shard_param(module, p_name, tp_mesh)
-
-        # Install the input/output transforms required by this module's TP style.
-        style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)
-        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            if style_name == "mla_kv_a_proj":
-                # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
-                # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
-                module.config = model.config.get_text_config()
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+    # Install the input/output transforms required by this module's TP style.
+    for full_module_name, style_name in module_plan.items():
+        module = model.get_submodule(full_module_name) if full_module_name else model
+        if style_name == "mla_kv_a_proj":
+            # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
+            # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
+            module.config = model.config.get_text_config()
+        ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model
 
 
-def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
+def apply_expert_parallelism(
+    model: nn.Module,
+    ep_mesh: DeviceMesh,
+    tp_mesh: DeviceMesh,
+    param_plan: dict[str, str],
+    module_plan: dict[str, str],
+):
     """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
-    for name, module in model.named_modules():
-        for p_name, _ in list(module.named_parameters(recurse=False)):
-            full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
-            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, ep_mesh, parameter_name=full)
-                style.shard_param(module, p_name, ep_mesh)
+    for full_param_name, style_name in param_plan.items():
+        module_name, param_name = full_param_name.rsplit(".", 1) if "." in full_param_name else ("", full_param_name)
+        module = model.get_submodule(module_name) if module_name else model
+        style = ALL_PARALLEL_STYLES[style_name]
+        style.validate_param(module, param_name, ep_mesh, parameter_name=full_param_name)
+        style.shard_param(module, param_name, ep_mesh)
+        module._is_hooked = True
 
+    for full_module_name, style_name in module_plan.items():
+        module = model.get_submodule(full_module_name) if full_module_name else model
+        style = ALL_PARALLEL_STYLES[style_name]
         # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
-        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
-        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            style = ALL_PARALLEL_STYLES[style_name]
-            if style_name == "ep_dispatch_experts":
-                style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
-            else:
-                style.install_forward(module, ep_mesh)
+        if style_name == "ep_dispatch_experts":
+            style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+        else:
+            style.install_forward(module, ep_mesh)
         module._is_hooked = True
 
     return model
