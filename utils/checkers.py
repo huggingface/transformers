@@ -54,6 +54,7 @@ import itertools
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -627,6 +628,9 @@ def main():
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
+    if is_ci:
+        # Runner context helps when triaging environment-specific failures from CI logs.
+        print(f"checkers env: uid={os.getuid()} host={socket.gethostname().split('.')[0]}", flush=True)
 
     if not is_tty and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
