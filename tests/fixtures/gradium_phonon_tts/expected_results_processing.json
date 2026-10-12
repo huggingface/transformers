@@ -1,0 +1,160 @@
+{
+  "original": {
+    "source": "https://github.com/gradium-ai/xn-ptts",
+    "tag": "preview-0.4.0",
+    "commit": "bff8b3f0723f8c9e5726613cdb053bd939759d1b",
+    "model_package": "phonon-7e71a02d.200",
+    "model_signature": "7e71a02d",
+    "quant": "f32"
+  },
+  "normalization": [
+    {
+      "lang": "en",
+      "input": "This is Gradium's open-source on-device Text-to-Speech model Phonon",
+      "normalized": "This is Gradium's open-source on-device Text-to-Speech model Phonon"
+    },
+    {
+      "lang": "en",
+      "input": "“Hello”; please email user@host (now)… 🚀",
+      "normalized": "\"Hello\", please email user at host, now."
+    },
+    {
+      "lang": "en",
+      "input": "Numbers: one, two, three. I paid 1,234.56 for it, in 2024, at 3:30 PM.",
+      "normalized": "Numbers, one, two, three. I paid 1 thousand 234 point 56 for it, in 2024, at 3:30 PM."
+    },
+    {
+      "lang": "en",
+      "input": "a–b—c foo (bar) [baz] {qux} *quux* • ‣ a→b",
+      "normalized": "a b c foo, bar, baz qux quux a b"
+    },
+    {
+      "lang": "en",
+      "input": "1+1=2 and -4500 or 2,500,000, then 007 and 12:30 and 3.5%",
+      "normalized": "1 plus 1 equals 2 and minus 4 thousand 500 or 2 million 500 thousand, then 007 and 12:30 and 3.5%"
+    },
+    {
+      "lang": "fr",
+      "input": "Écris à user@host, ça fait 1234,56 euros en 2024.",
+      "normalized": "Écris à user arobaze host, ça fait mille 234 virgule 56 euros en 2024."
+    },
+    {
+      "lang": "fr",
+      "input": "1+1=2 et -4500 ou 1500000",
+      "normalized": "1 plus 1 égal 2 et moins 4 mille 500 ou 1 million 500 mille"
+    },
+    {
+      "lang": "de",
+      "input": "Schreib an user@host: 1.234,567 oder 1000000 oder 1.23",
+      "normalized": "Schreib an user ät host, ein Tausend 234 Komma 567 oder eine Million oder 1.23"
+    },
+    {
+      "lang": "de",
+      "input": "1+1=2 und -1000",
+      "normalized": "1 Plus 1 Gleich 2 und minus ein Tausend"
+    },
+    {
+      "lang": "es",
+      "input": "Escribe a user@host; cuesta 1.234,5 o 1000000",
+      "normalized": "Escribe a user arroba host, cuesta mil 234 coma 5 o 1 millón"
+    },
+    {
+      "lang": "es",
+      "input": "1+1=2 y -4500",
+      "normalized": "1 mas 1 igual 2 y menos 4 mil 500"
+    },
+    {
+      "lang": "pt",
+      "input": "Escreve para user@host; custa 2000000 ou 1000000000",
+      "normalized": "Escreve para user arroba host, custa 2 milhões ou 1 bilhão"
+    },
+    {
+      "lang": "pt",
+      "input": "1+1=2 e -4500",
+      "normalized": "1 mais 1 igual 2 e menos 4 mil 500"
+    }
+  ],
+  "prepare_text_prompt": [
+    {
+      "input": "not a thing",
+      "prepared": "Not a thing.",
+      "frames_after_eos": 3,
+      "input_ids": [
+        1665,
+        668,
+        737,
+        663
+      ]
+    },
+    {
+      "input": "one two three four five",
+      "prepared": "One two three four five.",
+      "frames_after_eos": 1,
+      "input_ids": [
+        1510,
+        845,
+        948,
+        1120,
+        1094,
+        663
+      ]
+    },
+    {
+      "input": "  hello\nworld ",
+      "prepared": "Hello world.",
+      "frames_after_eos": 3,
+      "input_ids": [
+        3248,
+        956,
+        663
+      ]
+    },
+    {
+      "input": "already done!",
+      "prepared": "Already done!",
+      "frames_after_eos": 3,
+      "input_ids": [
+        803,
+        1201,
+        1004,
+        1367
+      ]
+    },
+    {
+      "input": "This is Gradium's open-source on-device Text-to-Speech model Phonon",
+      "prepared": "This is Gradium's open-source on-device Text-to-Speech model Phonon.",
+      "frames_after_eos": 1,
+      "input_ids": [
+        919,
+        677,
+        2877,
+        706,
+        3439,
+        664,
+        662,
+        1145,
+        742,
+        1779,
+        689,
+        742,
+        3616,
+        1103,
+        2438,
+        674,
+        742,
+        1008,
+        742,
+        1092,
+        1090,
+        738,
+        884,
+        2366,
+        949,
+        1286,
+        697,
+        860,
+        663
+      ]
+    }
+  ]
+}

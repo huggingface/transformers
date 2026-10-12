@@ -81,13 +81,13 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     latent_dim (`int`, *optional*, defaults to 32):
         Dimension of the audio latents the backbone takes as input (`audio_latents`); equals the flow head's and the audio
         tokenizer's `latent_dim`.
-    audio_prompt_dim (`int`, *optional*, defaults to 512):
-        Dimension of the voice-prompt latents (`audio_prompt_latents`), the unquantized latents of Gradium's speaker
-        codec (a Mimi encoder, not the audio tokenizer's), which the backbone projects to `hidden_size`.
     audio_prompt_token_id (`int`, *optional*, defaults to 4000):
         Placeholder token id of the voice-prompt frames in `input_ids`.
     audio_latent_token_id (`int`, *optional*, defaults to 4001):
         Placeholder token id of the audio latent positions in `input_ids`.
+    audio_prompt_dim (`int`, *optional*, defaults to 512):
+        Dimension of the voice-prompt latents (`audio_prompt_latents`), the unquantized latents of Gradium's speaker
+        codec (a Mimi encoder, not the audio tokenizer's), which the backbone projects to `hidden_size`.
     """
 
     model_type = "gradium_phonon_tts"
