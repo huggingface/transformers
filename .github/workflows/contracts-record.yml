@@ -23,6 +23,9 @@ jobs:
       image: huggingface/transformers-torch-light
       options: --shm-size=16gb
     env:
+      # Record the already-tested fixed PR build without merging upstream into
+      # contracts-proof. References remain candidates until source-specific review.
+      TRANSFORMERS_SHA: 1111c102092739070a59f8eb41f8008fc9709213
       TMIC_SHA: 03500b0c365087d17ae048b3e00e11a9657a2982
       MIC_MODELS: ${{ inputs.model_select || 'whisper' }}
       DOC_BUILDER_SHA: c69e96c087165ba49b1788e0c3464654dd60253c
@@ -35,6 +38,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TRANSFORMERS_SHA }}
       - name: Install the package and pinned CPU runtime
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -52,6 +57,7 @@ jobs:
           PY_PINS
       - name: Verify framework source from both working directories
         run: |
+          test "$(git rev-parse HEAD)" = "$TRANSFORMERS_SHA"
           for directory in "$GITHUB_WORKSPACE" /tmp; do
             cd "$directory"
             python - <<'PY_SOURCE'
@@ -59,18 +65,40 @@ jobs:
           import transformers
           from transformers import PreTrainedConfig, WhisperConfig
           import transformers.configuration_utils as configuration
+          assert os.path.realpath(transformers.__file__) == os.path.join(os.environ["GITHUB_WORKSPACE"], "src/transformers/__init__.py")
           print("cwd", os.getcwd(), "transformers", transformers.__file__)
           print("configuration", configuration.__file__, hashlib.sha256(open(configuration.__file__, "rb").read()).hexdigest())
           print("generation_parameters", inspect.getsource(PreTrainedConfig._get_generation_parameters))
           print("suppress_tokens_is_default", "suppress_tokens" in WhisperConfig.default_config_fields())
           PY_SOURCE
           done
-      - name: Record native references and export only unpatched passing checks
+      - name: Record unpatched native candidates without approval or export
         run: |
           export PYTHONPATH="$PWD/src"
           cp -R /tmp/tmic-source/experiments/published-prototypes /tmp/tmic-cpu
           cd /tmp
-          python /tmp/tmic-source/.github/scripts/record_cpu_prototypes.py /tmp/tmic-cpu $MIC_MODELS
+          python - <<'PY_RECORD'
+          import json, os, pathlib, subprocess, sys
+          root = pathlib.Path('/tmp/tmic-cpu')
+          models = {item['name'] for item in json.loads((root / 'models.json').read_text())['models']}
+          selected = os.environ['MIC_MODELS'].split()
+          assert selected and set(selected) <= models, selected
+          report = {'transformers_sha': os.environ['TRANSFORMERS_SHA'], 'package_sha': os.environ['TMIC_SHA'], 'models': {}}
+          for name in selected:
+              workspace = root / 'projects' / name
+              lock_path = workspace / 'example/transformers/tests/contracts/fleet.lock'
+              lock = json.loads(lock_path.read_text())
+              lock.pop('local_patches', None)
+              lock_path.write_text(json.dumps(lock, indent=2) + '\n')
+              log = root / 'logs' / f'{name}-record.log'
+              log.parent.mkdir(parents=True, exist_ok=True)
+              with log.open('w') as handle:
+                  result = subprocess.run(['tmic', '--workspace', str(workspace), 'record', '--all-variants'], stdout=handle, stderr=subprocess.STDOUT)
+              print(log.read_text(), flush=True)
+              report['models'][name] = {'record': result.returncode, 'approved': False, 'exported': False}
+              (root / 'cpu-report.json').write_text(json.dumps(report, indent=2) + '\n')
+          sys.exit(int(any(row['record'] for row in report['models'].values())))
+          PY_RECORD
       - uses: actions/upload-artifact@v4
         if: always()
         with:
