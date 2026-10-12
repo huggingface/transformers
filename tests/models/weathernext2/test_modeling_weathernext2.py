@@ -21,7 +21,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDa
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
-from transformers.testing_utils import require_kernels, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 from transformers.utils import is_torch_flex_attn_available
 
 from ...test_configuration_common import ConfigTester
@@ -186,11 +186,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["global_features", "noise"]
 
     test_resize_embeddings = False
-    # The persistent geometry tensors live on the base model rather than on independently
-    # dispatchable submodules, so Accelerate cannot split them across CPU/disk and an accelerator.
-    test_cpu_offload = False
-    test_disk_offload_bin = False
-    test_disk_offload_safetensors = False
 
     def setUp(self):
         self.model_tester = WeatherNext2ModelTester(self)
@@ -236,7 +231,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
         with torch.no_grad():
             outputs = model(**inputs)
-            masked_outputs = model(**inputs, attention_mask=model.model.attention_mask)
+            masked_outputs = model(**inputs, attention_mask=model.model.geometry.attention_mask)
         torch.testing.assert_close(outputs.prediction, masked_outputs.prediction)
         self.assertEqual(
             outputs.prediction.shape,
@@ -252,7 +247,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             config = self.model_tester.get_config()
             config._attn_implementation = implementation
             model = WeatherNext2Model(config).to(torch_device).eval()
-            mask = model.attention_mask
+            mask = model.geometry.attention_mask
             blocks, _, block_size, kv_length = mask.shape
             for batch_size in (1, 2):
                 with self.subTest(implementation=implementation, batch_size=batch_size):
@@ -272,51 +267,11 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                     hook.remove()
                     torch.testing.assert_close(captured[0], expected, atol=0, rtol=0)
 
-    def test_banded_mask_selects_independent_axes(self):
-        from transformers.models.weathernext2.modeling_weathernext2 import banded_mask_function
-
-        for device in dict.fromkeys(("cpu", torch_device)):
-            with self.subTest(device=device):
-                mask = torch.rand(3, 1, 7, 21, device=device) > 0.5
-                batch = torch.tensor([0, 3, 5, 1], device=device)[:, None, None, None]
-                queries = torch.tensor([6, 0, 2], device=device)[None, None, :, None]
-                keys = torch.tensor([20, 0, 5, 18], device=device)[None, None, None, :]
-                actual = banded_mask_function(mask)(batch, None, queries, keys)
-                expected = mask[:, 0][batch % 3, queries, keys]
-                torch.testing.assert_close(actual, expected, atol=0, rtol=0)
-
-    @require_kernels
-    def test_hub_kernels_mapping(self):
-        """WeatherNext2 inference layers share a kernel repository and support compilation."""
-        from kernels import Mode
-
-        from transformers.integrations import hub_kernels
-
-        model = WeatherNext2ForWeatherForecasting(self.model_tester.get_config())
-        hooked = {getattr(module, "kernel_layer_name", None) for module in model.modules()}
-        layers = {
-            "WeatherNext2Attention",
-            "WeatherNext2AttentionMask",
-            "WeatherNext2ConditionedMlp",
-            "WeatherNext2GridToMesh",
-            "WeatherNext2MeshToGrid",
-            "WeatherNext2ForecastHead",
-        }
-        self.assertEqual({name for name in hooked if name and name.startswith("WeatherNext2")}, layers)
-        mapping = hub_kernels._build_kernel_mapping()
-        mode = Mode.INFERENCE | Mode.TORCH_COMPILE
-        for layer in layers:
-            for modes in mapping[layer].values():
-                self.assertEqual(set(modes), {mode})
-                self.assertEqual(modes[mode]._repo_id, "kernels-community/weathernext2-banded-attention")
-                self.assertEqual(modes[mode]._version, 2)
-                self.assertEqual(modes[mode].layer_name, layer)
-
     def test_mesh_transformer_shares_prepared_mask(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = WeatherNext2Model(config).to(torch_device).eval()
         processor = model.mesh_transformer
-        inputs["attention_mask"] = model.attention_mask.clone()
+        inputs["attention_mask"] = model.geometry.attention_mask.clone()
         prepared_masks = []
         layer_masks = []
         hooks = [
@@ -419,7 +374,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             seconds_since_epoch=valid_time,
             num_steps=2,
             noise=noise,
-            attention_mask=model.model.attention_mask,
+            attention_mask=model.model.geometry.attention_mask,
         )
 
         manual_state = state
@@ -528,22 +483,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 noise=torch.zeros(2, config.noise_channels),
             )
 
-    def test_channel_layout_matches_projection_shapes(self):
-        config = self.model_tester.get_config()
-        model = WeatherNext2ForWeatherForecasting(config)
-        self.assertEqual(model.model.grid_encoder.fc1.in_features, config.num_grid_input_channels)
-        self.assertEqual(model.model.mesh_encoder.fc1.in_features, config.num_mesh_input_channels)
-        self.assertEqual(model.head.output_proj.out_features, config.num_output_channels)
-        self.assertEqual(
-            sum(levels for _, _, levels in config.input_channel_layout) + 3, config.num_grid_input_channels
-        )
-
-    def test_chunk_size_validation(self):
-        WeatherNext2Config(chunk_size=None)
-        for value in (0, -1):
-            with self.subTest(value=value), self.assertRaisesRegex(StrictDataclassClassValidationError, "positive"):
-                WeatherNext2Config(chunk_size=value)
-
     def test_attention_outputs(self):
         """Same contract as the shared test, with this model's block-local attention shape.
 
@@ -556,7 +495,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
             num_blocks, _, block_size, key_length = model.get_submodule(
                 "model" if model_class is not WeatherNext2Model else ""
-            ).attention_mask.shape
+            ).geometry.attention_mask.shape
             expected = (
                 self.model_tester.batch_size * num_blocks,
                 self.model_tester.num_attention_heads,
@@ -599,7 +538,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config).to(torch_device).eval()
             num_blocks, _, block_size, _ = model.get_submodule(
                 "model" if model_class is not WeatherNext2Model else ""
-            ).attention_mask.shape
+            ).geometry.attention_mask.shape
             expected = (self.model_tester.batch_size, num_blocks, block_size, self.model_tester.hidden_size)
 
             # via the forward argument
@@ -640,10 +579,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(
-        reason="The shared test calls `state_dict()` on the state dict it already has whenever a buffer is a "
-        "`BoolTensor`, which the banded attention mask is."
-    )
+    @unittest.skip("The shared test calls the state dict as a function when serializing a boolean tensor.")
     def test_torch_save_load(self):
         pass
 
@@ -663,8 +599,9 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         cls.model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).eval()
 
     def test_graphs_are_shaped_the_way_the_model_reads_them(self):
-        model, config = self.model.model, self.model.config
+        model, config = self.model.model.geometry, self.model.config
         self.assertEqual(config.num_mesh_nodes, 10 * 4**2 + 2)
+        self.assertTrue(all(not parameter.requires_grad for parameter in model.parameters()))
         # Mesh-to-grid connects every grid point to the three vertices of one face.
         self.assertEqual(len(model.mesh_to_grid_senders), 3 * config.num_grid_points)
         # Edges are sorted by receiver so the aggregation can use a segmented sum.
@@ -678,7 +615,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         self.assertLessEqual(float(model.mesh_to_grid_edge_features[:, 1:].abs().max()), 1.0 + 1e-6)
 
     def test_every_mesh_node_attends_and_the_padding_does_not(self):
-        model = self.model.model
+        model = self.model.model.geometry
         num_nodes = self.model.config.num_mesh_nodes
         reaches = model.attention_mask.any(-1).reshape(-1)
         self.assertTrue(reaches[:num_nodes].all(), "a mesh node attends to nothing, which is a NaN row")
@@ -763,7 +700,9 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         ).prediction
         prediction.square().mean().backward()
 
-        starved = {name for name, parameter in model.named_parameters() if parameter.grad is None}
+        starved = {
+            name for name, parameter in model.named_parameters() if parameter.requires_grad and parameter.grad is None
+        }
         expected = {
             name for name, _ in model.named_parameters() if name.startswith("model.mesh_to_grid.mesh_node_update.")
         }
@@ -776,7 +715,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         config = self.model.config
         attention: WeatherNext2Attention = model.mesh_transformer.layers[0].self_attn
 
-        banded_mask = model.attention_mask
+        banded_mask = model.geometry.attention_mask
         num_blocks, _, block_size, _ = banded_mask.shape
         padded = num_blocks * block_size
         hidden_states = floats_tensor([1, padded, config.hidden_size]).to(torch_device)

@@ -753,7 +753,7 @@ def geometry_state_dict(
         "mesh_to_grid_edge_features": geometry.mesh_to_grid_edge_features,
         "attention_mask": build_banded_attention_mask(geometry),
     }
-    return {f"model.{name}": torch.as_tensor(value) for name, value in tensors.items()}
+    return {f"model.geometry.{name}": torch.as_tensor(value) for name, value in tensors.items()}
 
 
 def main():

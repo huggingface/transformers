@@ -428,7 +428,14 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "grid_features"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["WeatherNext2Layer"]
+    _no_split_modules = [
+        "WeatherNext2ConditionedNorm",
+        "WeatherNext2ConditionedMlp",
+        "WeatherNext2GridToMesh",
+        "WeatherNext2MeshToGrid",
+        "WeatherNext2Layer",
+        "WeatherNext2ForecastHead",
+    ]
     _supports_sdpa = True
     _supports_flex_attn = True
     # Flash attention cannot take an arbitrary mask, and mesh adjacency is one.
@@ -441,8 +448,9 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, WeatherNext2Model):
-            module.init_geometry_buffers()
+        if isinstance(module, WeatherNext2Geometry):
+            for name, value in module.get_initial_geometry().items():
+                init.copy_(getattr(module, name), value)
         elif isinstance(module, WeatherNext2ForecastHead):
             gate, shifts = module.get_output_activation_buffers()
             init.copy_(module.sigmoid_gate, gate)
@@ -490,18 +498,49 @@ class WeatherNext2ForecastOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-# The buffers the geometry lives in, in the order they are registered.
-GEOMETRY_BUFFERS = (
-    "grid_spatial_features",
-    "mesh_spatial_features",
-    "grid_to_mesh_senders",
-    "grid_to_mesh_receivers",
-    "grid_to_mesh_edge_features",
-    "mesh_to_grid_senders",
-    "mesh_to_grid_receivers",
-    "mesh_to_grid_edge_features",
-    "attention_mask",
-)
+class WeatherNext2Geometry(nn.Module):
+    """Exact checkpoint geometry, stored as frozen parameters for device dispatch and offloading."""
+
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__()
+        edges = config.num_grid_to_mesh_edges
+        block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
+        num_blocks = -(-config.num_mesh_nodes // block_size)
+        mesh_to_grid_edges = 3 * config.num_grid_points
+        shapes = {
+            "grid_spatial_features": ((config.num_grid_points, config.num_node_spatial_features), torch.float32),
+            "mesh_spatial_features": ((config.num_mesh_nodes, config.num_node_spatial_features), torch.float32),
+            "grid_to_mesh_senders": ((edges,), torch.int64),
+            "grid_to_mesh_receivers": ((edges,), torch.int64),
+            "grid_to_mesh_edge_features": ((edges, config.num_edge_spatial_features), torch.float32),
+            "mesh_to_grid_senders": ((mesh_to_grid_edges,), torch.int64),
+            "mesh_to_grid_receivers": ((mesh_to_grid_edges,), torch.int64),
+            "mesh_to_grid_edge_features": ((mesh_to_grid_edges, config.num_edge_spatial_features), torch.float32),
+            "attention_mask": ((num_blocks, 1, block_size, 3 * block_size), torch.bool),
+        }
+        for name, (shape, dtype) in shapes.items():
+            self.register_parameter(name, nn.Parameter(torch.empty(shape, dtype=dtype), requires_grad=False))
+
+    def register_parameter(self, name: str, parameter: nn.Parameter | None):
+        # Checkpoint loading replaces parameters; geometry must remain non-trainable.
+        if parameter is not None:
+            parameter.requires_grad_(False)
+        super().register_parameter(name, parameter)
+
+    def get_initial_geometry(self) -> dict[str, torch.Tensor]:
+        """Builds placeholder geometry for a randomly initialized model, without reconstructing the mesh."""
+        values = {name: torch.zeros_like(parameter) for name, parameter in self.named_parameters(recurse=False)}
+        receivers = values["mesh_to_grid_receivers"]
+        values["mesh_to_grid_receivers"] = torch.arange(
+            receivers.numel() // 3, device=receivers.device
+        ).repeat_interleave(3)
+        mask = values["attention_mask"]
+        block_size = mask.shape[2]
+        mask[:, :, :, block_size : 2 * block_size] = True
+        return values
+
+    def forward(self) -> dict[str, torch.Tensor]:
+        return dict(self.named_parameters(recurse=False))
 
 
 @auto_docstring
@@ -520,62 +559,8 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         self.grid_to_mesh = WeatherNext2GridToMesh(config)
         self.mesh_transformer = WeatherNext2MeshTransformer(config)
         self.mesh_to_grid = WeatherNext2MeshToGrid(config)
-
-        self.allocate_geometry_buffers()
+        self.geometry = WeatherNext2Geometry(config)
         self.post_init()
-
-    def allocate_geometry_buffers(self):
-        """Registers the geometry buffers, empty, at the shapes the checkpoint stores them in.
-
-        The mesh, the two bipartite graphs and the banded attention mask are not learned: they follow
-        from the mesh refinement level and the grid, and deriving them is slow and pulls in libraries
-        the forward pass has no other use for. A few grid points lie exactly on a shared triangle
-        edge, so reconstructing the graph can also choose a different adjacent face as numerical
-        dependencies change. Every checkpoint therefore carries the exact conversion-time geometry.
-        Allocating it here needs only the two sizes the config records, which are the ones that cannot
-        be derived in closed form.
-        """
-        config = self.config
-        edges = config.num_grid_to_mesh_edges
-        block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
-        num_blocks = -(-config.num_mesh_nodes // block_size)
-        mesh_to_grid_edges = 3 * config.num_grid_points
-        shapes = {
-            "grid_spatial_features": ((config.num_grid_points, config.num_node_spatial_features), torch.float32),
-            "mesh_spatial_features": ((config.num_mesh_nodes, config.num_node_spatial_features), torch.float32),
-            "grid_to_mesh_senders": ((edges,), torch.int64),
-            "grid_to_mesh_receivers": ((edges,), torch.int64),
-            "grid_to_mesh_edge_features": ((edges, config.num_edge_spatial_features), torch.float32),
-            "mesh_to_grid_senders": ((mesh_to_grid_edges,), torch.int64),
-            "mesh_to_grid_receivers": ((mesh_to_grid_edges,), torch.int64),
-            "mesh_to_grid_edge_features": ((mesh_to_grid_edges, config.num_edge_spatial_features), torch.float32),
-            "attention_mask": ((num_blocks, 1, block_size, 3 * block_size), torch.bool),
-        }
-        for name in GEOMETRY_BUFFERS:
-            shape, dtype = shapes[name]
-            self.register_buffer(name, torch.zeros(shape, dtype=dtype), persistent=True)
-        self.init_geometry_buffers()
-
-    def init_geometry_buffers(self):
-        """Fills the geometry buffers of a model that has none, so that it is at least runnable.
-
-        A model built from a config rather than loaded has no mesh, so the node coordinates and the
-        edges are zero and every mesh node attends to its own block and nothing else. That is a
-        placeholder rather than a geometry: it exists so a randomly initialized model can run a
-        forward pass, and so a model moved off the meta device has no uninitialized tensor left. A
-        real forecast needs the geometry that came with the weights.
-        """
-        # The initialization helpers leave checkpoint geometry unchanged.
-        for name in GEOMETRY_BUFFERS[:-1]:
-            init.zeros_(getattr(self, name))
-        # Every grid point receives exactly three edges from the mesh, which the mesh-to-grid network relies
-        # on, so the placeholder graph keeps that layout too.
-        receivers = self.mesh_to_grid_receivers
-        init.copy_(receivers, torch.arange(receivers.numel() // 3, device=receivers.device).repeat_interleave(3))
-        if not getattr(self.attention_mask, "_is_hf_initialized", False):
-            init.zeros_(self.attention_mask)
-            block_size = self.attention_mask.shape[2]
-            init.ones_(self.attention_mask[:, :, :, block_size : 2 * block_size])
 
     @merge_with_config_defaults
     # `last_hidden_state` is the grid representation, not the last mesh-transformer layer, so it must
@@ -606,11 +591,15 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         batch_size = grid_features.shape[0]
         dtype = self.grid_encoder.fc1.weight.dtype
         conditioning = self.noise_encoder(noise.to(dtype=dtype))
+        geometry = self.geometry()
 
-        num_mesh_nodes = self.mesh_spatial_features.shape[0]
+        num_mesh_nodes = geometry["mesh_spatial_features"].shape[0]
         mesh_inputs = torch.cat(
             [
-                self.mesh_spatial_features.unsqueeze(0).expand(batch_size, -1, -1).to(dtype),
+                geometry["mesh_spatial_features"]
+                .unsqueeze(0)
+                .expand(batch_size, -1, -1)
+                .to(grid_features.device, dtype),
                 global_features.unsqueeze(1).expand(-1, num_mesh_nodes, -1).to(dtype),
             ],
             dim=-1,
@@ -621,7 +610,10 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         grid_states = self.grid_encoder(
             torch.cat(
                 [
-                    self.grid_spatial_features.unsqueeze(0).expand(batch_size, -1, -1).to(dtype),
+                    geometry["grid_spatial_features"]
+                    .unsqueeze(0)
+                    .expand(batch_size, -1, -1)
+                    .to(grid_features.device, dtype),
                     # [batch, channels, lat, lon] -> [batch, num_grid_points, channels]
                     grid_features.flatten(2).transpose(1, 2).to(dtype),
                 ],
@@ -634,19 +626,19 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         grid_states, mesh_states = self.grid_to_mesh(
             grid_states,
             mesh_states,
-            self.grid_to_mesh_edge_features.unsqueeze(0).expand(batch_size, -1, -1).to(dtype),
-            self.grid_to_mesh_senders,
-            self.grid_to_mesh_receivers,
+            geometry["grid_to_mesh_edge_features"].unsqueeze(0).expand(batch_size, -1, -1).to(dtype),
+            geometry["grid_to_mesh_senders"],
+            geometry["grid_to_mesh_receivers"],
             conditioning,
         )
-        attention_mask = self.attention_mask if attention_mask is None else attention_mask
+        attention_mask = geometry["attention_mask"] if attention_mask is None else attention_mask
         mesh_states = self.mesh_transformer(mesh_states, attention_mask, conditioning, **kwargs)
         grid_states, mesh_states = self.mesh_to_grid(
             grid_states,
             mesh_states,
-            self.mesh_to_grid_edge_features.unsqueeze(0).expand(batch_size, -1, -1).to(dtype),
-            self.mesh_to_grid_senders,
-            self.mesh_to_grid_receivers,
+            geometry["mesh_to_grid_edge_features"].unsqueeze(0).expand(batch_size, -1, -1).to(dtype),
+            geometry["mesh_to_grid_senders"],
+            geometry["mesh_to_grid_receivers"],
             conditioning,
         )
 
