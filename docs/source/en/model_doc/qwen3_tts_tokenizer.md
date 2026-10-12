@@ -103,40 +103,36 @@ real samples. [`~Qwen3TTSTokenizerModel.encode`] returns the codes as one padded
 
 ```python
 import torch
+from datasets import Audio, load_dataset
 
 from transformers import AutoFeatureExtractor, AutoModel
-from transformers.audio_utils import load_audio_librosa
 
 
+batch_size = 2
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
-audios = [
-    load_audio_librosa(url, sampling_rate=model.config.input_sampling_rate)
-    for url in [
-        "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-        "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
-    ]
-]
-
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audios = [dataset[i]["audio"]["array"] for i in range(batch_size)]
 inputs = feature_extractor(
     audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
 ).to(model.device, model.dtype)
 print("Input audio shape:", inputs["input_values"].shape)
-# Input audio shape: torch.Size([2, 1, 665600])
+# Input audio shape: torch.Size([2, 1, 140520])
 
 with torch.no_grad():
     encoder_outputs = model.encode(**inputs)
     audio_codes = encoder_outputs.audio_codes
     print("Audio codes shape:", audio_codes.shape)
-    # Audio codes shape: torch.Size([2, 347, 16])
+    # Audio codes shape: torch.Size([2, 74, 16])
     print("Valid frames:", encoder_outputs.audio_codes_mask.sum(dim=-1).tolist())
-    # Valid frames: [116, 347]
+    # Valid frames: [74, 61]
 
     audio_values = model.decode(audio_codes).audio_values
     print("Reconstructed audio shape:", audio_values.shape)
-    # Reconstructed audio shape: torch.Size([2, 666240])
+    # Reconstructed audio shape: torch.Size([2, 142080])
 ```
 
 ### Speed-up with `torch.compile`
@@ -146,17 +142,17 @@ few calls are slower due to compilation overhead, but subsequent calls with the 
 
 ```python
 import torch
+from datasets import Audio, load_dataset
+
 from transformers import AutoFeatureExtractor, AutoModel
-from transformers.audio_utils import load_audio_librosa
 
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
-audio = load_audio_librosa(
-    "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-    sampling_rate=model.config.input_sampling_rate,
-)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio = dataset[0]["audio"]["array"]
 inputs = feature_extractor(
     audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
 ).to(model.device, model.dtype)
@@ -171,7 +167,7 @@ for _ in range(3):
 with torch.inference_mode():
     output = compiled_model(**inputs)
 print("Audio values shape:", output.audio_values.shape)
-# Audio values shape: torch.Size([1, 222480])
+# Audio values shape: torch.Size([1, 140520])
 ```
 
 ## Qwen3TTSTokenizerConfig
