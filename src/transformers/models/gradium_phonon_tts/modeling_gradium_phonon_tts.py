@@ -292,18 +292,20 @@ class GradiumPhononTTSRotaryEmbedding(nn.Module):
 
 class GradiumPhononTTSTimestepNorm(nn.Module):
     """
-    The normalization closing the time embeddings: the input divided by its standard deviation (unbiased variance, no
-    centring), scaled by a learnt weight. Neither a LayerNorm (no centring) nor an RMSNorm (variance, not mean square).
+    The normalization closing the time embeddings. Difference to Pocket TTS (whose Python original divides by
+    `sqrt(unbiased variance + eps)`): Gradium's runtime divides by `sqrt(biased variance + eps)` and rescales by
+    `sqrt((n - 1) / n)`, the same up to where `eps` sits.
     """
 
     def __init__(self, hidden_size: int, eps: float = 1e-5):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.unbiased_scale = math.sqrt((hidden_size - 1) / hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        variance = hidden_states.var(-1, keepdim=True) + self.variance_epsilon
-        return hidden_states * (self.weight * torch.rsqrt(variance))
+        variance = hidden_states.var(-1, unbiased=False, keepdim=True)
+        return self.weight * hidden_states * torch.rsqrt(variance + self.variance_epsilon) * self.unbiased_scale
 
 
 class GradiumPhononTTSTimestepEmbedding(nn.Module):
@@ -338,7 +340,8 @@ class GradiumPhononTTSPreTrainedModel(PreTrainedModel):
     config: GradiumPhononTTSConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GradiumPhononTTSDecoderLayer"]
+    # the flow head runs as one unit per step: split across devices, its blocks would mix devices mid-computation
+    _no_split_modules = ["GradiumPhononTTSDecoderLayer", "GradiumPhononTTSFlowHead"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

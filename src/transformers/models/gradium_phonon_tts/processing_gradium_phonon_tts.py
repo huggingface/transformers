@@ -65,7 +65,7 @@ class GradiumPhononTTSProcessor(ProcessorMixin):
         short_text_max_words: int = 4,
         frames_after_eos_short_text: int = 3,
         frames_after_eos: int = 1,
-        fade_in_duration: float = 0.005,
+        fade_in_duration: float = 0.0,
     ):
         r"""
         audio_tokenizer (`PocketTTSAudioTokenizerModel`, *optional*):
@@ -77,9 +77,9 @@ class GradiumPhononTTSProcessor(ProcessorMixin):
             Number of frames generated after the end-of-speech frame for short texts.
         frames_after_eos (`int`, *optional*, defaults to 1):
             Number of frames generated after the end-of-speech frame for longer texts.
-        fade_in_duration (`float`, *optional*, defaults to 0.005):
-            Duration in seconds of the linear fade-in [`~GradiumPhononTTSProcessor.decode`] applies to the start of every
-            generated waveform: a fresh decoder state starts with a small step, heard as a click.
+        fade_in_duration (`float`, *optional*, defaults to 0.0):
+            Duration in seconds of a linear fade-in [`~GradiumPhononTTSProcessor.decode`] applies to the start of every
+            generated waveform. Gradium's runtime applies none (Pocket TTS's original fades the first 5 ms in).
         """
         self.short_text_max_words = short_text_max_words
         self.frames_after_eos_short_text = frames_after_eos_short_text

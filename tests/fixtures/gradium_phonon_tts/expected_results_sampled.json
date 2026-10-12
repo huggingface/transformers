@@ -1,0 +1,44 @@
+{
+  "original": {
+    "source": "https://github.com/gradium-ai/xn-ptts",
+    "tag": "preview-0.4.0",
+    "commit": "bff8b3f0723f8c9e5726613cdb053bd939759d1b",
+    "model_package": "phonon-7e71a02d.200",
+    "model_signature": "7e71a02d",
+    "quant": "f32"
+  },
+  "case": "sampled",
+  "inputs": {
+    "text": "This is Gradium's open-source on-device Text-to-Speech model Phonon",
+    "voice": "Freya",
+    "lang": "en",
+    "temperature": 0.3,
+    "do_sample": true,
+    "seed": 0,
+    "noise": "torch.manual_seed(seed); per step torch.randn(1, 32) * sqrt(temperature), CPU; stored as `noise`"
+  },
+  "reference_output": "ptts CLI --rng_values, 16-bit WAV (rounding <= 3.1e-5)",
+  "num_prepared_text_tokens": 29,
+  "frame_budget": 146,
+  "frames_after_eos": 1,
+  "sanity": {
+    "num_samples": 97920,
+    "num_frames": 51,
+    "duration_s": 4.08,
+    "rms": 0.064654,
+    "peak": 0.419434,
+    "first_values": [
+      -0.0009766,
+      -0.0010986,
+      -0.0018311,
+      -0.0047302
+    ],
+    "last_values": [
+      -9.16e-05,
+      -9.16e-05,
+      -9.16e-05,
+      -9.16e-05
+    ]
+  },
+  "cli_log_tail": []
+}

@@ -13,17 +13,31 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gradium Phonon TTS model."""
 
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
 from transformers import GradiumPhononTTSConfig, GradiumPhononTTSFlowHeadConfig
-from transformers.testing_utils import is_torch_available, require_torch, torch_device
+from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ..pocket_tts import test_modeling_pocket_tts as pocket_tts
 
 
 if is_torch_available():
     import torch
 
-    from transformers import GradiumPhononTTSForConditionalGeneration, GradiumPhononTTSModel
+    from transformers import (
+        AutoModelForTextToWaveform,
+        AutoProcessor,
+        GradiumPhononTTSForConditionalGeneration,
+        GradiumPhononTTSModel,
+    )
+
+
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/gradium_phonon_tts"
 
 
 class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
@@ -93,3 +107,123 @@ class GradiumPhononTTSModelTest(pocket_tts.PocketTTSModelTest):
         # only the trailing BOS latent position (and none before it) changes
         torch.testing.assert_close(before[:, :-1], after[:, :-1])
         self.assertFalse(torch.allclose(before[:, -1], after[:, -1]))
+
+
+@require_torch
+class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    """reproducer: ~/audio-model-work/phonon/reproducers (the Rust runtime `gradium-ai/xn-ptts@preview-0.4.0`, f32;
+    `run_reproducers.sh` regenerates every fixture)"""
+
+    # --- single source of truth, mirrored from reproducers/common.py ---
+    CASES = [
+        ("This is Gradium's open-source on-device Text-to-Speech model Phonon", "Freya"),
+        ("Hello world", "Toby"),
+    ]
+    SAMPLED_TEMPERATURE = 0.3
+    SAMPLED_SEED = 0
+
+    def setUp(self):
+        super().setUp()
+        self.checkpoint_name = "eustlb/gradium-phonon-tts"
+        self.bucket = "hf-internal-testing/phonon-integration-tests"
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
+
+    def _load_voice(self, name):
+        from huggingface_hub import hf_hub_download
+        from safetensors.torch import load_file
+
+        return load_file(hf_hub_download(self.checkpoint_name, f"voices/{name}.safetensors"))["audio_prompt_latents"]
+
+    def _load_expected(self, case):
+        from huggingface_hub import download_bucket_files
+        from safetensors.torch import load_file
+
+        metadata = json.load(open(FIXTURES_DIR / f"expected_results_{case}.json", encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            local_path = Path(tmp_dir) / "expected.safetensors"
+            download_bucket_files(self.bucket, files=[(f"{case}/expected.safetensors", str(local_path))])
+            return load_file(local_path), metadata
+
+    def _generate(self, model, texts, voices, **kwargs):
+        conversations = [[{"role": "user", "content": [{"type": "text", "text": text}]}] for text in texts]
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            processor_kwargs={"audio_prompt_latents": [self._load_voice(voice) for voice in voices]},
+        ).to(model.device)
+        with torch.no_grad():
+            return model.generate(**inputs, return_dict_in_generate=True, output_scores=True, **kwargs)
+
+    @slow
+    def test_single(self):
+        """reproducer: reproducer_single.py (Rust runtime, f32, temperature 0)"""
+        expected, metadata = self._load_expected("single")
+        model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        text, voice = self.CASES[0]
+        output = self._generate(model, [text], [voice], do_sample=False)
+
+        self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
+        # step-level agreement with the original, in the flow head's (normalised) latent space: 3e-5 (CPU) / 1e-4 (GPU)
+        # measured on latents and end-of-speech logits
+        latents = (output.audio_latents[0] - model.latent_mean) / model.latent_std
+        torch.testing.assert_close(latents.cpu(), expected["audio_latents"], atol=5e-4, rtol=0)
+        torch.testing.assert_close(
+            torch.stack(output.scores).squeeze(-1).cpu(), expected["eos_logits"], atol=5e-4, rtol=0
+        )
+        # waveform: 2e-5 (CPU) / 5e-5 (GPU) measured
+        audio = self.processor.decode(output.audio_latents, audio_latents_mask=output.audio_latents_mask)
+        torch.testing.assert_close(audio[0], expected["audio"], atol=2e-4, rtol=0)
+
+    @slow
+    def test_batch(self):
+        """reproducer: reproducer_batch.py (each row generated on its own by the Rust runtime, f32, temperature 0)"""
+        expected, metadata = self._load_expected("batch")
+        model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        output = self._generate(
+            model, [case[0] for case in self.CASES], [case[1] for case in self.CASES], do_sample=False
+        )
+
+        self.assertListEqual(
+            output.audio_latents_mask.sum(-1).tolist(), [row["sanity"]["num_frames"] for row in metadata["rows"]]
+        )
+        # row 0: 3e-5 (CPU) / 8e-5 (GPU) measured; row 1 is the short, left-padded utterance: 2e-4 (CPU) / 8e-4 (GPU)
+        audio = self.processor.decode(output.audio_latents, audio_latents_mask=output.audio_latents_mask)
+        torch.testing.assert_close(audio[0], expected["audio_0"], atol=2e-4, rtol=0)
+        torch.testing.assert_close(audio[1], expected["audio_1"], atol=2e-3, rtol=0)
+
+    @slow
+    def test_sampled(self):
+        """
+        reproducer: reproducer_sampled.py (Rust CLI with the torch-drawn noise replayed through `--rng-values`)
+
+        The noise is `torch.randn` on CPU under `torch.manual_seed`, so the model runs on CPU here: a GPU generator
+        draws a different sequence. The reference went through a 16-bit WAV (rounding 3e-5).
+        """
+        expected, metadata = self._load_expected("sampled")
+        model = AutoModelForTextToWaveform.from_pretrained(self.checkpoint_name, device_map="cpu")
+        text, voice = self.CASES[0]
+        torch.manual_seed(self.SAMPLED_SEED)
+        output = self._generate(model, [text], [voice], do_sample=True, temperature=self.SAMPLED_TEMPERATURE)
+
+        self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
+        # 9e-5 measured (int16 reference rounding included)
+        audio = self.processor.decode(output.audio_latents, audio_latents_mask=output.audio_latents_mask)
+        torch.testing.assert_close(audio[0], expected["audio"], atol=5e-4, rtol=0)
+
+    @slow
+    def test_tokenization(self):
+        """reproducer: reproducer_processing.py (the Rust runtime's `prepare_text_prompt` and token ids)"""
+        fixture = json.load(open(FIXTURES_DIR / "expected_results_processing.json", encoding="utf-8"))
+        for row in fixture["prepare_text_prompt"]:
+            inputs = self.processor.apply_chat_template(
+                [{"role": "user", "content": [{"type": "text", "text": row["input"]}]}],
+                lang="none",
+                tokenize=True,
+                return_dict=True,
+                add_generation_prompt=True,
+                processor_kwargs={"audio_prompt_latents": [torch.zeros(1, 512)]},
+            )
+            # one voice placeholder, the text, the BOS latent position
+            self.assertListEqual(inputs["input_ids"][0, 1:-1].tolist(), row["input_ids"])

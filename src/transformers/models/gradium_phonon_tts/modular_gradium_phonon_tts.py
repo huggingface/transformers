@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -27,6 +29,7 @@ from ..pocket_tts.modeling_pocket_tts import (
     PocketTTSModel,
     PocketTTSPreTrainedModel,
     PocketTTSRotaryEmbedding,
+    PocketTTSTimestepNorm,
 )
 from ..pocket_tts.processing_pocket_tts import PocketTTSProcessor
 from .generation_gradium_phonon_tts import GradiumPhononTTSGenerationMixin
@@ -98,6 +101,22 @@ class GradiumPhononTTSRotaryEmbedding(PocketTTSRotaryEmbedding):
     pass
 
 
+class GradiumPhononTTSTimestepNorm(PocketTTSTimestepNorm):
+    """
+    The normalization closing the time embeddings. Difference to Pocket TTS (whose Python original divides by
+    `sqrt(unbiased variance + eps)`): Gradium's runtime divides by `sqrt(biased variance + eps)` and rescales by
+    `sqrt((n - 1) / n)`, the same up to where `eps` sits.
+    """
+
+    def __init__(self, hidden_size: int, eps: float = 1e-5):
+        super().__init__(hidden_size, eps=eps)
+        self.unbiased_scale = math.sqrt((hidden_size - 1) / hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        variance = hidden_states.var(-1, unbiased=False, keepdim=True)
+        return self.weight * hidden_states * torch.rsqrt(variance + self.variance_epsilon) * self.unbiased_scale
+
+
 class GradiumPhononTTSPreTrainedModel(PocketTTSPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
@@ -164,7 +183,7 @@ class GradiumPhononTTSProcessor(PocketTTSProcessor):
         short_text_max_words: int = 4,
         frames_after_eos_short_text: int = 3,
         frames_after_eos: int = 1,
-        fade_in_duration: float = 0.005,
+        fade_in_duration: float = 0.0,
     ):
         r"""
         audio_tokenizer (`PocketTTSAudioTokenizerModel`, *optional*):
@@ -176,9 +195,9 @@ class GradiumPhononTTSProcessor(PocketTTSProcessor):
             Number of frames generated after the end-of-speech frame for short texts.
         frames_after_eos (`int`, *optional*, defaults to 1):
             Number of frames generated after the end-of-speech frame for longer texts.
-        fade_in_duration (`float`, *optional*, defaults to 0.005):
-            Duration in seconds of the linear fade-in [`~GradiumPhononTTSProcessor.decode`] applies to the start of every
-            generated waveform: a fresh decoder state starts with a small step, heard as a click.
+        fade_in_duration (`float`, *optional*, defaults to 0.0):
+            Duration in seconds of a linear fade-in [`~GradiumPhononTTSProcessor.decode`] applies to the start of every
+            generated waveform. Gradium's runtime applies none (Pocket TTS's original fades the first 5 ms in).
         """
         self.short_text_max_words = short_text_max_words
         self.frames_after_eos_short_text = frames_after_eos_short_text
