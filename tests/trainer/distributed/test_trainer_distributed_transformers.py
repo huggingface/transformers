@@ -45,3 +45,19 @@ class TestTrainerDistributedConfig(TestCasePlus):
         """`Trainer` saves the LoRA adapter of a model sharded at load time, and the saved adapter is the trained one."""
         cmd = self.get_torchrun_cmd(PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir()])
         execute_subprocess_async(cmd, env=self.get_env())
+
+    @require_peft
+    def test_peft_save_trained_bias(self):
+        """Same with sharded base-model parameters trained next to the adapter (the attention biases, `bias="lora_only"`)."""
+        cmd = self.get_torchrun_cmd(
+            PEFT_SAVE_SCRIPT,
+            [
+                "--output_dir",
+                self.get_auto_remove_tmp_dir(),
+                "--model",
+                "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
+                "--bias",
+                "lora_only",
+            ],
+        )
+        execute_subprocess_async(cmd, env=self.get_env())

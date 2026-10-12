@@ -27,6 +27,7 @@ import torch.distributed as dist
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
 from safetensors.torch import load_file
+from torch.distributed.tensor import DTensor
 
 from transformers import AutoModelForCausalLM, Trainer, TrainingArguments
 from transformers.distributed import DistributedConfig
@@ -35,13 +36,17 @@ from transformers.distributed import DistributedConfig
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_dir", required=True)
-    output_dir = parser.parse_args().output_dir
+    parser.add_argument("--model", default="trl-internal-testing/tiny-Qwen3ForCausalLM")
+    parser.add_argument("--bias", default="none")
+    script_args = parser.parse_args()
+    output_dir = script_args.output_dir
 
     model = AutoModelForCausalLM.from_pretrained(
-        "trl-internal-testing/tiny-Qwen3ForCausalLM",
+        script_args.model,
         distributed_config=DistributedConfig(fsdp_size=int(os.environ["WORLD_SIZE"])),
     )
-    model = get_peft_model(model, LoraConfig(r=4, target_modules=["q_proj", "v_proj"]))
+    peft_config = LoraConfig(r=4, target_modules=["q_proj", "v_proj"], bias=script_args.bias)
+    model = get_peft_model(model, peft_config)
     input_ids = [[1, 2, 3, 4, 5, 6, 7, 8]] * 4
     dataset = Dataset.from_dict({"input_ids": input_ids, "labels": input_ids})
     args = TrainingArguments(
@@ -54,12 +59,17 @@ def main():
     )
     Trainer(model=model, args=args, train_dataset=dataset).train()
 
+    # Gathering a sharded parameter (e.g. a trained bias of the base model) is collective: every rank does it
+    live = {
+        name.replace(".default", ""): (param.full_tensor() if isinstance(param, DTensor) else param).detach().cpu()
+        for name, param in model.named_parameters()
+        if param.requires_grad
+    }
     if dist.get_rank() == 0:
         saved = load_file(os.path.join(output_dir, "checkpoint-1", "adapter_model.safetensors"))
-        live = {name: param for name, param in model.named_parameters() if param.requires_grad}
-        assert len(saved) == len(live), f"{len(saved)} saved tensors for {len(live)} adapter parameters"
+        assert saved.keys() == live.keys(), f"saved {sorted(saved)} != trained {sorted(live)}"
         for name, param in live.items():
-            torch.testing.assert_close(saved[name.replace(".default", "")], param.detach().cpu(), rtol=0, atol=0)
+            torch.testing.assert_close(saved[name], param, rtol=0, atol=0)
 
 
 if __name__ == "__main__":
