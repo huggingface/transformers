@@ -334,9 +334,11 @@ class Qwen3TTSTokenizerIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(2)
         max_len = max(len(sample) for sample in samples)
-        input_values = torch.stack(
-            [torch.tensor(np.pad(sample, (0, max_len - len(sample)))) for sample in samples]
-        ).unsqueeze(1).to(model.device)
+        input_values = (
+            torch.stack([torch.tensor(np.pad(sample, (0, max_len - len(sample)))) for sample in samples])
+            .unsqueeze(1)
+            .to(model.device)
+        )
         padding_mask = torch.stack(
             [
                 torch.tensor(np.concatenate([np.ones(len(sample)), np.zeros(max_len - len(sample))]).astype(bool))
