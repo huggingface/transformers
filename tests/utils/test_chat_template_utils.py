@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 from typing import Literal
 
-from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.testing_utils import CaptureLogger, require_jinja
+from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema, logging
+from transformers.utils.chat_template_utils import render_jinja_template
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -736,3 +739,60 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+READS_REASONING_CONTENT = (
+    "{%- for message in messages %}"
+    "{%- if message.reasoning_content %}<think>{{ message.reasoning_content }}</think>{% endif %}"
+    "{{- message.content }}"
+    "{%- endfor %}"
+)
+READS_THINKING = READS_REASONING_CONTENT.replace("reasoning_content", "thinking")
+
+
+@require_jinja
+class ReasoningFieldAliasTest(unittest.TestCase):
+    def render(self, messages, chat_template, **kwargs):
+        rendered, _ = render_jinja_template(conversations=[messages], chat_template=chat_template, **kwargs)
+        return rendered[0]
+
+    def test_other_names_render_as_reasoning_content(self):
+        for field in ("thinking", "reasoning"):
+            with self.subTest(field=field):
+                messages = [{"role": "assistant", field: "Hmm.", "content": "Hi!"}]
+                self.assertEqual(self.render(messages, READS_REASONING_CONTENT), "<think>Hmm.</think>Hi!")
+
+    def test_reasoning_content_renders_as_thinking(self):
+        # gpt-oss templates read `thinking`
+        messages = [{"role": "assistant", "reasoning_content": "Hmm.", "content": "Hi!"}]
+        self.assertEqual(self.render(messages, READS_THINKING), "<think>Hmm.</think>Hi!")
+
+    def test_fields_set_by_the_caller_are_kept(self):
+        messages = [{"role": "assistant", "reasoning_content": "A", "thinking": "B", "content": "Hi!"}]
+        self.assertEqual(self.render(messages, READS_REASONING_CONTENT), "<think>A</think>Hi!")
+        self.assertEqual(self.render(messages, READS_THINKING), "<think>B</think>Hi!")
+
+    def test_input_messages_are_not_modified(self):
+        messages = [{"role": "assistant", "thinking": "Hmm.", "content": "Hi!"}]
+        original = copy.deepcopy(messages)
+        self.render(messages, READS_REASONING_CONTENT)
+        self.render(messages, READS_REASONING_CONTENT, continue_final_message="thinking")
+        self.assertEqual(messages, original)
+
+    def test_other_names_warn(self):
+        logger = logging.get_logger("transformers.utils.chat_template_utils")
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as cl:
+            self.render([{"role": "assistant", "reasoning_content": "Hmm.", "content": "Hi!"}], READS_THINKING)
+        self.assertEqual(cl.out, "")
+        with CaptureLogger(logger) as cl:
+            self.render([{"role": "assistant", "thinking": "Hmm.", "content": "Hi!"}], READS_REASONING_CONTENT)
+        self.assertIn("Copying the `thinking` message field to `reasoning_content`", cl.out)
+
+    def test_continue_final_message_through_alias(self):
+        # Prefilling reasoning under one name leaves it open in a template that reads another
+        for field, chat_template in [("reasoning_content", READS_THINKING), ("thinking", READS_REASONING_CONTENT)]:
+            with self.subTest(field=field):
+                messages = [{"role": "assistant", field: "Hmm.", "content": ""}]
+                rendered = self.render(messages, chat_template, continue_final_message=field)
+                self.assertEqual(rendered, "<think>Hmm.")

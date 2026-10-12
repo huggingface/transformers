@@ -301,6 +301,26 @@ Some templates may not even need the `name` key, in which case, you can write yo
 {%- endif %}
 ```
 
+## Templates for reasoning
+
+Reasoning models write a chain of thought before their final answer. This reasoning is passed in the `reasoning_content` key of an `"assistant"` message, separately from the `content` key.
+
+```json
+{
+  "role": "assistant",
+  "reasoning_content": "The user wants the product of 5 and 6.",
+  "content": "5 times 6 is 30."
+}
+```
+
+Read reasoning from `reasoning_content` and not from another key. It's the key that almost all chat templates use, and the one that [response templates](./chat_response_parsing) should parse reasoning into, so that a parsed message can be appended to the chat and rendered again. Many models drop the reasoning from earlier turns, so make sure the template only renders it where the model was trained to see it.
+
+```jinja
+{%- if message['role'] == 'assistant' and message['reasoning_content'] %}
+    {{- '<think>\n' + message['reasoning_content'] + '\n</think>\n\n' }}
+{%- endif %}
+```
+
 ## Contribute
 
 Once a template is ready, set it to the `chat_template` attribute in the tokenizer and test it with [`~PreTrainedTokenizerBase.apply_chat_template`]. If it works as expected, then upload it to the Hub with [`~PreTrainedTokenizer.push_to_hub`].

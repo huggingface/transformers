@@ -38,6 +38,7 @@ from transformers.cli.serving.utils import (
     BaseHandler,
     GenerationState,
     Modality,
+    ReasoningText,
     ToolCall,
     get_response_template,
     parse_assistant_message,
@@ -1953,6 +1954,52 @@ class TestToolCallUnit(unittest.TestCase):
             message, _ = parser.finalize()
             self.assertEqual(message["content"], "Checking two cities.")
             self.assertEqual(len(message["tool_calls"]), 2)
+
+
+class TestReasoningUnit(unittest.TestCase):
+    """Serve surfaces reasoning from `reasoning_content`, and from `thinking`, which some
+    response templates on the Hub still use (no server needed)."""
+
+    @staticmethod
+    def _template(field):
+        return {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                field: {"open": "<think>", "close": "</think>", "content": "text"},
+                "content": {"close": "<|im_end|>", "content": "text"},
+            },
+        }
+
+    def test_fallback_templates_use_reasoning_content(self):
+        for model_types, template in _RESPONSE_TEMPLATE_FALLBACKS.items():
+            with self.subTest(model_types=model_types):
+                self.assertIn("reasoning_content", template["fields"])
+                self.assertNotIn("thinking", template["fields"])
+
+    def test_reasoning_streamed_for_each_field_name(self):
+        for field in ("reasoning_content", "thinking"):
+            with self.subTest(field=field):
+                parser = ResponseParser(self._template(field), prefix="")
+                chunks = response_events_to_chunks(parser.feed("<think>Let me think.</think>Hi!<|im_end|>"))
+                chunks += response_events_to_chunks(parser.finalize()[1])
+                reasoning = "".join(chunk for chunk in chunks if isinstance(chunk, ReasoningText))
+                content = "".join(chunk for chunk in chunks if type(chunk) is str)
+                self.assertEqual(reasoning, "Let me think.")
+                self.assertEqual(content, "Hi!")
+
+    def test_parse_assistant_message_reads_each_field_name(self):
+        for field in ("reasoning_content", "thinking"):
+            with self.subTest(field=field):
+                tokenizer = MagicMock()
+                tokenizer.response_template = self._template(field)
+                tokenizer.parse_response.return_value = {"role": "assistant", field: "Let me think.", "content": "Hi!"}
+                processor = MagicMock()
+                processor.tokenizer = tokenizer
+                content, reasoning, tool_calls = parse_assistant_message(
+                    processor, MagicMock(), generated_ids="ignored", input_ids=[1, 2, 3], cleaned_content=""
+                )
+                self.assertEqual((content, reasoning, tool_calls), ("Hi!", "Let me think.", None))
 
 
 class TestCBWorkerDeadServerIntegration(unittest.TestCase):
